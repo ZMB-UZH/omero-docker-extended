@@ -15,7 +15,10 @@ class ContextRoutingLimits:
     hard_stop_task_files: int
 
     def required_tokens(self) -> tuple[str, ...]:
-        """Return the doc tokens that encode the routing policy."""
+        """Return the doc tokens that encode the routing policy.
+
+        Inputs: none. Output: `tuple[str, ...]`.
+        """
         return (
             f"Open at most {self.first_pass_task_files} task-specific files in the first pass",
             f"Run at most {self.refine_loop_limit} refine loops",

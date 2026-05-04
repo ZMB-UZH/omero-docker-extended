@@ -16,7 +16,10 @@ from tools import cocoindex_agent_search
 
 
 def test_package_pin_and_hashes_are_exact() -> None:
-    """Verify test package pin and hashes are exact."""
+    """Verify package pin and hashes are exact.
+
+    Inputs: none. Output: None.
+    """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
         "cocoindex-code[full]==0.2.31"
     )
@@ -24,7 +27,10 @@ def test_package_pin_and_hashes_are_exact() -> None:
 
 
 def test_benchmark_doc_records_package_hash_evidence() -> None:
-    """Verify test benchmark doc records package hash evidence."""
+    """Verify benchmark doc records package hash evidence.
+
+    Inputs: none. Output: None.
+    """
     repo_root = Path(__file__).resolve().parents[1]
     text = (
         repo_root / "docs/reference/cocoindex-code-agent-benchmark-2026-04-27.md"
@@ -37,7 +43,10 @@ def test_benchmark_doc_records_package_hash_evidence() -> None:
 def test_default_artifact_root_uses_xdg_not_repo(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test default artifact root uses xdg not repo."""
+    """Verify default artifact root uses xdg not repo.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.delenv(cocoindex_agent_search.ARTIFACT_ROOT_ENV, raising=False)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
 
@@ -49,7 +58,10 @@ def test_default_artifact_root_uses_xdg_not_repo(
 def test_timeout_env_override_is_positive_integer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test timeout env override is positive integer."""
+    """Verify timeout environment override is positive integer.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("AGENT_COCOINDEX_TIMEOUT_INDEX", "28800")
 
     assert cocoindex_agent_search.timeout_seconds("index") == 28800
@@ -59,7 +71,10 @@ def test_timeout_env_override_is_positive_integer(
 def test_timeout_env_override_rejects_invalid_values(
     monkeypatch: pytest.MonkeyPatch, raw_value: str
 ) -> None:
-    """Verify test timeout env override rejects invalid values."""
+    """Verify timeout environment override rejects invalid values.
+
+    Inputs: `monkeypatch`, `raw_value`. Output: None.
+    """
     monkeypatch.setenv("AGENT_COCOINDEX_TIMEOUT_SEARCH", raw_value)
 
     with pytest.raises(RuntimeError, match="positive integer"):
@@ -67,7 +82,10 @@ def test_timeout_env_override_rejects_invalid_values(
 
 
 def test_discover_git_root_candidate_walks_from_nested_path(tmp_path: Path) -> None:
-    """Verify test discover git root candidate walks from n behavior."""
+    """Verify discover git root candidate walks from nested path.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     repo = tmp_path / "repo"
     nested = repo / "src" / "package"
     nested.mkdir(parents=True)
@@ -79,7 +97,10 @@ def test_discover_git_root_candidate_walks_from_nested_path(tmp_path: Path) -> N
 def test_resolve_repo_root_uses_command_scoped_safe_directory_from_cwd(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test resolve repo root uses command scoped sa behavior."""
+    """Verify resolve repo root uses command scoped safe directory from cwd.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo = (tmp_path / "repo").resolve()
     nested = repo / "docs"
     nested.mkdir(parents=True)
@@ -92,7 +113,11 @@ def test_resolve_repo_root_uses_command_scoped_safe_directory_from_cwd(
         env: dict[str, str] | None = None,
         timeout: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        """Handle fake checked command."""
+        """Fake checked command.
+
+        Inputs: `args`, `cwd`, `env`, `timeout`. Output:
+        `subprocess.CompletedProcess[str]`.
+        """
         assert env is None
         assert timeout is None
         assert cwd == nested
@@ -123,7 +148,10 @@ def test_resolve_repo_root_uses_command_scoped_safe_directory_from_cwd(
 def test_resolve_repo_root_rejects_env_override_that_is_not_repo_root(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test resolve repo root rejects env override t behavior."""
+    """Verify resolve repo root rejects environment override that is not repo root.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo = (tmp_path / "repo").resolve()
     nested = repo / "docs"
     nested.mkdir(parents=True)
@@ -152,7 +180,10 @@ def test_resolve_repo_root_rejects_env_override_that_is_not_repo_root(
 def test_tracked_files_uses_command_scoped_safe_directory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test tracked files uses command scoped safe d behavior."""
+    """Verify tracked files uses command scoped safe directory.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo = (tmp_path / "repo").resolve()
     repo.mkdir()
 
@@ -163,7 +194,11 @@ def test_tracked_files_uses_command_scoped_safe_directory(
         env: dict[str, str] | None = None,
         timeout: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        """Handle fake checked command."""
+        """Fake checked command.
+
+        Inputs: `args`, `cwd`, `env`, `timeout`. Output:
+        `subprocess.CompletedProcess[str]`.
+        """
         assert env is None
         assert timeout is None
         assert cwd == repo
@@ -206,13 +241,19 @@ def test_tracked_files_uses_command_scoped_safe_directory(
     ("", "/abs", "../escape", "dir/../escape", "dir//file", "dir\\file", "bad\nfile"),
 )
 def test_validate_repo_relative_path_rejects_unsafe_paths(raw_path: str) -> None:
-    """Verify test validate repo relative path rejects unsa behavior."""
+    """Verify validate repo relative path rejects unsafe paths.
+
+    Inputs: `raw_path`. Output: None.
+    """
     with pytest.raises(RuntimeError):
         cocoindex_agent_search.validate_repo_relative_path(raw_path)
 
 
 def test_validate_repo_relative_path_accepts_clean_posix_paths() -> None:
-    """Verify test validate repo relative path accepts clea behavior."""
+    """Verify validate repo relative path accepts clean posix paths.
+
+    Inputs: none. Output: None.
+    """
     assert cocoindex_agent_search.validate_repo_relative_path(
         "tools/cocoindex_agent_search.py"
     ) == PurePosixPath("tools/cocoindex_agent_search.py")
@@ -223,12 +264,18 @@ def test_validate_repo_relative_path_accepts_clean_posix_paths() -> None:
     (".env", "local.env", "env/production.env", ".cocoindex_code/settings.yml"),
 )
 def test_is_denied_mirror_path_blocks_runtime_artifacts(raw_path: str) -> None:
-    """Verify test is denied mirror path blocks runtime art behavior."""
+    """Verify is denied mirror path blocks runtime artifacts.
+
+    Inputs: `raw_path`. Output: None.
+    """
     assert cocoindex_agent_search.is_denied_mirror_path(PurePosixPath(raw_path))
 
 
 def test_is_denied_mirror_path_allows_example_contracts() -> None:
-    """Verify test is denied mirror path allows example con behavior."""
+    """Verify is denied mirror path allows example contracts.
+
+    Inputs: none. Output: None.
+    """
     assert not cocoindex_agent_search.is_denied_mirror_path(
         PurePosixPath("env/service_example.env")
     )
@@ -238,7 +285,10 @@ def test_is_denied_mirror_path_allows_example_contracts() -> None:
 
 
 def test_load_benchmark_cases_validates_required_schema(tmp_path: Path) -> None:
-    """Verify test load benchmark cases validates required behavior."""
+    """Verify load benchmark cases validates required schema.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     cases_path = tmp_path / "cases.json"
     cases_path.write_text(
         '[{"name": "case", "query": "semantic query", "rg": "pattern", '
@@ -257,7 +307,10 @@ def test_load_benchmark_cases_validates_required_schema(tmp_path: Path) -> None:
 
 
 def test_load_benchmark_cases_rejects_missing_fields(tmp_path: Path) -> None:
-    """Verify test load benchmark cases rejects missing fields."""
+    """Verify load benchmark cases rejects missing fields.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     cases_path = tmp_path / "cases.json"
     cases_path.write_text('[{"name": "case"}]\n', encoding="utf-8")
 
@@ -266,7 +319,10 @@ def test_load_benchmark_cases_rejects_missing_fields(tmp_path: Path) -> None:
 
 
 def test_file_digest_refuses_tracked_symlink(tmp_path: Path) -> None:
-    """Verify test file digest refuses tracked symlink."""
+    """Verify file digest refuses tracked symlink.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "target.txt").write_text("payload", encoding="utf-8")
@@ -279,7 +335,10 @@ def test_file_digest_refuses_tracked_symlink(tmp_path: Path) -> None:
 
 
 def test_file_digest_includes_worktree_content(tmp_path: Path) -> None:
-    """Verify test file digest includes worktree content."""
+    """Verify file digest includes worktree content.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     path = repo / "tracked.txt"
@@ -298,7 +357,10 @@ def test_file_digest_includes_worktree_content(tmp_path: Path) -> None:
 
 
 def test_file_digest_preserves_package_markers(tmp_path: Path) -> None:
-    """Verify test file digest preserves package markers."""
+    """Verify file digest preserves package markers.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     repo = tmp_path / "repo"
     package = repo / "pkg"
     package.mkdir(parents=True)
@@ -313,7 +375,10 @@ def test_file_digest_preserves_package_markers(tmp_path: Path) -> None:
 
 
 def test_repo_relative_path_if_inside_validates_repo_member(tmp_path: Path) -> None:
-    """Verify test repo relative path if inside validates r behavior."""
+    """Verify repo relative path if inside validates repo member.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     repo = (tmp_path / "repo").resolve()
     repo.mkdir()
     cases_path = repo / "docs" / "cases.json"
@@ -332,7 +397,10 @@ def test_repo_relative_path_if_inside_validates_repo_member(tmp_path: Path) -> N
 
 
 def test_ccc_env_maps_database_and_display_paths_outside_repo(tmp_path: Path) -> None:
-    """Verify test ccc env maps database and display paths behavior."""
+    """Verify ccc environment maps database and display paths outside repo.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=(tmp_path / "repo").resolve(),
         artifact_root=(tmp_path / "artifacts").resolve(),
@@ -351,7 +419,10 @@ def test_ccc_env_maps_database_and_display_paths_outside_repo(tmp_path: Path) ->
 
 
 def test_verify_install_executes_console_entrypoint(tmp_path: Path) -> None:
-    """Verify test verify install executes console entrypoint."""
+    """Verify verify install executes console entrypoint.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -368,7 +439,10 @@ def test_verify_install_executes_console_entrypoint(tmp_path: Path) -> None:
 def test_project_settings_match_generic_mirror_policy(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test project settings match generic mirror po behavior."""
+    """Verify project settings match generic mirror policy.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -414,7 +488,10 @@ def test_project_settings_match_generic_mirror_policy(
 def test_project_settings_match_mirror_policy_idempotently(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test project settings match mirror policy ide behavior."""
+    """Verify project settings match mirror policy idempotently.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -448,7 +525,10 @@ def test_project_settings_match_mirror_policy_idempotently(
 def test_require_clean_index_target_rejects_dirty_worktree(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test require clean index target rejects dirty behavior."""
+    """Verify require clean index target rejects dirty worktree.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.setattr(
         cocoindex_agent_search,
         "repo_status_porcelain",
@@ -466,7 +546,10 @@ def test_repo_status_porcelain_includes_untracked_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Verify test repo status porcelain includes untracked behavior."""
+    """Verify repo status porcelain includes untracked files.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -477,7 +560,11 @@ def test_repo_status_porcelain_includes_untracked_files(
         cwd: Path | None = None,
         timeout: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        """Handle fake checked git command."""
+        """Fake checked git command.
+
+        Inputs: `repo_root`, `args`, `cwd`, `timeout`. Output:
+        `subprocess.CompletedProcess[str]`.
+        """
         assert repo_root == repo
         assert args == ["status", "--porcelain=v1"]
         assert cwd is None
@@ -501,7 +588,10 @@ def test_repo_status_porcelain_includes_untracked_files(
 def test_require_disk_budget_uses_host_scaled_free_space(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test require disk budget uses host scaled fre behavior."""
+    """Verify require disk budget uses host scaled free space.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -525,7 +615,10 @@ def test_require_mirror_write_budget_counts_source_bytes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Verify test require mirror write budget counts sourc behavior."""
+    """Verify require mirror write budget counts source bytes.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -547,7 +640,10 @@ def test_require_mirror_write_budget_counts_source_bytes(
 def test_multiple_repositories_share_one_install_but_use_separate_indexes(
     tmp_path: Path,
 ) -> None:
-    """Verify test multiple repositories share one install behavior."""
+    """Verify multiple repositories share one install but use separate indexes.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     artifact_root = tmp_path / "artifacts"
     repo_one = (tmp_path / "repo-one").resolve()
     repo_two = (tmp_path / "repo-two").resolve()
@@ -603,7 +699,10 @@ def test_multiple_repositories_share_one_install_but_use_separate_indexes(
 
 
 def test_mcp_config_is_workspace_agnostic_by_default(tmp_path: Path) -> None:
-    """Verify test mcp config is workspace agnostic by default."""
+    """Verify mcp config is workspace agnostic by default.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -638,7 +737,10 @@ def test_mcp_config_is_workspace_agnostic_by_default(tmp_path: Path) -> None:
 
 
 def test_mcp_config_can_pin_repo_for_static_clients(tmp_path: Path) -> None:
-    """Verify test mcp config can pin repo for static clients."""
+    """Verify mcp config can pin repo for static clients.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -665,7 +767,10 @@ def test_install_command_does_not_hash_worktree(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Verify test install command does not hash worktree."""
+    """Verify install command does not hash worktree.
+
+    Inputs: `monkeypatch`, `tmp_path`, `capsys`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -696,7 +801,10 @@ def test_mcp_config_command_does_not_hash_worktree(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Verify test mcp config command does not hash worktree."""
+    """Verify mcp config command does not hash worktree.
+
+    Inputs: `monkeypatch`, `tmp_path`, `capsys`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -725,7 +833,10 @@ def test_mcp_config_command_does_not_hash_worktree(
 def test_active_index_metadata_resolves_without_hashing_worktree(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test active index metadata resolves without h behavior."""
+    """Verify active index metadata resolves without hashing worktree.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo_root = (tmp_path / "repo").resolve()
     artifact_root = (tmp_path / "artifacts").resolve()
     mirror_digest = "abc12345" * 4
@@ -752,7 +863,10 @@ def test_active_index_metadata_resolves_without_hashing_worktree(
 
 
 def test_mcp_search_schema_does_not_allow_refresh_index() -> None:
-    """Verify test mcp search schema does not allow refresh behavior."""
+    """Verify mcp search schema does not allow refresh index.
+
+    Inputs: none. Output: None.
+    """
     schema = cocoindex_agent_search.mcp_search_tool_definition()["inputSchema"]
 
     assert isinstance(schema, dict)
@@ -760,7 +874,10 @@ def test_mcp_search_schema_does_not_allow_refresh_index() -> None:
 
 
 def test_mcp_install_does_not_duplicate_existing_codex_server(tmp_path: Path) -> None:
-    """Verify test mcp install does not duplicate existing behavior."""
+    """Verify mcp install does not duplicate existing codex server.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -804,7 +921,10 @@ def test_mcp_install_does_not_duplicate_existing_codex_server(tmp_path: Path) ->
 
 
 def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None:
-    """Verify test mcp install repairs stale existing codex behavior."""
+    """Verify mcp install repairs stale existing codex server.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -856,7 +976,10 @@ def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None
 def test_mcp_install_uses_workspace_agnostic_codex_registration(
     tmp_path: Path,
 ) -> None:
-    """Verify test mcp install uses workspace agnostic code behavior."""
+    """Verify mcp install uses workspace agnostic codex registration.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -901,7 +1024,10 @@ def test_mcp_install_uses_workspace_agnostic_codex_registration(
 def test_codex_mcp_server_matches_expected_requires_relative_args_and_timeouts(
     tmp_path: Path,
 ) -> None:
-    """Verify test codex mcp server matches expected requir behavior."""
+    """Verify codex mcp server matches expected requires relative args and timeouts.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -930,7 +1056,10 @@ def test_codex_mcp_server_matches_expected_requires_relative_args_and_timeouts(
 
 
 def test_upsert_toml_table_scalars_preserves_env_subtable() -> None:
-    """Verify test upsert toml table scalars preserves env behavior."""
+    """Verify upsert toml table scalars preserves environment subtable.
+
+    Inputs: none. Output: None.
+    """
     text = (
         'model = "gpt-5.5"\n'
         "\n"
@@ -954,7 +1083,10 @@ def test_upsert_toml_table_scalars_preserves_env_subtable() -> None:
 
 
 def test_repo_benchmark_cases_file_is_valid() -> None:
-    """Verify test repo benchmark cases file is valid."""
+    """Verify repo benchmark cases file is valid.
+
+    Inputs: none. Output: None.
+    """
     cases_path = (
         Path(__file__).resolve().parents[1]
         / "docs/reference/cocoindex-code-agent-benchmark-2026-04-27-cases.json"
@@ -969,7 +1101,10 @@ def test_repo_benchmark_cases_file_is_valid() -> None:
 def test_mcp_command_starts_without_preparing_cocoindex(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test mcp command starts without preparing coc behavior."""
+    """Verify mcp command starts without preparing cocoindex.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     server = mock.Mock()
     monkeypatch.setattr(
         cocoindex_agent_search,
@@ -995,7 +1130,10 @@ def test_mcp_command_starts_without_preparing_cocoindex(
 def test_lightweight_mcp_lists_tools_without_preparing_cocoindex(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test lightweight mcp lists tools without prep behavior."""
+    """Verify lightweight mcp lists tools without preparing cocoindex.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         cocoindex_agent_search,
         "resolve_context",
@@ -1054,7 +1192,10 @@ def test_lightweight_mcp_lists_tools_without_preparing_cocoindex(
 def test_lightweight_mcp_search_tool_defers_cocoindex_work_until_call(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test lightweight mcp search tool defers cocoi behavior."""
+    """Verify lightweight mcp search tool defers cocoindex work until call.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1111,7 +1252,10 @@ def test_lightweight_mcp_search_tool_defers_cocoindex_work_until_call(
 def test_lightweight_mcp_rejects_refresh_index(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test lightweight mcp rejects refresh index."""
+    """Verify lightweight mcp rejects refresh index.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1156,7 +1300,10 @@ def test_lightweight_mcp_rejects_refresh_index(
 def test_mcp_search_tool_uses_active_index_without_resolving_content(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test mcp search tool uses active index withou behavior."""
+    """Verify mcp search tool uses active index without resolving content.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1195,7 +1342,10 @@ def test_mcp_search_tool_uses_active_index_without_resolving_content(
 def test_lightweight_mcp_search_errors_redact_local_paths(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test lightweight mcp search errors redact loc behavior."""
+    """Verify lightweight mcp search errors redact local paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo_root = (tmp_path / "repo").resolve()
     artifact_root = (tmp_path / "artifacts").resolve()
     context = cocoindex_agent_search.CocoIndexContext(
@@ -1247,7 +1397,10 @@ def test_lightweight_mcp_search_errors_redact_local_paths(
 
 
 def test_lightweight_mcp_unknown_tool_does_not_echo_name() -> None:
-    """Verify test lightweight mcp unknown tool does not ec behavior."""
+    """Verify lightweight mcp unknown tool does not echo name.
+
+    Inputs: none. Output: None.
+    """
     sensitive_tool_name = "/private/operator/path"
     input_stream = io.StringIO(
         json.dumps(
@@ -1273,7 +1426,10 @@ def test_lightweight_mcp_unknown_tool_does_not_echo_name() -> None:
 def test_run_ccc_uses_supervised_ready_daemon(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test run ccc uses supervised ready daemon."""
+    """Verify run ccc uses supervised ready daemon.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -1297,7 +1453,10 @@ def test_run_ccc_uses_supervised_ready_daemon(
 def test_run_index_preserves_excluded_paths(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test run index preserves excluded paths."""
+    """Verify run index preserves excluded paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -1346,7 +1505,13 @@ def test_cleanup_stale_daemon_files_logs_unlink_failures(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Verify test cleanup stale daemon files logs unlink f behavior."""
+    """Verify cleanup stale daemon files logs unlink failures.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
@@ -1361,7 +1526,10 @@ def test_cleanup_stale_daemon_files_logs_unlink_failures(
     original_unlink = Path.unlink
 
     def fake_unlink(self: Path, *, missing_ok: bool = False) -> None:
-        """Handle fake unlink."""
+        """Fake unlink.
+
+        Inputs: `missing_ok`. Output: None. Raises on invalid or unavailable state.
+        """
         if self == socket_path:
             raise OSError("simulated busy socket")
         original_unlink(self, missing_ok=missing_ok)
@@ -1380,7 +1548,10 @@ def test_command_index_rejects_dirty_worktree_before_hashing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Verify test command index rejects dirty worktree bef behavior."""
+    """Verify command index rejects dirty worktree before hashing.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     monkeypatch.setattr(cocoindex_agent_search, "resolve_repo_root", lambda: repo_root)
@@ -1402,7 +1573,10 @@ def test_command_index_rejects_dirty_worktree_before_hashing(
 def test_command_search_refuses_missing_index_by_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test command search refuses missing index by behavior."""
+    """Verify command search refuses missing index by default.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1437,7 +1611,10 @@ def test_command_search_refuses_missing_index_by_default(
 def test_command_search_indexes_only_with_explicit_flag(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Verify test command search indexes only with explici behavior."""
+    """Verify command search indexes only with explicit flag.
+
+    Inputs: `monkeypatch`, `tmp_path`, `capsys`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1451,7 +1628,10 @@ def test_command_search_indexes_only_with_explicit_flag(
     def fake_index(
         _context: cocoindex_agent_search.CocoIndexContext, *, allow_dirty: bool
     ) -> str:
-        """Handle fake index."""
+        """Fake index.
+
+        Inputs: `_context`, `allow_dirty`. Output: `str`.
+        """
         cocoindex_agent_search.target_sqlite_db(context).parent.mkdir(parents=True)
         cocoindex_agent_search.target_sqlite_db(context).write_bytes(b"sqlite")
         return ""
@@ -1493,7 +1673,10 @@ def test_command_search_indexes_only_with_explicit_flag(
 def test_command_search_skips_cold_notice_when_index_exists(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Verify test command search skips cold notice when in behavior."""
+    """Verify command search skips cold notice when index exists.
+
+    Inputs: `monkeypatch`, `tmp_path`, `capsys`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1535,7 +1718,10 @@ def test_command_search_skips_cold_notice_when_index_exists(
 def test_mcp_smoke_uses_workspace_root_and_minimal_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test mcp smoke uses workspace root and minima behavior."""
+    """Verify mcp smoke uses workspace root and minimal environment.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1548,9 +1734,17 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         """Test double for fake fail after."""
 
         def __enter__(self) -> None:
+            """Enter the context manager.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         def __exit__(self, *args: object) -> bool:
+            """Exit the context manager.
+
+            Inputs: `*args`. Output: `bool`.
+            """
             return False
 
     class FakeServerParameters:
@@ -1564,6 +1758,10 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
             env: dict[str, str],
             cwd: str,
         ) -> None:
+            """Initialize the instance.
+
+            Inputs: `command`, `args`, `env`, `cwd`. Output: None.
+            """
             captured_params.update(
                 {"command": command, "args": args, "env": env, "cwd": cwd}
             )
@@ -1572,12 +1770,24 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         """Test double for fake stdio client."""
 
         def __init__(self, params: FakeServerParameters) -> None:
+            """Initialize the instance.
+
+            Inputs: `params`. Output: None.
+            """
             self.params = params
 
         async def __aenter__(self) -> tuple[object, object]:
+            """Enter the async context manager.
+
+            Inputs: none. Output: `tuple[object, object]`.
+            """
             return object(), object()
 
         async def __aexit__(self, *args: object) -> bool:
+            """Exit the async context manager.
+
+            Inputs: `*args`. Output: `bool`.
+            """
             return False
 
     created_sessions: list[FakeSession] = []
@@ -1586,32 +1796,53 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         """Test double for fake session."""
 
         def __init__(self, read_stream: object, write_stream: object) -> None:
+            """Initialize the instance.
+
+            Inputs: `read_stream`, `write_stream`. Output: None.
+            """
             self.streams = (read_stream, write_stream)
             created_sessions.append(self)
 
         async def __aenter__(self) -> "FakeSession":
+            """Enter the async context manager.
+
+            Inputs: none. Output: `'FakeSession'`.
+            """
             self.called_tool = None
             return self
 
         async def __aexit__(self, *args: object) -> bool:
+            """Exit the async context manager.
+
+            Inputs: `*args`. Output: `bool`.
+            """
             return False
 
         async def initialize(self) -> object:
-            """Handle initialize."""
+            """Initialize.
+
+            Inputs: none. Output: `object`.
+            """
             self.initialized = True
             return SimpleNamespace(
                 serverInfo=SimpleNamespace(name="fake", version="1.0")
             )
 
         async def list_tools(self) -> object:
-            """Return list tools."""
+            """Return list tools.
+
+            Inputs: none. Output: `object`.
+            """
             self.listed_tools = True
             return SimpleNamespace(
                 tools=[SimpleNamespace(name="search"), SimpleNamespace(name="index")]
             )
 
         async def call_tool(self, name: str, arguments: dict[str, object]) -> object:
-            """Handle call tool."""
+            """Call tool.
+
+            Inputs: `name`, `arguments`. Output: `object`.
+            """
             self.called_tool = (name, arguments)
             return SimpleNamespace(content=[])
 
@@ -1625,7 +1856,10 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
     fake_stdio = mock.Mock(stdio_client=FakeStdioClient)
 
     def fake_import_module(name: str) -> object:
-        """Handle fake import module."""
+        """Fake import module.
+
+        Inputs: `name`. Output: `object`.
+        """
         return {
             "anyio": fake_anyio,
             "mcp": fake_mcp,
@@ -1679,7 +1913,10 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
 def test_mcp_jsonrpc_protocol_probe_uses_raw_stdio(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test mcp jsonrpc protocol probe uses raw stdio."""
+    """Verify mcp jsonrpc protocol probe uses raw stdio.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1726,7 +1963,10 @@ def test_mcp_jsonrpc_protocol_probe_uses_raw_stdio(
 def test_mcp_jsonrpc_protocol_probe_retries_empty_tool_list(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test mcp jsonrpc protocol probe retries empty behavior."""
+    """Verify mcp jsonrpc protocol probe retries empty tool list.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1778,7 +2018,10 @@ def test_mcp_jsonrpc_protocol_probe_retries_empty_tool_list(
 def test_mcp_jsonrpc_protocol_probe_rejects_protocol_mismatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify test mcp jsonrpc protocol probe rejects proto behavior."""
+    """Verify mcp jsonrpc protocol probe rejects protocol mismatch.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path / "repo",
         artifact_root=tmp_path / "artifacts",
@@ -1806,7 +2049,10 @@ def test_mcp_jsonrpc_protocol_probe_rejects_protocol_mismatch(
 
 
 def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
-    """Verify test cross agent surfaces describe generic co behavior."""
+    """Verify cross agent surfaces describe generic cocoindex workflow.
+
+    Inputs: none. Output: None.
+    """
     repo_root = Path(__file__).resolve().parents[1]
     tracked_surfaces = (
         "AGENTS.md",
@@ -1835,7 +2081,10 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
 
 
 def test_no_copied_ccc_skill_trees_are_tracked() -> None:
-    """Verify test no copied ccc skill trees are tracked."""
+    """Verify no copied ccc skill trees are tracked.
+
+    Inputs: none. Output: None.
+    """
     repo_root = Path(__file__).resolve().parents[1]
     completed = subprocess.run(
         [
@@ -1859,7 +2108,10 @@ def test_no_copied_ccc_skill_trees_are_tracked() -> None:
 
 
 def test_repo_has_no_stale_omero_specific_cocoindex_install_name() -> None:
-    """Verify test repo has no stale OMERO specific cocoind behavior."""
+    """Verify repo has no stale OMERO specific cocoindex install name.
+
+    Inputs: none. Output: None.
+    """
     repo_root = Path(__file__).resolve().parents[1]
     stale_name = "omero" + "-agent-cocoindex"
     completed = subprocess.run(
@@ -1889,7 +2141,10 @@ def test_repo_has_no_stale_omero_specific_cocoindex_install_name() -> None:
 
 
 def test_cli_supports_help() -> None:
-    """Verify test cli supports help."""
+    """Verify cli supports help.
+
+    Inputs: none. Output: None.
+    """
     result = subprocess.run(
         [sys.executable, "tools/cocoindex_agent_search.py", "--help"],
         cwd=Path(__file__).resolve().parents[1],

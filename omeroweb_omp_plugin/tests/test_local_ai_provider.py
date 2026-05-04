@@ -37,19 +37,28 @@ class TestLocalProviderConstants(unittest.TestCase):
 
     @staticmethod
     def test_ollama_base_url_is_string():
-        """Verify test ollama base URL is string."""
+        """Verify ollama base URL is string.
+
+        Inputs: none. Output: None.
+        """
         assert isinstance(OLLAMA_BASE_URL, str)
         assert OLLAMA_BASE_URL.startswith("http")
 
     @staticmethod
     def test_ollama_model_is_nonempty():
-        """Verify test ollama model is nonempty."""
+        """Verify ollama model is nonempty.
+
+        Inputs: none. Output: None.
+        """
         assert isinstance(OLLAMA_MODEL, str)
         assert len(OLLAMA_MODEL) > 0
 
     @staticmethod
     def test_ollama_timeout_is_positive():
-        """Verify test ollama timeout is positive."""
+        """Verify ollama timeout is positive.
+
+        Inputs: none. Output: None.
+        """
         assert isinstance(OLLAMA_TIMEOUT_SECONDS, (int, float))
         assert OLLAMA_TIMEOUT_SECONDS > 0
 
@@ -59,7 +68,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_returns_response_text(self, mock_post):
-        """Verify test local provider returns response text."""
+        """Verify local provider returns response text.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"response": "10444,01,01,01,20x"}
@@ -80,7 +92,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_custom_model(self, mock_post):
-        """Verify test local provider custom model."""
+        """Verify local provider custom model.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "ok"}
         mock_resp.raise_for_status = MagicMock()
@@ -92,7 +107,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_empty_response_raises(self, mock_post):
-        """Verify test local provider empty response raises."""
+        """Verify local provider empty response raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": ""}
         mock_resp.raise_for_status = MagicMock()
@@ -103,7 +121,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_none_response_raises(self, mock_post):
-        """Verify test local provider none response raises."""
+        """Verify local provider none response raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": None}
         mock_resp.raise_for_status = MagicMock()
@@ -114,7 +135,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_missing_response_key_raises(self, mock_post):
-        """Verify test local provider missing response key raises."""
+        """Verify local provider missing response key raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"other_key": "data"}
         mock_resp.raise_for_status = MagicMock()
@@ -125,7 +149,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_connection_error_raises(self, mock_post):
-        """Verify test local provider connection error raises."""
+        """Verify local provider connection error raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_post.side_effect = requests.ConnectionError("refused")
 
         with self.assertRaises(AiAssistError) as ctx:
@@ -134,7 +161,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_timeout_raises(self, mock_post):
-        """Verify test local provider timeout raises."""
+        """Verify local provider timeout raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_post.side_effect = requests.Timeout("timed out")
 
         with self.assertRaises(AiAssistError):
@@ -142,7 +172,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_http_error_raises(self, mock_post):
-        """Verify test local provider HTTP error raises."""
+        """Verify local provider HTTP error raises.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.status_code = 500
         mock_resp.raise_for_status.side_effect = requests.HTTPError(response=mock_resp)
@@ -153,7 +186,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_uses_correct_timeout(self, mock_post):
-        """Verify test local provider uses correct timeout."""
+        """Verify local provider uses correct timeout.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "ok"}
         mock_resp.raise_for_status = MagicMock()
@@ -164,7 +200,10 @@ class TestCallLocalProvider(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist.requests.post")
     def test_local_provider_does_not_require_api_key(self, mock_post):
-        """Local provider works with empty API key."""
+        """Local provider works with empty API key.
+
+        Inputs: `mock_post`. Output: None.
+        """
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "value1,value2"}
         mock_resp.raise_for_status = MagicMock()
@@ -183,7 +222,10 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist._call_ai_provider_raw")
     def test_local_provider_full_parse_flow(self, mock_call):
-        """Verify test local provider full parse flow."""
+        """Verify local provider full parse flow.
+
+        Inputs: `mock_call`. Output: None.
+        """
         mock_call.return_value = "10444,01,01,01,20x\n10445,02,03,04,40x"
 
         result = generate_ai_parsed_values(
@@ -202,7 +244,10 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist._call_ai_provider_raw")
     def test_local_provider_with_custom_instructions(self, mock_call):
-        """Verify test local provider with custom instructions."""
+        """Verify local provider with custom instructions.
+
+        Inputs: `mock_call`. Output: None.
+        """
         mock_call.return_value = "ctrl,3,DAPI"
 
         result = generate_ai_parsed_values(
@@ -219,14 +264,20 @@ class TestGenerateAiParsedValuesLocal(unittest.TestCase):
 
     @patch("omeroweb_omp_plugin.services.ai_assist._call_ai_provider_raw")
     def test_local_provider_connection_failure_propagates(self, mock_call):
-        """Verify test local provider connection failure propag behavior."""
+        """Verify local provider connection failure propagates.
+
+        Inputs: `mock_call`. Output: None.
+        """
         mock_call.side_effect = AiAssistError("AI service unreachable")
 
         with self.assertRaises(AiAssistError):
             generate_ai_parsed_values("local", "", ["file.tif"])
 
     def test_local_provider_no_filenames_raises(self):
-        """Verify test local provider no filenames raises."""
+        """Verify local provider no filenames raises.
+
+        Inputs: none. Output: None.
+        """
         with self.assertRaises(AiAssistError):
             generate_ai_parsed_values("local", "", [])
 
@@ -236,7 +287,10 @@ class TestLocalProviderNotInUnsupportedList(unittest.TestCase):
 
     @staticmethod
     def test_local_is_not_unsupported():
-        """Calling _call_ai_provider_raw with 'local' should NOT raise
+        """Calling _call_ai_provider_raw with 'local' should NOT raise.
+
+        Inputs: none. Output: None.
+
         'provider not supported'. It should try Ollama (and may fail
         with connection error in test env, which is fine).
         """
@@ -251,7 +305,10 @@ class TestLocalProviderNotInUnsupportedList(unittest.TestCase):
             assert result == "test"
 
     def test_truly_unsupported_provider_raises(self):
-        """Verify test truly unsupported provider raises."""
+        """Verify truly unsupported provider raises.
+
+        Inputs: none. Output: None.
+        """
         with self.assertRaises(AiAssistError) as ctx:
             _call_ai_provider_raw("nonexistent_provider", "key", "prompt", 50)
         # Should mention "not supported"

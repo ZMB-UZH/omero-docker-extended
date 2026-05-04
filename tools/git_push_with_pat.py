@@ -22,7 +22,10 @@ TokenReader = Callable[[str], str]
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Validate parse args."""
+    """Parse args.
+
+    Inputs: `argv`. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description=(
             "Run git push with a socket-backed askpass helper so GitHub PATs "
@@ -60,7 +63,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _validate_git_argument(name: str, value: str) -> None:
-    """Handle validate git argument."""
+    """Validate git argument.
+
+    Inputs: `name`, `value`. Output: None. Raises on invalid or unavailable state.
+    """
     if not value or value.startswith("-") or "\x00" in value:
         raise SystemExit(f"{name} must be a non-option Git argument")
     if any(ord(character) < 32 for character in value):
@@ -68,7 +74,10 @@ def _validate_git_argument(name: str, value: str) -> None:
 
 
 def _validate_force_with_lease(value: str | None) -> str | None:
-    """Handle validate force with lease."""
+    """Validate force with lease.
+
+    Inputs: `value`. Output: `str | None`. Raises on invalid or unavailable state.
+    """
     if value is None:
         return None
     if "\x00" in value or any(ord(character) < 32 for character in value):
@@ -84,7 +93,13 @@ def _validate_force_with_lease(value: str | None) -> str | None:
 
 
 def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> str:
-    """Handle read token."""
+    """Read token.
+
+    Inputs: `env`, `env_name`, `reader`. Output: `str`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     token = env.get(env_name, "").strip()
     if token:
         return token
@@ -97,7 +112,10 @@ def _read_token(env: Mapping[str, str], env_name: str, reader: TokenReader) -> s
 
 
 def _write_askpass(path: Path) -> None:
-    """Handle write askpass."""
+    """Write askpass.
+
+    Inputs: `path`. Output: None.
+    """
     executable = sys.executable or "/usr/bin/env python3"
     path.write_text(
         "\n".join(
@@ -144,7 +162,13 @@ def _serve_credential_once(
     socket_path: Path,
     credential: str,
 ) -> tuple[threading.Event, threading.Thread]:
-    """Handle serve credential once."""
+    """Serve credential once.
+
+    Inputs: `socket_path`, `credential`. Output: `tuple[threading.Event,
+    threading.Thread]`.
+
+    threading.Thread]`.
+    """
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(socket_path))
     socket_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
@@ -155,7 +179,10 @@ def _serve_credential_once(
     payload = f"{credential}\n".encode("utf-8")
 
     def serve() -> None:
-        """Handle serve."""
+        """Serve.
+
+        Inputs: none. Output: None.
+        """
         try:
             while not stop.is_set():
                 try:
@@ -184,7 +211,13 @@ def run_push(
     token_reader: TokenReader = getpass.getpass,
     runner: RunCommand = subprocess.run,
 ) -> int:
-    """Run run push."""
+    """Push a refspec with a PAT-backed HTTPS remote.
+
+    Inputs: `args`, `env`, `token_reader`, `runner`. Output: `int`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     _validate_git_argument("remote", args.remote)
     _validate_git_argument("refspec", args.refspec)
     _validate_git_argument("username", args.username)
@@ -238,7 +271,10 @@ def run_push(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     return run_push(parse_args(argv))
 
 

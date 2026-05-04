@@ -10,10 +10,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -21,11 +28,18 @@ class _UnitValue(_Value):
     """Represent unit value."""
 
     def __init__(self, value, symbol):
+        """Initialize the instance.
+
+        Inputs: `value`, `symbol`. Output: None.
+        """
         super().__init__(value)
         self._symbol = symbol
 
     def getSymbol(self):
-        """Return get symbol."""
+        """Return Symbol.
+
+        Inputs: none. Output: `self._symbol`.
+        """
         return self._symbol
 
 
@@ -43,6 +57,11 @@ class _PlaneInfo:
         position_y=None,
         position_z=None,
     ):
+        """Initialize the instance.
+
+        Inputs: `the_c`, `the_z`, `the_t`, `delta_t`, `exposure_time`, `position_x`,
+        `position_y`, `position_z`. Output: None.
+        """
         self.theC = the_c
         self.theZ = the_z
         self.theT = the_t
@@ -53,25 +72,40 @@ class _PlaneInfo:
         self._position_z = position_z
 
     def getDeltaT(self, units="SECOND"):
-        """Return get delta t."""
+        """Return Delta T.
+
+        Inputs: `units`. Output: computed value.
+        """
         assert units == "SECOND"
         return None if self._delta_t is None else _Value(self._delta_t)
 
     def getExposureTime(self, units="SECOND"):
-        """Return get exposure time."""
+        """Return Exposure Time.
+
+        Inputs: `units`. Output: computed value.
+        """
         assert units == "SECOND"
         return None if self._exposure_time is None else _Value(self._exposure_time)
 
     def getPositionX(self):
-        """Return get position x."""
+        """Return Position X.
+
+        Inputs: none. Output: computed value.
+        """
         return None if self._position_x is None else _Value(self._position_x)
 
     def getPositionY(self):
-        """Return get position y."""
+        """Return Position Y.
+
+        Inputs: none. Output: computed value.
+        """
         return None if self._position_y is None else _Value(self._position_y)
 
     def getPositionZ(self):
-        """Return get position z."""
+        """Return Position Z.
+
+        Inputs: none. Output: computed value.
+        """
         return None if self._position_z is None else _Value(self._position_z)
 
 
@@ -79,6 +113,10 @@ class _Pixels:
     """Represent pixels."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.copy_plane_info_calls = []
         self._plane_infos = {
             (0, 0): [
@@ -99,46 +137,73 @@ class _Pixels:
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(2048)
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(1024)
 
     @staticmethod
     def getSizeZ():
-        """Return get size z."""
+        """Return Size Z.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(2)
 
     @staticmethod
     def getSizeC():
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(2)
 
     @staticmethod
     def getSizeT():
-        """Return get size t."""
+        """Return Size T.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(2)
 
     @staticmethod
     def getPhysicalSizeX():
-        """Return get physical size x."""
+        """Return Physical Size X.
+
+        Inputs: none. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPhysicalSizeY():
-        """Return get physical size y."""
+        """Return Physical Size Y.
+
+        Inputs: none. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPhysicalSizeZ():
-        """Return get physical size z."""
+        """Return Physical Size Z.
+
+        Inputs: none. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.400", "µm")
 
     def copyPlaneInfo(self, theC=None, theZ=None):
-        """Handle copy plane info."""
+        """Copy Plane Info.
+
+        Inputs: `theC`, `theZ`. Output: computed value.
+        """
         self.copy_plane_info_calls.append((theC, theZ))
         if theC is None and theZ is None:
             return [
@@ -157,17 +222,26 @@ class _DetectorSettings:
 
     @staticmethod
     def getBinning():
-        """Return get binning."""
+        """Return Binning.
+
+        Inputs: none. Output: '2x2'.
+        """
         return "2x2"
 
     @staticmethod
     def getGain():
-        """Return get gain."""
+        """Return Gain.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value("1.5")
 
     @staticmethod
     def getDetector():
-        """Return get detector."""
+        """Return Detector.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")
 
 
@@ -179,7 +253,10 @@ class _LightSourceSettings:
 
     @staticmethod
     def getLightSource():
-        """Return get light source."""
+        """Return Light Source.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(manufacturer="Coherent", model="Sapphire")
 
 
@@ -188,17 +265,26 @@ class _LightPath:
 
     @staticmethod
     def getDichroic():
-        """Return get dichroic."""
+        """Return Dichroic.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(manufacturer="Chroma", model="T495lpxr")
 
     @staticmethod
     def getEmissionFilters():
-        """Return get emission filters."""
+        """Return Emission Filters.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
     @staticmethod
     def getExcitationFilters():
-        """Return get excitation filters."""
+        """Return Excitation Filters.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Chroma", model="ET470/40x")]
 
 
@@ -211,17 +297,26 @@ class _LogicalChannel:
 
     @staticmethod
     def getDetectorSettings():
-        """Return get detector settings."""
+        """Return Detector Settings.
+
+        Inputs: none. Output: `_DetectorSettings` result.
+        """
         return _DetectorSettings()
 
     @staticmethod
     def getLightSourceSettings():
-        """Return get light source settings."""
+        """Return Light Source Settings.
+
+        Inputs: none. Output: `_LightSourceSettings` result.
+        """
         return _LightSourceSettings()
 
     @staticmethod
     def getLightPath():
-        """Return get light path."""
+        """Return Light Path.
+
+        Inputs: none. Output: `_LightPath` result.
+        """
         return _LightPath()
 
 
@@ -229,6 +324,13 @@ class _Channel:
     """Represent channel."""
 
     def __init__(self, index, label, excitation, emission, logical_channel=None):
+        """Initialize the instance.
+
+        Inputs: `index`, `label`, `excitation`, `emission`, `logical_channel`. Output:
+        None.
+
+        None.
+        """
         self._index = index
         self._label = label
         self._excitation = excitation
@@ -236,23 +338,38 @@ class _Channel:
         self._logical_channel = logical_channel
 
     def getIndex(self):
-        """Return get index."""
+        """Return Index.
+
+        Inputs: none. Output: `self._index`.
+        """
         return self._index
 
     def getLabel(self):
-        """Return get label."""
+        """Return Label.
+
+        Inputs: none. Output: `self._label`.
+        """
         return self._label
 
     def getExcitationWave(self):
-        """Return get excitation wave."""
+        """Return Excitation Wave.
+
+        Inputs: none. Output: `self._excitation`.
+        """
         return self._excitation
 
     def getEmissionWave(self):
-        """Return get emission wave."""
+        """Return Emission Wave.
+
+        Inputs: none. Output: `self._emission`.
+        """
         return self._emission
 
     def getLogicalChannel(self):
-        """Return get logical channel."""
+        """Return Logical Channel.
+
+        Inputs: none. Output: `self._logical_channel`.
+        """
         return self._logical_channel
 
 
@@ -260,20 +377,33 @@ class _NamedObject:
     """Represent named object."""
 
     def __init__(self, object_id, name, parents=None):
+        """Initialize the instance.
+
+        Inputs: `object_id`, `name`, `parents`. Output: None.
+        """
         self._id = object_id
         self._name = name
         self._parents = list(parents or [])
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def listParents(self):
-        """Return list parents."""
+        """Return list parents.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._parents)
 
 
@@ -282,17 +412,26 @@ class _ObjectiveSettings:
 
     @staticmethod
     def getCorrectionCollar():
-        """Return get correction collar."""
+        """Return Correction Collar.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value("0.17")
 
     @staticmethod
     def getID():
-        """Return get identifier."""
+        """Return ID.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(31)
 
     @staticmethod
     def getObjective():
-        """Return get objective."""
+        """Return Objective.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(
             manufacturer="Nikon",
             model="Plan Apo Lambda",
@@ -311,7 +450,10 @@ class _Microscope:
 
     @staticmethod
     def getMicroscopeType():
-        """Return get microscope type."""
+        """Return Microscope Type.
+
+        Inputs: none. Output: 'inverted'.
+        """
         return "inverted"
 
 
@@ -320,12 +462,18 @@ class _Instrument:
 
     @staticmethod
     def getMicroscope():
-        """Return get microscope."""
+        """Return Microscope.
+
+        Inputs: none. Output: `_Microscope` result.
+        """
         return _Microscope()
 
     @staticmethod
     def getObjectives():
-        """Return get objectives."""
+        """Return Objectives.
+
+        Inputs: none. Output: list.
+        """
         return [
             SimpleNamespace(
                 manufacturer="Nikon",
@@ -337,22 +485,34 @@ class _Instrument:
 
     @staticmethod
     def getFilters():
-        """Return get filters."""
+        """Return Filters.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Chroma", model="ET525/50m")]
 
     @staticmethod
     def getDichroics():
-        """Return get dichroics."""
+        """Return Dichroics.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Chroma", model="T495lpxr")]
 
     @staticmethod
     def getDetectors():
-        """Return get detectors."""
+        """Return Detectors.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Hamamatsu", model="Orca Flash")]
 
     @staticmethod
     def getLightSources():
-        """Return get light sources."""
+        """Return Light Sources.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(manufacturer="Coherent", model="Sapphire")]
 
 
@@ -361,22 +521,34 @@ class _OriginalFile:
 
     @staticmethod
     def getName():
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: 'synthetic-generated.dv'.
+        """
         return "synthetic-generated.dv"
 
     @staticmethod
     def getMimetype():
-        """Return get mimetype."""
+        """Return Mimetype.
+
+        Inputs: none. Output: 'application/octet-stream'.
+        """
         return "application/octet-stream"
 
     @staticmethod
     def getSize():
-        """Return get size."""
+        """Return Size.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(4096)
 
     @staticmethod
     def getPath():
-        """Return get path."""
+        """Return Path.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise AssertionError("private file paths must not be indexed")
 
 
@@ -385,7 +557,10 @@ class _UsedFile:
 
     @staticmethod
     def getOriginalFile():
-        """Return get original file."""
+        """Return Original File.
+
+        Inputs: none. Output: `_OriginalFile` result.
+        """
         return _OriginalFile()
 
 
@@ -394,7 +569,10 @@ class _Fileset:
 
     @staticmethod
     def copyUsedFiles():
-        """Handle copy used files."""
+        """Copy Used Files.
+
+        Inputs: none. Output: list.
+        """
         return [_UsedFile()]
 
 
@@ -405,7 +583,10 @@ class _MapAnnotation:
 
     @staticmethod
     def getValue():
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(name="Treatment", value="DMSO")]
 
 
@@ -416,7 +597,10 @@ class _TextAnnotation:
 
     @staticmethod
     def getTextValue():
-        """Return get text value."""
+        """Return Text Value.
+
+        Inputs: none. Output: 'QC passed'.
+        """
         return "QC passed"
 
 
@@ -424,28 +608,44 @@ class _Image:
     """Represent image."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         project = _NamedObject(200, "Cell Cycle")
         self._dataset = _NamedObject(100, "Mitotic Entry", parents=[project])
         self._pixels = _Pixels()
 
     @staticmethod
     def getName():
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: 'img-001'.
+        """
         return "img-001"
 
     @staticmethod
     def getDescription():
-        """Return get description."""
+        """Return Description.
+
+        Inputs: none. Output: 'Synthetic search fixture'.
+        """
         return "Synthetic search fixture"
 
     @staticmethod
     def getAcquisitionDate():
-        """Return get acquisition date."""
+        """Return Acquisition Date.
+
+        Inputs: none. Output: `datetime` result.
+        """
         return datetime(2026, 4, 12, 10, 30, 0)
 
     @staticmethod
     def getChannels():
-        """Return get channels."""
+        """Return Channels.
+
+        Inputs: none. Output: list.
+        """
         return [
             _Channel(0, "DAPI", _Value("405"), _Value("450")),
             _Channel(1, "GFP", _Value("488"), _Value("525"), _LogicalChannel()),
@@ -453,46 +653,73 @@ class _Image:
 
     @staticmethod
     def getObjectiveSettings():
-        """Return get objective settings."""
+        """Return Objective Settings.
+
+        Inputs: none. Output: `_ObjectiveSettings` result.
+        """
         return _ObjectiveSettings()
 
     @staticmethod
     def getDetectorSettings():
-        """Return get detector settings."""
+        """Return Detector Settings.
+
+        Inputs: none. Output: list.
+        """
         return [_DetectorSettings()]
 
     @staticmethod
     def getPixelSizeX(units=True):
-        """Return get pixel size x."""
+        """Return Pixel Size X.
+
+        Inputs: `units`. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPixelSizeY(units=True):
-        """Return get pixel size y."""
+        """Return Pixel Size Y.
+
+        Inputs: `units`. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.108", "µm")
 
     @staticmethod
     def getPixelSizeZ(units=True):
-        """Return get pixel size z."""
+        """Return Pixel Size Z.
+
+        Inputs: `units`. Output: `_UnitValue` result.
+        """
         return _UnitValue("0.400", "µm")
 
     def getPrimaryPixels(self):
-        """Return get primary pixels."""
+        """Return Primary Pixels.
+
+        Inputs: none. Output: `self._pixels`.
+        """
         return self._pixels
 
     @staticmethod
     def getInstrument():
-        """Return get instrument."""
+        """Return Instrument.
+
+        Inputs: none. Output: `_Instrument` result.
+        """
         return _Instrument()
 
     @staticmethod
     def getImagingEnvironment():
-        """Return get imaging environment."""
+        """Return Imaging Environment.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(temperature=_Value("37"), humidity=_Value("40"))
 
     @staticmethod
     def getStageLabel():
-        """Return get stage label."""
+        """Return Stage Label.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(
             name="Well A1",
             x=_Value("1.0"),
@@ -502,17 +729,26 @@ class _Image:
 
     @staticmethod
     def getFileset():
-        """Return get fileset."""
+        """Return Fileset.
+
+        Inputs: none. Output: `_Fileset` result.
+        """
         return _Fileset()
 
     @staticmethod
     def listAnnotations():
-        """Return list annotations."""
+        """Return list annotations.
+
+        Inputs: none. Output: list.
+        """
         return [_MapAnnotation(), _TextAnnotation()]
 
     @staticmethod
     def loadOriginalMetadata():
-        """Return load original metadata."""
+        """Return load original metadata.
+
+        Inputs: none. Output: tuple.
+        """
         return (
             None,
             [
@@ -528,12 +764,18 @@ class _Image:
         )
 
     def listParents(self):
-        """Return list parents."""
+        """Return list parents.
+
+        Inputs: none. Output: list.
+        """
         return [self._dataset]
 
 
 def test_extract_search_document_builds_canonical_fields_and_metadata_attributes():
-    """Verify test extract search document builds canonical behavior."""
+    """Verify extract search document builds canonical fields and metadata attributes.
+
+    Inputs: none. Output: None.
+    """
     image = _Image()
     document, context = extract_search_document(image)
 

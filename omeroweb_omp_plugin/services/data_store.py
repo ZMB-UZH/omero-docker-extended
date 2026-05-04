@@ -51,7 +51,10 @@ _PSYCOPG2_MODULES = _Psycopg2ModuleCache()
 
 
 def _load_psycopg2():
-    """Handle load psycopg2."""
+    """Load psycopg2.
+
+    Inputs: none. Output: tuple. Raises on invalid or unavailable state.
+    """
     if _PSYCOPG2_MODULES.module is not None and _PSYCOPG2_MODULES.extras is not None:
         return _PSYCOPG2_MODULES.module, _PSYCOPG2_MODULES.extras
 
@@ -67,7 +70,13 @@ def _load_psycopg2():
 
 
 def _load_psycopg2_sql():
-    """Handle load psycopg2 SQL."""
+    """Load psycopg2 sql.
+
+    Inputs: none. Output: `_PSYCOPG2_MODULES.sql`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     if _PSYCOPG2_MODULES.sql is not None:
         return _PSYCOPG2_MODULES.sql
 
@@ -81,13 +90,19 @@ def _load_psycopg2_sql():
 
 
 def _safe_query(template, *identifiers):
-    """Compose a parameterized SQL query with safe psycopg2.sql identifiers."""
+    """Compose a parameterized SQL query with safe psycopg2.sql identifiers.
+
+    Inputs: `template`, `*identifiers`. Output: call result.
+    """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
 
 
 def _db_params():
-    """Handle database params."""
+    """DB params.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
     password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
     host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
@@ -117,7 +132,10 @@ def _db_params():
 
 @contextmanager
 def _connect():
-    """Handle connect."""
+    """Open the connection.
+
+    Inputs: none. Output: yielded values. Raises on invalid or unavailable state.
+    """
     psycopg2, _ = _load_psycopg2()
     param_options = _db_params()
     conn = None
@@ -162,7 +180,10 @@ def _connect():
 
 
 def _ensure_schema(conn):
-    """Handle ensure schema."""
+    """Ensure schema.
+
+    Inputs: `conn`. Output: None.
+    """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -192,7 +213,10 @@ def _ensure_schema(conn):
 
 
 def _ensure_ai_schema(conn):
-    """Handle ensure ai schema."""
+    """Ensure AI schema.
+
+    Inputs: `conn`. Output: None.
+    """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -222,7 +246,10 @@ def _ensure_ai_schema(conn):
 
 
 def _ensure_user_settings_schema(conn):
-    """Handle ensure user settings schema."""
+    """Ensure user settings schema.
+
+    Inputs: `conn`. Output: None.
+    """
     _load_psycopg2_sql()
     with conn.cursor() as cur:
         stmt = _safe_query(
@@ -250,7 +277,10 @@ def _ensure_user_settings_schema(conn):
 
 
 def list_variable_sets(username):
-    """Return list variable sets."""
+    """Return list variable sets.
+
+    Inputs: `username`. Output: computed value. Raises on invalid or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -281,7 +311,11 @@ def list_variable_sets(username):
 
 
 def save_variable_set(username, set_name, var_names):
-    """Store save variable set."""
+    """Save variable set.
+
+    Inputs: `username`, `set_name`, `var_names`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -328,7 +362,11 @@ def save_variable_set(username, set_name, var_names):
 
 
 def load_variable_set(username, set_name):
-    """Return load variable set."""
+    """Return load variable set.
+
+    Inputs: `username`, `set_name`. Output: `row[0] if row else None`. Raises on invalid
+    or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -359,7 +397,11 @@ def load_variable_set(username, set_name):
 
 
 def delete_variable_set(username, set_name):
-    """Delete a saved variable set for a user."""
+    """Delete variable set.
+
+    Inputs: `username`, `set_name`. Output: None. Raises on invalid or unavailable
+    state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -406,7 +448,10 @@ def delete_variable_set(username, set_name):
 
 
 def list_ai_credentials(username):
-    """Return list ai credentials."""
+    """Return list ai credentials.
+
+    Inputs: `username`. Output: computed value. Raises on invalid or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -437,7 +482,11 @@ def list_ai_credentials(username):
 
 
 def get_ai_credential(username, provider):
-    """Return get ai credential."""
+    """Return AI credential.
+
+    Inputs: `username`, `provider`. Output: computed value. Raises on invalid or
+    unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -468,7 +517,11 @@ def get_ai_credential(username, provider):
 
 
 def save_ai_credentials(username, provider, api_key):
-    """Store save ai credentials."""
+    """Save ai credentials.
+
+    Inputs: `username`, `provider`, `api_key`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -499,7 +552,11 @@ def save_ai_credentials(username, provider, api_key):
 
 
 def save_user_settings(username, settings_payload):
-    """Store save user settings."""
+    """Save user settings.
+
+    Inputs: `username`, `settings_payload`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     try:
         _, extras = _load_psycopg2()
         _load_psycopg2_sql()
@@ -545,7 +602,10 @@ def save_user_settings(username, settings_payload):
 
 
 def delete_all_user_settings(username):
-    """Handle delete all user settings."""
+    """Delete all user settings.
+
+    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -575,7 +635,10 @@ def delete_all_user_settings(username):
 
 
 def delete_all_variable_sets(username):
-    """Handle delete all variable sets."""
+    """Delete all variable sets.
+
+    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -605,7 +668,10 @@ def delete_all_variable_sets(username):
 
 
 def delete_all_ai_credentials(username):
-    """Handle delete all ai credentials."""
+    """Delete all AI credentials.
+
+    Inputs: `username`. Output: `deleted`. Raises on invalid or unavailable state.
+    """
     try:
         _load_psycopg2_sql()
         with _connect() as conn:
@@ -635,7 +701,13 @@ def delete_all_ai_credentials(username):
 
 
 def delete_all_user_data(username):
-    """Handle delete all user data."""
+    """Delete all user data.
+
+    Inputs: `username`. Output: `deleted_counts`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     try:
         with _connect() as conn:
             _load_psycopg2_sql()
@@ -667,7 +739,10 @@ def delete_all_user_data(username):
 
 
 def _list_user_scoped_tables(conn):
-    """Handle list user scoped tables."""
+    """List user scoped tables.
+
+    Inputs: `conn`. Output: `sorted` result.
+    """
     with conn.cursor() as cur:
         cur.execute(  # nosemgrep
             """

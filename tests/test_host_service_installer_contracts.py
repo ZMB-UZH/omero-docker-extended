@@ -22,7 +22,10 @@ QUOTA_ENFORCER_UNITS = (
 
 
 def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
-    """Handle fake systemctl."""
+    """Fake systemctl.
+
+    Inputs: `tmp_path`. Output: `tuple[Path, Path]`.
+    """
     log_file = tmp_path / "systemctl.log"
     systemctl = tmp_path / "systemctl"
     systemctl.write_text(
@@ -39,7 +42,10 @@ def _fake_systemctl(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _fake_root_bin(tmp_path: Path) -> Path:
-    """Handle fake root bin."""
+    """Fake root bin.
+
+    Inputs: `tmp_path`. Output: `Path`.
+    """
     bin_dir = tmp_path / "fake-bin"
     id_bin = bin_dir / "id"
     dpkg_query = bin_dir / "dpkg-query"
@@ -70,7 +76,10 @@ def _fake_root_bin(tmp_path: Path) -> Path:
 
 
 def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    """Handle run bash."""
+    """Bash.
+
+    Inputs: `script`, `env`. Output: `subprocess.CompletedProcess[str]`.
+    """
     return subprocess.run(
         [BASH_BIN, "-c", script],
         check=False,
@@ -82,12 +91,18 @@ def _run_bash(script: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 
 
 def _sh(path: Path) -> str:
-    """Handle sh."""
+    """Sh.
+
+    Inputs: `path`. Output: `str`.
+    """
     return shlex.quote(str(path))
 
 
 def _systemd_escape(value: Path) -> str:
-    """Handle systemd escape."""
+    """Systemd escape.
+
+    Inputs: `value`. Output: `str`.
+    """
     safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/._:@+-")
     return "".join(
         char if char in safe else f"\\x{ord(char):02x}" for char in str(value)
@@ -97,7 +112,10 @@ def _systemd_escape(value: Path) -> str:
 def _write_stale_systemd_artifacts(
     systemd_dir: Path, unit_names: tuple[str, ...]
 ) -> None:
-    """Handle write stale systemd artifacts."""
+    """Write stale systemd artifacts.
+
+    Inputs: `systemd_dir`, `unit_names`. Output: None.
+    """
     for dependency_dir in (
         systemd_dir / "multi-user.target.wants",
         systemd_dir / "timers.target.wants",
@@ -126,7 +144,10 @@ def _assert_stale_systemd_artifacts_removed(
     systemd_dir: Path,
     unit_names: tuple[str, ...],
 ) -> None:
-    """Handle assert stale systemd artifacts removed."""
+    """Assert stale systemd artifacts removed.
+
+    Inputs: `systemd_dir`, `unit_names`. Output: None.
+    """
     for unit_name in unit_names:
         assert not (systemd_dir / f"{unit_name}.d").exists()
         for dependency_dir in systemd_dir.glob("*.wants"):
@@ -138,7 +159,10 @@ def _assert_stale_systemd_artifacts_removed(
 def test_tmp_cleaner_installer_replaces_managed_units_without_host_paths(
     tmp_path: Path,
 ) -> None:
-    """Verify test tmp cleaner installer replaces managed u behavior."""
+    """Verify temporary cleaner installer replaces managed units without host paths.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     systemd_dir = tmp_path / "systemd system"
     tmp_dir = tmp_path / "omero tmp"
@@ -193,7 +217,10 @@ def test_tmp_cleaner_installer_replaces_managed_units_without_host_paths(
 def test_tmp_cleaner_full_installer_is_idempotent_and_purges_stale_artifacts(
     tmp_path: Path,
 ) -> None:
-    """Verify test tmp cleaner full installer is idempotent behavior."""
+    """Verify temporary cleaner full installer is idempotent and purges stale artifacts.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     fake_bin = _fake_root_bin(tmp_path)
     systemd_dir = tmp_path / "systemd system"
@@ -245,7 +272,10 @@ def test_tmp_cleaner_full_installer_is_idempotent_and_purges_stale_artifacts(
 def test_quota_installer_renders_actual_paths_and_replaces_stale_units(
     tmp_path: Path,
 ) -> None:
-    """Verify test quota installer renders actual paths and behavior."""
+    """Verify quota installer renders actual paths and replaces stale units.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     systemd_dir = tmp_path / "systemd system"
     install_root = tmp_path / "install root"
@@ -312,7 +342,10 @@ def test_quota_installer_renders_actual_paths_and_replaces_stale_units(
 def test_quota_full_installer_is_idempotent_and_purges_stale_artifacts(
     tmp_path: Path,
 ) -> None:
-    """Verify test quota full installer is idempotent and p behavior."""
+    """Verify quota full installer is idempotent and purges stale artifacts.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     systemctl, systemctl_log = _fake_systemctl(tmp_path)
     fake_bin = _fake_root_bin(tmp_path)
     systemd_dir = tmp_path / "systemd system"
@@ -373,7 +406,10 @@ def test_quota_full_installer_is_idempotent_and_purges_stale_artifacts(
 def test_quota_defaults_file_quotes_installation_specific_paths(
     tmp_path: Path,
 ) -> None:
-    """Verify test quota defaults file quotes installation behavior."""
+    """Verify quota defaults file quotes installation specific paths.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     data_dir = tmp_path / 'omero data "quoted" $HOME `tick` back\\slash'
     defaults_file = tmp_path / "etc default" / "omero-quota-enforcer"
     data_dir.mkdir()

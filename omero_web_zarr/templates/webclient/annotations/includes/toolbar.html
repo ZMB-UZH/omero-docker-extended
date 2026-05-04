@@ -65,6 +65,7 @@
                 var shareMode = "{{ share|yesno:'true,false' }}" === "true";
 
                 if (!shareMode) {
+                  // Sanitize Openwith URL. Inputs: candidateUrl. Output: return value.
                   function sanitizeOpenwithUrl(candidateUrl) {
                     try {
                       var resolvedUrl = new URL(candidateUrl, window.location.origin);
@@ -77,12 +78,14 @@
                     }
                   }
 
+                  // Find Openwith Link. Inputs: openwithId. Output: return value.
                   function findOpenwithLink(openwithId) {
                     return $("#right_panel_openwith a").filter(function() {
                       return $(this).attr("data-openwithid") === String(openwithId);
                     });
                   }
 
+                  // Build Openwith Menu Items. Inputs: none. Output: return value.
                   function buildOpenwithMenuItems() {
                     return WEBCLIENT.OPEN_WITH.map(function(v){
                       var label = v.label || v.id;

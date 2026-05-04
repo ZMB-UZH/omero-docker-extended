@@ -17,14 +17,20 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.helper_path = cls.repo_root / "installation" / "install_transcript_utils.sh"
 
     def test_transcript_helper_saves_preinstall_and_install_output_under_omero_data_path(
         self,
     ) -> None:
-        """Verify test transcript helper saves preinstall and i behavior."""
+        """Verify transcript helper saves preinstall and install output under OMERO data path.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
             data_dir = temp_root / "omero_data"
@@ -82,7 +88,10 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_interactive_transcript_path_does_not_trip_on_pipestatus_under_set_u(
         self,
     ) -> None:
-        """Verify test interactive transcript path does not tri behavior."""
+        """Verify interactive transcript path does not trip on pipestatus under set u.
+
+        Inputs: none. Output: None.
+        """
         if shutil.which("script") is None:
             self.skipTest("script command not available")
         script_bin = shutil.which("script")
@@ -147,7 +156,10 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     def test_transcript_helper_rejects_unsafe_env_assignments_without_executing_them(
         self,
     ) -> None:
-        """Verify test transcript helper rejects unsafe env ass behavior."""
+        """Verify transcript helper rejects unsafe environment assignments without executing them.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
             env_file = temp_root / "installation_paths.env"

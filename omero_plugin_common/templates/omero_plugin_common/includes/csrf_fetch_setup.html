@@ -4,6 +4,7 @@
         return;
     }
 
+    // Return a cookie value. Inputs: name. Output: return value.
     function getCookie(name) {
         const prefix = `${name}=`;
         const cookies = document.cookie ? document.cookie.split(';') : [];
@@ -16,6 +17,7 @@
         return '';
     }
 
+    // Resolve Request URL. Inputs: input. Output: return value.
     function resolveRequestUrl(input) {
         if (typeof input === 'string') {
             return new URL(input, window.location.href);
@@ -29,6 +31,7 @@
         return null;
     }
 
+    // Return whether Mutating Method. Inputs: method. Output: return value.
     function isMutatingMethod(method) {
         return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
             String(method || 'GET').toUpperCase()

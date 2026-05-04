@@ -1,4 +1,4 @@
-"""Run Vulture against tracked production Python files only."""
+"""Execute Vulture against tracked production Python files only."""
 
 from __future__ import annotations
 
@@ -15,7 +15,10 @@ EXCLUDED_TOP_LEVEL_DIRS: frozenset[str] = frozenset({"docs", "tests", "third_par
 
 
 def resolve_required_executable(name: str) -> str:
-    """Resolve an executable name to an absolute path."""
+    """Resolve required executable.
+
+    Inputs: `name`. Output: `str`. Raises on invalid or unavailable state.
+    """
     resolved = shutil.which(name)
     if not resolved:
         raise RuntimeError(f"Required executable `{name}` is not available in PATH.")
@@ -23,7 +26,10 @@ def resolve_required_executable(name: str) -> str:
 
 
 def is_vulture_target(relative_path: PurePosixPath) -> bool:
-    """Return True when a tracked Python file belongs to the production scope."""
+    """Return True when a tracked Python file belongs to the production scope.
+
+    Inputs: `relative_path`. Output: `bool`.
+    """
     if relative_path.suffix != ".py":
         return False
 
@@ -46,7 +52,10 @@ def is_vulture_target(relative_path: PurePosixPath) -> bool:
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
-    """Handle run git."""
+    """Git.
+
+    Inputs: `repo_root`, `*args`. Output: `str`.
+    """
     safe_repo_root = str(repo_root.resolve())
     completed = subprocess.run(
         [
@@ -64,7 +73,10 @@ def _run_git(repo_root: Path, *args: str) -> str:
 
 
 def list_vulture_targets(repo_root: Path) -> list[str]:
-    """List tracked Python files that belong to the Vulture production scope."""
+    """List vulture targets.
+
+    Inputs: `repo_root`. Output: `list[str]`. Raises on invalid or unavailable state.
+    """
     tracked_files = _run_git(repo_root, "ls-files", "--", TRACKED_PYTHON_PATHSPEC)
     targets = [
         relative_path
@@ -79,7 +91,10 @@ def list_vulture_targets(repo_root: Path) -> list[str]:
 
 
 def build_vulture_command(paths: list[str], *, min_confidence: int) -> list[str]:
-    """Build the Vulture command for the given tracked paths."""
+    """The Vulture command for the given tracked paths.
+
+    Inputs: `paths`, `min_confidence`. Output: `list[str]`.
+    """
     return [
         sys.executable,
         "-m",
@@ -91,14 +106,20 @@ def build_vulture_command(paths: list[str], *, min_confidence: int) -> list[str]
 
 
 def run_vulture(repo_root: Path, paths: list[str], *, min_confidence: int) -> int:
-    """Run Vulture from the repository root."""
+    """Vulture from the repository root.
+
+    Inputs: `repo_root`, `paths`, `min_confidence`. Output: `int`.
+    """
     command = build_vulture_command(paths, min_confidence=min_confidence)
     completed = subprocess.run(command, cwd=repo_root, check=False)
     return completed.returncode
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build build parser."""
+    """Build the command-line parser.
+
+    Inputs: none. Output: `argparse.ArgumentParser`.
+    """
     parser = argparse.ArgumentParser(
         description="Run Vulture against tracked production Python files only."
     )
@@ -122,7 +143,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command-line entry point."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     args = build_parser().parse_args(argv)
     repo_root = Path(args.repo_root).resolve()
     targets = list_vulture_targets(repo_root)

@@ -99,6 +99,7 @@ const chartCaption = document.getElementById('chart_caption');
 const chartCard = document.querySelector('.storage-chart-card');
 const storageVisualLayout = document.getElementById('storage_visual_layout');
 const autoRefreshToggle = document.getElementById('storage_autorefresh');
+// Return storage. Inputs: none. Output: return value.
 const storage = (() => {
     try {
         const testKey = '__admin_tools_storage_state_test__';
@@ -110,6 +111,7 @@ const storage = (() => {
     }
 })();
 const storageStateKey = 'omeroweb_admin_tools_storage_state_v1';
+// Parse Stored State. Inputs: raw. Output: return value.
 const parseStoredState = (raw) => {
     if (!raw) {
         return null;
@@ -144,6 +146,7 @@ let totalUsedBytes = 0;
 let quotasEditMode = false;
 let quotaEnforcementAvailable = null;
 
+// Sync Quota Tab Availability. Inputs: none. Output: return value.
 function syncQuotaTabAvailability() {
     const btn = viewButtons.quotas;
     if (quotaEnforcementAvailable === true) {
@@ -160,6 +163,7 @@ function syncQuotaTabAvailability() {
     // The button starts enabled in HTML; once data loads the correct state is applied.
 }
 
+// Return Minimum Quota GB. Inputs: none. Output: return value.
 function getMinimumQuotaGb() {
     const configured = Number(rawData?.quotas?.min_quota_gb);
     if (Number.isFinite(configured) && configured > 0) {
@@ -168,6 +172,7 @@ function getMinimumQuotaGb() {
     return 0.10;
 }
 
+// Return persist State. Inputs: none. Output: return value.
 function persistState() {
     if (!storage) {
         return;
@@ -179,6 +184,7 @@ function persistState() {
     storage.setItem(storageStateKey, JSON.stringify(payload));
 }
 
+// Apply Stored State. Inputs: none. Output: return value.
 function applyStoredState() {
     const storedState = parseStoredState(storage?.getItem(storageStateKey));
     if (!storedState) {
@@ -192,6 +198,7 @@ function applyStoredState() {
     }
 }
 
+// Escape HTML. Inputs: value. Output: return value.
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -201,6 +208,7 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+// Format bytes. Inputs: v. Output: return value.
 function bytes(v) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let value = Number(v || 0);
@@ -212,6 +220,7 @@ function bytes(v) {
     return `${value.toFixed(DISK_USAGE_DECIMALS)} ${units[idx]}`;
 }
 
+// Return Column Layout For View. Inputs: none. Output: return value.
 function getColumnLayoutForView() {
     if (currentView === 'groups') {
         return ['15%', `calc(85% - ${(DISK_USAGE_COLUMN_WIDTH_PX * 2) + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
@@ -222,6 +231,7 @@ function getColumnLayoutForView() {
     return ['15%', '16%', `calc(69% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
 }
 
+// Sync Storage Table Height. Inputs: none. Output: return value.
 function syncStorageTableHeight() {
     if (!tableScroll || !chartCard) {
         return;
@@ -229,6 +239,7 @@ function syncStorageTableHeight() {
     tableScroll.style.maxHeight = `${chartCard.clientHeight}px`;
 }
 
+// Format GB. Inputs: value. Output: return value.
 function gb(value) {
     if (value === null || value === undefined || Number.isNaN(Number(value))) {
         return 'not set';
@@ -237,6 +248,7 @@ function gb(value) {
 }
 
 
+// Return managed Repository Compatibility. Inputs: none. Output: return value.
 function managedRepositoryCompatibility() {
     const compatibility = rawData.quotas?.managed_repository;
     if (!compatibility || typeof compatibility.is_compatible !== 'boolean') {
@@ -245,10 +257,12 @@ function managedRepositoryCompatibility() {
     return compatibility;
 }
 
+// Return quota Compatibility Message. Inputs: none. Output: return value.
 function quotaCompatibilityMessage() {
     return 'The current ManagedRepository structure is incompatible with setting up storage quotas per group. The suggested ManagedRepository template is: %group%/%user%/%year%-%month%-%day%/%time%.';
 }
 
+// Extract Error Message. Inputs: payload, fallbackMessage. Output: return value.
 function extractErrorMessage(payload, fallbackMessage) {
     if (payload && typeof payload.error === 'string' && payload.error.trim()) {
         return payload.error.trim();
@@ -256,6 +270,7 @@ function extractErrorMessage(payload, fallbackMessage) {
     return fallbackMessage;
 }
 
+// Read JSON Payload. Inputs: response, contextLabel. Output: Promise result.
 async function readJsonPayload(response, contextLabel) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('application/json')) {
@@ -268,6 +283,7 @@ async function readJsonPayload(response, contextLabel) {
     }
 }
 
+// Return Rows For View. Inputs: none. Output: return value.
 function getRowsForView() {
     if (currentView === 'groups' || currentView === 'quotas') {
         return (rawData.by_group || []).map((item) => {
@@ -303,6 +319,7 @@ function getRowsForView() {
     return users;
 }
 
+// Return Headers For View. Inputs: none. Output: return value.
 function getHeadersForView() {
     if (currentView === 'groups') {
         return ['Group', 'Username(s)', 'Permissions', 'Disk usage', 'Disk usage [% global]'];
@@ -313,6 +330,7 @@ function getHeadersForView() {
     return ['Username', 'Full name', 'Group(s)', 'Disk usage', 'Disk usage [% global]'];
 }
 
+// Set View. Inputs: nextView. Output: return value.
 function setView(nextView) {
     currentView = nextView;
     Object.entries(viewButtons).forEach(([viewName, button]) => {
@@ -327,6 +345,7 @@ function setView(nextView) {
     render();
 }
 
+// Return palette. Inputs: index. Output: return value.
 function palette(index) {
     const discretePalette = [
         '#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed',
@@ -336,6 +355,7 @@ function palette(index) {
     return discretePalette[index % discretePalette.length];
 }
 
+// Draw Pie Chart. Inputs: rows, labelName. Output: return value.
 function drawPieChart(rows, labelName) {
     const ctx = chartCanvas.getContext('2d');
     const cssWidth = Number(chartCanvas.getAttribute('width')) || 460;
@@ -418,6 +438,7 @@ function drawPieChart(rows, labelName) {
     chartCaption.textContent = `${labelName}: ${topRows.length} segment${topRows.length === 1 ? '' : 's'} shown${otherBytes > 0 ? ' (including Others)' : ''}.`;
 }
 
+// Render Quota Logs. Inputs: logs. Output: return value.
 function renderQuotaLogs(logs) {
     if (!Array.isArray(logs) || !logs.length) {
         quotaLogsBody.innerHTML = '<div class="log-empty">No quota log entries.</div>';
@@ -432,6 +453,7 @@ function renderQuotaLogs(logs) {
     quotaLogsBody.innerHTML = lines.join('');
 }
 
+// Render. Inputs: none. Output: return value.
 function render() {
     const storageTable = document.querySelector('.storage-table');
     const isGroupView = currentView === 'groups' || currentView === 'quotas';
@@ -517,6 +539,7 @@ function render() {
     syncStorageTableHeight();
 }
 
+// Export CSV. Inputs: none. Output: return value.
 function exportCsv() {
     const rows = getRowsForView();
     const headers = getHeadersForView();
@@ -539,6 +562,7 @@ function exportCsv() {
     URL.revokeObjectURL(link.href);
 }
 
+// Refresh Quotas Data. Inputs: none. Output: Promise result.
 async function refreshQuotasData() {
     const response = await fetch(quotaDataUrl, { credentials: 'same-origin' });
     const payload = await readJsonPayload(response, 'Quota data request');
@@ -558,6 +582,7 @@ async function refreshQuotasData() {
     }
 }
 
+// Reset Quotas Data For Unavailable Server. Inputs: none. Output: side effects.
 function resetQuotasDataForUnavailableServer() {
     rawData.quotas = {
         quotas_gb: {},
@@ -567,6 +592,7 @@ function resetQuotasDataForUnavailableServer() {
     };
 }
 
+// Load Data. Inputs: none. Output: Promise result.
 async function loadData() {
     statusEl.textContent = 'Loading storage distribution...';
     try {
@@ -605,6 +631,7 @@ async function loadData() {
     }
 }
 
+// Save Quota Edits. Inputs: none. Output: Promise result.
 async function saveQuotaEdits() {
     const inputs = [...document.querySelectorAll('.storage-quota-input')];
     const updates = inputs.map((input) => ({
@@ -634,6 +661,7 @@ async function saveQuotaEdits() {
     }
 }
 
+// Clear Auto Refresh Timer. Inputs: none. Output: return value.
 function clearAutoRefreshTimer() {
     if (autoRefreshTimer !== null) {
         window.clearInterval(autoRefreshTimer);
@@ -641,6 +669,7 @@ function clearAutoRefreshTimer() {
     }
 }
 
+// Sync Auto Refresh. Inputs: none. Output: return value.
 function syncAutoRefresh() {
     clearAutoRefreshTimer();
     persistState();

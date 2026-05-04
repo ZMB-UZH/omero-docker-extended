@@ -30,18 +30,27 @@ from omeroweb_import.views import utils as view_utils
 
 
 def _test_job_id(suffix: str) -> str:
-    """Build a fake job ID at runtime so static scanners do not flag it as a token."""
+    """Verify job ID.
+
+    Inputs: `suffix`. Output: `str`.
+    """
     return "a" * (32 - len(suffix)) + suffix
 
 
 def _ensure_dir(path):
-    """Handle ensure dir."""
+    """Ensure directory.
+
+    Inputs: `path`. Output: bool.
+    """
     Path(path).mkdir(parents=True, exist_ok=True)
     return True
 
 
 def _mark_job_owned(monkeypatch, job):
-    """Handle mark job owned."""
+    """Mark job owned.
+
+    Inputs: `monkeypatch`, `job`. Output: None.
+    """
     job["username"] = "alice"
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
@@ -49,7 +58,10 @@ def _mark_job_owned(monkeypatch, job):
 def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     tmp_path: Path, monkeypatch
 ):
-    """Verify test upload files accepts chunked upload and behavior."""
+    """Verify upload files accepts chunked upload and marks file uploaded.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `job`.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("b2")
     job = {
@@ -81,7 +93,10 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
     fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
-        """Handle fake apply upload updates."""
+        """Fake apply upload updates.
+
+        Inputs: `current_job_id`, `updates`, `upload_errors`. Output: `job`.
+        """
         assert current_job_id == job_id
         assert upload_errors == []
         assert updates == [{"upload_id": "u1", "status": "uploaded"}]
@@ -160,7 +175,10 @@ def test_upload_files_accepts_idempotent_final_chunk_retry_with_checksum(
     tmp_path: Path,
     monkeypatch,
 ):
-    """Verify final chunk retry is accepted without mutating completed jobs."""
+    """Verify final chunk retry is accepted without mutating completed jobs.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `job`.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("c3")
     job = {
@@ -189,7 +207,10 @@ def test_upload_files_accepts_idempotent_final_chunk_retry_with_checksum(
     import_started = []
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
-        """Mark the job as uploaded once."""
+        """Mark the job as uploaded once.
+
+        Inputs: `current_job_id`, `updates`, `upload_errors`. Output: `job`.
+        """
         apply_calls.append((current_job_id, updates, upload_errors))
         job["files"][0]["status"] = "uploaded"
         job["uploaded_bytes"] = 5
@@ -243,7 +264,10 @@ def test_upload_files_accepts_idempotent_final_chunk_retry_with_checksum(
 
 
 def test_upload_files_rejects_chunk_checksum_mismatch(tmp_path: Path, monkeypatch):
-    """Verify chunk checksum mismatch is rejected before staging bytes."""
+    """Verify chunk checksum mismatch is rejected before staging bytes.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("c4")
     job = {
@@ -304,7 +328,10 @@ def test_upload_files_rejects_chunk_checksum_mismatch(tmp_path: Path, monkeypatc
 def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     tmp_path: Path, monkeypatch
 ):
-    """Verify test upload files defers noncompat import unt behavior."""
+    """Verify upload files defers noncompat import until background plan exists.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `job`.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("ff")
     job = {
@@ -337,7 +364,10 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
-        """Handle fake apply upload updates."""
+        """Fake apply upload updates.
+
+        Inputs: `current_job_id`, `updates`, `upload_errors`. Output: `job`.
+        """
         assert current_job_id == job_id
         assert upload_errors == []
         assert updates == [{"upload_id": "u1", "status": "uploaded"}]
@@ -382,7 +412,10 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
 def test_upload_files_resets_existing_staged_file_when_chunk_restarts(
     tmp_path: Path, monkeypatch
 ):
-    """Verify test upload files resets existing staged file behavior."""
+    """Verify upload files resets existing staged file when chunk restarts.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("ba")
     job = {
@@ -456,7 +489,10 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(
 
 
 def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch):
-    """Verify test upload files rejects chunk offset mismatch."""
+    """Verify upload files rejects chunk offset mismatch.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("dd")
     job = {
@@ -511,7 +547,10 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
 
 
 def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
-    """Verify test upload files rejects unsafe staged path."""
+    """Verify upload files rejects unsafe staged path.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("f4")
     job = {
@@ -569,7 +608,10 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
 
 
 def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatch):
-    """Verify test upload files chunked save error is sanit behavior."""
+    """Verify upload files chunked save error is sanitized.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `job`.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("9f")
     job = {
@@ -597,7 +639,10 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
     apply_calls = []
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
-        """Handle fake apply upload updates."""
+        """Fake apply upload updates.
+
+        Inputs: `current_job_id`, `updates`, `upload_errors`. Output: `job`.
+        """
         apply_calls.append((current_job_id, updates, upload_errors))
         return job
 
@@ -647,13 +692,25 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
 def test_upload_files_wrapper_returns_json_when_internal_upload_raises(
     monkeypatch, caplog
 ):
-    """Verify test upload files wrapper returns JSON when i behavior."""
+    """Verify upload files wrapper returns JSON when internal upload raises.
+
+    Inputs: `monkeypatch`, `caplog`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     request = RequestFactory().post("/omeroweb_import/upload/test-job/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
 
     def raise_upload_error(request, job_id):
-        """Handle raise upload error."""
+        """Raise upload error.
+
+        Inputs: `request`, `job_id`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         raise RuntimeError("boom")
 
     monkeypatch.setattr(index_view, "_upload_files", raise_upload_error)
@@ -670,7 +727,10 @@ def test_upload_files_wrapper_returns_json_when_internal_upload_raises(
 
 
 def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
-    """Verify test upload files hides oserror details."""
+    """Verify upload files hides oserror details.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     upload_root = tmp_path / "upload-root"
     job_id = _test_job_id("0f")
     job = {

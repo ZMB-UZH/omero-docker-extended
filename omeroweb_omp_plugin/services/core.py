@@ -55,44 +55,68 @@ from .parsing.filename_parser import parse_filename
 
 
 def _get_hash_secret():
-    """Handle get hash secret."""
+    """Return hash secret.
+
+    Inputs: none. Output: call result.
+    """
     return _annotation_service.get_hash_secret()
 
 
 def _canonicalize_mapping(mapping):
-    """Handle canonicalize mapping."""
+    """Canonicalize mapping.
+
+    Inputs: `mapping`. Output: call result.
+    """
     return _annotation_service.canonicalize_mapping(mapping)
 
 
 def compute_plugin_hash(mapping):
-    """Handle compute plugin hash."""
+    """Compute plugin hash.
+
+    Inputs: `mapping`. Output: call result.
+    """
     return _annotation_service.compute_plugin_hash(mapping)
 
 
 def is_plugin_annotation(annotation):
-    """Return whether is plugin annotation."""
+    """Return whether plugin annotation.
+
+    Inputs: `annotation`. Output: call result.
+    """
     return _annotation_service.is_plugin_annotation(annotation)
 
 
 def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
-    """Handle find plugin annotation identifiers."""
+    """Find plugin annotation IDs.
+
+    Inputs: `conn`, `image_id`, `allow_legacy`. Output: call result.
+    """
     return _annotation_service.find_plugin_annotation_ids(
         conn, image_id, allow_legacy=allow_legacy
     )
 
 
 def find_annotation_link_ids(conn, annotation_ids):
-    """Handle find annotation link identifiers."""
+    """Find annotation link IDs.
+
+    Inputs: `conn`, `annotation_ids`. Output: call result.
+    """
     return _annotation_service.find_annotation_link_ids(conn, annotation_ids)
 
 
 def find_map_annotation_ids(conn, image_id):
-    """Handle find map annotation identifiers."""
+    """Find map annotation IDs.
+
+    Inputs: `conn`, `image_id`. Output: call result.
+    """
     return _annotation_service.find_map_annotation_ids(conn, image_id)
 
 
 def _supports_legacy_annotation_kwargs() -> bool:
-    """Handle supports legacy annotation kwargs."""
+    """Supports legacy annotation kwargs.
+
+    Inputs: none. Output: `bool`.
+    """
     try:
         parameters = inspect.signature(
             _annotation_service.delete_existing_annotations
@@ -107,12 +131,18 @@ def _supports_legacy_annotation_kwargs() -> bool:
 
 
 def _legacy_annotation_delete_callable():
-    """Handle legacy annotation delete callable."""
+    """Legacy annotation delete callable.
+
+    Inputs: none. Output: `_annotation_service.delete_existing_annotations`.
+    """
     return _annotation_service.delete_existing_annotations
 
 
 def _call_dynamic(callable_obj, *args, **kwargs):
-    """Handle call dynamic."""
+    """Call dynamic.
+
+    Inputs: `callable_obj`, `*args`, `**kwargs`. Output: `callable_obj` result.
+    """
     return callable_obj(*args, **kwargs)
 
 
@@ -123,7 +153,11 @@ def _call_legacy_annotation_delete(
     link_ids=None,
     allow_legacy=False,
 ):
-    """Handle call legacy annotation delete."""
+    """Call legacy annotation delete.
+
+    Inputs: `conn`, `image_id`, `annotation_ids`, `link_ids`, `allow_legacy`. Output:
+    `_call_dynamic` result.
+    """
     legacy_delete_existing_annotations = _legacy_annotation_delete_callable()
     legacy_kwargs = {
         "annotation_ids": annotation_ids,
@@ -139,7 +173,10 @@ def _call_legacy_annotation_delete(
 
 
 def _normalize_annotation_ids(values):
-    """Handle normalize annotation identifiers."""
+    """Normalize annotation IDs.
+
+    Inputs: `values`. Output: `normalized`.
+    """
     normalized = []
     seen = set()
     for value in values or []:
@@ -154,7 +191,10 @@ def _normalize_annotation_ids(values):
 
 
 def _try_normalize_annotation_id(value):
-    """Handle try normalize annotation identifier."""
+    """Try normalize annotation ID.
+
+    Inputs: `value`. Output: `int` result or None.
+    """
     try:
         return int(value)
     except (TypeError, ValueError, OverflowError):
@@ -162,7 +202,10 @@ def _try_normalize_annotation_id(value):
 
 
 def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
-    """Handle delete object by identifier."""
+    """Delete object by ID.
+
+    Inputs: `conn`, `update`, `object_type`, `stub_type`, `object_id`. Output: bool.
+    """
     if object_type == "MapAnnotation":
         conn.deleteObjects("Annotation", [int(object_id)], wait=True)
         return True
@@ -184,7 +227,13 @@ def _delete_object_by_id(conn, update, object_type, stub_type, object_id):
 def _delete_existing_annotations_by_ids(
     conn, image_id, *, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
-    """Handle delete existing annotations by identifiers."""
+    """Delete existing annotations by IDs.
+
+    Inputs: `conn`, `image_id`, `annotation_ids`, `link_ids`, `allow_legacy`. Output:
+    tuple.
+
+    tuple.
+    """
     resolved_annotation_ids = _normalize_annotation_ids(
         annotation_ids
         if annotation_ids is not None
@@ -228,7 +277,13 @@ def _delete_existing_annotations_by_ids(
 def delete_existing_annotations(
     conn, *args, annotation_ids=None, link_ids=None, allow_legacy=False
 ):
-    """Handle delete existing annotations."""
+    """Delete existing annotations.
+
+    Inputs: `conn`, `annotation_ids`, `link_ids`, `allow_legacy`, `*args`. Output: call
+    result. Raises on invalid or unavailable state.
+
+    result. Raises on invalid or unavailable state.
+    """
     uses_legacy_id_api = (
         annotation_ids is not None or link_ids is not None or len(args) == 1
     )

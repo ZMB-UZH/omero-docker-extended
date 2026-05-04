@@ -7,11 +7,13 @@ TMP_BASE="$(mktemp -d)"
 PASS=0
 FAIL=0
 
+# Clean up temporary resources. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup() {
     rm -rf "${TMP_BASE}"
 }
 trap cleanup EXIT
 
+# Create mock docker. Inputs: shell arguments and environment. Output: command status and side effects.
 create_mock_docker() {
     local test_dir="$1"
     local mock_path="${test_dir}/docker"
@@ -207,6 +209,7 @@ MOCK
     touch "${test_dir}/docker_calls.log"
 }
 
+# Assert contains. Inputs: shell arguments and environment. Output: command status and side effects.
 assert_contains() {
     local output="$1"
     local expected="$2"
@@ -219,6 +222,7 @@ assert_contains() {
     fi
 }
 
+# Assert log has. Inputs: shell arguments and environment. Output: command status and side effects.
 assert_log_has() {
     local log="$1"
     local expected="$2"
@@ -231,6 +235,7 @@ assert_log_has() {
     fi
 }
 
+# Assert log not has. Inputs: shell arguments and environment. Output: command status and side effects.
 assert_log_not_has() {
     local log="$1"
     local expected="$2"
@@ -243,6 +248,7 @@ assert_log_not_has() {
     fi
 }
 
+# Execute case. Inputs: shell arguments and environment. Output: command status and side effects.
 run_case() {
     local name="$1"
     local setup_fn="$2"
@@ -272,6 +278,7 @@ run_case() {
     fi
 }
 
+# Setup full. Inputs: shell arguments and environment. Output: command status and side effects.
 setup_full() {
     local dir="$1"
     cat > "${dir}/containers.conf" <<'EOF2'
@@ -284,6 +291,7 @@ moby/buildkit:buildx-stable-1|img2
 EOF2
 }
 
+# Validate full. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_full() {
     local dir="$1"
     local output="$2"
@@ -298,6 +306,7 @@ validate_full() {
 }
 
 
+# Setup compose redis name. Inputs: shell arguments and environment. Output: command status and side effects.
 setup_compose_redis_name() {
     local dir="$1"
     cat > "${dir}/containers.conf" <<'EOF2'
@@ -308,6 +317,7 @@ redis-sysctl-init:custom|img1
 EOF2
 }
 
+# Validate compose redis name. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_compose_redis_name() {
     local dir="$1"
     local output="$2"
@@ -318,7 +328,9 @@ validate_compose_redis_name() {
     assert_log_not_has "${dir}/docker_calls.log" "rm -f omero-redis-sysctl-init-1"
 }
 
+# Setup empty. Inputs: shell arguments and environment. Output: command status and side effects.
 setup_empty() { :; }
+# Validate empty. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_empty() {
     local dir="$1"
     local output="$2"

@@ -16,7 +16,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.installation_script = (
             cls.repo_root / "installation" / "installation_script.sh"
@@ -33,7 +36,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         cls.helper_script = cls.helper_path.read_text(encoding="utf-8")
 
     def test_helper_plan_uses_only_configured_shared_prefix_seeds(self) -> None:
-        """Verify test helper plan uses only configured shared behavior."""
+        """Verify helper plan uses only configured shared prefix seeds.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_legacy" / "alice").mkdir(parents=True)
@@ -60,7 +66,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
     def test_helper_plan_stops_before_volatile_tokens(self) -> None:
-        """Verify test helper plan stops before volatile tokens."""
+        """Verify helper plan stops before volatile tokens.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_private" / "2025" / "alice").mkdir(parents=True)
@@ -80,7 +89,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_handles_literal_shared_prefix_without_group_token(
         self,
     ) -> None:
-        """Verify test helper plan handles literal shared prefi behavior."""
+        """Verify helper plan handles literal shared prefix without group token.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             managed_root.mkdir(parents=True)
@@ -98,7 +110,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_helper_plan_does_not_infer_group_prefixes_from_repository_contents(
         self,
     ) -> None:
-        """Verify test helper plan does not infer group prefixe behavior."""
+        """Verify helper plan does not infer group prefixes from repository contents.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_private" / "alice").mkdir(parents=True)
@@ -121,7 +136,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertEqual("", result.stdout.strip())
 
     def test_helper_plan_is_read_only(self) -> None:
-        """Verify test helper plan is read only."""
+        """Verify helper plan is read only.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "ManagedRepository"
             (managed_root / "users_private" / "alice").mkdir(parents=True)
@@ -150,7 +168,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertEqual(before_paths, after_paths)
 
     def test_write_repo_root_sync_status_records_expected_fields(self) -> None:
-        """Verify test write repo root sync status records expe behavior."""
+        """Verify write repo root sync status records expected fields.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "write_repo_root_sync_status() {",
@@ -179,7 +200,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("failed_prefix_count=0", result.stdout)
 
     def test_installation_wait_accepts_current_repo_root_sync_status(self) -> None:
-        """Verify test installation wait accepts current repo r behavior."""
+        """Verify installation wait accepts current repo root sync status.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -225,7 +249,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             self._run_bash(script)
 
     def test_installation_wait_skips_when_no_stable_shared_prefix(self) -> None:
-        """Verify test installation wait skips when no stable s behavior."""
+        """Verify installation wait skips when no stable shared prefix.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -258,7 +285,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_dropbox_user_dir_sync_status(
         self,
     ) -> None:
-        """Verify test installation wait accepts current dropbo behavior."""
+        """Verify installation wait accepts current dropbox user directory sync status.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -312,7 +342,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_dropbox_ice_bootstrap_status(
         self,
     ) -> None:
-        """Verify test installation wait accepts current dropbo behavior."""
+        """Verify installation wait accepts current dropbox ice bootstrap status.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -359,7 +392,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("DropBox Ice bootstrap is ready", result.stdout)
 
     def test_installation_dropbox_ice_timeout_is_retryable(self) -> None:
-        """Verify test installation dropbox ice timeout is retr behavior."""
+        """Verify installation dropbox ice timeout is retryable.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -412,7 +448,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotIn("ERROR:", result.stderr)
 
     def test_installation_dropbox_ice_error_is_non_retryable(self) -> None:
-        """Verify test installation dropbox ice error is non re behavior."""
+        """Verify installation dropbox ice error is non retryable.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -464,7 +503,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("non-retryable error", result.stderr)
 
     def test_installation_dropbox_user_dir_timeout_is_retryable(self) -> None:
-        """Verify test installation dropbox user dir timeout is behavior."""
+        """Verify installation dropbox user directory timeout is retryable.
+
+        Inputs: none. Output: None.
+        """
         function_text = "\n".join(
             [
                 self.installation_validators,
@@ -527,7 +569,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotIn("ERROR:", result.stderr)
 
     def test_dropbox_ice_bootstrap_retry_budget_becomes_error(self) -> None:
-        """Verify test dropbox ice bootstrap retry budget becom behavior."""
+        """Verify dropbox ice bootstrap retry budget becomes error.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "write_dropbox_ice_bootstrap_status() {",
@@ -597,7 +642,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("retry budget exhausted", result.stdout)
 
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
-        """Verify test repo root bootstrap retries lookup befor behavior."""
+        """Verify repo root bootstrap retries lookup before marking failure.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "repo_root_sync_stable_prefix_depth() {",
@@ -683,7 +731,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("failed_prefix_count=0", result.stdout)
 
     def test_repo_root_bootstrap_lookup_is_repo_aware(self) -> None:
-        """Verify test repo root bootstrap lookup is repo aware."""
+        """Verify repo root bootstrap lookup is repo aware.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn('target_repo_uuid = ""', self.helper_script)
         self.assertIn("sharedResources().repositories()", self.helper_script)
         self.assertIn("host=host, port=port", self.helper_script)
@@ -697,7 +748,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
     def test_helper_lookup_rejects_non_positive_port(self) -> None:
-        """Verify test helper lookup rejects non positive port."""
+        """Verify helper lookup rejects non positive port.
+
+        Inputs: none. Output: None.
+        """
         result = subprocess.run(
             [
                 sys.executable,
@@ -726,7 +780,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_validate_managed_repository_configuration_rejects_relative_path(
         self,
     ) -> None:
-        """Verify test validate managed repository configuratio behavior."""
+        """Verify validate managed repository configuration rejects relative path.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "normalize_dir_path() {",
@@ -762,7 +819,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_validate_managed_repository_configuration_rejects_image_local_repo(
         self,
     ) -> None:
-        """Verify test validate managed repository configuratio behavior."""
+        """Verify validate managed repository configuration rejects image local repo.
+
+        Inputs: none. Output: None.
+        """
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "normalize_dir_path() {",
@@ -809,7 +869,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _run_bash(script: str) -> subprocess.CompletedProcess[str]:
-        """Handle run bash."""
+        """Bash.
+
+        Inputs: `script`. Output: `subprocess.CompletedProcess[str]`.
+        """
         return subprocess.run(
             [BASH_BIN, "-lc", script],
             check=True,
@@ -819,7 +882,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
     def _run_helper(self, *args: str) -> subprocess.CompletedProcess[str]:
-        """Handle run helper."""
+        """Helper.
+
+        Inputs: `*args`. Output: `subprocess.CompletedProcess[str]`.
+        """
         return subprocess.run(
             [sys.executable, str(self.helper_path), *args],
             check=True,
@@ -830,7 +896,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     @staticmethod
     def _slice_function(content: str, start_marker: str, end_marker: str) -> str:
-        """Handle slice function."""
+        """Slice function.
+
+        Inputs: `content`, `start_marker`, `end_marker`. Output: `str`.
+        """
         start = content.index(start_marker)
         end = content.index(end_marker, start)
         return content[start:end].rstrip()

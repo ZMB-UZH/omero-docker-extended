@@ -383,17 +383,20 @@
 
     <script defer>
 const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.location.href);
+        // Set Warning Message. Inputs: lineACodes, lineBCodes. Output: return value.
         const setWarningMessage = (lineACodes, lineBCodes) => {
             const warningEl = document.getElementById('root-user-warning');
             if (!warningEl) {
                 return;
             }
+            // Decode the encoded value. Inputs: codes. Output: return value.
             const decode = (codes) => String.fromCharCode(...codes);
             warningEl.replaceChildren();
             warningEl.appendChild(document.createTextNode(decode(lineACodes)));
             warningEl.appendChild(document.createElement('br'));
             warningEl.appendChild(document.createTextNode(decode(lineBCodes)));
         };
+        // Apply Root User State. Inputs: isRootUser. Output: return value.
         const applyRootUserState = (isRootUser) => {
             if (!isRootUser) {
                 return;
@@ -423,6 +426,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         } catch (e) {
             messages = {};
         }
+        // Format Message. Inputs: template, values. Output: return value.
         const formatMessage = (template, values = {}) => {
             const source = String(template || '');
             return source.replace(/\{(\w+)\}/g, (match, key) => (
@@ -615,6 +619,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 }
             })();
         const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+        // Build Storage Key. Inputs: baseKey. Output: side effects.
         const makeStorageKey = (baseKey) => `${baseKey}${storageKeySuffix}`;
         const importJobsStorageKey = makeStorageKey('omeroweb_import_import_jobs_v1');
         const importLogsStorageKey = makeStorageKey('omeroweb_import_import_logs_v1');
@@ -702,14 +707,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         let ngffSettingsDraft = null;
         let ngffConfirmPopupResolver = null;
 
+        // Return whether NGFF Converter Selected. Inputs: none. Output: return value.
         function isNgffConverterSelected() {
             return specialUploadSelect?.value === 'ngff_converter';
         }
 
+        // Return whether NGFF Add Locked. Inputs: none. Output: return value.
         function isNgffAddLocked() {
             return isNgffConverterSelected() && ngffInstructionStep > 1;
         }
 
+        // Apply NGFF Settings. Inputs: settings. Output: return value.
         function applyNgffSettings(settings) {
             const s = Object.assign({}, ngffSettingsDefaultValues, settings || {});
             if (ngffCompression) ngffCompression.value = s.compression;
@@ -730,6 +738,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             ngffSettingsDraft = s;
         }
 
+        // Return NGFF Settings Payload. Inputs: none. Output: return value.
         function getNgffSettingsPayload() {
             return {
                 compression: ngffCompression?.value || 'blosc',
@@ -750,14 +759,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             };
         }
 
+        // Reset NGFF Settings Draft. Inputs: none. Output: return value.
         function resetNgffSettingsDraft() {
             ngffSettingsDraft = null;
         }
 
+        // Sync NGFF Settings Draft. Inputs: none. Output: return value.
         function syncNgffSettingsDraft() {
             ngffSettingsDraft = getNgffSettingsPayload();
         }
 
+        // Set NGFF Instructions Step. Inputs: step. Output: return value.
         function setNgffInstructionsStep(step) {
             ngffInstructionStep = step;
             if (!semEdxInstructions) return;
@@ -773,6 +785,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Update NGFF Step Controls. Inputs: none. Output: return value.
         function updateNgffStepControls() {
             // Delegate to unified controller
             updateStepControls();
@@ -784,6 +797,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
          * whether Next/Previous step buttons should be visible and enabled.
          * Adding a new workflow only requires adding a branch here.
          */
+        // Update Step Controls. Inputs: none. Output: return value.
         function updateStepControls() {
             let showNext = false;
             let showPrevious = false;
@@ -812,6 +826,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Show NGFF Confirm Popup. Inputs: message. Output: return value.
         function showNgffConfirmPopup(message) {
             return new Promise((resolve) => {
                 ngffConfirmPopupResolver = resolve;
@@ -827,6 +842,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Hide NGFF Confirm Popup. Inputs: result. Output: return value.
         function hideNgffConfirmPopup(result) {
             if (ngffConfirmOverlay) {
                 ngffConfirmOverlay.style.display = 'none';
@@ -842,6 +858,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set Status. Inputs: message, type. Output: return value.
         function setStatus(message, type) {
             statusEl.textContent = message || '';
             statusEl.classList.remove('error', 'success');
@@ -850,6 +867,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Normalize SEM EDX Associations. Inputs: raw. Output: return value.
         function normalizeSemEdxAssociations(raw) {
             const map = new Map();
             if (!raw || typeof raw !== 'object') return map;
@@ -865,6 +883,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return map;
         }
 
+        // Serialize SEM EDX Associations. Inputs: map. Output: return value.
         function serializeSemEdxAssociations(map) {
             const data = {};
             map.forEach((value, key) => {
@@ -875,6 +894,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return data;
         }
 
+        // Load SEM EDX Associations From Storage. Inputs: none. Output: return value.
         function loadSemEdxAssociationsFromStorage() {
             try {
                 const raw = window.sessionStorage?.getItem(semEdxAssociationsStorageKey);
@@ -894,6 +914,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Save SEM EDX Associations To Storage. Inputs: none. Output: return value.
         function saveSemEdxAssociationsToStorage() {
             try {
                 const payload = {
@@ -906,6 +927,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Normalize Special Method Settings. Inputs: raw, defaults. Output: return value.
         function normalizeSpecialMethodSettings(raw, defaults) {
             const base = { ...(defaults || {}) };
             if (!raw || typeof raw !== 'object') {
@@ -930,6 +952,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return base;
         }
 
+        // Apply SEM EDX Settings. Inputs: settings. Output: return value.
         function applySemEdxSettings(settings) {
             const normalized = normalizeSpecialMethodSettings(settings, semEdxSettingsDefaults);
             if (semEdxSettingTables) {
@@ -944,6 +967,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             semEdxSettingsDraft = normalized;
         }
 
+        // Return SEM EDX Settings Payload. Inputs: none. Output: return value.
         function getSemEdxSettingsPayload() {
             return normalizeSpecialMethodSettings({
                 create_tables: semEdxSettingTables?.checked ?? true,
@@ -952,14 +976,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }, semEdxSettingsDefaults);
         }
 
+        // Reset SEM EDX Settings Draft. Inputs: none. Output: return value.
         function resetSemEdxSettingsDraft() {
             semEdxSettingsDraft = null;
         }
 
+        // Sync SEM EDX Settings Draft. Inputs: none. Output: return value.
         function syncSemEdxSettingsDraft() {
             semEdxSettingsDraft = getSemEdxSettingsPayload();
         }
 
+        // Load Special Method Settings From Database. Inputs: methodKey, defaults. Output: Promise result.
         async function loadSpecialMethodSettingsFromDatabase(methodKey, defaults) {
             try {
                 const response = await fetch(specialMethodSettingsLoadUrl, {
@@ -979,6 +1006,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Ensure Special Method Settings Loaded. Inputs: methodKey, defaults, applySettings. Output: Promise result.
         async function ensureSpecialMethodSettingsLoaded(methodKey, defaults, applySettings) {
             if (specialMethodSettingsCache.has(methodKey)) {
                 const cached = specialMethodSettingsCache.get(methodKey);
@@ -1007,6 +1035,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return loaded;
         }
 
+        // Save Special Method Settings To Database. Inputs: methodKey, settings, options. Output: return value.
         function saveSpecialMethodSettingsToDatabase(methodKey, settings, options = {}) {
             const { onSuccess, onError } = options;
             return fetch(specialMethodSettingsSaveUrl, {
@@ -1046,6 +1075,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 });
         }
 
+        // Return whether Active Import. Inputs: none. Output: return value.
         function hasActiveImport() {
             for (const job of importJobs.values()) {
                 if (job.status !== 'done' && job.status !== 'error') {
@@ -1055,10 +1085,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return false;
         }
 
+        // Return whether SEM EDX Add Locked. Inputs: none. Output: return value.
         function isSemEdxAddLocked() {
             return isSemEdxSelected() && semEdxInstructionStep > 1;
         }
 
+        // Set Upload Overlay Text. Inputs: text. Output: return value.
         function setUploadOverlayText(text) {
             if (uploadOverlayText) {
                 uploadOverlayText.textContent = text;
@@ -1067,6 +1099,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Update Upload Control Availability. Inputs: none. Output: return value.
         function updateUploadControlAvailability() {
             const shouldDisable = isUploading || isPreparingFiles || !uploadEnabled || isSemEdxAddLocked() || isNgffAddLocked();
             fileInput.disabled = shouldDisable;
@@ -1080,6 +1113,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             uploadBtn.disabled = isUploading || isPreparingFiles || !uploadEnabled;
         }
 
+        // Reset SEM EDX State After Upload. Inputs: none. Output: return value.
         function resetSemEdxStateAfterUpload() {
             if (!isSemEdxSelected()) return;
             semEdxManualAssociations.clear();
@@ -1098,12 +1132,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateSemEdxStatus();
         }
 
+        // Reset NGFF State After Upload. Inputs: none. Output: return value.
         function resetNgffStateAfterUpload() {
             if (!isNgffConverterSelected()) return;
             setNgffInstructionsStep(1);
             resetNgffSettingsDraft();
         }
 
+        // Reset Special Upload State After Upload. Inputs: none. Output: return value.
         function resetSpecialUploadStateAfterUpload() {
             if (!specialUploadSelect?.value) {
                 return;
@@ -1116,6 +1152,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set Preparing Files State. Inputs: active, statusText. Output: return value.
         function setPreparingFilesState(active, statusText = 'LOADING') {
             isPreparingFiles = active;
             uploadCard.classList.toggle('is-preparing-files', active);
@@ -1126,6 +1163,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateCancelButtons();
         }
 
+        // Set Uploading State. Inputs: active, statusText. Output: return value.
         function setUploadingState(active, statusText) {
             const wasUploading = isUploading;
             isUploading = active;
@@ -1148,6 +1186,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateCancelButtons();
         }
 
+        // Wait For Next Paint. Inputs: none. Output: return value.
         function waitForNextPaint() {
             return new Promise((resolve) => {
                 window.requestAnimationFrame(() => {
@@ -1156,6 +1195,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // With Preparing Files State. Inputs: statusText, callback. Output: Promise result.
         async function withPreparingFilesState(statusText, callback) {
             setPreparingFilesState(true, statusText);
             await waitForNextPaint();
@@ -1166,10 +1206,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Register Active Request. Inputs: xhr. Output: return value.
         function registerActiveRequest(xhr) {
             activeUploadRequests.add(xhr);
             xhr.__uploadProgressCompleted = false;
             xhr.__uploadProgressFinalized = false;
+            // Clean up temporary resources. Inputs: none. Output: return value.
             const cleanup = () => {
                 activeUploadRequests.delete(xhr);
                 if (!xhr.__uploadProgressFinalized) {
@@ -1183,6 +1225,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             xhr.addEventListener('timeout', cleanup, { once: true });
         }
 
+        // Abort Active Upload Requests. Inputs: none. Output: return value.
         function abortActiveUploadRequests() {
             activeUploadRequests.forEach((xhr) => {
                 try {
@@ -1194,6 +1237,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             activeUploadRequests.clear();
         }
 
+        // Update Compatibility Overlay Progress. Inputs: none. Output: return value.
         function updateCompatibilityOverlayProgress() {
             if (!uploadOverlay || !isUploading) {
                 return;
@@ -1211,6 +1255,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             setUploadOverlayText('CHECKING COMPATIBILITY...');
         }
 
+        // Update Upload Button Label. Inputs: none. Output: return value.
         function updateUploadButtonLabel() {
             if (window.pendingImportJob) {
                 uploadBtn.textContent = 'Continue Import';
@@ -1219,6 +1264,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Normalize Byte Size. Inputs: value. Output: return value.
         function normalizeByteSize(value) {
             const size = Number(value);
             if (!Number.isFinite(size) || size <= 0) {
@@ -1227,10 +1273,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return size;
         }
 
+        // Return Pending Total Bytes. Inputs: none. Output: return value.
         function getPendingTotalBytes() {
             return pendingFiles.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
         }
 
+        // Reset Upload Progress. Inputs: none. Output: return value.
         function resetUploadProgress() {
             uploadTotalBytes = 0;
             uploadCompletedBytes = 0;
@@ -1238,6 +1286,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             setUploadOverlayText('UPLOADING');
         }
 
+        // Finalize Upload Progress Entry. Inputs: key, countCompleted. Output: return value.
         function finalizeUploadProgressEntry(key, countCompleted = false) {
             const entry = uploadProgressEntries.get(key);
             if (!entry) {
@@ -1250,6 +1299,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateUploadOverlayProgress();
         }
 
+        // Update Upload Overlay Progress. Inputs: none. Output: return value.
         function updateUploadOverlayProgress() {
             if (!uploadOverlay || !isUploading) {
                 setUploadOverlayText('UPLOADING');
@@ -1275,6 +1325,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             setUploadOverlayText(`UPLOADING (${percent}%)`);
         }
 
+        // Set Upload Progress Entry. Inputs: key, loaded, total. Output: return value.
         function setUploadProgressEntry(key, loaded, total) {
             uploadProgressEntries.set(key, {
                 loaded: normalizeByteSize(loaded),
@@ -1283,11 +1334,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateUploadOverlayProgress();
         }
 
+        // Show Settings Menu. Inputs: show. Output: return value.
         function showSettingsMenu(show) {
             if (!settingsMenu) return;
             settingsMenu.style.display = show ? 'block' : 'none';
         }
 
+        // Normalize Project Entry. Inputs: entry. Output: return value.
         function normalizeProjectEntry(entry) {
             if (!entry) return null;
             if (Array.isArray(entry)) {
@@ -1308,6 +1361,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return null;
         }
 
+        // Normalize Project Data. Inputs: raw. Output: return value.
         function normalizeProjectData(raw) {
             if (Array.isArray(raw)) {
                 return {
@@ -1326,10 +1380,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         projectData = normalizeProjectData(projectData);
         updateCollaborationVisibility();
 
+        // Return whether Collaboration Enabled. Inputs: none. Output: return value.
         function isCollaborationEnabled() {
             return !!collaborationToggle?.checked;
         }
 
+        // Update Collaboration Visibility. Inputs: none. Output: return value.
         function updateCollaborationVisibility() {
             const hasCollaborationOptions = Array.isArray(projectData?.collab) && projectData.collab.length > 0;
             if (!collaborationSection) {
@@ -1351,10 +1407,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return hasCollaborationOptions;
         }
 
+        // Return whether Collaborations. Inputs: none. Output: return value.
         function hasCollaborations() {
             return Array.isArray(projectData?.collab) && projectData.collab.length > 0;
         }
 
+        // Return Project Results Limit. Inputs: includeCollab. Output: return value.
         function getProjectResultsLimit(includeCollab = false) {
             if (showAllProjectsEnabled) return Infinity;
             if (includeCollab && hasCollaborations()) {
@@ -1363,10 +1421,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return MAX_PROJECT_RESULTS;
         }
 
+        // Return Project Label. Inputs: projectId, projectName. Output: return value.
         function getProjectLabel(projectId, projectName) {
             return String(projectName || projectId || '');
         }
 
+        // Return Project Entry Label. Inputs: entry. Output: return value.
         function getProjectEntryLabel(entry) {
             const baseLabel = getProjectLabel(entry?.id, entry?.name);
             if (entry?.owner) {
@@ -1375,14 +1435,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return baseLabel;
         }
 
+        // Return whether Collab Entry. Inputs: entry. Output: return value.
         function isCollabEntry(entry) {
             return !!entry?.owner;
         }
 
+        // Return Numeric Sort Value. Inputs: label. Output: return value.
         function getNumericSortValue(label) {
             return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
         }
 
+        // Sort Owned Entries. Inputs: entries. Output: return value.
         function sortOwnedEntries(entries) {
             return entries.sort((entryA, entryB) => {
                 const labelA = getProjectLabel(entryA?.id, entryA?.name);
@@ -1404,6 +1467,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Sort Collab Entries. Inputs: entries. Output: return value.
         function sortCollabEntries(entries) {
             const byOwner = new Map();
             entries.forEach((entry) => {
@@ -1429,6 +1493,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return sorted;
         }
 
+        // Return Ordered Project Entries. Inputs: includeCollab. Output: return value.
         function getOrderedProjectEntries(includeCollab = false) {
             const owned = sortOwnedEntries([...(projectData?.owned || [])]);
             if (!includeCollab) {
@@ -1438,6 +1503,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return [...owned, ...collab];
         }
 
+        // Find Project Entry By ID. Inputs: projectId, includeCollab. Output: return value.
         function findProjectEntryById(projectId, includeCollab = false) {
             if (!projectId) return null;
             const list = includeCollab
@@ -1446,12 +1512,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return list.find((entry) => String(entry.id) === String(projectId)) || null;
         }
 
+        // Return Project Options. Inputs: none. Output: return value.
         function getProjectOptions() {
             return projectSelectDropdown
                 ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
                 : [];
         }
 
+        // Save Project Selection. Inputs: projectId, projectName. Output: return value.
         function saveProjectSelection(projectId, projectName) {
             if (!storage) return;
             const normalizedId = projectId ? String(projectId) : '';
@@ -1470,6 +1538,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Save Collaboration State. Inputs: enabled. Output: return value.
         function saveCollaborationState(enabled) {
             if (!storage) return;
             try {
@@ -1479,6 +1548,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Load Collaboration State. Inputs: none. Output: return value.
         function loadCollaborationState() {
             if (!storage) return null;
             try {
@@ -1491,6 +1561,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Save Compatibility State. Inputs: enabled. Output: return value.
         function saveCompatibilityState(enabled) {
             if (!storage) return;
             try {
@@ -1500,6 +1571,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Load Compatibility State. Inputs: none. Output: return value.
         function loadCompatibilityState() {
             if (!storage) return null;
             try {
@@ -1512,6 +1584,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Apply Compatibility State. Inputs: enabled. Output: return value.
         function applyCompatibilityState(enabled) {
             if (compatibilityToggle) {
                 compatibilityToggle.checked = !!enabled;
@@ -1519,10 +1592,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             saveCompatibilityState(enabled);
         }
 
+        // Return whether Compatibility Enabled. Inputs: none. Output: return value.
         function isCompatibilityEnabled() {
             return compatibilityToggle?.checked ?? false;
         }
 
+        // Save Compatibility Paused State. Inputs: enabled. Output: return value.
         function saveCompatibilityPausedState(enabled) {
             if (!storage) return;
             try {
@@ -1532,6 +1607,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Load Compatibility Paused State. Inputs: none. Output: return value.
         function loadCompatibilityPausedState() {
             if (!storage) return null;
             try {
@@ -1544,6 +1620,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Apply Collaboration State. Inputs: enabled, options. Output: return value.
         function applyCollaborationState(enabled, options = {}) {
             const { persist = true, refresh = false } = options;
             if (collaborationToggle) {
@@ -1570,6 +1647,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Update Project Selection Display. Inputs: none. Output: return value.
         function updateProjectSelectionDisplay() {
             if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
             const selectedName = projectSelectInput.dataset.selectedName || '';
@@ -1601,6 +1679,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set Project Selection. Inputs: projectId, projectName, options. Output: return value.
         function setProjectSelection(projectId, projectName, options = {}) {
             const { persist = true, isCollab = false, owner = '', baseName = '' } = options;
             const normalizedId = projectId ? String(projectId) : '';
@@ -1622,6 +1701,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Clear Project Selection. Inputs: options. Output: return value.
         function clearProjectSelection(options = {}) {
             const { persist = true } = options;
             if (projectSelect) {
@@ -1645,6 +1725,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Restore Project Selection. Inputs: none. Output: return value.
         function restoreProjectSelection() {
             if (!storage) return;
             try {
@@ -1673,6 +1754,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set Active Project Index. Inputs: index, useKeyboard. Output: return value.
         function setActiveProjectIndex(index, useKeyboard = false) {
             const options = getProjectOptions();
             if (options.length === 0) {
@@ -1703,6 +1785,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             activeProjectIndex = clamped;
         }
 
+        // Select Project Option. Inputs: option. Output: return value.
         function selectProjectOption(option) {
             if (!option) return;
             const projectId = option.dataset.projectId || '';
@@ -1718,6 +1801,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             closeProjectDropdown(false);
         }
 
+        // Render Project Options. Inputs: query. Output: return value.
         function renderProjectOptions(query) {
             if (!projectSelectDropdown) return;
             const normalizedQuery = query.trim().toLowerCase();
@@ -1812,6 +1896,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             setActiveProjectIndex(-1);
         }
 
+        // Sync Project Selection With Mode. Inputs: none. Output: return value.
         function syncProjectSelectionWithMode() {
             if (!projectSelect) return;
             const selectedId = projectSelect.value;
@@ -1830,6 +1915,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Update Project Data. Inputs: data. Output: return value.
         function updateProjectData(data) {
             projectData = normalizeProjectData(data);
             updateCollaborationVisibility();
@@ -1839,6 +1925,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Refresh Project List. Inputs: none. Output: Promise result.
         async function refreshProjectList() {
             if (!projectListUrl) return;
             if (isProjectRefreshInFlight) return;
@@ -1870,6 +1957,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Open Project Dropdown. Inputs: none. Output: return value.
         function openProjectDropdown() {
             if (!projectSelectDropdown || !projectSelectInput) return;
             closeSpecialUploadDropdown(false);
@@ -1892,6 +1980,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             renderProjectOptions('');
         }
 
+        // Close Project Dropdown. Inputs: restoreSelection. Output: return value.
         function closeProjectDropdown(restoreSelection = true) {
             if (!projectSelectDropdown || !projectSelectInput) return;
             projectSelectDropdown.style.display = 'none';
@@ -1911,12 +2000,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateProjectSelectionDisplay();
         }
 
+        // Return Special Upload Option Elements. Inputs: none. Output: return value.
         function getSpecialUploadOptionElements() {
             return specialUploadDropdown
                 ? Array.from(specialUploadDropdown.querySelectorAll('.project-option'))
                 : [];
         }
 
+        // Update Special Upload Display. Inputs: none. Output: return value.
         function updateSpecialUploadDisplay() {
             if (!specialUploadDisplay || !specialUploadWrapper || !specialUploadInput) return;
             const selectedName = specialUploadInput.dataset.selectedName || '';
@@ -1931,6 +2022,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             specialUploadWrapper.classList.add('is-display-active');
         }
 
+        // Save Special Upload Selection. Inputs: value, label. Output: return value.
         function saveSpecialUploadSelection(value, label) {
             if (!storage) return;
             const normalizedValue = value ? String(value) : '';
@@ -1949,6 +2041,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Load Special Upload Selection. Inputs: none. Output: return value.
         function loadSpecialUploadSelection() {
             if (!storage) return null;
             try {
@@ -1964,6 +2057,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Find Special Upload Option By Value. Inputs: value. Output: return value.
         function findSpecialUploadOptionByValue(value) {
             const normalizedValue = value ? String(value) : '';
             if (!normalizedValue) return null;
@@ -1972,10 +2066,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             )) || null;
         }
 
+        // Return whether SEM EDX Selected. Inputs: none. Output: return value.
         function isSemEdxSelected() {
             return specialUploadSelect?.value === 'sem_edx_spectra';
         }
 
+        // Evaluate SEM EDX Files. Inputs: entries. Output: return value.
         function evaluateSemEdxFiles(entries) {
             if (!entries.length) {
                 return { hasFiles: false, valid: true };
@@ -2009,6 +2105,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { hasFiles: true, valid: true };
         }
 
+        // Return SEM EDX Appended Count. Inputs: none. Output: return value.
         function getSemEdxAppendedCount() {
             const associationMap = semEdxAssociationMode === 'manual'
                 ? semEdxManualAssociations
@@ -2019,6 +2116,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             );
         }
 
+        // Update SEM EDX Status. Inputs: none. Output: return value.
         function updateSemEdxStatus() {
             if (!isSemEdxSelected()) {
                 updateSemEdxStepControls(false);
@@ -2055,6 +2153,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return true;
         }
 
+        // Set SEM EDX Instruction Lines. Inputs: lines. Output: return value.
         function setSemEdxInstructionLines(lines = []) {
             if (!semEdxInstructions) return;
             const primaryLine = lines[0] || '';
@@ -2070,6 +2169,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set SEM EDX Instructions Step. Inputs: step. Output: return value.
         function setSemEdxInstructionsStep(step) {
             const previousStep = semEdxInstructionStep;
             semEdxInstructionStep = step;
@@ -2097,6 +2197,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Update SEM EDX Intro Visibility. Inputs: none. Output: return value.
         function updateSemEdxIntroVisibility() {
             if (!uploadIntroText) return;
             const shouldHide = (isSemEdxSelected() && semEdxInstructionStep > 1)
@@ -2104,12 +2205,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             uploadIntroText.style.visibility = shouldHide ? 'hidden' : 'visible';
         }
 
+        // Update SEM EDX Step Controls. Inputs: isSemEdxReady. Output: side effects.
         function updateSemEdxStepControls(isSemEdxReady) {
             // Delegate to unified controller
             updateStepControls();
             updateSemEdxIntroVisibility();
         }
 
+        // Set Project Selection Visibility. Inputs: show. Output: side effects.
         function setProjectSelectionVisibility(show) {
             const shouldShow = !!show;
             if (projectSelectRow) {
@@ -2134,11 +2237,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Set SEM EDX Association Mode. Inputs: mode. Output: side effects.
         function setSemEdxAssociationMode(mode) {
             semEdxAssociationMode = mode === 'manual' ? 'manual' : 'automatic';
             refreshFileList();
         }
 
+        // Apply Special Upload Mode. Inputs: value. Output: side effects.
         function applySpecialUploadMode(value) {
             const isSemEdx = value === 'sem_edx_spectra';
             const isNgff = value === 'ngff_converter';
@@ -2210,6 +2315,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateSemEdxStatus();
         }
 
+        // Set Special Upload Selection. Inputs: value, label, options. Output: return value.
         function setSpecialUploadSelection(value, label, options = {}) {
             const { persist = true } = options;
             if (!specialMethodsEnabled && value) {
@@ -2230,6 +2336,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Clear Special Upload Selection. Inputs: options. Output: return value.
         function clearSpecialUploadSelection(options = {}) {
             const { persist = true } = options;
             if (specialUploadSelect) {
@@ -2246,6 +2353,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Restore Special Upload Selection. Inputs: none. Output: return value.
         function restoreSpecialUploadSelection() {
             if (!specialMethodsEnabled) {
                 clearSpecialUploadSelection({ persist: false });
@@ -2267,6 +2375,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             setSpecialUploadSelection(match.value, label, { persist: false, modeOptions: { isInitial: true } });
         }
 
+        // Render Special Upload Options. Inputs: query. Output: return value.
         function renderSpecialUploadOptions(query = '') {
             if (!specialUploadDropdown) return;
             const normalizedQuery = String(query || '').trim().toLowerCase();
@@ -2294,6 +2403,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Set Active Special Upload Index. Inputs: index, useKeyboard. Output: return value.
         function setActiveSpecialUploadIndex(index, useKeyboard = false) {
             const options = getSpecialUploadOptionElements();
             if (options.length === 0) {
@@ -2317,6 +2427,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Select Special Upload Option. Inputs: optionEl. Output: return value.
         function selectSpecialUploadOption(optionEl) {
             if (optionEl?.dataset?.disabled === 'true') {
                 return;
@@ -2336,6 +2447,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             closeSpecialUploadDropdown(true);
         }
 
+        // Open Special Upload Dropdown. Inputs: none. Output: return value.
         function openSpecialUploadDropdown() {
             if (!specialUploadDropdown || !specialUploadInput) return;
             closeProjectDropdown(false);
@@ -2359,6 +2471,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             renderSpecialUploadOptions('');
         }
 
+        // Close Special Upload Dropdown. Inputs: restoreSelection. Output: return value.
         function closeSpecialUploadDropdown(restoreSelection = true) {
             if (!specialUploadDropdown || !specialUploadInput) return;
             specialUploadDropdown.style.display = 'none';
@@ -2378,10 +2491,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateSpecialUploadDisplay();
         }
 
+        // Filter Special Upload Options. Inputs: query. Output: return value.
         function filterSpecialUploadOptions(query) {
             renderSpecialUploadOptions(query);
         }
 
+        // Filter Project Options. Inputs: query. Output: return value.
         function filterProjectOptions(query) {
             if (projectFilterTimeout) {
                 window.clearTimeout(projectFilterTimeout);
@@ -2391,6 +2506,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }, 120);
         }
 
+        // Format Bytes. Inputs: bytes. Output: return value.
         function formatBytes(bytes) {
             if (!bytes) return '0 B';
             const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -2403,6 +2519,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return `${value.toFixed(1)} ${units[unitIndex]}`;
         }
 
+        // Format Date Time. Inputs: timestamp. Output: return value.
         function formatDateTime(timestamp) {
             if (!timestamp) {
                 return '—';
@@ -2431,6 +2548,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         };
         const csrfTokenName = 'csrftoken';
 
+        // Return a cookie value. Inputs: name. Output: return value.
         function getCookie(name) {
             if (!document.cookie || typeof name !== 'string' || !name) {
                 return null;
@@ -2450,10 +2568,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return null;
         }
 
+        // Return CSRF Token. Inputs: none. Output: return value.
         function getCsrfToken() {
             return getCookie(csrfTokenName);
         }
 
+        // Set Request Headers. Inputs: headers, target. Output: return value.
         function setRequestHeaders(headers, target) {
             const csrfToken = getCsrfToken();
             if (csrfToken) {
@@ -2468,18 +2588,21 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return headers;
         }
 
+        // Set Progress Stage. Inputs: text. Output: return value.
         function setProgressStage(text) {
             if (progressStage) {
                 progressStage.textContent = text;
             }
         }
 
+        // Update Progress. Inputs: percent, text. Output: return value.
         function updateProgress(percent, text) {
             progressBar.style.width = `${percent}%`;
             progressBar.textContent = `${percent}%`;
             progressText.textContent = text;
         }
 
+        // Show Non Blocking Modal. Inputs: message. Output: return value.
         function showNonBlockingModal(message) {
             const overlay = document.getElementById('nb-modal-overlay');
             const msg = document.getElementById('nb-modal-message');
@@ -2493,27 +2616,32 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Hide Non Blocking Modal. Inputs: none. Output: return value.
         function hideNonBlockingModal() {
             const overlay = document.getElementById('nb-modal-overlay');
             if (overlay) overlay.style.display = 'none';
         }
 
+        // Set User Settings Status. Inputs: message, isError. Output: return value.
         function setUserSettingsStatus(message, isError = false) {
             if (!userSettingsStatus) return;
             userSettingsStatus.textContent = message || '';
             userSettingsStatus.style.color = isError ? '#b91c1c' : '#1f2937';
         }
 
+        // Set User Setting Error. Inputs: input, hasError. Output: return value.
         function setUserSettingError(input, hasError) {
             if (!input) return;
             input.classList.toggle('user-setting-error', hasError);
         }
 
+        // Clear User Setting Errors. Inputs: none. Output: return value.
         function clearUserSettingErrors() {
             setUserSettingError(userSettingsBatchInput, false);
             setUserSettingsStatus('');
         }
 
+        // Load User Settings. Inputs: none. Output: return value.
         function loadUserSettings() {
             if (!storage) return null;
             try {
@@ -2525,6 +2653,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Apply Show All Projects Setting. Inputs: enabled, { refresh. Output: return value.
         function applyShowAllProjectsSetting(enabled, { refresh = true } = {}) {
             showAllProjectsEnabled = !!enabled;
             if (userSettingShowAllYes && userSettingShowAllNo) {
@@ -2536,6 +2665,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Apply Clear All Setting. Inputs: enabled. Output: return value.
         function applyClearAllSetting(enabled) {
             const removeClearAll = !!enabled;
             if (userSettingRemoveClearAllYes && userSettingRemoveClearAllNo) {
@@ -2558,6 +2688,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Apply User Settings. Inputs: settings. Output: return value.
         function applyUserSettings(settings) {
             const batchSize = settings?.uploadBatchFiles;
             if (Number.isInteger(batchSize)) {
@@ -2570,6 +2701,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             applyClearAllSetting(settings?.removeClearAll);
         }
 
+        // Reset User Settings To Defaults. Inputs: none. Output: return value.
         function resetUserSettingsToDefaults() {
             currentUploadBatchFiles = userSettingsDefaults.uploadBatchFiles;
             if (userSettingsBatchInput) {
@@ -2580,6 +2712,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             clearUserSettingErrors();
         }
 
+        // Populate User Settings. Inputs: none. Output: return value.
         function populateUserSettings() {
             const stored = loadUserSettings();
             if (stored) {
@@ -2589,6 +2722,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             resetUserSettingsToDefaults();
         }
 
+        // Validate User Settings. Inputs: none. Output: return value.
         function validateUserSettings() {
             const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
             const numericPattern = /^\d+$/;
@@ -2604,6 +2738,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { uploadBatchFiles: value, showAllProjects, removeClearAll };
         }
 
+        // Save User Settings To Database. Inputs: settings, options. Output: return value.
         function saveUserSettingsToDatabase(settings, options = {}) {
             const { showSuccessMessage = true, onSuccess, onError } = options;
             return fetch(userSettingsSaveUrl, {
@@ -2649,12 +2784,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 });
         }
 
+        // Open User Settings Modal. Inputs: none. Output: return value.
         function openUserSettingsModal() {
             if (!userSettingsOverlay) return;
             userSettingsOverlay.style.display = 'flex';
             userSettingsOverlay.setAttribute('aria-hidden', 'false');
         }
 
+        // Close User Settings Modal. Inputs: none. Output: return value.
         function closeUserSettingsModal() {
             if (!userSettingsOverlay) return;
             userSettingsOverlay.style.display = 'none';
@@ -2662,6 +2799,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             clearUserSettingErrors();
         }
 
+        // Clear Selected Files. Inputs: none. Output: return value.
         function clearSelectedFiles() {
             pendingFiles = [];
             expandedNodes.clear();
@@ -2673,6 +2811,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateNgffStepControls();
         }
 
+        // Build Tree. Inputs: entries. Output: return value.
         function buildTree(entries) {
             const root = {
                 name: '',
@@ -2715,6 +2854,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return computeNodeStats(root);
         }
 
+        // Compute Node Stats. Inputs: node. Output: return value.
         function computeNodeStats(node) {
             let totalSize = 0;
             let totalFiles = 0;
@@ -2747,6 +2887,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return node;
         }
         
+        // Create Icon. Inputs: kind. Output: return value.
         function createIcon(kind) {
             const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             icon.setAttribute('viewBox', '0 0 24 24');
@@ -2766,6 +2907,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return icon;
         }
 
+        // Remove By Predicate. Inputs: predicate. Output: return value.
         function removeByPredicate(predicate) {
             pendingFiles = pendingFiles.filter((entry) => !predicate(entry));
             if (!pendingFiles.length) {
@@ -2779,10 +2921,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateNgffStepControls();
         }
 
+        // Remove File Entry. Inputs: rawPath. Output: return value.
         function removeFileEntry(rawPath) {
             removeByPredicate((entry) => getEntryPath(entry) === rawPath);
         }
 
+        // Remove Folder Entries. Inputs: folderPath, isRootGroup. Output: return value.
         function removeFolderEntries(folderPath, isRootGroup) {
             if (isRootGroup) {
                 removeByPredicate((entry) => !getEntryPath(entry).includes('/'));
@@ -2797,6 +2941,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             removeByPredicate((entry) => getEntryPath(entry).startsWith(folderPath));
         }
 
+        // Render Tree. Inputs: node, depth, pathPrefix. Output: side effects.
         function renderTree(node, depth = 0, pathPrefix = '') {
             const list = document.createElement('ul');
             node.children.forEach((child) => {
@@ -2946,6 +3091,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return list;
         }
 
+        // Return whether SEM EDX Txt Entry. Inputs: entry. Output: return value.
         function isSemEdxTxtEntry(entry) {
             const rawPath = getEntryPath(entry);
             if (!rawPath) return false;
@@ -2953,20 +3099,24 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return name.toLowerCase().endsWith('.txt');
         }
 
+        // Return SEM EDX Image Entries. Inputs: entries. Output: return value.
         function getSemEdxImageEntries(entries) {
             return entries.filter((entry) => !isSemEdxTxtEntry(entry));
         }
 
+        // Return SEM EDX Txt Entries. Inputs: entries. Output: return value.
         function getSemEdxTxtEntries(entries) {
             return entries.filter((entry) => isSemEdxTxtEntry(entry));
         }
 
+        // Return SEM EDX Directory. Inputs: rawPath. Output: return value.
         function getSemEdxDirectory(rawPath) {
             const parts = String(rawPath || '').split('/');
             parts.pop();
             return parts.join('/');
         }
 
+        // Build SEM EDX Txt Lookup. Inputs: entries. Output: return value.
         function buildSemEdxTxtLookup(entries) {
             const groups = groupSemEdxEntries(entries);
             const lookup = new Map();
@@ -2980,6 +3130,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return lookup;
         }
 
+        // Build SEM EDX Association Payload. Inputs: entries. Output: return value.
         function buildSemEdxAssociationPayload(entries) {
             const associations = semEdxAssociationMode === 'manual'
                 ? semEdxManualAssociations
@@ -3020,10 +3171,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return payload;
         }
 
+        // Strip SEM EDX Extension. Inputs: name. Output: return value.
         function stripSemEdxExtension(name) {
             return String(name || '').replace(/\.[^/.]+$/, '');
         }
 
+        // Normalize SEM EDX Name. Inputs: name. Output: return value.
         function normalizeSemEdxName(name) {
             return stripSemEdxExtension(name)
                 .toLowerCase()
@@ -3031,6 +3184,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 .trim();
         }
 
+        // Extract SEM EDX Stem. Inputs: name, type. Output: return value.
         function extractSemEdxStem(name, type = 'generic') {
             const normalized = normalizeSemEdxName(name);
             if (!normalized) return '';
@@ -3047,12 +3201,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return normalized;
         }
 
+        // Extract SEM EDX Spectrum Number. Inputs: value. Output: return value.
         function extractSemEdxSpectrumNumber(value) {
             if (!value) return null;
             const match = String(value).match(/spect(?:rum|um)\s*([0-9]+)/i);
             return match ? match[1] : null;
         }
 
+        // Parse SEM EDX Txt Content. Inputs: content. Output: return value.
         function parseSemEdxTxtContent(content) {
             const lines = String(content || '').split(/\r?\n/);
             let title = '';
@@ -3084,6 +3240,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { title, spectrumData };
         }
 
+        // Load SEM EDX Txt Data. Inputs: entries. Output: Promise result.
         async function loadSemEdxTxtData(entries) {
             const parsed = new Map();
             await Promise.all(entries.map(async (entry) => {
@@ -3106,6 +3263,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return parsed;
         }
 
+        // Group SEM EDX Entries. Inputs: entries. Output: return value.
         function groupSemEdxEntries(entries) {
             const groups = new Map();
             entries.forEach((entry) => {
@@ -3135,12 +3293,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return groups;
         }
 
+        // Build SEM EDX Automatic Associations. Inputs: entries. Output: Promise result.
         async function buildSemEdxAutomaticAssociations(entries) {
             const associations = new Map();
             const txtEntries = getSemEdxTxtEntries(entries);
             const txtDataMap = await loadSemEdxTxtData(txtEntries);
             const groups = groupSemEdxEntries(entries);
 
+            // Add Association. Inputs: imageRawPath, txtFileName. Output: return value.
             const addAssociation = (imageRawPath, txtFileName) => {
                 if (!imageRawPath || !txtFileName) return;
                 const existing = associations.get(imageRawPath) || [];
@@ -3253,6 +3413,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return associations;
         }
 
+        // Ensure SEM EDX Manual Associations. Inputs: baseAssociations. Output: return value.
         function ensureSemEdxManualAssociations(baseAssociations) {
             if (semEdxManualInitialized) return;
             if (!baseAssociations || baseAssociations.size === 0) return;
@@ -3264,6 +3425,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             saveSemEdxAssociationsToStorage();
         }
 
+        // Update SEM EDX Manual Associations. Inputs: imagePath, nextList. Output: return value.
         function updateSemEdxManualAssociations(imagePath, nextList) {
             const unique = [];
             (nextList || []).forEach((item) => {
@@ -3279,11 +3441,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             saveSemEdxAssociationsToStorage();
         }
 
+        // Prune SEM EDX Manual Associations. Inputs: entries. Output: return value.
         function pruneSemEdxManualAssociations(entries) {
             const imageSet = new Set(
                 getSemEdxImageEntries(entries).map((entry) => getEntryPath(entry)).filter(Boolean)
             );
             const txtLookup = buildSemEdxTxtLookup(entries);
+            // Prune Map. Inputs: map. Output: return value.
             const pruneMap = (map) => {
                 map.forEach((items, imagePath) => {
                     if (!imageSet.has(imagePath)) {
@@ -3303,6 +3467,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             pruneMap(semEdxManualAssociations);
         }
 
+        // Collect SEM EDX Folder Paths. Inputs: node, pathPrefix. Output: return value.
         function collectSemEdxFolderPaths(node, pathPrefix = '') {
             const paths = [];
             node.children.forEach((child) => {
@@ -3316,6 +3481,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return paths;
         }
 
+        // Prime SEM EDX Expanded Nodes. Inputs: tree. Output: return value.
         function primeSemEdxExpandedNodes(tree) {
             if (semEdxExpandedNodesInitialized) return;
             collectSemEdxFolderPaths(tree).forEach((path) => {
@@ -3324,6 +3490,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             semEdxExpandedNodesInitialized = true;
         }
 
+        // Invalidate SEM EDX Associations. Inputs: none. Output: return value.
         function invalidateSemEdxAssociations() {
             semEdxAssociationVersion += 1;
             semEdxAssociationCache = new Map();
@@ -3333,6 +3500,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             saveSemEdxAssociationsToStorage();
         }
 
+        // Ensure SEM EDX Automatic Associations. Inputs: none. Output: Promise result.
         async function ensureSemEdxAutomaticAssociations() {
             if (semEdxAssociationLoading || semEdxAssociationReady) return;
             const version = semEdxAssociationVersion;
@@ -3349,6 +3517,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             refreshFileList();
         }
 
+        // Build SEM EDX Txt Select. Inputs: options, selectedValue, includeEmpty. Output: return value.
         function buildSemEdxTxtSelect(options, selectedValue = '', includeEmpty = false) {
             const select = document.createElement('select');
             select.classList.add('sem-edx-appended-select');
@@ -3368,6 +3537,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return select;
         }
 
+        // Render SEM EDX Appended List. Inputs: imagePath, options. Output: side effects.
         function renderSemEdxAppendedList(imagePath, options = {}) {
             const { associations, mode = 'automatic', txtOptions = [] } = options;
             const list = document.createElement('div');
@@ -3449,6 +3619,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return list;
         }
 
+        // Render SEM EDX Manual Tree. Inputs: node, depth, pathPrefix, options. Output: return value.
         function renderSemEdxManualTree(node, depth = 0, pathPrefix = '', options = {}) {
             const { associations = null, mode = 'automatic', txtLookup = new Map() } = options;
             const list = document.createElement('ul');
@@ -3569,6 +3740,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return list;
         }
 
+        // Render SEM EDX Associations. Inputs: none. Output: return value.
         function renderSemEdxAssociations() {
             if (!fileTree) return;
             fileTree.innerHTML = '';
@@ -3664,6 +3836,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateSemEdxStatus();
         }
 
+        // Refresh File List. Inputs: none. Output: return value.
         function refreshFileList() {
             fileTree.innerHTML = '';
             fileTree.classList.remove('sem-edx-associations');
@@ -3688,6 +3861,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             fileTree.appendChild(renderTree(tree));
         }
 
+        // Focus Fallback Element. Inputs: options. Output: return value.
         function focusFallbackElement(options = {}) {
             const { allowSelectInputs = true } = options;
             const candidates = [
@@ -3717,6 +3891,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Show Duplicate Popup. Inputs: message. Output: return value.
         function showDuplicatePopup(message) {
             duplicateMessage.textContent = message;
             duplicateOverlay.style.display = 'block';
@@ -3725,6 +3900,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             duplicateOkBtn.focus();
         }
 
+        // Hide Duplicate Popup. Inputs: none. Output: return value.
         function hideDuplicatePopup() {
             if (duplicatePopup.contains(document.activeElement)) {
                 focusFallbackElement();
@@ -3734,6 +3910,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             duplicatePopup.setAttribute('aria-hidden', 'true');
         }
 
+        // Show Compatibility Popup. Inputs: message. Output: return value.
         function showCompatibilityPopup(message) {
             compatibilityMessage.textContent = message;
             compatibilityOverlay.style.display = 'block';
@@ -3747,6 +3924,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Resolve Compatibility Popup. Inputs: decision. Output: return value.
         function resolveCompatibilityPopup(decision) {
             if (compatibilityPopupResolver) {
                 compatibilityPopupResolver(decision);
@@ -3762,6 +3940,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             compatibilityPopup.setAttribute('aria-hidden', 'true');
         }
 
+        // Show SEM EDX Confirm Popup. Inputs: message. Output: return value.
         function showSemEdxConfirmPopup(message) {
             semEdxConfirmMessage.textContent = message;
             semEdxConfirmOverlay.style.display = 'block';
@@ -3773,6 +3952,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Resolve SEM EDX Confirm Popup. Inputs: decision. Output: return value.
         function resolveSemEdxConfirmPopup(decision) {
             if (semEdxConfirmPopupResolver) {
                 semEdxConfirmPopupResolver(decision);
@@ -3788,12 +3968,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             semEdxConfirmPopup.setAttribute('aria-hidden', 'true');
         }
 
+        // Return delay. Inputs: ms. Output: return value.
         function delay(ms) {
             return new Promise((resolve) => {
                 window.setTimeout(resolve, ms);
             });
         }
 
+        // Return Root Info. Inputs: entry. Output: return value.
         function getRootInfo(entry) {
             const rawPath = getEntryPath(entry);
             const parts = rawPath.split('/').filter(Boolean);
@@ -3801,6 +3983,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { rootName, isRootFile: parts.length <= 1 };
         }
 
+        // Find Duplicate Root Names. Inputs: entries. Output: return value.
         function findDuplicateRootNames(entries) {
             const existingRootNames = new Set();
 
@@ -3840,6 +4023,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return duplicates;
         }
 
+        // Normalize File List. Inputs: files. Output: return value.
         function normalizeFileList(files) {
             return Array.from(files).map((file) => ({
                 file,
@@ -3847,6 +4031,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }));
         }
 
+        // Collect Directory Handle Files. Inputs: handle, prefix. Output: Promise result.
         async function collectDirectoryHandleFiles(handle, prefix = '') {
             const entries = [];
             for await (const entry of handle.values()) {
@@ -3861,6 +4046,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return entries;
         }
 
+        // Open File Picker. Inputs: none. Output: Promise result.
         async function openFilePicker() {
             if (typeof window.showOpenFilePicker !== 'function') {
                 return;
@@ -3884,6 +4070,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Open Folder Picker. Inputs: none. Output: Promise result.
         async function openFolderPicker() {
             if (typeof window.showDirectoryPicker !== 'function') {
                 return;
@@ -3903,6 +4090,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Return handle Files. Inputs: entries. Output: return value.
         function handleFiles(entries) {
             const duplicates = findDuplicateRootNames(entries);
             if (duplicates.size) {
@@ -3925,9 +4113,11 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Read All Directory Entries. Inputs: reader. Output: return value.
         function readAllDirectoryEntries(reader) {
             return new Promise((resolve, reject) => {
                 const entries = [];
+                // Read Chunk. Inputs: none. Output: return value.
                 const readChunk = () => {
                     reader.readEntries((batch) => {
                         if (!batch.length) {
@@ -3942,6 +4132,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Traverse Entry. Inputs: entry, pathPrefix. Output: Promise result.
         async function traverseEntry(entry, pathPrefix = '') {
             if (!entry) {
                 return [];
@@ -3966,6 +4157,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return [];
         }
 
+        // Return Files From Drop. Inputs: event. Output: Promise result.
         async function getFilesFromDrop(event) {
             const items = Array.from(event.dataTransfer?.items || []);
             const entries = [];
@@ -4174,6 +4366,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Parse JSON Response. Inputs: response. Output: Promise result.
         async function parseJsonResponse(response) {
             let text = '';
             try {
@@ -4192,6 +4385,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             );
         }
 
+        // Fetch Job Status. Inputs: job. Output: Promise result.
         async function fetchJobStatus(job) {
             const response = await fetch(job.status_url, { credentials: 'same-origin' });
             const data = await parseJsonResponse(response);
@@ -4201,6 +4395,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return data;
         }
 
+        // Wait For Compatibility. Inputs: job. Output: Promise result.
         async function waitForCompatibility(job) {
             if (!job?.status_url) {
                 return { confirmation_required: false, compatibility_status: 'compatible', status: 'ready' };
@@ -4234,6 +4429,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Confirm Compatibility. Inputs: job. Output: Promise result.
         async function confirmCompatibility(job) {
             const response = await fetch(job.confirm_url, {
                 method: 'POST',
@@ -4247,6 +4443,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return data;
         }
 
+        // Prune Upload Job. Inputs: job, keepPaths. Output: Promise result.
         async function pruneUploadJob(job, keepPaths) {
             if (!job?.prune_url) {
                 return;
@@ -4264,11 +4461,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return data;
         }
 
+        // Return Entry Path. Inputs: entry. Output: return value.
         function getEntryPath(entry) {
             const rawPath = entry?.relativePath || entry?.file?.name || '';
             return normalizeCompatibilityPath(rawPath);
         }
 
+        // Normalize Compatibility Path. Inputs: rawPath. Output: return value.
         function normalizeCompatibilityPath(rawPath) {
             if (!rawPath) {
                 return '';
@@ -4280,6 +4479,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 .replace(/\/+/g, '/');
         }
 
+        // Apply Compatibility Flags. Inputs: entries, incompatibleFiles. Output: return value.
         function applyCompatibilityFlags(entries, incompatibleFiles) {
             const incompatibleSet = new Set(
                 (incompatibleFiles || []).map(normalizeCompatibilityPath)
@@ -4296,6 +4496,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return changed;
         }
 
+        // Filter Compatibility Incompatible Files. Inputs: incompatibleFiles. Output: return value.
         function filterCompatibilityIncompatibleFiles(incompatibleFiles) {
             const files = (incompatibleFiles || []).map(normalizeCompatibilityPath).filter(Boolean);
             if (!isSemEdxSelected()) {
@@ -4304,6 +4505,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return files.filter((path) => !path.toLowerCase().endsWith('.txt'));
         }
 
+        // Ensure Compatibility Before Import. Inputs: job, uploadedFiles. Output: Promise result.
         async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
@@ -4342,8 +4544,10 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { proceed: true, status: statusData };
         }
 
+        // Start Upload Job. Inputs: entries. Output: Promise result.
         async function startUploadJob(entries = pendingFiles) {
             const totalBytes = entries.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
+            // Return whether Skip SEM EDX. Inputs: entry. Output: side effects.
             const shouldSkipSemEdx = (entry) => isSemEdxSelected() && isSemEdxTxtEntry(entry);
             const metadata = entries.map((entry) => ({
                 name: entry.file.name,
@@ -4393,6 +4597,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return { ...data, totalBytes };
         }
 
+        // Return Upload Failure Message. Inputs: status, fallbackMessage. Output: return value.
         function getUploadFailureMessage(status, fallbackMessage = '') {
             const cleanFallback = typeof fallbackMessage === 'string' ? fallbackMessage.trim() : '';
             if (cleanFallback) {
@@ -4413,6 +4618,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return 'The upload request failed before the server returned a usable response. Please check OMERO.web and reverse proxy logs.';
         }
 
+        // Parse JSON Text Or Throw. Inputs: responseText, contentType, status, contextLabel, responseUrl, expectedUrl. Output: return value.
         function parseJsonTextOrThrow(responseText, contentType, status, contextLabel, responseUrl, expectedUrl) {
             const rawText = responseText || '';
             if (!rawText) {
@@ -4437,6 +4643,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Create Upload Batches. Inputs: entries. Output: return value.
         function createUploadBatches(entries = pendingFiles) {
             const maxBatchFiles = Math.max(1, currentUploadBatchFiles);
             const batches = [];
@@ -4468,6 +4675,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return batches;
         }
 
+        // Upload Batch. Inputs: uploadUrl, batch. Output: return value.
         function uploadBatch(uploadUrl, batch) {
             return new Promise((resolve, reject) => {
                 if (cancelUploadRequested) {
@@ -4547,10 +4755,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Return whether Use Chunked Upload. Inputs: entry. Output: return value.
         function shouldUseChunkedUpload(entry) {
             return normalizeByteSize(entry?.file?.size) > uploadChunkThresholdBytes;
         }
 
+        // Upload Chunk. Inputs: uploadUrl, entry, chunkStart, chunkEnd. Output: return value.
         function uploadChunk(uploadUrl, entry, chunkStart, chunkEnd) {
             return new Promise((resolve, reject) => {
                 if (cancelUploadRequested) {
@@ -4620,6 +4830,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Upload Chunked File. Inputs: uploadUrl, entry. Output: Promise result.
         async function uploadChunkedFile(uploadUrl, entry) {
             const file = entry?.file;
             const relativePath = getEntryPath(entry);
@@ -4642,6 +4853,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Upload Files. Inputs: uploadUrl, entries. Output: Promise result.
         async function uploadFiles(uploadUrl, entries = pendingFiles) {
             const regularEntries = entries.filter((entry) => !shouldUseChunkedUpload(entry));
             const chunkedEntries = entries.filter((entry) => shouldUseChunkedUpload(entry));
@@ -4686,6 +4898,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Escape HTML. Inputs: value. Output: return value.
         function escapeHtml(value) {
             if (value == null) {
                 return '';
@@ -4698,6 +4911,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 .replace(/'/g, '&#39;');
         }
 
+        // Format Import Log Entry. Inputs: entry. Output: return value.
         function formatImportLogEntry(entry) {
             const rawEntry = String(entry ?? '');
             const successMatch = rawEntry.match(/^Import success(?:\s*:)?\s*(.*)$/);
@@ -4739,6 +4953,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             return escapeHtml(rawEntry);
         }
 
+        // Update Import Log. Inputs: entries. Output: return value.
         function updateImportLog(entries) {
             if (!entries || !entries.length) {
                 return;
@@ -4752,6 +4967,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             progressLog.innerHTML = formatted.join('\n');
         }
 
+        // Return persist Import State. Inputs: none. Output: return value.
         function persistImportState() {
             if (!storage) {
                 return;
@@ -4781,6 +4997,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Restore Import State. Inputs: none. Output: return value.
         function restoreImportState() {
             if (!storage) {
                 return;
@@ -4837,6 +5054,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Append Import Messages. Inputs: jobId, messages. Output: return value.
         function appendImportMessages(jobId, messages) {
             if (!messages || !messages.length) {
                 return;
@@ -4857,6 +5075,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             updateImportLog(importLogEntries);
         }
 
+        // Update Import Log From Jobs. Inputs: jobs. Output: return value.
         function updateImportLogFromJobs(jobs) {
             jobs.forEach((job) => {
                 const combined = [...(job.messages || [])];
@@ -4872,6 +5091,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             });
         }
 
+        // Update Progress From Jobs. Inputs: none. Output: return value.
         function updateProgressFromJobs() {
             if (!importJobs.size) {
                 progressSection.style.display = 'none';
@@ -4935,6 +5155,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Poll Import Jobs. Inputs: none. Output: Promise result.
         async function pollImportJobs() {
             const jobs = Array.from(importJobs.values());
             if (!jobs.length) {
@@ -4999,12 +5220,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             }
         }
 
+        // Ensure Import Polling. Inputs: none. Output: return value.
         function ensureImportPolling() {
             if (!importPollTimer) {
                 pollImportJobs();
             }
         }
 
+        // Register Import Job. Inputs: job. Output: return value.
         function registerImportJob(job) {
             importJobs.set(job.job_id, {
                 job_id: job.job_id,
@@ -5023,6 +5246,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             ensureImportPolling();
         }
 
+        // Update Cancel Buttons. Inputs: none. Output: return value.
         function updateCancelButtons() {
             const showUploadCancel = isUploading;
             const showImportCancel = hasActiveImport();
@@ -5032,6 +5256,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             cancelImportBtn.disabled = !showImportCancel;
         }
 
+        // Clear Import State. Inputs: none. Output: return value.
         function clearImportState() {
             importJobs.clear();
             importLogEntries.splice(0, importLogEntries.length);

@@ -14,10 +14,17 @@ class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 
     def __init__(self, query):
+        """Initialize the instance.
+
+        Inputs: `query`. Output: None.
+        """
         self.query = str(query)
 
     def format(self, *args, **kwargs):
-        """Build format."""
+        """Return formatted representation.
+
+        Inputs: `*args`, `**kwargs`. Output: `self.query`.
+        """
         return self.query
 
 
@@ -26,12 +33,18 @@ class _FakeSqlModule:
 
     @staticmethod
     def SQL(query):
-        """Handle SQL."""
+        """SQL.
+
+        Inputs: `query`. Output: `_FakeSqlTemplate` result.
+        """
         return _FakeSqlTemplate(query)
 
     @staticmethod
     def Identifier(name):
-        """Handle identifier."""
+        """Identifier.
+
+        Inputs: `name`. Output: `name`.
+        """
         return name
 
 
@@ -40,7 +53,10 @@ class _FakeExtras:
 
     @staticmethod
     def Json(payload):
-        """Handle JSON."""
+        """JSON.
+
+        Inputs: `payload`. Output: dict.
+        """
         return {"json": payload}
 
 
@@ -48,6 +64,10 @@ class _FakeCursor:
     """Test double for fake cursor."""
 
     def __init__(self, *, fetchone=None, fetchall=None, rowcount=0, rowcounts=None):
+        """Initialize the instance.
+
+        Inputs: `fetchone`, `fetchall`, `rowcount`, `rowcounts`. Output: None.
+        """
         self.fetchone_value = fetchone
         self.fetchall_value = fetchall or []
         self.rowcount = rowcount
@@ -55,23 +75,40 @@ class _FakeCursor:
         self.executed = []
 
     def execute(self, query, params=None):
-        """Run execute."""
+        """Execute the query or command.
+
+        Inputs: `query`, `params`. Output: None.
+        """
         self.executed.append((str(query), params))
         if self.rowcounts:
             self.rowcount = self.rowcounts.pop(0)
 
     def fetchone(self):
-        """Handle fetchone."""
+        """Return one result row.
+
+        Inputs: none. Output: `self.fetchone_value`.
+        """
         return self.fetchone_value
 
     def fetchall(self):
-        """Handle fetchall."""
+        """Return all result rows.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self.fetchall_value)
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
@@ -79,39 +116,61 @@ class _FakeConnection:
     """Test double for fake connection."""
 
     def __init__(self, cursors):
+        """Initialize the instance.
+
+        Inputs: `cursors`. Output: None.
+        """
         self._cursors = list(cursors)
         self.commits = 0
         self.closed = False
 
     def cursor(self):
-        """Handle cursor."""
+        """Return a database cursor.
+
+        Inputs: none. Output: `self._cursors.pop` result.
+        """
         if not self._cursors:
             self._cursors.append(_FakeCursor())
         return self._cursors.pop(0)
 
     def commit(self):
-        """Handle commit."""
+        """Commit the transaction.
+
+        Inputs: none. Output: None.
+        """
         self.commits += 1
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
 def _patch_connection_queue(monkeypatch, module, connections):
-    """Handle patch connection queue."""
+    """Patch connection queue.
+
+    Inputs: `monkeypatch`, `module`, `connections`. Output: yielded values.
+    """
     queue = list(connections)
 
     @contextmanager
     def fake_connect():
-        """Handle fake connect."""
+        """Fake connect.
+
+        Inputs: none. Output: yielded values.
+        """
         yield queue.pop(0)
 
     monkeypatch.setattr(module, "_connect", fake_connect)
 
 
 def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
-    """Verify test omp data store connection and schema hel behavior."""
+    """Verify omp data store connection and schema helpers.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     env_values = {
         omp_data_store.ENV_USER: "plugin-user",
         omp_data_store.ENV_AUTH: TEST_DB_AUTH,
@@ -164,7 +223,10 @@ def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
 
 
 def test_omp_data_store_variable_sets_credentials_and_user_cleanup(monkeypatch):
-    """Verify test omp data store variable sets credentials behavior."""
+    """Verify omp data store variable sets credentials and user cleanup.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(omp_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(
         omp_data_store,
@@ -216,7 +278,10 @@ def test_omp_data_store_variable_sets_credentials_and_user_cleanup(monkeypatch):
 
 
 def test_omp_data_store_delete_validation_and_table_listing(monkeypatch):
-    """Verify test omp data store delete validation and tab behavior."""
+    """Verify omp data store delete validation and table listing.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(omp_data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
     monkeypatch.setattr(omp_data_store, "_ensure_schema", lambda conn: None)
 

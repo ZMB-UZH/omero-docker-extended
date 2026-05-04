@@ -37,7 +37,10 @@ class _PyplotCompat:
 
     @staticmethod
     def subplots(*, figsize=(6.4, 4.8), dpi=None):
-        """Handle subplots."""
+        """Subplots.
+
+        Inputs: `figsize`, `dpi`. Output: tuple.
+        """
         fig = Figure(figsize=figsize, dpi=dpi)
         FigureCanvasAgg(fig)
         ax = fig.add_subplot(1, 1, 1)
@@ -45,7 +48,10 @@ class _PyplotCompat:
 
     @staticmethod
     def close(fig=None):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: `fig`. Output: None.
+        """
         if fig is None:
             return
         fig.clear()
@@ -55,8 +61,9 @@ plt = _PyplotCompat()
 
 
 def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
-    """
-    Parse an EMSA/MAS format SEM EDX spectrum file.
+    """Parse emsa file.
+
+    Inputs: `txt_path`. Output: `Dict[str, Any]`.
 
     Args:
         txt_path: Path to the .txt file
@@ -176,7 +183,10 @@ def _nearest_spectrum_point(
     spectrum: List[Tuple[float, float]],
     energy_kev: float,
 ) -> Optional[Tuple[float, float]]:
-    """Handle nearest spectrum point."""
+    """Nearest spectrum point.
+
+    Inputs: `spectrum`, `energy_kev`. Output: `Optional[Tuple[float, float]]`.
+    """
     if not spectrum:
         return None
     energies = [point[0] for point in spectrum]
@@ -196,13 +206,20 @@ class BBox:
     """Bounding box for collision detection"""
 
     def __init__(self, x0, y0, x1, y1):
+        """Initialize the instance.
+
+        Inputs: `x0`, `y0`, `x1`, `y1`. Output: None.
+        """
         self.x0 = x0
         self.y0 = y0
         self.x1 = x1
         self.y1 = y1
 
     def overlaps(self, other):
-        """Check if this bbox overlaps with another"""
+        """If this bbox overlaps with another.
+
+        Inputs: `other`. Output: bool.
+        """
         return not (
             self.x1 <= other.x0
             or self.x0 >= other.x1
@@ -211,7 +228,10 @@ class BBox:
         )
 
     def overlap_area(self, other):
-        """Calculate overlap area with another bbox"""
+        """Calculate overlap area with another bbox.
+
+        Inputs: `other`. Output: computed value.
+        """
         if not self.overlaps(other):
             return 0.0
 
@@ -221,10 +241,16 @@ class BBox:
 
 
 def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
-    """Check if line segment (x1,y1)-(x2,y2) crosses (x3,y3)-(x4,y4)"""
+    """If line segment (x1,y1)-(x2,y2) crosses (x3,y3)-(x4,y4).
+
+    Inputs: `x1`, `y1`, `x2`, `y2`, `x3`, `y3`, `x4`, `y4`. Output: bool.
+    """
 
     def ccw(ax, ay, bx, by, cx, cy):
-        """Handle ccw."""
+        """Ccw.
+
+        Inputs: `ax`, `ay`, `bx`, `by`, `cx`, `cy`. Output: bool.
+        """
         return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
 
     return ccw(x1, y1, x3, y3, x4, y4) != ccw(x2, y2, x3, y3, x4, y4) and ccw(
@@ -236,11 +262,19 @@ class LabelGene:
     """Single label placement gene"""
 
     def __init__(self, label_id: int, x: float, y: float):
+        """Initialize the instance.
+
+        Inputs: `label_id`, `x`, `y`. Output: None.
+        """
         self.label_id = label_id
         self.x = x
         self.y = y
 
     def __repr__(self):
+        """Return the debug representation.
+
+        Inputs: none. Output: computed value.
+        """
         return f"Gene(id={self.label_id}, x={self.x:.1f}, y={self.y:.1f})"
 
 
@@ -252,14 +286,25 @@ class Chromosome:
     """
 
     def __init__(self, genes: List[LabelGene]):
+        """Initialize the instance.
+
+        Inputs: `genes`. Output: None.
+        """
         self.genes = genes
         self.fitness = float("inf")
 
     def copy(self):
-        """Deep copy of chromosome"""
+        """Deep copy of chromosome.
+
+        Inputs: none. Output: `Chromosome` result.
+        """
         return Chromosome([LabelGene(g.label_id, g.x, g.y) for g in self.genes])
 
     def __repr__(self):
+        """Return the debug representation.
+
+        Inputs: none. Output: computed value.
+        """
         return f"Chromosome(genes={len(self.genes)}, fitness={self.fitness:.2f})"
 
 
@@ -276,6 +321,11 @@ class GeneticLabelPlacer:
         mutation_rate: float = 0.15,
         elite_size: int = 10,
     ):
+        """Initialize the instance.
+
+        Inputs: `label_specs`, `axes_bbox`, `ax`, `population_size`, `generations`,
+        `mutation_rate`, `elite_size`. Output: None.
+        """
         self.label_specs = label_specs
         self.axes_bbox = axes_bbox
         self.ax = ax
@@ -300,7 +350,10 @@ class GeneticLabelPlacer:
         print(f"Elite size: {elite_size}")
 
     def generate_initial_chromosome(self) -> Chromosome:
-        """IMPROVEMENT 4: Initial placement in INCREASING X order (left to right)"""
+        """IMPROVEMENT 4: Initial placement in INCREASING X order (left to right).
+
+        Inputs: none. Output: `Chromosome`.
+        """
         genes = []
 
         for spec in self.label_specs:
@@ -325,7 +378,10 @@ class GeneticLabelPlacer:
         return Chromosome(genes)
 
     def generate_random_chromosome(self) -> Chromosome:
-        """Generate random valid placement"""
+        """Generate random valid placement.
+
+        Inputs: none. Output: `Chromosome`.
+        """
         genes = []
 
         for spec in self.label_specs:
@@ -349,7 +405,10 @@ class GeneticLabelPlacer:
         return Chromosome(genes)
 
     def calculate_fitness(self, chromosome: Chromosome) -> float:
-        """Calculate fitness score (LOWER is better)"""
+        """Calculate fitness score (LOWER is better).
+
+        Inputs: `chromosome`. Output: `float`.
+        """
         # Build bboxes
         bboxes = []
         for gene in chromosome.genes:
@@ -431,7 +490,10 @@ class GeneticLabelPlacer:
     def tournament_selection(
         population: List[Chromosome], tournament_size: int = 3
     ) -> Chromosome:
-        """Select parent using tournament selection"""
+        """Select parent using tournament selection.
+
+        Inputs: `population`, `tournament_size`. Output: `Chromosome`.
+        """
         tournament = random.sample(population, tournament_size)  # nosec B311
         return min(tournament, key=lambda c: c.fitness)
 
@@ -439,7 +501,10 @@ class GeneticLabelPlacer:
     def crossover(
         parent1: Chromosome, parent2: Chromosome
     ) -> Tuple[Chromosome, Chromosome]:
-        """Ordered crossover"""
+        """Ordered crossover.
+
+        Inputs: `parent1`, `parent2`. Output: `Tuple[Chromosome, Chromosome]`.
+        """
         n = len(parent1.genes)
         split = random.randint(1, n - 1)  # nosec B311
 
@@ -481,7 +546,10 @@ class GeneticLabelPlacer:
         return Chromosome(child1_genes), Chromosome(child2_genes)
 
     def mutate(self, chromosome: Chromosome) -> Chromosome:
-        """Mutate by randomly adjusting positions"""
+        """Mutate by randomly adjusting positions.
+
+        Inputs: `chromosome`. Output: `Chromosome`.
+        """
         mutated = chromosome.copy()
 
         for gene in mutated.genes:
@@ -508,7 +576,10 @@ class GeneticLabelPlacer:
         return mutated
 
     def evolve(self) -> Chromosome:
-        """Main genetic algorithm loop"""
+        """Main genetic algorithm loop.
+
+        Inputs: none. Output: `Chromosome`.
+        """
         print("\n=== Starting Evolution ===")
 
         # Initialize population: ONE initial ordered + rest random
@@ -570,7 +641,11 @@ def genetic_label_placement(
     ax,
     renderer,
 ) -> List[Tuple[float, float, str, float, float, List[float]]]:
-    """Genetic algorithm for label placement"""
+    """Genetic algorithm for label placement.
+
+    Inputs: `labels_data`, `axes_bbox`, `fig`, `ax`, `renderer`. Output:
+    `List[Tuple[float, float, str, float, float, List[float]]]`.
+    """
     if not labels_data:
         return []
 
@@ -684,7 +759,10 @@ def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
 ) -> Optional[Path]:
-    """Build create edx spectrum plot."""
+    """Create edx spectrum plot.
+
+    Inputs: `txt_path`, `output_path`. Output: `Optional[Path]`.
+    """
     parsed = parse_emsa_file(txt_path)
     spectrum = parsed.get("spectrum") or []
     if not spectrum:
@@ -832,7 +910,10 @@ def build_spectrum_columns(
     image_id: int,
     spectrum: List[Tuple[float, float]],
 ) -> List[Any]:
-    """Build build spectrum columns."""
+    """Spectrum columns.
+
+    Inputs: `image_id`, `spectrum`. Output: `List[Any]`.
+    """
     from omero.grid import DoubleColumn, LongColumn
 
     columns = [
@@ -856,8 +937,10 @@ def create_spectrum_table(
     txt_filename: str,
     columns: Optional[List[Any]] = None,
 ) -> Optional[int]:
-    """
-    Create an OMERO Table containing spectrum X,Y data.
+    """Create spectrum table.
+
+    Inputs: `conn`, `image_id`, `spectrum`, `txt_filename`, `columns`. Output:
+    `Optional[int]`.
 
     Args:
         conn: OMERO BlitzGateway connection
@@ -998,8 +1081,9 @@ def attach_sem_edx_tables(
     txt_path: Path,
     persist_table: bool = True,
 ) -> Optional[int]:
-    """
-    Parse SEM EDX txt file and create OMERO Table with spectrum data attached to the dataset.
+    """SEM EDX txt file and create OMERO Table with spectrum data attached to the dataset.
+
+    Inputs: `conn`, `image_id`, `txt_path`, `persist_table`. Output: `Optional[int]`.
 
     This is the main function to call from the upload workflow.
 

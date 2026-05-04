@@ -38,6 +38,7 @@
         const rootStatusUrl = new URL('{% url "omeroweb_tools_root_status" %}', window.location.href);
         const warningEl = document.getElementById('root-user-warning');
 
+        // Set Root Warning. Inputs: none. Output: return value.
         const setRootWarning = () => {
             if (!warningEl) {
                 return;

@@ -15,6 +15,10 @@ class _FakeResponse:
     """Test double for fake response."""
 
     def __init__(self, status, payload):
+        """Initialize the instance.
+
+        Inputs: `status`, `payload`. Output: None.
+        """
         self.status = status
         self.status_code = status
         self._payload = payload
@@ -22,7 +26,10 @@ class _FakeResponse:
         self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
-        """Return read."""
+        """Read data from the resource.
+
+        Inputs: none. Output: `self._payload`.
+        """
         return self._payload
 
 
@@ -30,21 +37,34 @@ class _FakeConnection:
     """Test double for fake connection."""
 
     def __init__(self, response=None, *, request_error=None):
+        """Initialize the instance.
+
+        Inputs: `response`, `request_error`. Output: None.
+        """
         self.response = response
         self.request_error = request_error
         self.closed = False
 
     def request(self, method, path):
-        """Handle request."""
+        """Request.
+
+        Inputs: `method`, `path`. Output: None. Raises on invalid or unavailable state.
+        """
         if self.request_error is not None:
             raise self.request_error
 
     def getresponse(self):
-        """Return getresponse."""
+        """Return the HTTP response.
+
+        Inputs: none. Output: `self.response`.
+        """
         return self.response
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
@@ -52,21 +72,39 @@ class _Cursor:
     """Represent cursor."""
 
     def __init__(self, row):
+        """Initialize the instance.
+
+        Inputs: `row`. Output: None.
+        """
         self.row = row
         self.executed = []
 
     def execute(self, query):
-        """Run execute."""
+        """Execute the query or command.
+
+        Inputs: `query`. Output: None.
+        """
         self.executed.append(query)
 
     def fetchone(self):
-        """Handle fetchone."""
+        """Return one result row.
+
+        Inputs: none. Output: `self.row`.
+        """
         return self.row
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
@@ -74,20 +112,33 @@ class _PgConnection:
     """Represent pg connection."""
 
     def __init__(self, row):
+        """Initialize the instance.
+
+        Inputs: `row`. Output: None.
+        """
         self.row = row
         self.closed = False
 
     def cursor(self):
-        """Handle cursor."""
+        """Return a database cursor.
+
+        Inputs: none. Output: `_Cursor` result.
+        """
         return _Cursor(self.row)
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
 def _result(check_id: str, label: str) -> DiagnosticCheckResult:
-    """Handle result."""
+    """Return result.
+
+    Inputs: `check_id`, `label`. Output: `DiagnosticCheckResult`.
+    """
     return DiagnosticCheckResult(
         check_id=check_id,
         label=label,
@@ -99,7 +150,10 @@ def _result(check_id: str, label: str) -> DiagnosticCheckResult:
 
 
 def test_environment_and_database_profile_helpers(monkeypatch):
-    """Verify test environment and database profile helpers."""
+    """Verify environment and database profile helpers.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_HOST", "plugin-db")
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_PORT", "5544")
     monkeypatch.setenv("ADMIN_TOOLS_PLUGIN_DB_USER", "plugin-user")
@@ -148,7 +202,10 @@ def test_environment_and_database_profile_helpers(monkeypatch):
 def test_docker_api_json_and_runtime_inspection_handle_socket_and_payload_cases(
     monkeypatch,
 ):
-    """Verify test docker API JSON and runtime inspection h behavior."""
+    """Verify docker API JSON and runtime inspection handle socket and payload cases.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(system_diagnostics.os.path, "exists", lambda path: False)
     ok, payload, error = system_diagnostics._docker_api_json("/containers/json")
     assert ok is False
@@ -224,10 +281,16 @@ def test_docker_api_json_and_runtime_inspection_handle_socket_and_payload_cases(
 
 
 def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
-    """Verify test SQL and network primitives report succes behavior."""
+    """Verify sql and network primitives report success and failure.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
 
     def _psycopg2_single_value():
-        """Handle psycopg2 single value."""
+        """Psycopg2 single value.
+
+        Inputs: none. Output: call result.
+        """
         return type(
             "Psycopg2",
             (),
@@ -256,9 +319,17 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
         """Represent socket context."""
 
         def __enter__(self):
+            """Enter the context manager.
+
+            Inputs: none. Output: `self`.
+            """
             return self
 
         def __exit__(self, exc_type, exc, tb):
+            """Exit the context manager.
+
+            Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+            """
             return False
 
     monkeypatch.setattr(
@@ -326,7 +397,10 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
     assert invalid_http.status == "fail"
 
     def _psycopg2_bad_value():
-        """Handle psycopg2 bad value."""
+        """Psycopg2 bad value.
+
+        Inputs: none. Output: call result.
+        """
         return type(
             "Psycopg2",
             (),
@@ -346,7 +420,10 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
 
 
 def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
-    """Verify test diagnostic aggregators return expected c behavior."""
+    """Verify diagnostic aggregators return expected checks.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064")
     monkeypatch.setenv("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063")
@@ -399,7 +476,10 @@ def test_diagnostic_aggregators_return_expected_checks(monkeypatch):
 
 
 def test_omero_server_core_reports_missing_runtime_config(monkeypatch):
-    """Verify test OMERO server core reports missing runtim behavior."""
+    """Verify OMERO server core reports missing runtime config.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     for name in (
         "ADMIN_TOOLS_OMERO_SERVER_HOST",
         "OMEROHOST",

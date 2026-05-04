@@ -49,6 +49,7 @@ FLATTEN_TEMP_DIRS=()
 FLATTEN_TEMP_CONTAINERS=()
 BUILDX_RUNTIME_CLEANUP_ARMED=0
 
+# Require binary. Inputs: shell arguments and environment. Output: command status and side effects.
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
     if ! command -v "${binary_name}" >/dev/null 2>&1; then
@@ -58,6 +59,7 @@ require_binary() {
     return 0
 }
 
+# Require non empty. Inputs: shell arguments and environment. Output: command status and side effects.
 require_non_empty() {
     local variable_name="${1:?BUG: require_non_empty requires a variable name}"
     local variable_value="${2-}"
@@ -68,6 +70,7 @@ require_non_empty() {
     return 0
 }
 
+# Validate toggle. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_toggle() {
     local variable_name="${1:?BUG: validate_toggle requires variable name}"
     local variable_value="${2-}"
@@ -78,6 +81,7 @@ validate_toggle() {
     return 0
 }
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
     case "${1:-}" in
         ""|*[!0-9]*) return 1 ;;
@@ -85,6 +89,7 @@ is_non_negative_integer() {
     esac
 }
 
+# Return whether build target name. Inputs: shell arguments and environment. Output: success or failure status.
 is_build_target_name() {
     case "${1:-}" in
         ""|*[!A-Za-z0-9._-]*) return 1 ;;
@@ -92,6 +97,7 @@ is_build_target_name() {
     esac
 }
 
+# Validate non negative integer. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_non_negative_integer() {
     local variable_name="${1:?BUG: validate_non_negative_integer requires variable name}"
     local variable_value="${2-}"
@@ -102,6 +108,7 @@ validate_non_negative_integer() {
     return 0
 }
 
+# Validate local cache mode. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_local_cache_mode() {
     case "${DOCKER_BUILD_LOCAL_CACHE_MODE}" in
         min|max) return 0 ;;
@@ -112,6 +119,7 @@ validate_local_cache_mode() {
     esac
 }
 
+# Validate serial mode. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_serial_mode() {
     case "${DOCKER_BUILD_BAKE_SERIAL_MODE}" in
         auto|always|never) return 0 ;;
@@ -122,6 +130,7 @@ validate_serial_mode() {
     esac
 }
 
+# Validate buildx driver. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_buildx_driver() {
     case "${DOCKER_BUILDX_DRIVER}" in
         docker-container)
@@ -134,11 +143,13 @@ validate_buildx_driver() {
     esac
 }
 
+# Resolve builder driver. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_builder_driver() {
     local builder_name="${1:?BUG: resolve_builder_driver requires builder name}"
     docker buildx inspect "${builder_name}" 2>/dev/null | awk '/^Driver:/ {print $2; exit}' || true
 }
 
+# Return whether transient layer lock error. Inputs: shell arguments and environment. Output: success or failure status.
 is_transient_layer_lock_error() {
     local output_file="${1:?BUG: is_transient_layer_lock_error requires output file path}"
     if [ ! -r "${output_file}" ]; then
@@ -151,6 +162,7 @@ is_transient_layer_lock_error() {
     return 1
 }
 
+# Return whether transient cache export error. Inputs: shell arguments and environment. Output: success or failure status.
 is_transient_cache_export_error() {
     local output_file="${1:?BUG: is_transient_cache_export_error requires output file path}"
     if [ ! -r "${output_file}" ]; then
@@ -168,6 +180,7 @@ is_transient_cache_export_error() {
     return 1
 }
 
+# Execute buildx bake with retries. Inputs: shell arguments and environment. Output: command status and side effects.
 run_buildx_bake_with_retries() {
     local max_attempts="${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     local sleep_seconds="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
@@ -235,6 +248,7 @@ run_buildx_bake_with_retries() {
     return 1
 }
 
+# Count build targets. Inputs: shell arguments and environment. Output: stdout text and command status.
 count_build_targets() {
     local count=0
     local target=""
@@ -244,6 +258,7 @@ count_build_targets() {
     printf '%s' "${count}"
 }
 
+# Perform as bool literal. Inputs: shell arguments and environment. Output: command status and side effects.
 as_bool_literal() {
     local toggle_value="${1:?BUG: as_bool_literal requires a value}"
     if [ "${toggle_value}" = "1" ]; then printf 'true'; return 0; fi
@@ -252,6 +267,7 @@ as_bool_literal() {
     return 1
 }
 
+# Validate compression type. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_compression_type() {
     case "${DOCKER_BUILD_COMPRESSION_TYPE}" in
         gzip|zstd|estargz) return 0 ;;
@@ -262,6 +278,7 @@ validate_compression_type() {
     esac
 }
 
+# Validate compression level. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_compression_level() {
     if ! is_non_negative_integer "${DOCKER_BUILD_COMPRESSION_LEVEL}"; then
         echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_COMPRESSION_LEVEL must be an integer. Got: ${DOCKER_BUILD_COMPRESSION_LEVEL}" >&2
@@ -274,6 +291,7 @@ validate_compression_level() {
     return 0
 }
 
+# Validate compose file. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_compose_file() {
     if [ ! -r "${COMPOSE_FILE}" ]; then
         echo "ERROR (${SCRIPT_NAME}): Compose file is missing or unreadable: ${COMPOSE_FILE}" >&2
@@ -282,6 +300,7 @@ validate_compose_file() {
     return 0
 }
 
+# Validate build targets. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_build_targets() {
     local target=""
     require_non_empty "DOCKER_BUILD_TARGETS" "${DOCKER_BUILD_TARGETS}"
@@ -294,6 +313,7 @@ validate_build_targets() {
     return 0
 }
 
+# Perform compose target image name. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_target_image_name() {
     local target="${1:?BUG: compose_target_image_name requires a target}"
     if [ -n "${DOCKER_REGISTRY_PREFIX}" ]; then
@@ -304,6 +324,7 @@ compose_target_image_name() {
     return 0
 }
 
+# Resolve target image name from compose. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_target_image_name_from_compose() {
     local target="${1:?BUG: resolve_target_image_name_from_compose requires a target}"
     local rendered_compose=""
@@ -344,6 +365,7 @@ resolve_target_image_name_from_compose() {
     return 0
 }
 
+# Resolve target final image name. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_target_final_image_name() {
     local target="${1:?BUG: resolve_target_final_image_name requires a target}"
 
@@ -356,6 +378,7 @@ resolve_target_final_image_name() {
     return 0
 }
 
+# Perform compose flatten source image name. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_flatten_source_image_name() {
     local target="${1:?BUG: compose_flatten_source_image_name requires a target}"
     local final_image_name=""
@@ -365,6 +388,7 @@ compose_flatten_source_image_name() {
     return 0
 }
 
+# Perform compose build output image name. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_build_output_image_name() {
     local target="${1:?BUG: compose_build_output_image_name requires a target}"
     if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
@@ -376,18 +400,21 @@ compose_build_output_image_name() {
     return 0
 }
 
+# Register flatten temp image. Inputs: shell arguments and environment. Output: command status and side effects.
 register_flatten_temp_image() {
     local image_name="${1:?BUG: register_flatten_temp_image requires an image name}"
     FLATTEN_TEMP_IMAGES+=("${image_name}")
     return 0
 }
 
+# Register flatten temp directory. Inputs: shell arguments and environment. Output: command status and side effects.
 register_flatten_temp_dir() {
     local dir_path="${1:?BUG: register_flatten_temp_dir requires a directory path}"
     FLATTEN_TEMP_DIRS+=("${dir_path}")
     return 0
 }
 
+# Register flatten temp source images. Inputs: shell arguments and environment. Output: command status and side effects.
 register_flatten_temp_source_images() {
     local target=""
 
@@ -402,6 +429,7 @@ register_flatten_temp_source_images() {
     return 0
 }
 
+# Cleanup flatten artifacts. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_flatten_artifacts() {
     local image_name=""
     local dir_path=""
@@ -428,12 +456,14 @@ cleanup_flatten_artifacts() {
     return 0
 }
 
+# Register flatten temp container. Inputs: shell arguments and environment. Output: command status and side effects.
 register_flatten_temp_container() {
     local container_name="${1:?BUG: register_flatten_temp_container requires a container name}"
     FLATTEN_TEMP_CONTAINERS+=("${container_name}")
     return 0
 }
 
+# Prepare flatten source images from existing tags. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_flatten_source_images_from_existing_tags() {
     local target=""
     local source_image_name=""
@@ -459,11 +489,13 @@ prepare_flatten_source_images_from_existing_tags() {
     return 0
 }
 
+# Render active compose config. Inputs: shell arguments and environment. Output: stdout text and command status.
 render_active_compose_config() {
     docker compose -f "${COMPOSE_FILE}" config
     return $?
 }
 
+# Resolve build targets from compose. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_build_targets_from_compose() {
     local rendered_compose=""
     local discovered_targets=""
@@ -504,6 +536,7 @@ resolve_build_targets_from_compose() {
     return 0
 }
 
+# Resolve push images default. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_push_images_default() {
     if [ -n "${DOCKER_BUILD_PUSH_IMAGES}" ]; then
         printf '%s' "${DOCKER_BUILD_PUSH_IMAGES}"
@@ -519,6 +552,7 @@ resolve_push_images_default() {
     return 0
 }
 
+# Resolve local cache directory. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_local_cache_dir() {
     if [ -n "${BUILDX_DATA_PATH:-}" ]; then
         printf '%s' "${BUILDX_DATA_PATH}"
@@ -538,6 +572,7 @@ resolve_local_cache_dir() {
     return 0
 }
 
+# Resolve target cache directory. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_target_cache_dir() {
     local cache_root="${1:?BUG: resolve_target_cache_dir requires cache root}"
     local target_name="${2:?BUG: resolve_target_cache_dir requires target name}"
@@ -545,6 +580,7 @@ resolve_target_cache_dir() {
     return 0
 }
 
+# Resolve target cache staging directory. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_target_cache_staging_dir() {
     local target_cache_dir="${1:?BUG: resolve_target_cache_staging_dir requires cache dir}"
     local rotation_token="${2:?BUG: resolve_target_cache_staging_dir requires rotation token}"
@@ -552,6 +588,7 @@ resolve_target_cache_staging_dir() {
     return 0
 }
 
+# Prepare target cache staging directory. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_target_cache_staging_dir() {
     local target_cache_staging_dir="${1:?BUG: prepare_target_cache_staging_dir requires staging dir}"
     rm -rf "${target_cache_staging_dir}"
@@ -559,6 +596,7 @@ prepare_target_cache_staging_dir() {
     return 0
 }
 
+# Swap target cache staging directory. Inputs: shell arguments and environment. Output: command status and side effects.
 swap_target_cache_staging_dir() {
     local target_cache_dir="${1:?BUG: swap_target_cache_staging_dir requires cache dir}"
     local target_cache_staging_dir="${2:?BUG: swap_target_cache_staging_dir requires staging dir}"
@@ -578,12 +616,14 @@ swap_target_cache_staging_dir() {
     return 0
 }
 
+# Cleanup target cache staging directory. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_target_cache_staging_dir() {
     local target_cache_staging_dir="${1:?BUG: cleanup_target_cache_staging_dir requires staging dir}"
     rm -rf "${target_cache_staging_dir}"
     return 0
 }
 
+# Commit local cache staging directories. Inputs: shell arguments and environment. Output: command status and side effects.
 commit_local_cache_staging_dirs() {
     local cache_root=""
     local target=""
@@ -604,6 +644,7 @@ commit_local_cache_staging_dirs() {
     return 0
 }
 
+# Cleanup local cache staging directories. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_local_cache_staging_dirs() {
     local cache_root=""
     local target=""
@@ -624,6 +665,7 @@ cleanup_local_cache_staging_dirs() {
     return 0
 }
 
+# Generate flatten filesystem dockerfile. Inputs: shell arguments and environment. Output: command status and side effects.
 generate_flatten_filesystem_dockerfile() {
     local source_image_name="${1:?BUG: generate_flatten_filesystem_dockerfile requires a source image name}"
     local dockerfile_path="${2:?BUG: generate_flatten_filesystem_dockerfile requires a dockerfile path}"
@@ -647,6 +689,7 @@ PY
     return 0
 }
 
+# Build flatten import changes. Inputs: shell arguments and environment. Output: command status and side effects.
 build_flatten_import_changes() {
     local source_image_name="${1:?BUG: build_flatten_import_changes requires a source image name}"
     local image_metadata_json=""
@@ -778,6 +821,7 @@ PY
     return 0
 }
 
+# Perform flatten target image. Inputs: shell arguments and environment. Output: command status and side effects.
 flatten_target_image() {
     local target="${1:?BUG: flatten_target_image requires a target}"
     local source_image_name=""
@@ -855,6 +899,7 @@ flatten_target_image() {
     return 0
 }
 
+# Perform flatten final images if requested. Inputs: shell arguments and environment. Output: command status and side effects.
 flatten_final_images_if_requested() {
     local target=""
 
@@ -869,16 +914,19 @@ flatten_final_images_if_requested() {
     return 0
 }
 
+# Finalize build outputs. Inputs: shell arguments and environment. Output: command status and side effects.
 finalize_build_outputs() {
     commit_local_cache_staging_dirs
     flatten_final_images_if_requested
     return 0
 }
 
+# Return whether timeout. Inputs: shell arguments and environment. Output: success or failure status.
 has_timeout() {
     command -v timeout >/dev/null 2>&1
 }
 
+# Execute with optional timeout. Inputs: shell arguments and environment. Output: command status and side effects.
 run_with_optional_timeout() {
     local timeout_seconds="${1:?BUG: run_with_optional_timeout requires seconds}"
     shift
@@ -892,6 +940,7 @@ run_with_optional_timeout() {
     return $?
 }
 
+# Cleanup buildx builder. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_buildx_builder() {
     local builder_name="${1:?BUG: cleanup_buildx_builder requires a builder name}"
 
@@ -912,6 +961,7 @@ cleanup_buildx_builder() {
     return 0
 }
 
+# Cleanup buildx builder volumes. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_buildx_builder_volumes() {
     local builder_name="${1:?BUG: cleanup_buildx_builder_volumes requires a builder name}"
     local ids=""
@@ -925,6 +975,7 @@ cleanup_buildx_builder_volumes() {
     return 0
 }
 
+# Cleanup buildx runtime artifacts. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_buildx_runtime_artifacts() {
     if [ "${BUILDX_RUNTIME_CLEANUP_ARMED}" != "1" ]; then
         return 0
@@ -936,6 +987,7 @@ cleanup_buildx_runtime_artifacts() {
     return 0
 }
 
+# Ensure builder. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_builder() {
     # The docker (default) driver only supports inline cache export.
     # type=local cache-to requires the docker-container driver, which runs
@@ -1015,6 +1067,7 @@ ensure_builder() {
     return 1
 }
 
+# Build target overrides. Inputs: shell arguments and environment. Output: command status and side effects.
 build_target_overrides() {
     local target=""
     local target_image_name=""
@@ -1102,6 +1155,7 @@ build_target_overrides() {
     done
 }
 
+# Execute buildx bake serial fallback. Inputs: shell arguments and environment. Output: command status and side effects.
 run_buildx_bake_serial_fallback() {
     local original_targets="${DOCKER_BUILD_TARGETS}"
     local target=""
@@ -1142,6 +1196,7 @@ run_buildx_bake_serial_fallback() {
     return 0
 }
 
+# Execute buildx bake without local cache fallback. Inputs: shell arguments and environment. Output: command status and side effects.
 run_buildx_bake_without_local_cache_fallback() {
     local original_local_cache_enabled="${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
 
@@ -1174,6 +1229,7 @@ run_buildx_bake_without_local_cache_fallback() {
     return 1
 }
 
+# Return whether run serial mode. Inputs: shell arguments and environment. Output: success or failure status.
 should_run_serial_mode() {
     local target_count
     target_count="$(count_build_targets)"
@@ -1197,6 +1253,7 @@ should_run_serial_mode() {
     esac
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     local push_bool=""
     local oci_mediatypes_bool=""

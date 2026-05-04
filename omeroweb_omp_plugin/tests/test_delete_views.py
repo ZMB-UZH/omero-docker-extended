@@ -15,12 +15,18 @@ AUTH_VALUE = "".join(["fixture", "-", "credential"])
 
 
 def _payload(response):
-    """Handle payload."""
+    """Payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _delete_request_payload(project_id, password_value):
-    """Handle delete request payload."""
+    """Delete request payload.
+
+    Inputs: `project_id`, `password_value`. Output: dict.
+    """
     return {"project_id": project_id, "password": password_value}
 
 
@@ -28,18 +34,28 @@ class _Conn:
     """Represent conn."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.getObject = lambda kind, object_id: None
 
     @staticmethod
     def getUser():
-        """Return get user."""
+        """Return the fake user.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getName=lambda: "alice")
 
 
 def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     monkeypatch,
 ):
-    """Verify test delete all view covers validation chunk behavior."""
+    """Verify delete all view covers validation chunk failures and top level errors.
+
+    Inputs: `monkeypatch`. Output: `cli_results[cmd[4]]`.
+    """
     conn = _Conn()
     factory = RequestFactory()
 
@@ -172,7 +188,10 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     }
 
     def _run(cmd, **kwargs):
-        """Handle run."""
+        """Return the fake subprocess result for cmd and kwargs.
+
+        Inputs: `cmd`, `**kwargs`. Output: `cli_results[cmd[4]]`.
+        """
         return cli_results[cmd[4]]
 
     monkeypatch.setattr(delete_all_view.subprocess, "run", _run)
@@ -234,7 +253,10 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
 
 
 def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatch):
-    """Verify test delete plugin view covers validation and behavior."""
+    """Verify delete plugin view covers validation and empty project paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     with pytest.raises(ValueError, match="Invalid annotation id"):
         delete_plugin_view._validated_delete_object_id(0, "annotation id")
     with pytest.raises(ValueError, match="Unsupported OMERO delete target"):
@@ -373,7 +395,13 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
 
 
 def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeypatch):
-    """Verify test delete plugin view covers cli failures l behavior."""
+    """Verify delete plugin view covers cli failures link residue and success.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     conn = _Conn()
     factory = RequestFactory()
 
@@ -407,7 +435,13 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     )
 
     def _plugin_annotation_ids(_conn, image_id):
-        """Handle plugin annotation identifiers."""
+        """Plugin annotation ids.
+
+        Inputs: `_conn`, `image_id`. Output: computed value. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if image_id == 1:
             raise RuntimeError("lookup failed")
         return {
@@ -428,7 +462,13 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     }
 
     def _find_link_ids(_conn, annotation_id):
-        """Handle find link identifiers."""
+        """Find link IDs.
+
+        Inputs: `_conn`, `annotation_id`. Output: `list` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         state = link_lookup[annotation_id]
         if state == "boom":
             raise RuntimeError("link lookup failed")
@@ -463,7 +503,10 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     }
 
     def _run(cmd, **kwargs):
-        """Handle run."""
+        """Return the fake subprocess result for cmd and kwargs.
+
+        Inputs: `cmd`, `**kwargs`. Output: `delete_results[cmd[4]]`.
+        """
         return delete_results[cmd[4]]
 
     annotation_lookup = {

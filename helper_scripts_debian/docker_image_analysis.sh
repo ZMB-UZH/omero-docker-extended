@@ -14,24 +14,29 @@ DEFAULT_MAX_REPORT_BYTES="$((50 * 1024 * 1024))"
 
 DEBUG_MODE="false"
 
+# Log info. Inputs: shell arguments and environment. Output: command status and side effects.
 log_info() {
   printf '[INFO] %s\n' "$*" >&2
 }
 
+# Log debug. Inputs: shell arguments and environment. Output: command status and side effects.
 log_debug() {
   if [ "${DEBUG_MODE}" = "true" ]; then
     printf '[DEBUG] %s\n' "$*" >&2
   fi
 }
 
+# Log warn. Inputs: shell arguments and environment. Output: command status and side effects.
 log_warn() {
   printf '[WARN] %s\n' "$*" >&2
 }
 
+# Log error. Inputs: shell arguments and environment. Output: command status and side effects.
 log_error() {
   printf '[ERROR] %s\n' "$*" >&2
 }
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
   cat <<EOF
 $SCRIPT_NAME v$VERSION
@@ -66,6 +71,7 @@ Behavior:
 EOF
 }
 
+# Cleanup files. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_files() {
   if [ "${#TEMP_FILES[@]}" -gt 0 ]; then
     local f
@@ -78,6 +84,7 @@ cleanup_files() {
 TEMP_FILES=()
 trap cleanup_files EXIT
 
+# Require command. Inputs: shell arguments and environment. Output: command status and side effects.
 require_command() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -86,14 +93,17 @@ require_command() {
   fi
 }
 
+# Perform iso utc timestamp. Inputs: shell arguments and environment. Output: command status and side effects.
 iso_utc_timestamp() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+# Perform safe filename fragment. Inputs: shell arguments and environment. Output: command status and side effects.
 safe_filename_fragment() {
   printf '%s' "$1" | tr '/:@ ' '____' | tr -cd 'A-Za-z0-9._-'
 }
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
   case "${1:-}" in
     ""|*[!0-9]*) return 1 ;;
@@ -101,6 +111,7 @@ is_non_negative_integer() {
   esac
 }
 
+# Validate non negative integer. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_non_negative_integer() {
   local value="$1"
   local name="$2"
@@ -111,6 +122,7 @@ validate_non_negative_integer() {
   return 0
 }
 
+# Validate image reference. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_image_reference() {
   local image_ref="$1"
   if [ -z "$image_ref" ]; then
@@ -131,6 +143,7 @@ validate_image_reference() {
   return 0
 }
 
+# Ensure output directory writable. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_output_dir_writable() {
   local output_dir="$1"
   mkdir -p "$output_dir"
@@ -152,6 +165,7 @@ ensure_output_dir_writable() {
   return 0
 }
 
+# Set report permissions. Inputs: shell arguments and environment. Output: command status and side effects.
 set_report_permissions() {
   local file_path="$1"
   if [ -f "$file_path" ]; then
@@ -161,6 +175,7 @@ set_report_permissions() {
   fi
 }
 
+# Perform docker preflight. Inputs: shell arguments and environment. Output: command status and side effects.
 docker_preflight() {
   require_command docker || return 1
 
@@ -172,6 +187,7 @@ docker_preflight() {
   return 0
 }
 
+# Perform truncate if oversized. Inputs: shell arguments and environment. Output: command status and side effects.
 truncate_if_oversized() {
   local file_path="$1"
   local max_bytes="$2"
@@ -200,18 +216,22 @@ truncate_if_oversized() {
   cp "$tmp" "$file_path"
 }
 
+# Build probe script. Inputs: shell arguments and environment. Output: command status and side effects.
 build_probe_script() {
   cat <<'EOS'
 set -u
 
+# Begin section. Inputs: shell arguments and environment. Output: command status and side effects.
 begin_section() {
   printf '###BEGIN:%s###\n' "$1"
 }
 
+# End section. Inputs: shell arguments and environment. Output: command status and side effects.
 end_section() {
   printf '###END:%s###\n' "$1"
 }
 
+# Execute section cmd. Inputs: shell arguments and environment. Output: command status and side effects.
 run_section_cmd() {
   section_name="$1"
   shift
@@ -299,6 +319,7 @@ end_section "PYTHON_VENVS"
 EOS
 }
 
+# Extract section. Inputs: shell arguments and environment. Output: command status and side effects.
 extract_section() {
   local section_name="$1"
   local raw_file="$2"
@@ -309,6 +330,7 @@ extract_section() {
   ' "$raw_file"
 }
 
+# Write text report. Inputs: shell arguments and environment. Output: command status and side effects.
 write_text_report() {
   local image="$1"
   local shell_used="$2"
@@ -352,6 +374,7 @@ write_text_report() {
   } >"$out_txt"
 }
 
+# Generate JSON report. Inputs: shell arguments and environment. Output: command status and side effects.
 generate_json_report() {
   local image="$1"
   local shell_used="$2"
@@ -401,6 +424,7 @@ PY
   return 1
 }
 
+# Execute probe with shell. Inputs: shell arguments and environment. Output: command status and side effects.
 run_probe_with_shell() {
   local image="$1"
   local shell_path="$2"
@@ -423,6 +447,7 @@ run_probe_with_shell() {
   return 1
 }
 
+# Perform inspect image summary. Inputs: shell arguments and environment. Output: command status and side effects.
 inspect_image_summary() {
   local image="$1"
   local inspect_json
@@ -503,6 +528,7 @@ PY
   printf '%s\n' "$inspect_json"
 }
 
+# Execute self test. Inputs: shell arguments and environment. Output: command status and side effects.
 run_self_test() {
   log_info "Running self-tests for parser and helpers..."
   local tmp
@@ -549,6 +575,7 @@ EOF
   return 0
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
   local image_ref=""
   local output_dir="$DEFAULT_OUTPUT_DIR"

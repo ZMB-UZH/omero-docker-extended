@@ -13,12 +13,18 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.bootstrap = SERVER_BOOTSTRAP.read_text(encoding="utf-8")
 
     def test_server_image_bundles_figure_to_pdf_script(self):
-        """Verify test server image bundles figure to pdf script."""
+        """Verify server image bundles figure to pdf script.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             'ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"',
             self.dockerfile,
@@ -30,14 +36,20 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         )
 
     def test_bootstrap_register_script_sync_skips_package_markers(self):
-        """Verify test bootstrap register script sync skips pac behavior."""
+        """Verify bootstrap register script sync skips package markers.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             "if not file.endswith('.py') or file == '__init__.py':",
             self.bootstrap,
         )
 
     def test_bootstrap_requires_figure_version_env_var(self):
-        """Verify test bootstrap requires figure version env var."""
+        """Verify bootstrap requires figure version environment var.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             'echo "ERROR: OMERO_FIGURE_VERSION must be set in env/omeroserver.env and must not be empty." >&2',
             self.bootstrap,
@@ -45,7 +57,10 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         self.assertNotIn('figure_version="7.3.0"', self.bootstrap)
 
     def test_bootstrap_installs_figure_script_before_registration(self):
-        """Verify test bootstrap installs figure script before behavior."""
+        """Verify bootstrap installs figure script before registration.
+
+        Inputs: none. Output: None.
+        """
         self.assertRegex(
             self.bootstrap,
             re.compile(

@@ -9,7 +9,10 @@ from omeroweb_tools.task_names import ENHANCED_SEARCH_SCOPE_SYNC_TASK_NAME
 
 
 def test_config_helpers_cover_invalid_values_and_scope_serialization():
-    """Verify test config helpers cover invalid values and behavior."""
+    """Verify config helpers cover invalid values and scope serialization.
+
+    Inputs: none. Output: None.
+    """
     scope = tools_config.EnhancedSearchScope("user", 7, "Your universal metadata index")
 
     assert scope.to_dict() == {
@@ -26,7 +29,10 @@ def test_config_helpers_cover_invalid_values_and_scope_serialization():
 
 
 def test_build_enhanced_search_celery_config_normalizes_invalid_inputs(monkeypatch):
-    """Verify test build enhanced search celery config norm behavior."""
+    """Verify build enhanced search celery config normalizes invalid inputs.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         tools_config,
         "get_optional_env",
@@ -60,13 +66,20 @@ def test_build_enhanced_search_celery_config_normalizes_invalid_inputs(monkeypat
 
 
 def test_celery_app_builds_configured_celery_instance(monkeypatch):
-    """Verify test celery app builds configured celery inst behavior."""
+    """Verify celery app builds configured celery instance.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     created = {}
 
     class _FakeCelery:
         """Test double for fake celery."""
 
         def __init__(self, name, broker, backend):
+            """Initialize the instance.
+
+            Inputs: `name`, `broker`, `backend`. Output: None.
+            """
             created["init"] = {
                 "name": name,
                 "broker": broker,
@@ -76,7 +89,10 @@ def test_celery_app_builds_configured_celery_instance(monkeypatch):
 
         @staticmethod
         def autodiscover_tasks(packages, force=False):
-            """Handle autodiscover tasks."""
+            """Autodiscover tasks.
+
+            Inputs: `packages`, `force`. Output: None.
+            """
             created["autodiscover"] = {"packages": packages, "force": force}
 
     monkeypatch.setattr(
@@ -118,7 +134,10 @@ def test_celery_app_builds_configured_celery_instance(monkeypatch):
 
 
 def test_tasks_module_registers_and_runs_scope_sync_task(monkeypatch):
-    """Verify test tasks module registers and runs scope sy behavior."""
+    """Verify tasks module registers and runs scope sync task.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     decorated = {}
 
     class _FakeApp:
@@ -126,10 +145,16 @@ def test_tasks_module_registers_and_runs_scope_sync_task(monkeypatch):
 
         @staticmethod
         def task(**kwargs):
-            """Handle task."""
+            """Task.
+
+            Inputs: `**kwargs`. Output: computed value.
+            """
 
             def _decorator(func):
-                """Handle decorator."""
+                """Decorator.
+
+                Inputs: `func`. Output: `func`.
+                """
                 decorated["kwargs"] = kwargs
                 return func
 

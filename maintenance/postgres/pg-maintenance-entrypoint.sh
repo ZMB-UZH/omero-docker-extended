@@ -35,16 +35,20 @@ OPTIONAL_ENV_VARS=(
     PG_MAINTENANCE_REINDEX_STATEMENT_TIMEOUT
 )
 
+# Write a log message. Inputs: shell arguments and environment. Output: command status and side effects.
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
 
+# Print an error and exit. Inputs: shell arguments and environment. Output: command status and side effects.
 die() { log "FATAL: $*" >&2; exit 1; }
 
+# Derive runtime environment aliases. Inputs: shell arguments and environment. Output: command status and side effects.
 derive_runtime_env_aliases() {
     if [ -z "${PLUGIN_DB_PASS:-}" ] && [ -n "${OMP_PLUGIN_DB_PASS:-}" ]; then
         export PLUGIN_DB_PASS="${OMP_PLUGIN_DB_PASS}"
     fi
 }
 
+# Write export. Inputs: shell arguments and environment. Output: command status and side effects.
 write_export() {
     local name="$1"
     local value="${!name-}"
@@ -54,6 +58,7 @@ write_export() {
     printf '\n'
 }
 
+# Write cron environment. Inputs: shell arguments and environment. Output: command status and side effects.
 write_cron_env() {
     local missing=()
     local tmp_file
@@ -97,6 +102,7 @@ write_cron_env() {
     }
 }
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     if [ "$(id -u)" -ne 0 ]; then
         die "pg-maintenance entrypoint must run as root so it can install cron and write ${ENV_FILE}"

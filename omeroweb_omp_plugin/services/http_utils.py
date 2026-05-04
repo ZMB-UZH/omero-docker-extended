@@ -2,7 +2,10 @@ import json
 
 
 def _extract_message_from_payload(payload):
-    """Handle extract message from payload."""
+    """Extract message from payload.
+
+    Inputs: `payload`. Output: computed value or None.
+    """
     if isinstance(payload, dict):
         info = payload.get("error") or payload.get("message")
         if isinstance(info, dict):
@@ -15,7 +18,10 @@ def _extract_message_from_payload(payload):
 
 
 def _extract_message_from_response(response):
-    """Handle extract message from response."""
+    """Extract message from response.
+
+    Inputs: `response`. Output: computed value or None.
+    """
     if response is None:
         return None
     try:
@@ -32,7 +38,10 @@ def _extract_message_from_response(response):
 
 
 def extract_error_details(error):
-    """Return extract error details."""
+    """Return extract error details.
+
+    Inputs: `error`. Output: computed value or None.
+    """
     if not error:
         return None
     response = getattr(error, "response", None)

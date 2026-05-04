@@ -31,6 +31,10 @@ class _FakeChannel:
     """Test double for fake channel."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self._label = "base"
 
     class _Color:
@@ -38,65 +42,104 @@ class _FakeChannel:
 
         @staticmethod
         def getHtml():
-            """Return get HTML."""
+            """Return the HTML color value.
+
+            Inputs: none. Output: 'FFFFFF'.
+            """
             return "FFFFFF"
 
     def getLabel(self):
-        """Return get label."""
+        """Return Label.
+
+        Inputs: none. Output: `self._label`.
+        """
         return self._label
 
     def getColor(self):
-        """Return get color."""
+        """Return Color.
+
+        Inputs: none. Output: `self._Color` result.
+        """
         return self._Color()
 
     @staticmethod
     def getEmissionWave():
-        """Return get emission wave."""
+        """Return Emission Wave.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getFamily():
-        """Return get family."""
+        """Return Family.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getCoefficient():
-        """Return get coefficient."""
+        """Return Coefficient.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getLut():
-        """Return get lut."""
+        """Return Lut.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getWindowStart():
-        """Return get window start."""
+        """Return Window Start.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getWindowEnd():
-        """Return get window end."""
+        """Return Window End.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def getWindowMin():
-        """Return get window min."""
+        """Return Window Min.
+
+        Inputs: none. Output: 1.0.
+        """
         return 1.0
 
     @staticmethod
     def getWindowMax():
-        """Return get window max."""
+        """Return Window Max.
+
+        Inputs: none. Output: 9.0.
+        """
         return 9.0
 
     @staticmethod
     def isActive():
-        """Handle is active."""
+        """Return whether Active.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def isInverted():
-        """Handle is inverted."""
+        """Return whether Inverted.
+
+        Inputs: none. Output: None.
+        """
         return None
 
 
@@ -107,122 +150,195 @@ class _FakeImageDataImage:
     archived = False
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.id = 7
         self.name = "demo.zarr"
         self._channel_calls = []
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self.name`.
+        """
         return self.name
 
     def getChannels(self, noRE=False):
-        """Return get channels."""
+        """Return Channels.
+
+        Inputs: `noRE`. Output: list.
+        """
         self._channel_calls.append(noRE)
         return [_FakeChannel()]
 
     @staticmethod
     def getProject():
-        """Return get project."""
+        """Return Project.
+
+        Inputs: none. Output: None.
+        """
         return None
 
     @staticmethod
     def listParents():
-        """Return list parents."""
+        """Return list parents.
+
+        Inputs: none. Output: list.
+        """
         return []
 
     @staticmethod
     def getAuthor():
-        """Return get author."""
+        """Return Author.
+
+        Inputs: none. Output: 'Test User'.
+        """
         return "Test User"
 
     @staticmethod
     def getDate():
-        """Return get date."""
+        """Return Date.
+
+        Inputs: none. Output: `datetime` result.
+        """
         return datetime(2026, 3, 23, 12, 0, 0)
 
     @staticmethod
     def getPixelsType():
-        """Return get pixels type."""
+        """Return Pixels Type.
+
+        Inputs: none. Output: 'uint16'.
+        """
         return "uint16"
 
     @staticmethod
     def canAnnotate():
-        """Handle can annotate."""
+        """Return whether Annotate.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def canEdit():
-        """Handle can edit."""
+        """Return whether Edit.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def canDelete():
-        """Handle can delete."""
+        """Return whether Delete.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def canLink():
-        """Handle can link."""
+        """Return whether Link.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: 1024.
+        """
         return 1024
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: 512.
+        """
         return 512
 
     @staticmethod
     def getSizeZ():
-        """Return get size z."""
+        """Return Size Z.
+
+        Inputs: none. Output: 4.
+        """
         return 4
 
     @staticmethod
     def getSizeT():
-        """Return get size t."""
+        """Return Size T.
+
+        Inputs: none. Output: 1.
+        """
         return 1
 
     @staticmethod
     def getSizeC():
-        """Return get size c."""
+        """Return Size C.
+
+        Inputs: none. Output: 1.
+        """
         return 1
 
     @staticmethod
     def splitChannelDims():
-        """Handle split channel dims."""
+        """Split channel dims.
+
+        Inputs: none. Output: dict.
+        """
         return {"g": {"width": 1026, "height": 514}}
 
     @staticmethod
     def getProjection():
-        """Return get projection."""
+        """Return Projection.
+
+        Inputs: none. Output: 'normal'.
+        """
         return "normal"
 
     @staticmethod
     def getPixelSizeX(units=None):
-        """Return get pixel size x."""
+        """Return Pixel Size X.
+
+        Inputs: `units`. Output: None.
+        """
         return None
 
     @staticmethod
     def getPixelSizeY(units=None):
-        """Return get pixel size y."""
+        """Return Pixel Size Y.
+
+        Inputs: `units`. Output: None.
+        """
         return None
 
     @staticmethod
     def getPixelSizeZ(units=None):
-        """Return get pixel size z."""
+        """Return Pixel Size Z.
+
+        Inputs: `units`. Output: None.
+        """
         return None
 
     @staticmethod
     def getObjectiveSettings():
-        """Return get objective settings."""
+        """Return Objective Settings.
+
+        Inputs: none. Output: None.
+        """
         return None
 
 
 def test_decorate_store_backed_channels_applies_metadata(monkeypatch):
-    """Verify test decorate store backed channels applies m behavior."""
+    """Verify decorate store backed channels applies metadata.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         integration,
         "get_store_backed_channel_overrides",
@@ -251,11 +367,17 @@ def test_decorate_store_backed_channels_applies_metadata(monkeypatch):
 
 
 def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkeypatch):
-    """Verify test install webgateway overrides routes stor behavior."""
+    """Verify install webgateway overrides routes store backed channels off re.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -268,7 +390,10 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
     calls = []
 
     def _fake_get_channels(self, *args, **kwargs):
-        """Handle fake get channels."""
+        """Fake get channels.
+
+        Inputs: `*args`, `**kwargs`. Output: list.
+        """
         calls.append((args, kwargs))
         return [_FakeChannel()]
 
@@ -341,11 +466,17 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
 
 
 def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypatch):
-    """Verify test install webgateway overrides preserves r behavior."""
+    """Verify install webgateway overrides preserves regular image data JSON.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -365,13 +496,19 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `regular_image`.
+            """
             assert object_type == "Image"
             assert iid == 7
             return regular_image
 
     def original_image_data_json(request, conn=None, _internal=False, **kwargs):
-        """Handle original image data JSON."""
+        """Original image data JSON.
+
+        Inputs: `request`, `conn`, `_internal`, `**kwargs`. Output: dict.
+        """
         original_calls.append((conn, _internal, kwargs))
         return {"source": "original", "iid": kwargs["iid"]}
 
@@ -443,11 +580,17 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
 def test_install_webgateway_overrides_preserves_regular_render_image_region(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides preserves r behavior."""
+    """Verify install webgateway overrides preserves regular render image region.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -470,13 +613,19 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `regular_image`.
+            """
             assert object_type == "Image"
             assert iid == 7
             return regular_image
 
     def original_render_image_region(request, iid, z, t, conn=None, **kwargs):
-        """Handle original render image region."""
+        """Original render image region.
+
+        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: `sentinel`.
+        """
         original_calls.append((iid, z, t, conn, kwargs))
         return sentinel
 
@@ -546,7 +695,10 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(
 
 
 def test_store_backed_image_data_uses_store_metadata_without_re(monkeypatch):
-    """Verify test store backed image data uses store metad behavior."""
+    """Verify store backed image data uses store metadata without re.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get("/webclient/imgData/7/")
     request.session = {
         "server_settings": {
@@ -612,7 +764,10 @@ def test_store_backed_image_data_uses_store_metadata_without_re(monkeypatch):
 
 
 def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
-    """Verify test store backed region response maps viewer behavior."""
+    """Verify store backed region response maps viewer tile level.
+
+    Inputs: `monkeypatch`. Output: `Image.fromarray` result.
+    """
     image = object()
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",
@@ -653,7 +808,10 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
     monkeypatch.setattr(integration, "load_store_backed_image_node", lambda image: node)
 
     def fake_region(*args, **kwargs):
-        """Handle fake region."""
+        """Fake region.
+
+        Inputs: `*args`, `**kwargs`. Output: `Image.fromarray` result.
+        """
         captured.update(kwargs)
         from PIL import Image
 
@@ -684,7 +842,10 @@ class _FakeConfigService:
 
     @staticmethod
     def getConfigValue(key):
-        """Return get config value."""
+        """Return Config Value.
+
+        Inputs: `key`. Output: '1024'.
+        """
         assert key == "omero.pixeldata.max_tile_length"
         return "1024"
 
@@ -694,7 +855,10 @@ class _FakeConnForTileSize:
 
     @staticmethod
     def getConfigService():
-        """Return get config service."""
+        """Return Config Service.
+
+        Inputs: none. Output: `_FakeConfigService` result.
+        """
         return _FakeConfigService()
 
 
@@ -702,6 +866,10 @@ class _FakeResolution:
     """Test double for fake resolution."""
 
     def __init__(self, size_x, size_y):
+        """Initialize the instance.
+
+        Inputs: `size_x`, `size_y`. Output: None.
+        """
         self.sizeX = size_x
         self.sizeY = size_y
 
@@ -711,27 +879,42 @@ class _FailingResolutionEngine:
 
     @staticmethod
     def getResolutionLevels():
-        """Return get resolution levels."""
+        """Return Resolution Levels.
+
+        Inputs: none. Output: 2.
+        """
         return 2
 
     @staticmethod
     def getTileSize():
-        """Return get tile size."""
+        """Return Tile Size.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
     @staticmethod
     def getResolutionDescriptions():
-        """Return get resolution descriptions."""
+        """Return Resolution Descriptions.
+
+        Inputs: none. Output: list.
+        """
         return [_FakeResolution(1024, 512), _FakeResolution(512, 256)]
 
     @staticmethod
     def getDefaultZ():
-        """Return get default z."""
+        """Return Default Z.
+
+        Inputs: none. Output: 0.
+        """
         return 0
 
     @staticmethod
     def getDefaultT():
-        """Return get default t."""
+        """Return Default T.
+
+        Inputs: none. Output: 0.
+        """
         return 0
 
 
@@ -739,28 +922,44 @@ class _FakeRegularTileFailureImage(_FakeImageDataImage):
     """Test double for fake regular tile failure image."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         super().__init__()
         self._re = _FailingResolutionEngine()
         self._conn = _FakeConnForTileSize()
 
     @staticmethod
     def _prepareRenderingEngine():
-        """Handle prepare rendering engine."""
+        """Prepare Rendering Engine.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def getPixelRange():
-        """Return get pixel range."""
+        """Return Pixel Range.
+
+        Inputs: none. Output: tuple.
+        """
         return (0, 65535)
 
     @staticmethod
     def isGreyscaleRenderingModel():
-        """Handle is greyscale rendering model."""
+        """Return whether Greyscale Rendering Model.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
     @staticmethod
     def isInvertedAxis():
-        """Handle is inverted axis."""
+        """Return whether Inverted Axis.
+
+        Inputs: none. Output: bool.
+        """
         return False
 
 
@@ -768,26 +967,43 @@ class _PreparedRegionImage:
     """Represent prepared region image."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self._re = _FailingResolutionEngine()
         self.calls = []
 
     @staticmethod
     def _prepareRenderingEngine():
-        """Handle prepare rendering engine."""
+        """Prepare Rendering Engine.
+
+        Inputs: none. Output: bool.
+        """
         return True
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: 1024.
+        """
         return 1024
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: 512.
+        """
         return 512
 
     def renderJpegRegion(self, z, t, x, y, width, height, level=None, compression=None):
-        """Build render jpeg region."""
+        """Render JPEG Region.
+
+        Inputs: `z`, `t`, `x`, `y`, `width`, `height`, `level`, `compression`. Output:
+        b'jpeg'.
+        """
         self.calls.append(
             {
                 "z": z,
@@ -810,7 +1026,10 @@ class _FakeMetadataPreviewImage:
 
     @staticmethod
     def getAllRenderingDefs():
-        """Return get all rendering defs."""
+        """Return All Rendering Defs.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError(
             "Error instantiating pixel buffer: managed/path\n"
             "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
@@ -818,17 +1037,26 @@ class _FakeMetadataPreviewImage:
 
     @staticmethod
     def getRenderingDefId():
-        """Return get rendering def identifier."""
+        """Return Rendering Def ID.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise AssertionError("rendering definition lookup should not run after failure")
 
     @staticmethod
     def getSizeX():
-        """Return get size x."""
+        """Return Size X.
+
+        Inputs: none. Output: 4096.
+        """
         return 4096
 
     @staticmethod
     def getSizeY():
-        """Return get size y."""
+        """Return Size Y.
+
+        Inputs: none. Output: 2048.
+        """
         return 2048
 
 
@@ -836,6 +1064,10 @@ class _FakeMetadataPreviewContainer:
     """Test double for fake metadata preview container."""
 
     def __init__(self, conn, **kwargs):
+        """Initialize the instance.
+
+        Inputs: `conn`, `**kwargs`. Output: None.
+        """
         self.conn = conn
         self.kwargs = kwargs
         self.image = _FakeMetadataPreviewImage()
@@ -846,12 +1078,18 @@ class _FakeMetadataPreviewConn:
 
     @staticmethod
     def getMaxPlaneSize():
-        """Return get max plane size."""
+        """Return Max Plane Size.
+
+        Inputs: none. Output: tuple.
+        """
         return (1024, 1024)
 
 
 def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
-    """Verify test marshal regular image data with safe til behavior."""
+    """Verify marshal regular image data with safe tile size uses generic fallback.
+
+    Inputs: none. Output: None.
+    """
     request = RequestFactory().get("/webclient/imgData/7/")
     request.session = {
         "server_settings": {
@@ -878,7 +1116,10 @@ def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
 
 
 def test_safe_regular_image_marshal_uses_generic_fallback_and_key_selection():
-    """Verify test safe regular image marshal uses generic behavior."""
+    """Verify safe regular image marshal uses generic fallback and key selection.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     request = RequestFactory().get("/webclient/imgData/7/")
     request.session = {
         "server_settings": {
@@ -891,7 +1132,13 @@ def test_safe_regular_image_marshal_uses_generic_fallback_and_key_selection():
     image = _FakeRegularTileFailureImage()
 
     def failing_image_marshal(image, key=None, request=None):
-        """Handle failing image marshal."""
+        """Failing image marshal.
+
+        Inputs: `image`, `key`, `request`. Output: None. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
     payload = integration._safe_regular_image_marshal(
@@ -911,14 +1158,20 @@ def test_safe_regular_image_marshal_uses_generic_fallback_and_key_selection():
 
 
 def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkeypatch):
-    """Verify test install safe image marshal overrides reb behavior."""
+    """Verify install safe image marshal overrides rebinds loaded view modules.
+
+    Inputs: `monkeypatch`. Output: dict.
+    """
     from omero_figure import views as figure_views
     from omero_iviewer import views as iviewer_views
     from omeroweb.webgateway import marshal as webgateway_marshal
     from omeroweb.webgateway import views as webgateway_views
 
     def original_image_marshal(image, key=None, request=None):
-        """Handle original image marshal."""
+        """Original image marshal.
+
+        Inputs: `image`, `key`, `request`. Output: dict.
+        """
         return {"id": getattr(image, "id", None)}
 
     monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
@@ -951,7 +1204,10 @@ def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkey
 def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(
     monkeypatch,
 ):
-    """Verify test render regular image region with safe ti behavior."""
+    """Verify render regular image region with safe tile size uses generic fallback.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",
         {"tile": "0,1,2"},
@@ -991,14 +1247,20 @@ def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(
 
 
 def test_load_metadata_preview_with_safe_rendering_returns_empty_rdefs(monkeypatch):
-    """Verify test load metadata preview with safe renderin behavior."""
+    """Verify load metadata preview with safe rendering returns empty rdefs.
+
+    Inputs: `monkeypatch`. Output: call result.
+    """
     request = RequestFactory().get("/webclient/metadata_preview/image/1061/")
     request.session = {}
 
     from omeroweb.webclient import views as webclient_views
 
     def _build_metadata_preview_container(conn, **kwargs):
-        """Handle build metadata preview container."""
+        """Metadata preview container.
+
+        Inputs: `conn`, `**kwargs`. Output: call result.
+        """
         return _FakeMetadataPreviewContainer(conn, **kwargs)
 
     monkeypatch.setattr(
@@ -1028,14 +1290,20 @@ def test_load_metadata_preview_with_safe_rendering_returns_empty_rdefs(monkeypat
 
 
 def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypatch):
-    """When OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=false, the safe image
+    """When OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=false, the safe image.
+
+    Inputs: `monkeypatch`. Output: computed value.
+
     marshal override is NOT installed — OMERO's built-in imageMarshal
     stays unpatched.
     """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -1046,7 +1314,10 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
     from omeroweb.webgateway import views as webgateway_views
 
     def original_image_marshal(image, key=None, request=None):
-        """Handle original image marshal."""
+        """Original image marshal.
+
+        Inputs: `image`, `key`, `request`. Output: dict.
+        """
         return {"id": 999}
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -1112,13 +1383,20 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
 def test_install_webgateway_overrides_propagates_tile_failure_when_safe_rendering_disabled(
     monkeypatch,
 ):
-    """When safe rendering is disabled, tile-size failures in regular images
+    """When safe rendering is disabled, tile-size failures in regular images.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
     must propagate as-is — OMERO's built-in error handling applies.
     """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -1135,11 +1413,20 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `regular_image`.
+            """
             return regular_image
 
     def failing_image_data_json(request, conn=None, _internal=False, **kwargs):
-        """Handle failing image data JSON."""
+        """Failing image data JSON.
+
+        Inputs: `request`, `conn`, `_internal`, `**kwargs`. Output: None. Raises on
+        invalid or unavailable state.
+
+        invalid or unavailable state.
+        """
         raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -1207,11 +1494,20 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
 def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_failure(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides falls back behavior."""
+    """Verify install webgateway overrides falls back for metadata preview rendering failure.
+
+    Inputs: `monkeypatch`. Output: `lambda func: func`. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     request = RequestFactory().get("/webclient/metadata_preview/image/1061/")
@@ -1276,7 +1572,13 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
     def failing_load_metadata_preview(
         request, c_type, c_id, conn=None, share_id=None, **kwargs
     ):
-        """Handle failing load metadata preview."""
+        """Failing load metadata preview.
+
+        Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
+        None. Raises on invalid or unavailable state.
+
+        None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError(
             "Error instantiating pixel buffer: managed/path\n"
             "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
@@ -1306,7 +1608,10 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
 
 
 def test_render_tile_bad_request_does_not_reflect_user_input():
-    """Tile parsing errors must not echo attacker-controlled values."""
+    """Tile parsing errors must not echo attacker-controlled values.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     from omeroweb.webgateway import views as webgateway_views
 
     xss_payload = '<script>alert("xss")</script>'
@@ -1324,7 +1629,10 @@ def test_render_tile_bad_request_does_not_reflect_user_input():
 
         @staticmethod
         def _prepareRenderingEngine():
-            """Handle prepare rendering engine."""
+            """Prepare Rendering Engine.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise ValueError("forced")
 
     import unittest.mock as mock
@@ -1352,7 +1660,10 @@ def test_render_tile_bad_request_does_not_reflect_user_input():
 def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
     monkeypatch,
 ):
-    """Verify test store backed render response and pixel h behavior."""
+    """Verify store backed render response and pixel helpers cover download paths.
+
+    Inputs: `monkeypatch`. Output: 'demo image.zarr'.
+    """
     request = RequestFactory().get("/webclient/render_image/7/", {"format": "png"})
 
     class _Image:
@@ -1362,7 +1673,10 @@ def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
 
         @staticmethod
         def getName():
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: 'demo image.zarr'.
+            """
             return "demo image.zarr"
 
     monkeypatch.setattr(
@@ -1408,7 +1722,10 @@ def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
 
 
 def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
-    """Verify test store backed metadata and rendering mode behavior."""
+    """Verify store backed metadata and rendering model cover parent resolution.
+
+    Inputs: none. Output: computed value.
+    """
 
     class _Project:
         """Represent project."""
@@ -1429,6 +1746,10 @@ def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
         """Represent well."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.id = type("Value", (), {"val": 71})()
 
     class _WellSample:
@@ -1437,6 +1758,10 @@ def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
         OMERO_CLASS = "WellSample"
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.well = _Well()
 
     class _Image:
@@ -1449,31 +1774,49 @@ def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
 
         @staticmethod
         def getProject():
-            """Return get project."""
+            """Return Project.
+
+            Inputs: none. Output: `_Project` result.
+            """
             return _Project()
 
         @staticmethod
         def listParents():
-            """Return list parents."""
+            """Return list parents.
+
+            Inputs: none. Output: list.
+            """
             return [_Dataset(), _WellSample()]
 
         def getName(self):
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: `self.name`.
+            """
             return self.name
 
         @staticmethod
         def getAuthor():
-            """Return get author."""
+            """Return Author.
+
+            Inputs: none. Output: 'Alice'.
+            """
             return "Alice"
 
         @staticmethod
         def getDate():
-            """Return get date."""
+            """Return Date.
+
+            Inputs: none. Output: `datetime` result.
+            """
             return datetime(2026, 3, 30, 7, 0, 0)
 
         @staticmethod
         def getPixelsType():
-            """Return get pixels type."""
+            """Return Pixels Type.
+
+            Inputs: none. Output: 'uint16'.
+            """
             return "uint16"
 
     metadata = integration._store_backed_metadata(_Image())
@@ -1491,7 +1834,10 @@ def test_store_backed_metadata_and_rendering_model_cover_parent_resolution():
 def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
     monkeypatch,
 ):
-    """Verify test load metadata preview with safe renderin behavior."""
+    """Verify load metadata preview with safe rendering dedupes rendering defs.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     request = RequestFactory().get("/webclient/metadata_preview/image/42/")
     request.session = {}
 
@@ -1500,7 +1846,10 @@ def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
 
         @staticmethod
         def getAllRenderingDefs():
-            """Return get all rendering defs."""
+            """Return All Rendering Defs.
+
+            Inputs: none. Output: list.
+            """
             return [
                 {
                     "id": 1,
@@ -1534,23 +1883,36 @@ def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
 
         @staticmethod
         def getRenderingDefId():
-            """Return get rendering def identifier."""
+            """Return Rendering Def ID.
+
+            Inputs: none. Output: 2.
+            """
             return 2
 
         @staticmethod
         def getSizeX():
-            """Return get size x."""
+            """Return Size X.
+
+            Inputs: none. Output: 256.
+            """
             return 256
 
         @staticmethod
         def getSizeY():
-            """Return get size y."""
+            """Return Size Y.
+
+            Inputs: none. Output: 256.
+            """
             return 256
 
     class _Manager:
         """Represent manager."""
 
         def __init__(self, conn, **kwargs):
+            """Initialize the instance.
+
+            Inputs: `conn`, `**kwargs`. Output: None.
+            """
             self.image = _Image()
 
     from omeroweb.webclient import views as webclient_views
@@ -1577,7 +1939,10 @@ def test_load_metadata_preview_with_safe_rendering_dedupes_rendering_defs(
 
 
 def test_store_backed_region_response_rejects_invalid_requests(monkeypatch):
-    """Verify test store backed region response rejects inv behavior."""
+    """Verify store backed region response rejects invalid requests.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     node = type(
         "FakeNode",
         (),
@@ -1637,7 +2002,10 @@ def test_store_backed_region_response_rejects_invalid_requests(monkeypatch):
 def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_and_missing_image(
     monkeypatch,
 ):
-    """Verify test render regular image region with safe ti behavior."""
+    """Verify render regular image region with safe tile size rejects invalid levels and missing image.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     from omeroweb.webgateway import views as webgateway_views
 
     request = RequestFactory().get(
@@ -1694,14 +2062,23 @@ def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_
 
 
 def test_patch_urlpatterns_updates_nested_routes():
-    """Verify test patch urlpatterns updates nested routes."""
+    """Verify patch urlpatterns updates nested routes.
+
+    Inputs: none. Output: `HttpResponse` result.
+    """
 
     def original_view(request):
-        """Handle original view."""
+        """Original view.
+
+        Inputs: `request`. Output: `HttpResponse` result.
+        """
         return HttpResponse("original")
 
     def replacement_view(request):
-        """Handle replacement view."""
+        """Replacement view.
+
+        Inputs: `request`. Output: `HttpResponse` result.
+        """
         return HttpResponse("replacement")
 
     urlpatterns = [
@@ -1739,12 +2116,18 @@ def test_patch_urlpatterns_updates_nested_routes():
 def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides renders sto behavior."""
+    """Verify install webgateway overrides renders store backed thumbnails and images.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
     monkeypatch.setattr(integration.settings, "THUMBNAILS_BATCH", 10, raising=False)
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -1765,12 +2148,18 @@ def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: call result.
+            """
             return {7: store_backed_image, 8: regular_image}.get(int(iid))
 
         @staticmethod
         def getThumbnailSet(ids, width):
-            """Return get thumbnail set."""
+            """Return Thumbnail Set.
+
+            Inputs: `ids`, `width`. Output: dict.
+            """
             return {8: b"regular-thumb"}
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -1868,11 +2257,20 @@ def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images
 def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides cover regul behavior."""
+    """Verify install webgateway overrides cover regular fallback and error paths.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -1889,6 +2287,13 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
         """Represent thumb map."""
 
         def __getitem__(self, image_id):
+            """Return the item for the requested key.
+
+            Inputs: `image_id`. Output: b'thumb'. Raises on invalid or unavailable
+            state.
+
+            state.
+            """
             if image_id == 3:
                 raise KeyError(image_id)
             if image_id == 4:
@@ -1899,16 +2304,26 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
         """Represent conn."""
 
         def __init__(self, image_map):
+            """Initialize the instance.
+
+            Inputs: `image_map`. Output: None.
+            """
             self._image_map = image_map
 
         def getObject(self, object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `self._image_map.get` result.
+            """
             assert object_type == "Image"
             return self._image_map.get(iid)
 
         @staticmethod
         def getThumbnailSet(ids, width):
-            """Return get thumbnail set."""
+            """Return Thumbnail Set.
+
+            Inputs: `ids`, `width`. Output: `_ThumbMap` result.
+            """
             return _ThumbMap()
 
     thumb_calls = []
@@ -1920,25 +2335,50 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
     def original_render_thumbnail(
         request, iid, w=None, h=None, conn=None, _defcb=None, **kwargs
     ):
-        """Handle original render thumbnail."""
+        """Original render thumbnail.
+
+        Inputs: `request`, `iid`, `w`, `h`, `conn`, `_defcb`, `**kwargs`. Output:
+        `HttpResponse` result.
+        """
         original_thumb_calls.append((iid, w, h))
         return HttpResponse(b"regular-thumb", content_type="image/jpeg")
 
     def original_get_thumbnails_json(request, w=None, conn=None, **kwargs):
-        """Handle original get thumbnails JSON."""
+        """Original get thumbnails JSON.
+
+        Inputs: `request`, `w`, `conn`, `**kwargs`. Output: dict.
+        """
         return {"source": "original", "width": w}
 
     def original_render_image(request, iid, z=None, t=None, conn=None, **kwargs):
-        """Handle original render image."""
+        """Original render image.
+
+        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: `HttpResponse`
+        result.
+
+        result.
+        """
         original_render_image_calls.append((iid, z, t, kwargs))
         return HttpResponse(b"regular-image", content_type="image/jpeg")
 
     def failing_render_image_region(request, iid, z, t, conn=None, **kwargs):
-        """Handle failing render image region."""
+        """Failing render image region.
+
+        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: None. Raises on
+        invalid or unavailable state.
+
+        invalid or unavailable state.
+        """
         raise RuntimeError("tile too large")
 
     def failing_image_data_json(request, conn=None, _internal=False, **kwargs):
-        """Handle failing image data JSON."""
+        """Failing image data JSON.
+
+        Inputs: `request`, `conn`, `_internal`, `**kwargs`. Output: dict. Raises on
+        invalid or unavailable state.
+
+        invalid or unavailable state.
+        """
         if kwargs["iid"] == 9:
             return {"source": "original", "iid": kwargs["iid"]}
         raise RuntimeError("tile too large")
@@ -1946,7 +2386,13 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
     def failing_load_metadata_preview(
         request, c_type, c_id, conn=None, share_id=None, **kwargs
     ):
-        """Handle failing load metadata preview."""
+        """Failing load metadata preview.
+
+        Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
+        None. Raises on invalid or unavailable state.
+
+        None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("preview boom")
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -2163,12 +2609,21 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
 def test_install_safe_image_marshal_overrides_handles_optional_import_failures(
     monkeypatch,
 ):
-    """Verify test install safe image marshal overrides han behavior."""
+    """Verify install safe image marshal overrides handles optional import failures.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     from omeroweb.webgateway import marshal as webgateway_marshal
     from omeroweb.webgateway import views as webgateway_views
 
     def original_image_marshal(image, key=None, request=None):
-        """Handle original image marshal."""
+        """Original image marshal.
+
+        Inputs: `image`, `key`, `request`. Output: dict.
+        """
         return {"id": getattr(image, "id", None)}
 
     monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
@@ -2189,7 +2644,11 @@ def test_install_safe_image_marshal_overrides_handles_optional_import_failures(
     real_import = builtins.__import__
 
     def fake_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
-        """Handle fake import."""
+        """Fake import.
+
+        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `real_import` result. Raises on invalid or unavailable state.
+        """
         if name in {"omero_iviewer.views", "omero_figure.views"}:
             raise ImportError(f"{name} unavailable")
         return real_import(name, global_vars, local_vars, fromlist, level)
@@ -2207,11 +2666,21 @@ def test_install_safe_image_marshal_overrides_handles_optional_import_failures(
 def test_install_webgateway_overrides_returns_when_imports_fail_or_already_installed(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides returns whe behavior."""
+    """Verify install webgateway overrides returns when imports fail or already installed.
+
+    Inputs: `monkeypatch`. Output: `real_import` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     real_import = builtins.__import__
 
     def failing_import(name, global_vars=None, local_vars=None, fromlist=(), level=0):
-        """Handle failing import."""
+        """Failing import.
+
+        Inputs: `name`, `global_vars`, `local_vars`, `fromlist`, `level`. Output:
+        `real_import` result. Raises on invalid or unavailable state.
+        """
         if name == "omeroweb.webgateway":
             raise ImportError("webgateway unavailable")
         return real_import(name, global_vars, local_vars, fromlist, level)
@@ -2234,11 +2703,17 @@ def test_install_webgateway_overrides_returns_when_imports_fail_or_already_insta
 def test_install_webgateway_overrides_covers_store_backed_region_image_data_and_w_only_thumbnails(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides covers stor behavior."""
+    """Verify install webgateway overrides covers store backed region image data and w only thumbnails.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -2256,7 +2731,10 @@ def test_install_webgateway_overrides_covers_store_backed_region_image_data_and_
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `store_backed_image`.
+            """
             return store_backed_image
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
@@ -2371,11 +2849,17 @@ def test_install_webgateway_overrides_covers_store_backed_region_image_data_and_
 def test_install_webgateway_overrides_re_raises_regular_tile_failures_when_safe_rendering_is_off(
     monkeypatch,
 ):
-    """Verify test install webgateway overrides re raises r behavior."""
+    """Verify install webgateway overrides re raises regular tile failures when safe rendering is off.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
 
     def _identity_decorator():
-        """Handle identity decorator."""
+        """Identity decorator.
+
+        Inputs: none. Output: `lambda func: func`.
+        """
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
@@ -2392,7 +2876,10 @@ def test_install_webgateway_overrides_re_raises_regular_tile_failures_when_safe_
 
         @staticmethod
         def getObject(object_type, iid):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `iid`. Output: `regular_image`.
+            """
             return regular_image
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)

@@ -6,7 +6,10 @@ from typing import Callable, Dict, Iterable, Mapping
 
 
 def snake_to_camel(name: str) -> str:
-    """Convert snake_case to lowerCamelCase."""
+    """Convert snake_case to lowerCamelCase.
+
+    Inputs: `name`. Output: `str`.
+    """
     parts = name.split("_")
     return parts[0] + "".join(part.title() for part in parts[1:])
 
@@ -15,7 +18,10 @@ def build_message_payload(
     names: Iterable[str],
     message_lookup: Mapping[str, Callable[[], str]],
 ) -> Dict[str, str]:
-    """Build a payload for a list of message names from the provided lookup."""
+    """A payload for a list of message names from the provided lookup.
+
+    Inputs: `names`, `message_lookup`. Output: `Dict[str, str]`.
+    """
     payload: Dict[str, str] = {}
     for name in names:
         key = (

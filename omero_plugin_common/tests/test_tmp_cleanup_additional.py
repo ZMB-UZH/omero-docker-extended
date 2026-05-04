@@ -11,7 +11,10 @@ from omero_plugin_common import tmp_cleanup
 def test_tmp_cleanup_safe_remove_tree_returns_false_when_walk_or_delete_fails(
     tmp_path, monkeypatch
 ):
-    """Verify test tmp cleanup safe remove tree returns fal behavior."""
+    """Verify temporary cleanup safe remove tree returns false when walk or delete fails.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     target = root / "target"
@@ -41,7 +44,10 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_file_unlink_fails_in_de
     tmp_path,
     monkeypatch,
 ):
-    """Verify test tmp cleanup safe remove tree returns fal behavior."""
+    """Verify temporary cleanup safe remove tree returns false when file unlink fails in delete pass.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     target = root / "target"
@@ -60,7 +66,10 @@ def test_tmp_cleanup_safe_remove_tree_returns_false_when_file_unlink_fails_in_de
 def test_tmp_cleanup_marker_helpers_cover_fsync_and_root_validation(
     tmp_path, monkeypatch
 ):
-    """Verify test tmp cleanup marker helpers cover fsync a behavior."""
+    """Verify temporary cleanup marker helpers cover fsync and root validation.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None.
+    """
     root = tmp_path / "root"
     root.mkdir()
     artifact = root / "artifact.txt"
@@ -94,7 +103,13 @@ def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failure
     tmp_path,
     monkeypatch,
 ):
-    """Verify test tmp cleanup covers symlink directory cle behavior."""
+    """Verify temporary cleanup covers symlink directory cleanup and marker cleanup failures.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `real_unlink` result. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
     root = tmp_path / "root"
     root.mkdir()
     target = root / "target"
@@ -128,7 +143,13 @@ def test_tmp_cleanup_covers_symlink_directory_cleanup_and_marker_cleanup_failure
     )
 
     def _fail_tmp_unlink(self, *args, **kwargs):
-        """Handle fail tmp unlink."""
+        """Fail tmp unlink.
+
+        Inputs: `*args`, `**kwargs`. Output: `real_unlink` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         if self.suffix == ".tmp":
             raise OSError("cleanup failed")
         return real_unlink(self, *args, **kwargs)

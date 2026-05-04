@@ -26,10 +26,12 @@ declare -a RETAINED_DIRS=()
 declare -a RETAINED_FILES=()
 declare -a RETAINED_MARKERS=()
 
+# Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
     echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>]" >&2
 }
 
+# Require option value. Inputs: shell arguments and environment. Output: command status and side effects.
 require_option_value() {
     local option_name="$1"
     local option_value="${2:-}"
@@ -40,6 +42,7 @@ require_option_value() {
     fi
 }
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
     case "${1:-}" in
         ""|*[!0-9]*) return 1 ;;
@@ -104,6 +107,7 @@ if [[ "${MAX_AGE_MINUTES}" -lt 1 ]]; then
     MAX_AGE_MINUTES=1
 fi
 
+# Read retention expiry. Inputs: shell arguments and environment. Output: command status and side effects.
 read_retention_expiry() {
     local marker="$1"
     local expiry=""
@@ -119,12 +123,14 @@ read_retention_expiry() {
     printf '%s\n' "${expiry}"
 }
 
+# Perform path is within. Inputs: shell arguments and environment. Output: command status and side effects.
 path_is_within() {
     local path="$1"
     local root="$2"
     [[ "${path}" = "${root}" || "${path}" = "${root}"/* ]]
 }
 
+# Load active retention markers. Inputs: shell arguments and environment. Output: command status and side effects.
 load_active_retention_markers() {
     local now_epoch marker expiry marker_name target_name target_path
     now_epoch="$(date +%s)"
@@ -156,6 +162,7 @@ load_active_retention_markers() {
     )
 }
 
+# Perform path is structural. Inputs: shell arguments and environment. Output: command status and side effects.
 path_is_structural() {
     # Protect namespace directories (depth 1) and their tmp/ subdirectories
     # (depth 2) from deletion.  These are the TMPDIR targets that running
@@ -181,6 +188,7 @@ path_is_structural() {
     return 1
 }
 
+# Perform path is retained. Inputs: shell arguments and environment. Output: command status and side effects.
 path_is_retained() {
     local path="$1"
     local retained_dir retained_file retained_marker

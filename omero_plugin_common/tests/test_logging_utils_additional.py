@@ -7,13 +7,20 @@ class _UnconstructableError(Exception):
     """Represent unconstructable error."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         super().__init__("original")
 
 
 def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
     monkeypatch,
 ):
-    """Verify test logging utils cover empty URL parse fail behavior."""
+    """Verify logging utils cover empty URL parse failures and exception fallbacks.
+
+    Inputs: `monkeypatch`. Output: call result. Raises on invalid or unavailable state.
+    """
     assert logging_utils.sanitize_url_for_logging("") == ""
 
     monkeypatch.setattr(
@@ -24,7 +31,10 @@ def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
     assert logging_utils.sanitize_url_for_logging("line1\nline2") == "line1\\\\nline2"
 
     def sanitized_info_for_test_exception():
-        """Handle sanitized info for test exception."""
+        """Sanitized info for test exception.
+
+        Inputs: none. Output: call result. Raises on invalid or unavailable state.
+        """
         try:
             raise _UnconstructableError()
         except _UnconstructableError as exc:
@@ -38,7 +48,10 @@ def test_logging_utils_cover_empty_url_parse_failures_and_exception_fallbacks(
 
 
 def test_summarize_process_output_reports_only_counts() -> None:
-    """Verify test summarize process output reports only co behavior."""
+    """Verify summarize process output reports only counts.
+
+    Inputs: none. Output: None.
+    """
     summary = logging_utils.summarize_process_output("line1\nline2", "error")
 
     assert summary == ("stdout_lines=2 stderr_lines=1 stdout_chars=11 stderr_chars=5")

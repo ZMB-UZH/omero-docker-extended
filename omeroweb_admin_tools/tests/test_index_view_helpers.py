@@ -20,10 +20,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self.val`.
+        """
         return self.val
 
 
@@ -31,25 +38,41 @@ class _User:
     """Represent user."""
 
     def __init__(self, user_id, username, first_name="", last_name=""):
+        """Initialize the instance.
+
+        Inputs: `user_id`, `username`, `first_name`, `last_name`. Output: None.
+        """
         self.id = _Value(user_id)
         self.omeName = _Value(username)
         self.firstName = _Value(first_name)
         self.lastName = _Value(last_name)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `self.id`.
+        """
         return self.id
 
     def getOmeName(self):
-        """Return get ome name."""
+        """Return the fake OMERO name.
+
+        Inputs: none. Output: `self.omeName`.
+        """
         return self.omeName
 
     def getFirstName(self):
-        """Return get first name."""
+        """Return the fake first name.
+
+        Inputs: none. Output: `self.firstName`.
+        """
         return self.firstName
 
     def getLastName(self):
-        """Return get last name."""
+        """Return Last Name.
+
+        Inputs: none. Output: `self.lastName`.
+        """
         return self.lastName
 
 
@@ -57,20 +80,33 @@ class _Group:
     """Represent group."""
 
     def __init__(self, group_id, name, permissions):
+        """Initialize the instance.
+
+        Inputs: `group_id`, `name`, `permissions`. Output: None.
+        """
         self.id = _Value(group_id)
         self.name = _Value(name)
         self.permissions = permissions
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `self.id`.
+        """
         return self.id
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self.name`.
+        """
         return self.name
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getPermissions=lambda: self.permissions)
 
 
@@ -85,24 +121,41 @@ class _Permissions:
         group_write=False,
         group_annotate=False,
     ):
+        """Initialize the instance.
+
+        Inputs: `label`, `group_read`, `group_write`, `group_annotate`. Output: None.
+        """
         self._label = label
         self._group_read = group_read
         self._group_write = group_write
         self._group_annotate = group_annotate
 
     def __str__(self):
+        """Return the string representation.
+
+        Inputs: none. Output: `self._label`.
+        """
         return self._label
 
     def isGroupRead(self):
-        """Handle is group read."""
+        """Return whether Group Read.
+
+        Inputs: none. Output: `self._group_read`.
+        """
         return self._group_read
 
     def isGroupWrite(self):
-        """Handle is group write."""
+        """Return whether Group Write.
+
+        Inputs: none. Output: `self._group_write`.
+        """
         return self._group_write
 
     def isGroupAnnotate(self):
-        """Handle is group annotate."""
+        """Return whether Group Annotate.
+
+        Inputs: none. Output: `self._group_annotate`.
+        """
         return self._group_annotate
 
 
@@ -110,28 +163,44 @@ class _AdminService:
     """Represent admin service."""
 
     def __init__(self, users, groups, groups_by_user, users_by_group):
+        """Initialize the instance.
+
+        Inputs: `users`, `groups`, `groups_by_user`, `users_by_group`. Output: None.
+        """
         self._users = users
         self._groups = groups
         self._groups_by_user = groups_by_user
         self._users_by_group = users_by_group
 
     def lookupExperimenters(self):
-        """Handle lookup experimenters."""
+        """Lookup experimenters.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._users)
 
     def lookupGroups(self):
-        """Handle lookup groups."""
+        """Lookup groups.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._groups)
 
     def containedGroups(self, *args):
-        """Handle contained groups."""
+        """Contained groups.
+
+        Inputs: `*args`. Output: `list` result.
+        """
         identifier = args[0] if args else None
         if identifier is None:
             return list(self._groups)
         return list(self._groups_by_user.get(int(identifier), []))
 
     def containedExperimenters(self, *args):
-        """Handle contained experimenters."""
+        """Contained experimenters.
+
+        Inputs: `*args`. Output: `list` result.
+        """
         identifier = args[0] if args else None
         if identifier is None:
             return list(self._users)
@@ -139,7 +208,10 @@ class _AdminService:
 
 
 def test_proxy_path_and_redirect_safety_helpers():
-    """Verify test proxy path and redirect safety helpers."""
+    """Verify proxy path and redirect safety helpers.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     assert index_view._normalize_proxy_prefix(" /grafana/ ") == "/grafana"
     assert index_view._safe_redirect_segment("../escape", "fallback") == "fallback"
     assert (
@@ -167,7 +239,10 @@ def test_proxy_path_and_redirect_safety_helpers():
 
 
 def test_normalize_proxy_request_target_rejects_path_traversal():
-    """Verify test normalize proxy request target rejects p behavior."""
+    """Verify normalize proxy request target rejects path traversal.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     try:
         index_view._normalize_proxy_request_target("../../escape")
     except ValueError as exc:
@@ -177,7 +252,10 @@ def test_normalize_proxy_request_target_rejects_path_traversal():
 
 
 def test_build_proxied_response_rewrites_html_locations_and_cookies():
-    """Verify test build proxied response rewrites HTML loc behavior."""
+    """Verify build proxied response rewrites html locations and cookies.
+
+    Inputs: none. Output: None.
+    """
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
     headers.add_header("Location", f"{GRAFANA_URL}/login")
@@ -212,7 +290,10 @@ def test_build_proxied_response_rewrites_html_locations_and_cookies():
 
 
 def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
-    """Verify test proxy backend helpers build expected URL behavior."""
+    """Verify proxy backend helpers build expected URLs and fallbacks.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "infra")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-overview")
 
@@ -253,7 +334,10 @@ def test_proxy_backend_helpers_build_expected_urls_and_fallbacks(monkeypatch):
 
 
 def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
-    """Verify test request and public URL helpers cover rev behavior."""
+    """Verify request and public URL helpers cover reverse proxy cases.
+
+    Inputs: none. Output: None.
+    """
     factory = RequestFactory()
     proxied = factory.get(
         "/",
@@ -295,7 +379,10 @@ def test_request_and_public_url_helpers_cover_reverse_proxy_cases():
 def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
     monkeypatch,
 ) -> None:
-    """Verify test grafana dashboard URLs sanitize configur behavior."""
+    """Verify grafana dashboard URLs sanitize configured dashboard segments.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
 
@@ -314,7 +401,10 @@ def test_grafana_dashboard_urls_sanitize_configured_dashboard_segments(
 
 
 def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch):
-    """Verify test validation and identity helpers cover re behavior."""
+    """Verify validation and identity helpers cover remaining guard paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     with pytest.raises(ValueError):
         index_view._validated_http_url("grafana.example.test")
     with pytest.raises(ValueError):
@@ -369,7 +459,10 @@ def test_validation_and_identity_helpers_cover_remaining_guard_paths(monkeypatch
 
 
 def test_admin_listing_helpers_collect_users_groups_and_permissions():
-    """Verify test admin listing helpers collect users grou behavior."""
+    """Verify admin listing helpers collect users groups and permissions.
+
+    Inputs: none. Output: None.
+    """
     users = [
         _User(1, "alice", "Alice", "Admin"),
         _User(2, "bob", "Bob", "Builder"),
@@ -408,7 +501,10 @@ def test_admin_listing_helpers_collect_users_groups_and_permissions():
 
 
 def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
-    """Verify test admin listing helpers skip incomplete me behavior."""
+    """Verify admin listing helpers skip incomplete memberships and runtime state.
+
+    Inputs: none. Output: list.
+    """
     missing_user = SimpleNamespace(
         getId=lambda: _Value(3),
         getOmeName=lambda: _Value(""),
@@ -432,17 +528,26 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
         @staticmethod
         def lookupExperimenters():
-            """Handle lookup experimenters."""
+            """Lookup experimenters.
+
+            Inputs: none. Output: list.
+            """
             return [missing_user]
 
         @staticmethod
         def lookupGroups():
-            """Handle lookup groups."""
+            """Lookup groups.
+
+            Inputs: none. Output: list.
+            """
             return [unnamed_group, valid_group]
 
         @staticmethod
         def containedGroups(*args):
-            """Handle contained groups."""
+            """Contained groups.
+
+            Inputs: `*args`. Output: list.
+            """
             identifier = args[0] if args else None
             if identifier == 3:
                 return [SimpleNamespace(getName=lambda: _Value(""))]
@@ -450,7 +555,10 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
         @staticmethod
         def containedExperimenters(*args):
-            """Handle contained experimenters."""
+            """Contained experimenters.
+
+            Inputs: `*args`. Output: list.
+            """
             identifier = args[0] if args else None
             if identifier == 23:
                 return [username_less_user]
@@ -508,31 +616,53 @@ def test_admin_listing_helpers_skip_incomplete_memberships_and_runtime_state():
 
 
 def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypatch):
-    """Verify test admin helper fallbacks cover wrapped val behavior."""
+    """Verify admin helper fallbacks cover wrapped values and compose health.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class _TextPermission:
         """Represent text permission."""
 
         @staticmethod
         def isGroupRead():
-            """Handle is group read."""
+            """Return whether Group Read.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad read")
 
         @staticmethod
         def isGroupWrite():
-            """Handle is group write."""
+            """Return whether Group Write.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad write")
 
         @staticmethod
         def isGroupAnnotate():
-            """Handle is group annotate."""
+            """Return whether Group Annotate.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad annotate")
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: 'read-only'.
+            """
             return "read-only"
 
     def _fallback_group_details():
-        """Handle fallback group details."""
+        """Fallback group details.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getPermissions=_TextPermission)
 
     fallback_group = SimpleNamespace(getDetails=_fallback_group_details)
@@ -542,12 +672,18 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
 
         @staticmethod
         def lookupGroups(*_args):
-            """Handle lookup groups."""
+            """Lookup groups.
+
+            Inputs: `*_args`. Output: list.
+            """
             return [_Group(12, "users_rw", _Permissions("rwrw--", group_write=True))]
 
         @staticmethod
         def containedGroups(*_args):
-            """Handle contained groups."""
+            """Contained groups.
+
+            Inputs: `*_args`. Output: None. Raises on invalid or unavailable state.
+            """
             raise TypeError("wrong signature")
 
     monkeypatch.setattr(
@@ -593,7 +729,10 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
 def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
     monkeypatch,
 ):
-    """Verify test proxy and admin post views cover remaini behavior."""
+    """Verify proxy and admin post views cover remaining error and success paths.
+
+    Inputs: `monkeypatch`. Output: 'req-1'.
+    """
     factory = RequestFactory()
     conn = object()
 
@@ -721,6 +860,10 @@ def test_proxy_and_admin_post_views_cover_remaining_error_and_success_paths(
         """Represent request identifier."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: 'req-1'.
+            """
             return "req-1"
 
     monkeypatch.setattr(index_view.uuid, "uuid4", _RequestId)

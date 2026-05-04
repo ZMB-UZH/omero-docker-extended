@@ -23,14 +23,20 @@ JOB_LOCK_RETRY_SLEEP_MAX_SECONDS = 0.2
 
 
 def get_job_path(job_id: str, jobs_root: Path) -> Path:
-    """Get filesystem path for job file."""
+    """Return job path.
+
+    Inputs: `job_id`, `jobs_root`. Output: `Path`. Raises on invalid or unavailable
+    state.
+    """
     if not safe_job_id(job_id):
         raise ValueError("Invalid job id.")
     return jobs_root / f"{job_id}.json"
 
 
 def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
-    """Get integer from environment with bounds checking.
+    """Return environment int.
+
+    Inputs: `env_key`, `default`, `min_value`, `max_value`. Output: `int`.
 
     IMPORTANT: env vars must be OPTIONAL. Missing/invalid values should fall back to defaults.
     """
@@ -42,7 +48,10 @@ def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> i
 
 
 def normalize_job_batch_size(value, default: int) -> int:
-    """Normalize batch size to valid range."""
+    """Normalize job batch size.
+
+    Inputs: `value`, `default`. Output: `int`.
+    """
     try:
         normalized = int(value)
     except (TypeError, ValueError):
@@ -51,7 +60,10 @@ def normalize_job_batch_size(value, default: int) -> int:
 
 
 def resolve_job_batch_size(job_dict) -> int:
-    """Resolve batch size for job from dict or environment."""
+    """Resolve job batch size.
+
+    Inputs: `job_dict`. Output: `int`.
+    """
     default_batch_size = get_env_int(
         UPLOAD_BATCH_FILES_ENV,
         DEFAULT_UPLOAD_BATCH_FILES,
@@ -62,12 +74,18 @@ def resolve_job_batch_size(job_dict) -> int:
 
 
 def has_pending_uploads(job_dict) -> bool:
-    """Check if job has pending upload entries."""
+    """Return whether pending uploads.
+
+    Inputs: `job_dict`. Output: `bool`.
+    """
     return any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
 
 
 def get_compatibility_pending_entries(job_dict):
-    """Get entries awaiting compatibility check."""
+    """Return compatibility pending entries.
+
+    Inputs: `job_dict`. Output: computed value.
+    """
     return [
         entry
         for entry in job_dict.get("files", [])
@@ -80,7 +98,10 @@ def get_compatibility_pending_entries(job_dict):
 
 
 def should_start_compatibility_check(job_dict) -> bool:
-    """Determine if compatibility check should start."""
+    """Determine if compatibility check should start.
+
+    Inputs: `job_dict`. Output: `bool`.
+    """
     if not job_dict or job_dict.get("compatibility_thread_active"):
         return False
     if job_dict.get("compatibility_confirmed"):
@@ -93,7 +114,10 @@ def should_start_compatibility_check(job_dict) -> bool:
 
 
 def refresh_job_status(job_dict):
-    """Update job status based on current state."""
+    """Job status based on current state.
+
+    Inputs: `job_dict`. Output: `job_dict`.
+    """
     if has_pending_uploads(job_dict):
         job_dict["status"] = "uploading"
         return job_dict
@@ -128,7 +152,10 @@ def refresh_job_status(job_dict):
 
 
 def load_job(job_id: str, jobs_root: Path):
-    """Load job data from filesystem."""
+    """Load job.
+
+    Inputs: `job_id`, `jobs_root`. Output: `json.load` result or None.
+    """
     try:
         path = get_job_path(job_id, jobs_root)
     except ValueError:
@@ -154,7 +181,10 @@ def save_job(
     retries: int = JOB_LOCK_RETRIES,
     timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
 ):
-    """Save job data to filesystem with retry logic."""
+    """Save job data to filesystem with retry logic.
+
+    Inputs: `job_dict`, `jobs_root`, `retries`, `timeout`. Output: bool.
+    """
     path = get_job_path(job_dict["job_id"], jobs_root)
     job_dict["updated"] = time.time()
     for attempt in range(retries):
@@ -191,7 +221,11 @@ def robust_update_job(
     retries: int = JOB_LOCK_RETRIES,
     timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
 ):
-    """Atomically update job with function."""
+    """Atomically update job with function.
+
+    Inputs: `job_id`, `update_fn`, `jobs_root`, `retries`, `timeout`. Output: `job_dict`
+    or None.
+    """
     try:
         path = get_job_path(job_id, jobs_root)
     except ValueError:
@@ -231,26 +265,38 @@ def robust_update_job(
 
 
 def safe_job_id(value: str) -> bool:
-    """Validate job ID format."""
+    """Return safe job ID.
+
+    Inputs: `value`. Output: `bool`.
+    """
     return bool(value and JOB_ID_SANITIZER.match(value))
 
 
 def append_job_message(job: dict, message: str):
-    """Append message to job log."""
+    """Append message to job log.
+
+    Inputs: `job`, `message`. Output: None.
+    """
     messages = job.get("messages", [])
     messages.append({"timestamp": time.time(), "text": message})
     job["messages"] = messages
 
 
 def append_job_error(job: dict, message: str):
-    """Append error to job log."""
+    """Append error to job log.
+
+    Inputs: `job`, `message`. Output: None.
+    """
     errors = job.get("errors", [])
     errors.append({"timestamp": time.time(), "text": message})
     job["errors"] = errors
 
 
 def _compatibility_pending_entries(job_dict):
-    """Handle compatibility pending entries."""
+    """Compatibility pending entries.
+
+    Inputs: `job_dict`. Output: computed value.
+    """
     return [
         entry
         for entry in job_dict.get("files", [])

@@ -23,12 +23,18 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def _test_tmp_path(*parts: str) -> Path:
-    """Handle test tmp path."""
+    """Verify temporary path.
+
+    Inputs: `*parts`. Output: `Path`.
+    """
     return TEST_TMP_ROOT.joinpath(*parts)
 
 
 def _install_import_stubs():
-    """Handle install import stubs."""
+    """Install import stubs.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
         django_module.__path__ = []
@@ -151,11 +157,19 @@ def _install_import_stubs():
             """Represent lock."""
 
             def __init__(self, path, mode="a+", timeout=1):
+                """Initialize the instance.
+
+                Inputs: `path`, `mode`, `timeout`. Output: None.
+                """
                 self.path = str(path)
                 self.timeout = timeout
                 self._lock = None
 
             def __enter__(self):
+                """Enter the context manager.
+
+                Inputs: none. Output: `self`. Raises on invalid or unavailable state.
+                """
                 with lock_registry_guard:
                     self._lock = lock_registry.setdefault(self.path, threading.Lock())
                 acquired = self._lock.acquire(timeout=self.timeout)
@@ -164,6 +178,10 @@ def _install_import_stubs():
                 return self
 
             def __exit__(self, exc_type, exc, tb):
+                """Exit the context manager.
+
+                Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+                """
                 if self._lock and self._lock.locked():
                     self._lock.release()
                 return False
@@ -229,7 +247,10 @@ from omeroweb_import.views import index_view
 
 
 def _load_manage_zarr_script_module():
-    """Handle load manage Zarr script module."""
+    """Load manage Zarr script module.
+
+    Inputs: none. Output: `module`.
+    """
     _install_import_stubs()
     module_path = (
         REPO_ROOT
@@ -251,7 +272,10 @@ class ImportPluginRegressionTests(TestCase):
 
     @staticmethod
     def _json_status_and_payload(response):
-        """Handle JSON status and payload."""
+        """JSON status and payload.
+
+        Inputs: `response`. Output: tuple.
+        """
         if isinstance(response, dict):
             return response["status"], response["payload"]
         return response.status_code, json.loads(response.content)
@@ -259,7 +283,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_normalize_upload_relative_path_rejects_overlong_component_by_utf8_bytes(
         self,
     ):
-        """Verify test normalize upload relative path rejects o behavior."""
+        """Verify normalize upload relative path rejects overlong component by utf8 bytes.
+
+        Inputs: none. Output: None.
+        """
         raw_name = f"{'ä' * 130}.tif"
 
         rel_path, error = core_functions._normalize_upload_relative_path(raw_name)
@@ -268,7 +295,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("Filename is too long", error)
 
     def test_get_text_falls_back_to_private_rstring_value(self):
-        """Verify test get text falls back to private rstring v behavior."""
+        """Verify get text falls back to private rstring value.
+
+        Inputs: none. Output: None.
+        """
         value_obj = types.SimpleNamespace(
             val=None, _val="/managed/path/sample.ome.zarr"
         )
@@ -278,7 +308,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("/managed/path/sample.ome.zarr", text)
 
     def test_external_info_text_uses_getter_when_attribute_is_unloaded(self):
-        """Verify test external info text uses getter when attr behavior."""
+        """Verify external info text uses getter when attribute is unloaded.
+
+        Inputs: none. Output: None.
+        """
         external_info = types.SimpleNamespace(
             lsid=types.SimpleNamespace(val=None, _val=None),
             getLsid=lambda: types.SimpleNamespace(
@@ -291,7 +324,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("/managed/path/from-getter.ome.zarr", text)
 
     def test_query_image_external_info_reads_projection_values(self):
-        """Verify test query image external info reads projecti behavior."""
+        """Verify query image external info reads projection values.
+
+        Inputs: none. Output: None.
+        """
         params_seen = {}
         fake_query = mock.Mock()
         fake_query.projection.return_value = [
@@ -325,7 +361,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("com.glencoesoftware.ngff:multiscales", entity_type)
 
     def test_native_zarr_image_relative_path_from_lsid_handles_root_and_series(self):
-        """Verify test native Zarr image relative path from lsi behavior."""
+        """Verify native Zarr image relative path from lsid handles root and series.
+
+        Inputs: none. Output: None.
+        """
         managed_root = Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr")
 
         root_relative = core_functions._native_zarr_image_relative_path_from_lsid(
@@ -341,90 +380,150 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("1", series_relative)
 
     def test_finalize_imported_zarr_image_metadata_persists_source_pixel_sizes(self):
-        """Verify test finalize imported Zarr image metadata pe behavior."""
+        """Verify finalize imported Zarr image metadata persists source pixel sizes.
+
+        Inputs: none. Output: computed value.
+        """
 
         class _FakeUnit:
             """Test double for fake unit."""
 
             def __init__(self, name):
+                """Initialize the instance.
+
+                Inputs: `name`. Output: None.
+                """
                 self.name = name
 
         class _FakeLength:
             """Test double for fake length."""
 
             def __init__(self, value, unit_name):
+                """Initialize the instance.
+
+                Inputs: `value`, `unit_name`. Output: None.
+                """
                 self._value = float(value)
                 self._unit = _FakeUnit(unit_name)
 
             def getValue(self):
-                """Return get value."""
+                """Return the fake OMERO value.
+
+                Inputs: none. Output: `self._value`.
+                """
                 return self._value
 
             def getUnit(self):
-                """Return get unit."""
+                """Return Unit.
+
+                Inputs: none. Output: `self._unit`.
+                """
                 return self._unit
 
         class _FakePixelsModel:
             """Test double for fake pixels model."""
 
             def __init__(self):
+                """Initialize the instance.
+
+                Inputs: none. Output: None.
+                """
                 self._x = None
                 self._y = None
                 self._z = None
 
             def setPhysicalSizeX(self, value):
-                """Store set physical size x."""
+                """Set Physical Size X.
+
+                Inputs: `value`. Output: None.
+                """
                 self._x = value
 
             def setPhysicalSizeY(self, value):
-                """Store set physical size y."""
+                """Set Physical Size Y.
+
+                Inputs: `value`. Output: None.
+                """
                 self._y = value
 
             def setPhysicalSizeZ(self, value):
-                """Store set physical size z."""
+                """Set Physical Size Z.
+
+                Inputs: `value`. Output: None.
+                """
                 self._z = value
 
         class _FakePixelsWrapper:
             """Test double for fake pixels wrapper."""
 
             def __init__(self, model):
+                """Initialize the instance.
+
+                Inputs: `model`. Output: None.
+                """
                 self._obj = model
 
             def getPhysicalSizeX(self):
-                """Return get physical size x."""
+                """Return Physical Size X.
+
+                Inputs: none. Output: `self._obj._x`.
+                """
                 return self._obj._x
 
             def getPhysicalSizeY(self):
-                """Return get physical size y."""
+                """Return Physical Size Y.
+
+                Inputs: none. Output: `self._obj._y`.
+                """
                 return self._obj._y
 
             def getPhysicalSizeZ(self):
-                """Return get physical size z."""
+                """Return Physical Size Z.
+
+                Inputs: none. Output: `self._obj._z`.
+                """
                 return self._obj._z
 
         class _FakeImage:
             """Test double for fake image."""
 
             def __init__(self, image_id, pixels_wrapper):
+                """Initialize the instance.
+
+                Inputs: `image_id`, `pixels_wrapper`. Output: None.
+                """
                 self._image_id = image_id
                 self._pixels_wrapper = pixels_wrapper
 
             def getId(self):
-                """Return get identifier."""
+                """Return the fake OMERO identifier.
+
+                Inputs: none. Output: `self._image_id`.
+                """
                 return self._image_id
 
             def getPrimaryPixels(self):
-                """Return get primary pixels."""
+                """Return Primary Pixels.
+
+                Inputs: none. Output: `self._pixels_wrapper`.
+                """
                 return self._pixels_wrapper
 
         class _FakeUpdateService:
             """Test double for fake update service."""
 
             def __init__(self):
+                """Initialize the instance.
+
+                Inputs: none. Output: None.
+                """
                 self.saved = []
 
             def saveAndReturnObject(self, obj):
-                """Store save and return object."""
+                """Save and return object.
+
+                Inputs: `obj`. Output: `obj`.
+                """
                 self.saved.append(obj)
                 return obj
 
@@ -432,6 +531,10 @@ class ImportPluginRegressionTests(TestCase):
             """Test double for fake conn."""
 
             def __init__(self, image):
+                """Initialize the instance.
+
+                Inputs: `image`. Output: None.
+                """
                 self._image = image
                 self._update_service = _FakeUpdateService()
                 self.SERVICE_OPTS = types.SimpleNamespace(
@@ -440,32 +543,51 @@ class ImportPluginRegressionTests(TestCase):
                 self.closed = False
 
             def getObject(self, obj_type, image_id):
-                """Return get object."""
+                """Return Object.
+
+                Inputs: `obj_type`, `image_id`. Output: `self._image`.
+                """
                 self._last_lookup = (obj_type, image_id)
                 return self._image
 
             def getUpdateService(self):
-                """Return get update service."""
+                """Return Update Service.
+
+                Inputs: none. Output: `self._update_service`.
+                """
                 return self._update_service
 
             def close(self):
-                """Handle close."""
+                """Close the resource.
+
+                Inputs: none. Output: None.
+                """
                 self.closed = True
 
         class _FakeAdminConn:
             """Test double for fake admin conn."""
 
             def __init__(self, conn):
+                """Initialize the instance.
+
+                Inputs: `conn`. Output: None.
+                """
                 self._conn = conn
                 self.closed = False
 
             def suConn(self, username):
-                """Handle su conn."""
+                """Su conn.
+
+                Inputs: `username`. Output: `self._conn`.
+                """
                 self._username = username
                 return self._conn
 
             def close(self):
-                """Handle close."""
+                """Close the resource.
+
+                Inputs: none. Output: None.
+                """
                 self.closed = True
 
         pixels_model = _FakePixelsModel()
@@ -533,27 +655,44 @@ class ImportPluginRegressionTests(TestCase):
         self.assertTrue(fake_admin_conn.closed)
 
     def test_runtime_native_zarr_physical_sizes_normalizes_ngff_unit_symbols(self):
-        """Verify test runtime native Zarr physical sizes norma behavior."""
+        """Verify runtime native Zarr physical sizes normalizes NGFF unit symbols.
+
+        Inputs: none. Output: computed value.
+        """
 
         class _FakeUnit:
             """Test double for fake unit."""
 
             def __init__(self, name):
+                """Initialize the instance.
+
+                Inputs: `name`. Output: None.
+                """
                 self.name = name
 
         class _FakeLength:
             """Test double for fake length."""
 
             def __init__(self, value, unit):
+                """Initialize the instance.
+
+                Inputs: `value`, `unit`. Output: None.
+                """
                 self._value = float(value)
                 self._unit = unit
 
             def getValue(self):
-                """Return get value."""
+                """Return the fake OMERO value.
+
+                Inputs: none. Output: `self._value`.
+                """
                 return self._value
 
             def getUnit(self):
-                """Return get unit."""
+                """Return Unit.
+
+                Inputs: none. Output: `self._unit`.
+                """
                 return self._unit
 
         unit_names = (
@@ -629,7 +768,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_validate_staged_target_path_rejects_excessive_target_length(self):
-        """Verify test validate staged target path rejects exce behavior."""
+        """Verify validate staged target path rejects excessive target length.
+
+        Inputs: none. Output: None.
+        """
         upload_root = _test_tmp_path("upload-root")
         staged_path = "_staged/job/" + ("a" * 5000) + ".tif"
 
@@ -638,7 +780,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("File path is too long", error)
 
     def test_resolve_staged_target_path_rejects_traversal(self):
-        """Verify test resolve staged target path rejects trave behavior."""
+        """Verify resolve staged target path rejects traversal.
+
+        Inputs: none. Output: None.
+        """
         upload_root = _test_tmp_path("upload-root")
 
         target, error = core_functions._resolve_staged_target_path(
@@ -649,7 +794,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("Invalid", error)
 
     def test_load_job_rejects_invalid_job_id_without_touching_jobs_root(self):
-        """Verify test load job rejects invalid job identifier behavior."""
+        """Verify load job rejects invalid job ID without touching jobs root.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch.object(
             core_functions,
             "_get_jobs_root",
@@ -660,7 +808,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(loaded)
 
     def test_save_job_rejects_invalid_job_id_without_touching_jobs_root(self):
-        """Verify test save job rejects invalid job identifier behavior."""
+        """Verify save job rejects invalid job ID without touching jobs root.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch.object(
             core_functions,
             "_get_jobs_root",
@@ -671,7 +822,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertFalse(saved)
 
     def test_job_updates_remain_atomic_under_concurrency(self):
-        """Verify test job updates remain atomic under concurrency."""
+        """Verify job updates remain atomic under concurrency.
+
+        Inputs: none. Output: None.
+        """
         job_id = "a" * 32
         job = {"job_id": job_id, "counter": 0, "files": []}
 
@@ -683,7 +837,10 @@ class ImportPluginRegressionTests(TestCase):
                 self.assertTrue(core_functions._save_job(dict(job)))
 
                 def increment_job():
-                    """Handle increment job."""
+                    """Increment job.
+
+                    Inputs: none. Output: None.
+                    """
                     for _ in range(25):
                         updated = core_functions._robust_update_job(
                             job_id,
@@ -706,7 +863,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_open_session_connection_detaches_joined_session_before_wrapper_teardown(
         self,
     ):
-        """Verify test open session connection detaches joined behavior."""
+        """Verify open session connection detaches joined session before wrapper teardown.
+
+        Inputs: none. Output: `FakeSession` result.
+        """
         detach_calls = []
         group_calls = []
         client_calls = {}
@@ -716,19 +876,29 @@ class ImportPluginRegressionTests(TestCase):
 
             @staticmethod
             def detachOnDestroy():
-                """Handle detach on destroy."""
+                """Detach on destroy.
+
+                Inputs: none. Output: None.
+                """
                 detach_calls.append("detached")
 
         class FakeClient:
             """Test double for fake client."""
 
             def __init__(self, *, host, port):
+                """Initialize the instance.
+
+                Inputs: `host`, `port`. Output: None.
+                """
                 client_calls["host"] = host
                 client_calls["port"] = port
 
             @staticmethod
             def joinSession(session_key):
-                """Handle join session."""
+                """Join session.
+
+                Inputs: `session_key`. Output: `FakeSession` result.
+                """
                 client_calls["session_key"] = session_key
                 return FakeSession()
 
@@ -737,13 +907,20 @@ class ImportPluginRegressionTests(TestCase):
 
             @staticmethod
             def setOmeroGroup(value):
-                """Store set OMERO group."""
+                """Set OMERO Group.
+
+                Inputs: `value`. Output: None.
+                """
                 group_calls.append(value)
 
         class FakeGateway:
             """Test double for fake gateway."""
 
             def __init__(self, client_obj=None):
+                """Initialize the instance.
+
+                Inputs: `client_obj`. Output: None.
+                """
                 self.client_obj = client_obj
                 self.SERVICE_OPTS = FakeServiceOpts()
 
@@ -769,7 +946,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(["-1"], group_calls)
 
     def test_build_omero_cli_command_places_connection_flags_before_subcommand(self):
-        """Verify test build OMERO cli command places connectio behavior."""
+        """Verify build OMERO cli command places connection flags before subcommand.
+
+        Inputs: none. Output: None.
+        """
         command = core_functions._build_omero_cli_command(
             ["import", "--depth", "15"],
             "session-key",
@@ -794,7 +974,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_extract_imported_object_ids_supports_created_image_output(self):
-        """Verify test extract imported object identifiers supp behavior."""
+        """Verify extract imported object IDs supports created image output.
+
+        Inputs: none. Output: None.
+        """
         output = "\n".join(
             [
                 "Importing: Image",
@@ -809,7 +992,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_sanitize_cli_output_for_logging_redacts_uuid_tokens(self):
-        """Verify test sanitize cli output for logging redacts behavior."""
+        """Verify sanitize cli output for logging redacts uuid tokens.
+
+        Inputs: none. Output: None.
+        """
         raw = "Bad session key. Cannot join 12345678-1234-1234-1234-123456789abc on omeroserver:4064."
 
         sanitized = core_functions._sanitize_cli_output_for_logging(raw)
@@ -818,7 +1004,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("12345678-1234-1234-1234-123456789abc", sanitized)
 
     def test_extract_script_outputs_parses_named_lines(self):
-        """Verify test extract script outputs parses named lines."""
+        """Verify extract script outputs parses named lines.
+
+        Inputs: none. Output: None.
+        """
         outputs = core_functions._extract_script_outputs(
             "\n".join(
                 [
@@ -838,10 +1027,16 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_find_script_id_by_name_prefers_import_scripts_path(self):
-        """Verify test find script identifier by name prefers i behavior."""
+        """Verify find script ID by name prefers import scripts path.
+
+        Inputs: none. Output: `types.SimpleNamespace` result.
+        """
 
         def script(name, path, sid):
-            """Handle script."""
+            """Script.
+
+            Inputs: `name`, `path`, `sid`. Output: `types.SimpleNamespace` result.
+            """
             return types.SimpleNamespace(
                 name=types.SimpleNamespace(val=name),
                 path=types.SimpleNamespace(val=path),
@@ -881,7 +1076,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(37, script_id)
 
     def test_run_zarr_managed_repo_script_launches_expected_cli_command(self):
-        """Verify test run Zarr managed repo script launches ex behavior."""
+        """Verify run Zarr managed repo script launches expected cli command.
+
+        Inputs: none. Output: None.
+        """
         completed = subprocess.CompletedProcess(
             args=["omero"],
             returncode=0,
@@ -973,7 +1171,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(
         self,
     ):
-        """Verify test run Zarr managed repo script retries whe behavior."""
+        """Verify run Zarr managed repo script retries when no processor is temporarily unavailable.
+
+        Inputs: none. Output: None.
+        """
         admin_conn = types.SimpleNamespace(close=lambda: None)
         results = [
             subprocess.CompletedProcess(
@@ -1056,7 +1257,10 @@ class ImportPluginRegressionTests(TestCase):
         sleep_mock.assert_called_once_with(1)
 
     def test_import_zarr_via_cli_cleans_managed_path_when_no_objects_are_created(self):
-        """Verify test import Zarr via cli cleans managed path behavior."""
+        """Verify import Zarr via cli cleans managed path when no objects are created.
+
+        Inputs: none. Output: None.
+        """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
@@ -1142,7 +1346,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_render_verification_fails(self):
-        """Verify test import Zarr via cli rolls back when rend behavior."""
+        """Verify import Zarr via cli rolls back when render verification fails.
+
+        Inputs: none. Output: None.
+        """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
@@ -1242,7 +1449,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_metadata_finalization_fails(self):
-        """Verify test import Zarr via cli rolls back when meta behavior."""
+        """Verify import Zarr via cli rolls back when metadata finalization fails.
+
+        Inputs: none. Output: None.
+        """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
@@ -1342,7 +1552,10 @@ class ImportPluginRegressionTests(TestCase):
         render_verify_mock.assert_not_called()
 
     def test_import_zarr_via_cli_accepts_only_renderable_images(self):
-        """Verify test import Zarr via cli accepts only rendera behavior."""
+        """Verify import Zarr via cli accepts only renderable images.
+
+        Inputs: none. Output: None.
+        """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
@@ -1436,7 +1649,10 @@ class ImportPluginRegressionTests(TestCase):
         cleanup_managed_mock.assert_not_called()
 
     def test_prepare_server_readable_zarr_source_copies_into_shared_transfer_root(self):
-        """Verify test prepare server readable Zarr source copi behavior."""
+        """Verify prepare server readable Zarr source copies into shared transfer root.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
             source = tmp_root / "upload" / "sample.zarr"
@@ -1507,7 +1723,10 @@ class ImportPluginRegressionTests(TestCase):
             )
 
     def test_prepare_server_readable_zarr_source_preserves_multiscale_copy(self):
-        """Verify test prepare server readable Zarr source pres behavior."""
+        """Verify prepare server readable Zarr source preserves multiscale copy.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
             source = tmp_root / "upload" / "sample.zarr"
@@ -1592,7 +1811,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_check_import_compatibility_accepts_incompatible_ome_zarr_via_ome_zarr_support(
         self,
     ):
-        """Verify test check import compatibility accepts incom behavior."""
+        """Verify check import compatibility accepts incompatible ome Zarr via ome Zarr support.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "image.ome.zarr"
             zarr_dir.mkdir()
@@ -1662,7 +1884,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("ome-zarr", result["details"].lower())
 
     def test_check_import_compatibility_uses_bioformats_when_scan_finds_groups(self):
-        """Verify test check import compatibility uses bioforma behavior."""
+        """Verify check import compatibility uses bioformats when scan finds groups.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "bf2raw.ome.zarr"
             series_dir = zarr_dir / "0"
@@ -1736,7 +1961,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("File format supported by OMERO", result["details"])
 
     def test_check_import_compatibility_rejects_invalid_native_zarr_layout(self):
-        """Verify test check import compatibility rejects inval behavior."""
+        """Verify check import compatibility rejects invalid native Zarr layout.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "broken.ome.zarr"
             zarr_dir.mkdir()
@@ -1798,7 +2026,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(
         self,
     ):
-        """Verify test check import compatibility rejects nativ behavior."""
+        """Verify check import compatibility rejects native Zarr missing scale transform.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "broken-scale.ome.zarr"
             zarr_dir.mkdir()
@@ -1860,7 +2091,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("coordinate transformations", result["details"].lower())
 
     def test_check_import_compatibility_rejects_native_zarr_string_axes(self):
-        """Verify test check import compatibility rejects nativ behavior."""
+        """Verify check import compatibility rejects native Zarr string axes.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "string-axes.ome.zarr"
             zarr_dir.mkdir()
@@ -1929,7 +2163,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("readable multiscale image node", result["details"].lower())
 
     def test_check_import_compatibility_rejects_sparse_bioformats2raw_series(self):
-        """Verify test check import compatibility rejects spars behavior."""
+        """Verify check import compatibility rejects sparse bioformats2raw series.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "bf2raw-gap.ome.zarr"
             for series_name in ("0", "2"):
@@ -2006,7 +2243,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("readable multiscale image node", result["details"])
 
     def test_background_import_session_closes_created_session_object(self):
-        """Verify test background import session closes created behavior."""
+        """Verify background import session closes created session object.
+
+        Inputs: none. Output: None.
+        """
         fake_session = types.SimpleNamespace(
             getUuid=lambda: types.SimpleNamespace(getValue=lambda: "session-key")
         )
@@ -2045,7 +2285,10 @@ class ImportPluginRegressionTests(TestCase):
         fake_service.closeSession.assert_called_once_with(fake_session)
 
     def test_load_job_falls_back_to_unlocked_read_after_lock_contention(self):
-        """Verify test load job falls back to unlocked read aft behavior."""
+        """Verify load job falls back to unlocked read after lock contention.
+
+        Inputs: none. Output: bool. Raises on invalid or unavailable state.
+        """
         job_id = "b" * 32
         job = {"job_id": job_id, "status": "uploading"}
 
@@ -2053,13 +2296,25 @@ class ImportPluginRegressionTests(TestCase):
             """Represent failing lock."""
 
             def __init__(self, *_args, **_kwargs):
+                """Initialize the instance.
+
+                Inputs: `*_args`, `**_kwargs`. Output: None.
+                """
                 self.args = _args
                 self.kwargs = _kwargs
 
             def __enter__(self):
+                """Enter the context manager.
+
+                Inputs: none. Output: None. Raises on invalid or unavailable state.
+                """
                 raise core_functions.portalocker.exceptions.LockException("busy")
 
             def __exit__(self, exc_type, exc, tb):
+                """Exit the context manager.
+
+                Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+                """
                 return False
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2076,14 +2331,20 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("updated", loaded)
 
     def test_mark_failed_job_for_deferred_cleanup_marks_upload_data_and_job_file(self):
-        """Verify test mark failed job for deferred cleanup mar behavior."""
+        """Verify mark failed job for deferred cleanup marks upload data and job file.
+
+        Inputs: none. Output: bool.
+        """
         job_id = "c" * 32
         upload_root = _test_tmp_path("upload-root")
         jobs_root = _test_tmp_path("jobs-root")
         calls = []
 
         def capture_marker(path, root, *, ttl_seconds, now=None):
-            """Handle capture marker."""
+            """Capture marker.
+
+            Inputs: `path`, `root`, `ttl_seconds`, `now`. Output: bool.
+            """
             calls.append((path, root, ttl_seconds, now))
             return True
 
@@ -2116,7 +2377,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_build_import_units_uses_package_root_for_grouped_directory_imports(self):
-        """Verify test build import units uses package root for behavior."""
+        """Verify build import units uses package root for grouped directory imports.
+
+        Inputs: none. Output: call result.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             upload_root = Path(tmpdir) / "job-root"
             relative_paths = [
@@ -2157,7 +2421,10 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             def fake_scan(path, timeout=45):
-                """Handle fake scan."""
+                """Fake scan.
+
+                Inputs: `path`, `timeout`. Output: call result.
+                """
                 if path == package_root:
                     return subprocess.CompletedProcess(
                         args=["omero", "import"],
@@ -2187,7 +2454,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("METADATA.ome.xml", units[0]["group_header_name"])
 
     def test_upload_template_keeps_compatibility_polling_without_browser_timeout(self):
-        """Verify test upload template keeps compatibility poll behavior."""
+        """Verify upload template keeps compatibility polling without browser timeout.
+
+        Inputs: none. Output: None.
+        """
         template = (
             REPO_ROOT
             / "omeroweb_import"
@@ -2206,7 +2476,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("const maxTimeMs = 5 * 60 * 1000", template)
 
     def test_upload_template_uses_short_loading_label_for_dropped_files(self):
-        """Verify test upload template uses short loading label behavior."""
+        """Verify upload template uses short loading label for dropped files.
+
+        Inputs: none. Output: None.
+        """
         template = (
             REPO_ROOT
             / "omeroweb_import"
@@ -2219,7 +2492,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("LOADING DROPPED FILES", template)
 
     def test_resolve_managed_child_path_rejects_path_traversal(self):
-        """Verify test resolve managed child path rejects path behavior."""
+        """Verify resolve managed child path rejects path traversal.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
 
@@ -2227,7 +2503,10 @@ class ImportPluginRegressionTests(TestCase):
                 core_functions._resolve_managed_child_path(root, "../escape.txt")
 
     def test_load_owned_job_rejects_invalid_job_id_before_disk_access(self):
-        """Verify test load owned job rejects invalid job ident behavior."""
+        """Verify load owned job rejects invalid job ID before disk access.
+
+        Inputs: none. Output: None.
+        """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
 
         with mock.patch.object(index_view, "_load_job") as load_job_mock:
@@ -2246,7 +2525,10 @@ class ImportPluginRegressionTests(TestCase):
         load_job_mock.assert_not_called()
 
     def test_load_owned_job_rejects_cross_user_job_access(self):
-        """Verify test load owned job rejects cross user job ac behavior."""
+        """Verify load owned job rejects cross user job access.
+
+        Inputs: none. Output: None.
+        """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "bob"}
 
@@ -2268,7 +2550,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_load_owned_job_allows_matching_owner(self):
-        """Verify test load owned job allows matching owner."""
+        """Verify load owned job allows matching owner.
+
+        Inputs: none. Output: None.
+        """
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "alice"}
 
@@ -2287,7 +2572,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(error_response)
 
     def test_confirm_import_defers_dataset_preparation_to_background_thread(self):
-        """Verify test confirm import defers dataset preparatio behavior."""
+        """Verify confirm import defers dataset preparation to background thread.
+
+        Inputs: none. Output: None.
+        """
         job_id = "d" * 32
         request = types.SimpleNamespace(
             method="POST", user=types.SimpleNamespace(username="alice")
@@ -2327,20 +2615,32 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual([job_id], import_started)
 
     def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
-        """Verify test ensure job dataset targets uses request behavior."""
+        """Verify ensure job dataset targets uses request connection when available.
+
+        Inputs: none. Output: 11. Raises on invalid or unavailable state.
+        """
         request_conn = types.SimpleNamespace(
             SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None)
         )
         created = []
 
         def fail_open_service_connection(*args, **kwargs):
-            """Handle fail open service connection."""
+            """Fail open service connection.
+
+            Inputs: `*args`, `**kwargs`. Output: None. Raises on invalid or unavailable
+            state.
+
+            state.
+            """
             raise AssertionError(
                 "service connection should not be used when request connection is available"
             )
 
         def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
-            """Handle fake get or create dataset."""
+            """Fake get or create dataset.
+
+            Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: 11.
+            """
             created.append((conn, name, project_id))
             dataset_map[name] = 11
             return 11
@@ -2387,7 +2687,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(
         self,
     ):
-        """Verify test prepare request job import datasets uses behavior."""
+        """Verify prepare request job import datasets uses Zarr package root without import scan.
+
+        Inputs: none. Output: 21.
+        """
         created = []
         group_calls = []
 
@@ -2399,13 +2702,19 @@ class ImportPluginRegressionTests(TestCase):
 
                 @staticmethod
                 def setOmeroGroup(value):
-                    """Store set OMERO group."""
+                    """Set OMERO Group.
+
+                    Inputs: `value`. Output: None.
+                    """
                     group_calls.append(value)
 
             SERVICE_OPTS = _Opts()
 
         def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
-            """Handle fake get or create dataset."""
+            """Fake get or create dataset.
+
+            Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: 21.
+            """
             created.append((conn, name, project_id))
             dataset_map[name] = 21
             return 21
@@ -2450,7 +2759,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(["4"], group_calls)
 
     def test_prepare_uploaded_job_dataset_targets_runs_when_job_is_ready(self):
-        """Verify test prepare uploaded job dataset targets run behavior."""
+        """Verify prepare uploaded job dataset targets runs when job is ready.
+
+        Inputs: none. Output: None.
+        """
         request_conn = object()
         job = {
             "job_id": "d" * 32,
@@ -2476,7 +2788,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_uploaded_job_for_request_path_import_waits_for_planned_units_during_compatibility(
         self,
     ):
-        """Verify test prepare uploaded job for request path im behavior."""
+        """Verify prepare uploaded job for request path import waits for planned units during compatibility.
+
+        Inputs: none. Output: None.
+        """
         job = {
             "job_id": "e" * 32,
             "status": "checking",
@@ -2507,7 +2822,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_prepare_uploaded_job_for_request_path_import_waits_for_background_import_plan(
         self,
     ):
-        """Verify test prepare uploaded job for request path im behavior."""
+        """Verify prepare uploaded job for request path import waits for background import plan.
+
+        Inputs: none. Output: None.
+        """
         job = {
             "job_id": "f" * 32,
             "status": "checking",
@@ -2536,7 +2854,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(error)
 
     def test_run_compatibility_check_skips_scan_when_compatibility_is_disabled(self):
-        """Verify test run compatibility check skips scan when behavior."""
+        """Verify run compatibility check skips scan when compatibility is disabled.
+
+        Inputs: none. Output: `job_state`.
+        """
         job_id = "1" * 32
         job_state = {
             "job_id": job_id,
@@ -2556,12 +2877,18 @@ class ImportPluginRegressionTests(TestCase):
         }
 
         def fake_load_job(current_job_id):
-            """Handle fake load job."""
+            """Fake load job.
+
+            Inputs: `current_job_id`. Output: `job_state`.
+            """
             self.assertEqual(job_id, current_job_id)
             return job_state
 
         def fake_update_job(current_job_id, updater):
-            """Handle fake update job."""
+            """Fake update job.
+
+            Inputs: `current_job_id`, `updater`. Output: `job_state`.
+            """
             self.assertEqual(job_id, current_job_id)
             updater(job_state)
             return job_state
@@ -2603,7 +2930,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("ready", job_state["status"])
 
     def test_job_status_starts_ready_job_after_request_path_preparation(self):
-        """Verify test job status starts ready job after reques behavior."""
+        """Verify job status starts ready job after request path preparation.
+
+        Inputs: none. Output: None.
+        """
         request = types.SimpleNamespace(method="GET")
         job_id = "f" * 32
         job = {
@@ -2649,7 +2979,10 @@ class ImportPluginRegressionTests(TestCase):
         start_import.assert_called_once_with(job_id)
 
     def test_vizarr_openwith_uses_browser_origin_for_source_url(self):
-        """Verify test vizarr openwith uses browser origin for behavior."""
+        """Verify vizarr openwith uses browser origin for source URL.
+
+        Inputs: none. Output: None.
+        """
         script = (
             REPO_ROOT / "omero_web_zarr/static/omero_web_zarr/openwith.js"
         ).read_text(encoding="utf-8")
@@ -2660,7 +2993,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_open_user_owned_background_connection_requires_independent_session_key(
         self,
     ):
-        """Verify test open user owned background connection re behavior."""
+        """Verify open user owned background connection requires independent session key.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch.object(
             core_functions,
             "_open_group_scoped_session_connection",
@@ -2676,7 +3012,10 @@ class ImportPluginRegressionTests(TestCase):
     def test_import_plugin_source_forbids_job_service_impersonation_for_background_user_work(
         self,
     ):
-        """Verify test import plugin source forbids job service behavior."""
+        """Verify import plugin source forbids job service impersonation for background user work.
+
+        Inputs: none. Output: None.
+        """
         source = (REPO_ROOT / "omeroweb_import/views/core_functions.py").read_text(
             encoding="utf-8"
         )
@@ -2686,7 +3025,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("service_conn.suConn(", source)
 
     def test_ensure_job_dataset_targets_hides_background_session_details(self):
-        """Verify test ensure job dataset targets hides backgro behavior."""
+        """Verify ensure job dataset targets hides background session details.
+
+        Inputs: none. Output: yielded values.
+        """
         job = {
             "job_id": "b" * 32,
             "host": "omeroserver",
@@ -2707,7 +3049,10 @@ class ImportPluginRegressionTests(TestCase):
 
         @contextmanager
         def _background_user_connection(*args, **kwargs):
-            """Handle background user connection."""
+            """Background user connection.
+
+            Inputs: `*args`, `**kwargs`. Output: yielded values.
+            """
             yield None
 
         with mock.patch.object(
@@ -2727,7 +3072,10 @@ class ImportPluginRegressionTests(TestCase):
 
     @staticmethod
     def test_start_import_thread_does_not_spawn_when_save_fails():
-        """Verify test start import thread does not spawn when behavior."""
+        """Verify start import thread does not spawn when save fails.
+
+        Inputs: none. Output: None.
+        """
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
 
         with (
@@ -2741,7 +3089,10 @@ class ImportPluginRegressionTests(TestCase):
         thread_cls.assert_not_called()
 
     def test_upload_user_settings_view_hides_store_exception_details(self):
-        """Verify test upload user settings view hides store ex behavior."""
+        """Verify upload user settings view hides store exception details.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views import user_settings_view
         from omeroweb_import.services import data_store
 
@@ -2768,7 +3119,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("secret", payload["error"])
 
     def test_upload_special_method_load_hides_store_exception_details(self):
-        """Verify test upload special method load hides store e behavior."""
+        """Verify upload special method load hides store exception details.
+
+        Inputs: none. Output: None.
+        """
         from omeroweb_import.views import special_method_settings_view
         from omeroweb_import.services import data_store
 
@@ -2799,7 +3153,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("secret", payload["error"])
 
     def test_upload_template_keeps_completed_bytes_and_aborts_parallel_failures(self):
-        """Verify test upload template keeps completed bytes an behavior."""
+        """Verify upload template keeps completed bytes and aborts parallel failures.
+
+        Inputs: none. Output: None.
+        """
         template = (
             REPO_ROOT / "omeroweb_import/templates/omeroweb_import/index.html"
         ).read_text()
@@ -2814,7 +3171,10 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_upload_styles_keep_long_names_inside_tree_column(self):
-        """Verify test upload styles keep long names inside tre behavior."""
+        """Verify upload styles keep long names inside tree column.
+
+        Inputs: none. Output: None.
+        """
         styles = (
             REPO_ROOT / "omeroweb_import/static/omeroweb_import/styles.css"
         ).read_text()
@@ -2827,7 +3187,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("padding-left: 0;", styles)
 
     def test_upload_preload_script_scopes_persisted_selection_restore(self):
-        """Verify test upload preload script scopes persisted s behavior."""
+        """Verify upload preload script scopes persisted selection restore.
+
+        Inputs: none. Output: None.
+        """
         script = (
             REPO_ROOT / "omeroweb_import/static/omeroweb_import/upload.js"
         ).read_text()
@@ -2848,7 +3211,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _server_config(tmpdir: str, tmp_root: Path) -> dict[str, str]:
-        """Handle server config."""
+        """Server config.
+
+        Inputs: `tmpdir`, `tmp_root`. Output: `dict[str, str]`.
+        """
         return {
             "omero.data.dir": str(Path(tmpdir) / "data"),
             "omero.managed.dir": str(Path(tmpdir) / "data" / "ManagedRepository"),
@@ -2858,19 +3224,29 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _managed_repo_conn(managed_root: Path):
-        """Handle managed repo conn."""
+        """Managed repo conn.
+
+        Inputs: `managed_root`. Output: computed value.
+        """
 
         class _RepoProxy:
             """Represent repo proxy."""
 
             def __init__(self, root: Path):
+                """Initialize the instance.
+
+                Inputs: `root`. Output: None.
+                """
                 self.root = root
                 self.make_dir_calls = []
                 self.delete_calls = []
                 self.registered_paths = set()
 
             def makeDir(self, path, parents):
-                """Build make dir."""
+                """Make dir.
+
+                Inputs: `path`, `parents`. Output: None.
+                """
                 self.make_dir_calls.append((path, parents))
                 target = self.root / path.strip("/")
                 target.mkdir(parents=parents, exist_ok=True)
@@ -2880,12 +3256,18 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                     self.registered_paths.add(current.resolve(strict=False))
 
             def fileExists(self, path):
-                """Handle file exists."""
+                """File exists.
+
+                Inputs: `path`. Output: bool.
+                """
                 target = (self.root / path.strip("/")).resolve(strict=False)
                 return target in self.registered_paths
 
             def deletePaths(self, paths, recursively, force):
-                """Handle delete paths."""
+                """Delete Paths.
+
+                Inputs: `paths`, `recursively`, `force`. Output: 'delete-handle'.
+                """
                 self.delete_calls.append((list(paths), recursively, force))
                 for raw_path in paths:
                     target = (self.root / raw_path.strip("/")).resolve(strict=False)
@@ -2926,14 +3308,20 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
     @staticmethod
     def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
-        """Handle register repo path."""
+        """Register repo path.
+
+        Inputs: `repo_proxy`, `managed_root`, `target`. Output: None.
+        """
         current = managed_root.resolve(strict=False)
         for part in target.resolve(strict=False).relative_to(managed_root).parts:
             current = (current / part).resolve(strict=False)
             repo_proxy.registered_paths.add(current)
 
     def test_stage_zarr_uses_existing_user_prefix_and_template_suffix(self):
-        """Verify test stage Zarr uses existing user prefix and behavior."""
+        """Verify stage Zarr uses existing user prefix and template suffix.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
 
@@ -2984,13 +3372,19 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             self.assertEqual(0o644, (destination / "0" / "0").stat().st_mode & 0o777)
 
     def test_shared_tmp_root_requires_persisted_server_config(self):
-        """Verify test shared tmp root requires persisted serve behavior."""
+        """Verify shared temporary root requires persisted server config.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
         with self.assertRaisesRegex(RuntimeError, "omero.web.import.shared_tmp_path"):
             manage_script._shared_tmp_root({})
 
     def test_managed_repository_root_rejects_relative_managed_dir(self):
-        """Verify test managed repository root rejects relative behavior."""
+        """Verify managed repository root rejects relative managed directory.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3000,7 +3394,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._managed_repository_root(config)
 
     def test_managed_repository_root_rejects_root_outside_data_dir(self):
-        """Verify test managed repository root rejects root out behavior."""
+        """Verify managed repository root rejects root outside data directory.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3012,7 +3409,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._managed_repository_root(config)
 
     def test_stage_zarr_registers_missing_template_container_via_repository_api(self):
-        """Verify test stage Zarr registers missing template co behavior."""
+        """Verify stage Zarr registers missing template container via repository API.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
 
@@ -3054,7 +3454,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             )
 
     def test_stage_zarr_rejects_existing_unregistered_suffix_dirs(self):
-        """Verify test stage Zarr rejects existing unregistered behavior."""
+        """Verify stage Zarr rejects existing unregistered suffix directories.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
 
@@ -3088,7 +3491,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             self.assertEqual([], repo_proxy.make_dir_calls)
 
     def test_load_server_config_reads_runtime_state_file(self):
-        """Verify test load server config reads runtime state file."""
+        """Verify load server config reads runtime state file.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3123,7 +3529,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         self.assertEqual("/shared-transfer", config["omero.web.import.shared_tmp_path"])
 
     def test_load_runtime_state_value_requires_existing_state_file_and_key(self):
-        """Verify test load runtime state value requires existi behavior."""
+        """Verify load runtime state value requires existing state file and key.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3155,7 +3564,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 )
 
     def test_render_repo_template_and_validate_source_path_enforce_safe_inputs(self):
-        """Verify test render repo template and validate source behavior."""
+        """Verify render repo template and validate source path enforce safe inputs.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3213,7 +3625,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._validate_source_path(config, str(not_zarr))
 
     def test_allocate_destination_dir_cleanup_and_symlink_guards(self):
-        """Verify test allocate destination dir cleanup and sym behavior."""
+        """Verify allocate destination directory cleanup and symlink guards.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3279,7 +3694,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._reject_symlinks(symlink_source)
 
     def test_cleanup_zarr_rejects_path_outside_template(self):
-        """Verify test cleanup Zarr rejects path outside template."""
+        """Verify cleanup Zarr rejects path outside template.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3308,7 +3726,10 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 )
 
     def test_cleanup_zarr_matches_template_prefix_without_current_time_assumption(self):
-        """Verify test cleanup Zarr matches template prefix wit behavior."""
+        """Verify cleanup Zarr matches template prefix without current time assumption.
+
+        Inputs: none. Output: None.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3345,27 +3766,43 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             self.assertEqual([("delete-handle", True)], wait_calls)
 
     def test_run_script_sets_outputs_and_closes_session(self):
-        """Verify test run script sets outputs and closes session."""
+        """Verify run script sets outputs and closes session.
+
+        Inputs: none. Output: `dict` result.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         class _FakeClient:
             """Test double for fake client."""
 
             def __init__(self, params):
+                """Initialize the instance.
+
+                Inputs: `params`. Output: None.
+                """
                 self._params = params
                 self.outputs = {}
                 self.closed = False
 
             def getInputs(self, unwrap=True):
-                """Return get inputs."""
+                """Return Inputs.
+
+                Inputs: `unwrap`. Output: `dict` result.
+                """
                 return dict(self._params)
 
             def setOutput(self, key, value):
-                """Store set output."""
+                """Set Output.
+
+                Inputs: `key`, `value`. Output: None.
+                """
                 self.outputs[key] = value
 
             def closeSession(self):
-                """Handle close session."""
+                """Close session.
+
+                Inputs: none. Output: None.
+                """
                 self.closed = True
 
         stage_client = _FakeClient(
@@ -3434,19 +3871,29 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         self.assertGreaterEqual(print_mock.call_count, 4)
 
     def test_run_script_reports_invalid_actions_without_leaking_session(self):
-        """Verify test run script reports invalid actions witho behavior."""
+        """Verify run script reports invalid actions without leaking session.
+
+        Inputs: none. Output: dict.
+        """
         manage_script = _load_manage_zarr_script_module()
 
         class _FakeClient:
             """Test double for fake client."""
 
             def __init__(self):
+                """Initialize the instance.
+
+                Inputs: none. Output: None.
+                """
                 self.outputs = {}
                 self.closed = False
 
             @staticmethod
             def getInputs(unwrap=True):
-                """Return get inputs."""
+                """Return Inputs.
+
+                Inputs: `unwrap`. Output: dict.
+                """
                 return {
                     "Action": "invalid",
                     "Group_Name": "users_private",
@@ -3454,11 +3901,17 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 }
 
             def setOutput(self, key, value):
-                """Store set output."""
+                """Set Output.
+
+                Inputs: `key`, `value`. Output: None.
+                """
                 self.outputs[key] = value
 
             def closeSession(self):
-                """Handle close session."""
+                """Close session.
+
+                Inputs: none. Output: None.
+                """
                 self.closed = True
 
         client = _FakeClient()

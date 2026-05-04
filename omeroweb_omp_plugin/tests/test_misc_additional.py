@@ -15,12 +15,18 @@ from omeroweb_omp_plugin.views import help_view, user_settings_view
 
 
 def _json_payload(response):
-    """Handle JSON payload."""
+    """JSON payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_http_utils_cover_response_and_stream_fallback_paths():
-    """Verify test HTTP utils cover response and stream fal behavior."""
+    """Verify HTTP utils cover response and stream fallback paths.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     nested_response = SimpleNamespace(
         json=lambda: {"message": {"message": "nested detail"}},
         text="ignored",
@@ -43,7 +49,10 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
 
         @staticmethod
         def read():
-            """Return read."""
+            """Read data from the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("unreadable")
 
     assert http_utils.extract_error_details(
@@ -58,7 +67,10 @@ def test_http_utils_cover_response_and_stream_fallback_paths():
 def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
     monkeypatch,
 ):
-    """Verify test core wrapper and filename parser paths f behavior."""
+    """Verify core wrapper and filename parser paths follow runtime contracts.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         annotation_service,
         "canonicalize_mapping",
@@ -145,11 +157,17 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
 def test_core_delete_existing_annotations_supports_runtime_positional_signature(
     monkeypatch,
 ):
-    """Verify test core delete existing annotations support behavior."""
+    """Verify core delete existing annotations supports runtime positional signature.
+
+    Inputs: `monkeypatch`. Output: tuple.
+    """
     captured = {}
 
     def fake_delete(conn, update, img, var_names, mode):
-        """Handle fake delete."""
+        """Fake delete.
+
+        Inputs: `conn`, `update`, `img`, `var_names`, `mode`. Output: tuple.
+        """
         captured["args"] = (conn, update, img, var_names, mode)
         return (1, 2, 3)
 
@@ -170,14 +188,23 @@ def test_core_delete_existing_annotations_supports_runtime_positional_signature(
 def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
     monkeypatch,
 ):
-    """Verify test core delete existing annotations falls b behavior."""
+    """Verify core delete existing annotations falls back to ID based deletion.
+
+    Inputs: `monkeypatch`. Output: `_Update` result or None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     deleted = []
 
     class _Stub:
         """Test double for stub."""
 
         def setId(self, value):
-            """Store set identifier."""
+            """Set ID.
+
+            Inputs: `value`. Output: None.
+            """
             self.id = value
 
     class _Update:
@@ -185,7 +212,10 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 
         @staticmethod
         def deleteObject(obj):
-            """Handle delete object."""
+            """Delete Object.
+
+            Inputs: `obj`. Output: None.
+            """
             deleted.append(obj.id)
 
     class _Conn:
@@ -193,21 +223,36 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 
         @staticmethod
         def getObject(*_args):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `*_args`. Output: None.
+            """
             return None
 
         @staticmethod
         def getUpdateService():
-            """Return get update service."""
+            """Return Update Service.
+
+            Inputs: none. Output: `_Update` result.
+            """
             return _Update()
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Handle delete objects."""
+            """Delete Objects.
+
+            Inputs: `kind`, `object_ids`, `wait`. Output: None.
+            """
             deleted.extend((kind, object_id, wait) for object_id in object_ids)
 
     def fake_delete(conn, update, img, var_names, mode):
-        """Handle fake delete."""
+        """Fake delete.
+
+        Inputs: `conn`, `update`, `img`, `var_names`, `mode`. Output: None. Raises on
+        invalid or unavailable state.
+
+        invalid or unavailable state.
+        """
         raise AssertionError("legacy id-based fallback should handle this path")
 
     monkeypatch.setattr(annotation_service, "delete_existing_annotations", fake_delete)
@@ -239,7 +284,10 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 def test_help_page_and_user_settings_views_cover_success_and_error_paths(
     monkeypatch,
 ):
-    """Verify test help page and user settings views cover behavior."""
+    """Verify help page and user settings views cover success and error paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
 
     response = inspect.unwrap(help_view.help_page)(factory.get("/help"))
@@ -333,7 +381,13 @@ def test_help_page_and_user_settings_views_cover_success_and_error_paths(
 def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
     monkeypatch,
 ):
-    """Verify test core delete helpers cover signature and behavior."""
+    """Verify core delete helpers cover signature and argument validation edges.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setattr(
         core.inspect,
         "signature",
@@ -353,7 +407,10 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
         """Test double for stub."""
 
         def setId(self, value):
-            """Store set identifier."""
+            """Set ID.
+
+            Inputs: `value`. Output: None.
+            """
             self.id = value
 
     class _Update:
@@ -361,7 +418,10 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
 
         @staticmethod
         def deleteObject(obj):
-            """Handle delete object."""
+            """Delete Object.
+
+            Inputs: `obj`. Output: None.
+            """
             deleted.append(obj)
 
     class _Conn:
@@ -369,19 +429,29 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
 
         @staticmethod
         def getObject(object_type, object_id):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `object_id`. Output: `SimpleNamespace` result. Raises
+            on invalid or unavailable state.
+            """
             if object_type == "ImageAnnotationLink":
                 raise RuntimeError("lookup failed")
             return SimpleNamespace(_obj=("annotation", object_id))
 
         @staticmethod
         def getUpdateService():
-            """Return get update service."""
+            """Return Update Service.
+
+            Inputs: none. Output: `_Update` result.
+            """
             return _Update()
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Handle delete objects."""
+            """Delete Objects.
+
+            Inputs: `kind`, `object_ids`, `wait`. Output: None.
+            """
             deleted.extend((kind, object_id, wait) for object_id in object_ids)
 
     monkeypatch.setattr(core, "MapAnnotationI", _Stub)
@@ -405,7 +475,10 @@ def test_core_delete_helpers_cover_signature_and_argument_validation_edges(
 
         @staticmethod
         def getObject(object_type, object_id):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `object_id`. Output: `SimpleNamespace` result.
+            """
             assert object_type == "ImageAnnotationLink"
             return SimpleNamespace(_obj=("loaded-link", object_id))
 

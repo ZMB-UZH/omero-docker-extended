@@ -12,7 +12,13 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     monkeypatch,
     tmp_path: Path,
 ):
-    """Verify test core function small helper edges cover e behavior."""
+    """Verify core function small helper edges cover early validation paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: 'fallback'. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     monkeypatch.setenv("EDGE_INT_VALUE", "bad")
     assert core_functions._get_env_int("EDGE_INT_VALUE", 7, 1, 10) == 7
 
@@ -131,10 +137,17 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("boom")
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: 'fallback'.
+            """
             return "fallback"
 
     assert core_functions._get_text(_BrokenValue()) == "fallback"
@@ -180,7 +193,10 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad value")
 
     assert core_functions._native_zarr_length_signature(_BrokenLength()) is None
@@ -189,7 +205,10 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
 def test_core_function_connection_and_name_normalization_helpers_cover_remaining_paths(
     monkeypatch,
 ):
-    """Verify test core function connection and name normal behavior."""
+    """Verify core function connection and name normalization helpers cover remaining paths.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_USER_ENV_FALLBACK, raising=False)
     monkeypatch.delenv(core_functions.JOB_SERVICE_AUTH_ENV, raising=False)
@@ -225,7 +244,10 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
     )
 
     def _raising_connect():
-        """Handle raising connect."""
+        """Raising connect.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("connect exploded")
 
     cleanup_events = []
@@ -343,7 +365,10 @@ def test_core_function_connection_and_name_normalization_helpers_cover_remaining
 
 
 def test_core_function_message_and_import_verification_helpers_cover_remaining_paths():
-    """Verify test core function message and import verific behavior."""
+    """Verify core function message and import verification helpers cover remaining paths.
+
+    Inputs: none. Output: None.
+    """
     job = {}
     core_functions._append_job_message(job, "")
     core_functions._append_job_error(job, "")

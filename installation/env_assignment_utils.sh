@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+# Perform environment assignment is name start char. Inputs: shell arguments and environment. Output: command status and side effects.
 
 _env_assignment_is_name_start_char() {
     case "${1-}" in
@@ -8,6 +8,7 @@ _env_assignment_is_name_start_char() {
 }
 
 
+# Perform environment assignment is name char. Inputs: shell arguments and environment. Output: command status and side effects.
 _env_assignment_is_name_char() {
     case "${1-}" in
         [A-Za-z0-9_]) return 0 ;;
@@ -16,6 +17,7 @@ _env_assignment_is_name_char() {
 }
 
 
+# Perform environment assignment find next reference. Inputs: shell arguments and environment. Output: command status and side effects.
 _env_assignment_find_next_reference() {
     local input="${1-}"
     local input_length="${#input}"
@@ -79,6 +81,7 @@ _env_assignment_find_next_reference() {
 }
 
 
+# Resolve environment assignment value. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_env_assignment_value() {
     local raw_value="${1-}"
     local value="${raw_value}"

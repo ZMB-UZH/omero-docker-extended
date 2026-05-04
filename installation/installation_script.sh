@@ -93,17 +93,20 @@ if declare -F install_transcript_enable >/dev/null 2>&1; then
 fi
 
 if ! declare -F install_transcript_record_line >/dev/null 2>&1; then
+    # Install transcript record line. Inputs: shell arguments and environment. Output: command status and side effects.
     install_transcript_record_line() {
         :
     }
 fi
 
 if ! declare -F install_transcript_record_text >/dev/null 2>&1; then
+    # Install transcript record text. Inputs: shell arguments and environment. Output: command status and side effects.
     install_transcript_record_text() {
         :
     }
 fi
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
     case "${1:-}" in
         ""|*[!0-9]*) return 1 ;;
@@ -112,6 +115,7 @@ is_non_negative_integer() {
 }
 
 
+# Return whether positive integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_positive_integer() {
     local value="${1:-}"
 
@@ -123,6 +127,7 @@ is_positive_integer() {
 }
 
 
+# Return whether shell variable name. Inputs: shell arguments and environment. Output: success or failure status.
 is_shell_variable_name() {
     case "${1:-}" in
         ""|[0-9]*|*[!A-Za-z0-9_]*) return 1 ;;
@@ -131,6 +136,7 @@ is_shell_variable_name() {
 }
 
 
+# Return whether OMERO group name. Inputs: shell arguments and environment. Output: success or failure status.
 is_omero_group_name() {
     case "${1:-}" in
         ""|*[!A-Za-z0-9_.-]*) return 1 ;;
@@ -139,6 +145,7 @@ is_omero_group_name() {
 }
 
 
+# Return whether crowdsec enabled. Inputs: shell arguments and environment. Output: success or failure status.
 is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
     local legacy_placeholder_prefix="CHANGE"
@@ -153,21 +160,25 @@ is_crowdsec_enabled() {
 }
 
 
+# Perform crowdsec install auto restart marker path. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_install_auto_restart_marker_path() {
     printf '%s' "${CROWDSEC_DB_PATH%/}/.install-auto-restart.pending"
 }
 
 
+# Perform crowdsec install enrollment done marker path. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_install_enrollment_done_marker_path() {
     printf '%s' "${CROWDSEC_DB_PATH%/}/.console-enrollment-install.done"
 }
 
 
+# Perform crowdsec has install enrollment done marker. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_has_install_enrollment_done_marker() {
     [ -f "$(crowdsec_install_enrollment_done_marker_path)" ]
 }
 
 
+# Clear crowdsec install enrollment done marker. Inputs: shell arguments and environment. Output: command status and side effects.
 clear_crowdsec_install_enrollment_done_marker() {
     local marker_path=""
 
@@ -186,6 +197,7 @@ clear_crowdsec_install_enrollment_done_marker() {
 }
 
 
+# Perform crowdsec directory has runtime state. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_directory_has_runtime_state() {
     local directory_path="${1:?BUG: crowdsec_directory_has_runtime_state requires a path}"
 
@@ -206,6 +218,7 @@ crowdsec_directory_has_runtime_state() {
 }
 
 
+# Perform crowdsec has preexisting runtime state. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_has_preexisting_runtime_state() {
     if crowdsec_directory_has_runtime_state "${CROWDSEC_CONFIG_PATH}"; then
         return 0
@@ -219,6 +232,7 @@ crowdsec_has_preexisting_runtime_state() {
 }
 
 
+# Prepare crowdsec install bootstrap enrollment. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_crowdsec_install_bootstrap_enrollment() {
     CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
     CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
@@ -247,6 +261,7 @@ prepare_crowdsec_install_bootstrap_enrollment() {
     return 0
 }
 
+# Print crowdsec install bootstrap status. Inputs: shell arguments and environment. Output: stdout text and command status.
 print_crowdsec_install_bootstrap_status() {
     case "${CROWDSEC_INSTALL_BOOTSTRAP_STATUS:-disabled}" in
         disabled)
@@ -268,6 +283,7 @@ print_crowdsec_install_bootstrap_status() {
 }
 
 
+# Load installation paths environment. Inputs: shell arguments and environment. Output: command status and side effects.
 load_installation_paths_env() {
     local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
     local env_line
@@ -305,6 +321,7 @@ load_installation_paths_env() {
     done < "${env_file_path}"
 }
 
+# Load secrets environment. Inputs: shell arguments and environment. Output: command status and side effects.
 load_secrets_env() {
     local secrets_env_file="${1:?BUG: load_secrets_env requires a path}"
 
@@ -319,6 +336,7 @@ load_secrets_env() {
     set +a
 }
 
+# Execute runtime environment contract check. Inputs: shell arguments and environment. Output: command status and side effects.
 run_runtime_env_contract_check() {
     local repo_root="${1:?BUG: run_runtime_env_contract_check requires repo root}"
     shift
@@ -339,6 +357,7 @@ run_runtime_env_contract_check() {
 }
 
 
+# Bootstrap environment files from examples. Inputs: shell arguments and environment. Output: command status and side effects.
 bootstrap_env_files_from_examples() {
     local env_dir="${REPO_ROOT_DIR}/env"
     local example_file actual_file
@@ -366,6 +385,7 @@ bootstrap_env_files_from_examples() {
     done
 }
 
+# Resolve script environment file. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_script_env_file() {
     local default_env_file="${REPO_ROOT_DIR}/installation_paths.env"
 
@@ -420,6 +440,7 @@ do
     set +a
 done
 
+# Require nonempty config variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_nonempty_config_var() {
     local variable_name="$1"
     local variable_source="$2"
@@ -433,6 +454,7 @@ require_nonempty_config_var() {
     return 0
 }
 
+# Require path config variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_path_config_var() {
     local variable_name="$1"
     local variable_source="$2"
@@ -450,6 +472,7 @@ require_path_config_var() {
     return 0
 }
 
+# Validate retry config. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_retry_config() {
     if ! is_positive_integer "${COMPOSE_UP_RETRIES}"; then
         echo "ERROR: COMPOSE_UP_RETRIES must be an integer >= 1. Got: ${COMPOSE_UP_RETRIES}" >&2
@@ -469,6 +492,7 @@ validate_retry_config() {
     return 0
 }
 
+# Validate tcp port config. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_tcp_port_config() {
     local variable_name="${1:?BUG: validate_tcp_port_config requires variable name}"
     local variable_value="${2:-}"
@@ -488,6 +512,7 @@ validate_tcp_port_config() {
     return 0
 }
 
+# Validate crowdsec install auto restart config. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_crowdsec_install_auto_restart_config() {
     if ! is_non_negative_integer "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"; then
         echo "ERROR: CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS must be an integer >= 0. Got: ${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" >&2
@@ -502,6 +527,7 @@ validate_crowdsec_install_auto_restart_config() {
     return 0
 }
 
+# Validate toggle config. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_toggle_config() {
     local variable_name="${1:?BUG: validate_toggle_config requires variable name}"
     local variable_value="${2:-}"
@@ -514,6 +540,7 @@ validate_toggle_config() {
     return 0
 }
 
+# Resolve buildx inline cache setting. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_buildx_inline_cache_setting() {
     if [ -n "${DOCKER_BUILD_INLINE_CACHE:-}" ]; then
         printf '%s' "${DOCKER_BUILD_INLINE_CACHE}"
@@ -524,6 +551,7 @@ resolve_buildx_inline_cache_setting() {
     return 0
 }
 
+# Resolve build provenance setting. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_build_provenance_setting() {
     if [ -n "${DOCKER_BUILD_PROVENANCE:-}" ]; then
         if [ "${DOCKER_BUILD_PROVENANCE}" = "1" ]; then
@@ -545,6 +573,7 @@ resolve_build_provenance_setting() {
 # Cache is controlled by USE_CACHE_BUILD (from the "Use cache?" prompt),
 # which applies to both buildx inline cache and docker build cache.
 # ---------------------------------------------------------------------------
+# Execute image build. Inputs: shell arguments and environment. Output: command status and side effects.
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
@@ -669,6 +698,7 @@ run_image_build() {
     return 0
 }
 
+# Resolve buildx local cache directory. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_buildx_local_cache_dir() {
     if [ -n "${BUILDX_DATA_PATH:-}" ]; then
         printf '%s' "${BUILDX_DATA_PATH}"
@@ -683,6 +713,7 @@ resolve_buildx_local_cache_dir() {
     return 1
 }
 
+# Cleanup local build cache if disabled. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_local_build_cache_if_disabled() {
     local buildx_local_cache_dir=""
 
@@ -722,6 +753,7 @@ cleanup_local_build_cache_if_disabled() {
     return 0
 }
 
+# Perform compose with installation environment. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_with_installation_env() {
     local compose_file="$1"
     shift
@@ -732,12 +764,14 @@ compose_with_installation_env() {
         "$@"
 }
 
+# Perform compose images with installation environment. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_images_with_installation_env() {
     local compose_file="$1"
 
     compose_with_installation_env "${compose_file}" config --images 2>/dev/null || true
 }
 
+# Export compose interpolation environment. Inputs: shell arguments and environment. Output: command status and side effects.
 export_compose_interpolation_env() {
     local env_var_name=""
     local required_compose_env_vars=(
@@ -793,6 +827,7 @@ export_compose_interpolation_env() {
     return 0
 }
 
+# Validate numeric ID. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_numeric_id() {
     local id_label="$1"
     local id_value="$2"
@@ -805,6 +840,7 @@ validate_numeric_id() {
     return 0
 }
 
+# Ensure container writable path. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_container_writable_path() {
     local path_to_prepare="$1"
     local path_label="$2"
@@ -827,6 +863,7 @@ ensure_container_writable_path() {
     return 0
 }
 
+# Print compose failure context. Inputs: shell arguments and environment. Output: stdout text and command status.
 print_compose_failure_context() {
     local compose_file="$1"
 
@@ -862,6 +899,7 @@ print_compose_failure_context() {
     done <<< "${failed_services}"
 }
 
+# Remove stale crowdsec install auto restart marker. Inputs: shell arguments and environment. Output: command status and side effects.
 remove_stale_crowdsec_install_auto_restart_marker() {
     local marker_path="${1:?BUG: remove_stale_crowdsec_install_auto_restart_marker requires a path}"
     local target_epoch=""
@@ -885,6 +923,7 @@ remove_stale_crowdsec_install_auto_restart_marker() {
     return 0
 }
 
+# Resolve crowdsec install auto restart remaining delay. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_crowdsec_install_auto_restart_remaining_delay() {
     local total_delay_seconds="${1:?BUG: resolve_crowdsec_install_auto_restart_remaining_delay requires total delay}"
     local container_name="${2:-crowdsec}"
@@ -918,6 +957,7 @@ resolve_crowdsec_install_auto_restart_remaining_delay() {
     return 0
 }
 
+# Print crowdsec install enrollment notice. Inputs: shell arguments and environment. Output: stdout text and command status.
 print_crowdsec_install_enrollment_notice() {
     local remaining_delay_seconds="${1:?BUG: print_crowdsec_install_enrollment_notice requires delay}"
     local window_minutes=0
@@ -951,6 +991,7 @@ print_crowdsec_install_enrollment_notice() {
     echo ""
 }
 
+# Schedule crowdsec install auto restart. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_crowdsec_install_auto_restart() {
     local helper_path="${CROWDSEC_INSTALL_AUTO_RESTART_HELPER}"
     local marker_path=""
@@ -996,6 +1037,7 @@ EOF
     return 0
 }
 
+# Perform compose up with retries. Inputs: shell arguments and environment. Output: command status and side effects.
 compose_up_with_retries() {
     local compose_file="$1"
     local attempt=1
@@ -1024,6 +1066,7 @@ compose_up_with_retries() {
 }
 
 
+# Normalize OMERO install group list. Inputs: shell arguments and environment. Output: command status and side effects.
 normalize_omero_install_group_list() {
     local raw_group_list="${1:-}"
     local list_without_inline_comment=""
@@ -1048,6 +1091,7 @@ normalize_omero_install_group_list() {
     printf '%s' "${normalized_list}"
 }
 
+# Validate OMERO install group list. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_omero_install_group_list() {
     local raw_group_list="${1:-}"
     local normalized_group_list=""
@@ -1098,6 +1142,7 @@ validate_omero_install_group_list() {
     return 0
 }
 
+# Create OMERO groups from list. Inputs: shell arguments and environment. Output: command status and side effects.
 create_omero_groups_from_list() {
     local compose_file="$1"
     local raw_group_list="${2:-}"
@@ -1160,6 +1205,7 @@ set -euo pipefail
 : "${OMERO_TMP_PATH:?OMERO_TMP_PATH is required}"
 : "${OMERODIR:?OMERODIR is required}"
 
+# Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local candidate=""
     local server_root=""
@@ -1172,6 +1218,7 @@ resolve_omero_bin() {
     return 1
 }
 
+# Resolve cli home. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_cli_home() {
     local cli_home=""
     cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || true)"
@@ -1194,6 +1241,7 @@ mkdir -p "${OMERO_TMPDIR_VALUE}"
 chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${OMERO_TMPDIR_VALUE}"
 chmod 0700 "${OMERO_TMPDIR_VALUE}"
 
+# Execute OMERO cli. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_cli() {
     runuser -u "${OMERO_CLI_USER}" -- env \
         HOME="${OMERO_CLI_HOME}" \
@@ -1243,6 +1291,7 @@ EOS_GROUP_BOOTSTRAP
     return 0
 }
 
+# Add job service to install groups. Inputs: shell arguments and environment. Output: command status and side effects.
 add_job_service_to_install_groups() {
     local compose_file="$1"
     local raw_group_list="${2:-}"
@@ -1303,6 +1352,7 @@ set -euo pipefail
 : "${JOB_SERVICE_USER_RETRIES:?JOB_SERVICE_USER_RETRIES is required}"
 : "${JOB_SERVICE_SYNC_HELPER:?JOB_SERVICE_SYNC_HELPER is required}"
 
+# Resolve server python. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_server_python() {
     local candidate=""
     local server_root=""
@@ -1315,6 +1365,7 @@ resolve_server_python() {
     return 1
 }
 
+# Resolve cli home. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_cli_home() {
     local cli_home=""
     cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || true)"
@@ -1381,6 +1432,7 @@ EOS_JOB_SERVICE
     return 0
 }
 
+# Perform repo root sync stable prefix depth. Inputs: shell arguments and environment. Output: command status and side effects.
 repo_root_sync_stable_prefix_depth() {
     local helper_path="${REPO_ROOT_DIR}/startup/repo_root_sync_helper.py"
 
@@ -1393,6 +1445,7 @@ repo_root_sync_stable_prefix_depth() {
         --repo-template "${CONFIG_omero_fs_repo_path:-}"
 }
 
+# Wait for repo root sync ready. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_repo_root_sync_ready() {
     local started_epoch="${1:?BUG: wait_for_repo_root_sync_ready requires a start epoch}"
     local status_file="${OMERO_SERVER_VAR_PATH%/}/repo-root-sync.status"
@@ -1467,6 +1520,7 @@ wait_for_repo_root_sync_ready() {
     done
 }
 
+# Wait for dropbox ice bootstrap ready. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_dropbox_ice_bootstrap_ready() {
     local started_epoch="${1:?BUG: wait_for_dropbox_ice_bootstrap_ready requires a start epoch}"
     local enabled="${OMERO_DROPBOX_ENABLED:?OMERO_DROPBOX_ENABLED is required}"
@@ -1536,6 +1590,7 @@ wait_for_dropbox_ice_bootstrap_ready() {
     done
 }
 
+# Wait for dropbox user directory sync ready. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_dropbox_user_dir_sync_ready() {
     local started_epoch="${1:?BUG: wait_for_dropbox_user_dir_sync_ready requires a start epoch}"
     local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:?OMERO_DROPBOX_USER_DIR_SYNC_ENABLED is required}"
@@ -1613,6 +1668,7 @@ wait_for_dropbox_user_dir_sync_ready() {
     done
 }
 
+# Stop old installation containers. Inputs: shell arguments and environment. Output: command status and side effects.
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -1707,6 +1763,7 @@ if ! flock -w 15 9; then
     exit 1
 fi
 
+# Return whether valid linux path. Inputs: shell arguments and environment. Output: success or failure status.
 is_valid_linux_path() {
     local path_input="$1"
 
@@ -1721,6 +1778,7 @@ is_valid_linux_path() {
     return 0
 }
 
+# Validate installation path. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_installation_path() {
     local install_path="$1"
 
@@ -1741,6 +1799,7 @@ validate_installation_path() {
     return 0
 }
 
+# Ensure installation path. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_installation_path() {
     local install_path="$1"
 
@@ -1765,6 +1824,7 @@ ensure_installation_path() {
     return 0
 }
 
+# Count top level entries. Inputs: shell arguments and environment. Output: stdout text and command status.
 count_top_level_entries() {
     local target_path="$1"
 
@@ -1776,6 +1836,7 @@ count_top_level_entries() {
     find "${target_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]'
 }
 
+# Perform warn directory not empty. Inputs: shell arguments and environment. Output: command status and side effects.
 warn_directory_not_empty() {
     local target_path="$1"
     local target_label="$2"
@@ -1799,6 +1860,7 @@ warn_directory_not_empty() {
     return 0
 }
 
+# Collect bootstrap sentinel names. Inputs: shell arguments and environment. Output: command status and side effects.
 collect_bootstrap_sentinel_names() {
     (
         local _install_root="${OMERO_INSTALLATION_PATH:-}"
@@ -1854,6 +1916,7 @@ collect_bootstrap_sentinel_names() {
     ) | sort -u
 }
 
+# Collect repo data directory names. Inputs: shell arguments and environment. Output: command status and side effects.
 collect_repo_data_dir_names() {
     local repo_root="${REPO_ROOT_DIR%/}"
 
@@ -1895,6 +1958,7 @@ collect_repo_data_dir_names() {
     ) | sort -u
 }
 
+# Bootstrap installation checkout if missing. Inputs: shell arguments and environment. Output: command status and side effects.
 bootstrap_installation_checkout_if_missing() {
     local install_path="$1"
     local compose_file_path="${install_path%/}/docker-compose.yml"
@@ -2047,6 +2111,7 @@ bootstrap_installation_checkout_if_missing() {
     return 0
 }
 
+# Write compose dot environment. Inputs: shell arguments and environment. Output: command status and side effects.
 write_compose_dot_env() {
     local dot_env_path="${1:?BUG: write_compose_dot_env requires a path}"
 
@@ -2132,6 +2197,7 @@ DOTENV
     echo "Generated docker compose .env file: ${dot_env_path}"
 }
 
+# Derive compose project name. Inputs: shell arguments and environment. Output: command status and side effects.
 derive_compose_project_name() {
     local install_path="${1:?BUG: derive_compose_project_name requires a path}"
     local install_name=""
@@ -2163,6 +2229,7 @@ derive_compose_project_name() {
     printf '%s' "${normalized}"
 }
 
+# Write installation paths environment. Inputs: shell arguments and environment. Output: command status and side effects.
 write_installation_paths_env() {
     local env_file_path="${1:?BUG: write_installation_paths_env requires a path}"
 
@@ -2229,6 +2296,7 @@ ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
 }
+# Verify installation paths environment content. Inputs: shell arguments and environment. Output: command status and side effects.
 verify_installation_paths_env_content() {
     local env_file_path="${1:?BUG: verify_installation_paths_env_content requires a path}"
 
@@ -2284,6 +2352,7 @@ verify_installation_paths_env_content() {
     return 0
 }
 
+# Validate path is preparable. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_path_is_preparable() {
     local path_to_check="$1"
     local path_label="$2"
@@ -2329,6 +2398,7 @@ validate_path_is_preparable() {
     return 0
 }
 
+# Perform tty echo. Inputs: shell arguments and environment. Output: command status and side effects.
 tty_echo() {
     local message="${1:-}"
 
@@ -2338,6 +2408,7 @@ tty_echo() {
     install_transcript_record_line "${message}"
 }
 
+# Perform tty write text. Inputs: shell arguments and environment. Output: command status and side effects.
 tty_write_text() {
     local rendered_message="${1:-}"
 
@@ -2347,6 +2418,7 @@ tty_write_text() {
     install_transcript_record_text "${rendered_message}"
 }
 
+# Perform tty read line. Inputs: shell arguments and environment. Output: command status and side effects.
 tty_read_line() {
     local __result_var="${1:?BUG: tty_read_line requires target variable name}"
     local __tty_read_value=""
@@ -2367,6 +2439,7 @@ tty_read_line() {
     return 0
 }
 
+# Perform prompt for preparable path. Inputs: shell arguments and environment. Output: command status and side effects.
 prompt_for_preparable_path() {
     local default_path="$1"
     local path_label="$2"
@@ -2387,6 +2460,7 @@ prompt_for_preparable_path() {
     done
 }
 
+# Ensure data path. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_data_path() {
     local data_path="$1"
     local path_label="$2"
@@ -2417,6 +2491,7 @@ ensure_data_path() {
 }
 
 
+# Log path snapshot. Inputs: shell arguments and environment. Output: command status and side effects.
 log_path_snapshot() {
     local path_to_check="$1"
     local label="$2"
@@ -2439,6 +2514,7 @@ log_path_snapshot() {
     echo "SNAPSHOT(meta-only, non-recursive): ${label}: top_level_entries=${top_level_entries} owner=${dir_owner} mode=${dir_mode} path=${path_to_check}"
 }
 
+# Resolve delete images choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_delete_images_choice() {
     local reply=""
     local override_choice="${DELETE_IMAGES_CHOICE:-}"
@@ -2485,6 +2561,7 @@ resolve_delete_images_choice() {
     return 0
 }
 
+# Resolve path with default prompt. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_path_with_default_prompt() {
     local default_path="$1"
     local path_label="$2"
@@ -2523,6 +2600,7 @@ resolve_path_with_default_prompt() {
     done
 }
 
+# Perform prompt yes no. Inputs: shell arguments and environment. Output: command status and side effects.
 prompt_yes_no() {
     local prompt_message="$1"
     local default_choice="$2"
@@ -2565,6 +2643,7 @@ prompt_yes_no() {
     done
 }
 
+# Resolve cache build choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_cache_build_choice() {
     local reply=""
     local override_choice="${USE_CACHE_BUILD_CHOICE:-}"
@@ -2606,6 +2685,7 @@ resolve_cache_build_choice() {
     return 0
 }
 
+# Resolve flatten final image choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_flatten_final_image_choice() {
     local reply=""
     local prompt_message=""
@@ -2634,6 +2714,7 @@ resolve_flatten_final_image_choice() {
     return 0
 }
 
+# Resolve security hardening choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_security_hardening_choice() {
     local reply=""
     local override_choice="${SECURITY_HARDENING_CHOICE:-}"
@@ -2682,6 +2763,7 @@ resolve_security_hardening_choice() {
     return 0
 }
 
+# Resolve vulnerability scan choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_vulnerability_scan_choice() {
     local reply=""
     local override_choice="${VULNERABILITY_SCAN_CHOICE:-}"
@@ -2730,6 +2812,7 @@ resolve_vulnerability_scan_choice() {
     return 0
 }
 
+# Resolve buildx compressed build choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_buildx_compressed_build_choice() {
     local reply=""
     local override_choice="${USE_BUILDX_CHOICE:-}"
@@ -2764,6 +2847,7 @@ resolve_buildx_compressed_build_choice() {
     return 0
 }
 
+# Resolve start containers choice. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_start_containers_choice() {
     local reply=""
     local override_choice="${START_CONTAINERS_CHOICE:-}"
@@ -3165,6 +3249,7 @@ _SCOUT_BASELINE_DIR=""
 # Images pulled solely for baseline scanning (removed after report).
 declare -a _SCOUT_PULLED_FOR_BASELINE=()
 
+# Perform scout is available. Inputs: shell arguments and environment. Output: command status and side effects.
 _scout_is_available() {
     command -v docker >/dev/null 2>&1 || return 1
 
@@ -3209,7 +3294,7 @@ _scout_is_available() {
 # _scout_extract_summary <raw_output>
 # Parses Docker Scout CVE output into a compact one-line format:
 #   "73 (9C 58H 63M 51L)"
-# Returns non-zero if parsing fails.
+# Perform scout extract summary. Inputs: shell arguments and environment. Output: command status and side effects.
 _scout_extract_summary() {
     local raw="${1:-}"
     if [ -z "${raw}" ]; then return 1; fi
@@ -3231,7 +3316,7 @@ _scout_extract_summary() {
 }
 
 # _scout_extract_base_image <dockerfile_path>
-# Reads the first FROM instruction and prints the image reference.
+# Perform scout extract base image. Inputs: shell arguments and environment. Output: command status and side effects.
 _scout_extract_base_image() {
     local dockerfile="${1:-}"
     [ -f "${dockerfile}" ] || return 1
@@ -3239,7 +3324,7 @@ _scout_extract_base_image() {
 }
 
 # _scout_scan_image <image_ref> [timeout_seconds]
-# Runs `docker scout cves` and prints raw output.  Returns 1 on failure/timeout.
+# Perform scout scan image. Inputs: shell arguments and environment. Output: command status and side effects.
 _scout_scan_image() {
     local image="${1:-}" scan_timeout="${2:-600}" output=""
     [ -n "${image}" ] || return 1
@@ -3258,6 +3343,7 @@ _scout_scan_image() {
 # already local before pulling are tracked in _SCOUT_PULLED_FOR_BASELINE
 # and removed after the report to avoid stale images.
 # ---------------------------------------------------------------------------
+# Execute docker scout baseline scan. Inputs: shell arguments and environment. Output: command status and side effects.
 run_docker_scout_baseline_scan() {
     # Only scan baselines when cache is disabled (fresh pulls).
     if [ "${USE_CACHE_BUILD}" != "0" ]; then return 0; fi
@@ -3336,6 +3422,7 @@ fi
 #
 # Output is a compact table with one line per image.
 # ---------------------------------------------------------------------------
+# Execute docker scout summary. Inputs: shell arguments and environment. Output: command status and side effects.
 run_docker_scout_summary() {
     echo ""
     echo "============================================================"
@@ -3569,6 +3656,7 @@ echo "Discovering actual UID/GID from built images"
 echo "============================================"
 echo ""
 
+# Discover first existing user or die. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_first_existing_user_or_die() {
     local image="$1"
     shift
@@ -3605,6 +3693,7 @@ discover_first_existing_user_or_die() {
     return 0
 }
 
+# Discover uid gid or die. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_uid_gid_or_die() {
     local image="$1"
     local user_name="$2"
@@ -3633,6 +3722,7 @@ discover_uid_gid_or_die() {
 }
 
 
+# Resolve service image from compose or die. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_service_image_from_compose_or_die() {
     local compose_file="$1"
     local service_name="$2"
@@ -3668,6 +3758,7 @@ resolve_service_image_from_compose_or_die() {
     return 0
 }
 
+# Discover uid gid from passwd or die. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_uid_gid_from_passwd_or_die() {
     local image="$1"
     local user_name="$2"
@@ -3721,6 +3812,7 @@ discover_uid_gid_from_passwd_or_die() {
     return 1
 }
 
+# Discover container default ID or die. Inputs: shell arguments and environment. Output: command status and side effects.
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
@@ -3734,6 +3826,7 @@ discover_container_default_id_or_die() {
     local resolved_uid=""
     local resolved_gid=""
 
+    # Probe effective runtime IDs from proc. Inputs: shell arguments and environment. Output: command status and side effects.
     probe_effective_runtime_ids_from_proc() {
         local probe_image="$1"
         local probe_container=""
@@ -3991,6 +4084,7 @@ echo "Fixing host bind-mount ownership based on actual UID/GID"
 echo "========================================================"
 echo ""
 
+# Chown tree or die. Inputs: shell arguments and environment. Output: command status and side effects.
 chown_tree_or_die() {
     local path="$1"
     local label="$2"
@@ -4014,6 +4108,7 @@ chown_tree_or_die() {
     return 0
 }
 
+# Ensure OMERO temporary layout. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_omero_tmp_layout() {
     local tmp_root="$1"
     local web_uid="$2"
@@ -4138,7 +4233,7 @@ fi
 # quotas.  When all prerequisites are met the host-side systemd timer
 # is installed automatically.  When not, a non-blocking info message
 # is printed and the Quotas tab in Admin Tools will be disabled.
-# =====================================================
+# Install quota enforcer if supported. Inputs: shell arguments and environment. Output: command status and side effects.
 install_quota_enforcer_if_supported() {
     local omero_user_data_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
@@ -4263,7 +4358,7 @@ fi
 # IMPORTANT:
 # - This replaces all previous "cleanup on page load" mechanisms in plugins.
 # - Immediate cleanup after successful jobs is handled inside the plugins.
-# =====================================================
+# Install temporary cleaner if available. Inputs: shell arguments and environment. Output: command status and side effects.
 install_tmp_cleaner_if_available() {
     local omero_tmp_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-tmp-cleaner.sh"
@@ -4307,6 +4402,7 @@ install_tmp_cleaner_if_available() {
     return 0
 }
 
+# Print binary repository cleanse notice. Inputs: shell arguments and environment. Output: stdout text and command status.
 print_binary_repository_cleanse_notice() {
     local startup_state="${1:?BUG: print_binary_repository_cleanse_notice requires startup state}"
     local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"

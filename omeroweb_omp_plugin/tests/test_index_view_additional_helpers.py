@@ -9,15 +9,28 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self.val`.
+        """
         return self.val
 
 
 def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatch):
-    """Verify test owner permission and group helpers cover behavior."""
+    """Verify owner permission and group helpers cover remaining fallbacks.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     plain_owner = SimpleNamespace(getId=lambda: 17)
     details_obj = SimpleNamespace(
         getDetails=lambda: SimpleNamespace(getOwner=lambda: plain_owner)
@@ -105,6 +118,10 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
         """Represent missing attr permissions."""
 
         def __getattr__(self, name):
+            """Return a dynamic attribute value by name.
+
+            Inputs: `name`. Output: None. Raises on invalid or unavailable state.
+            """
             raise AttributeError(name)
 
     class _FailingPermissions:
@@ -112,7 +129,10 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
         @staticmethod
         def failing():
-            """Handle failing."""
+            """Failing.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("flag failed")
 
     assert index_view._permissions_flag(_MissingAttrPermissions(), "isRead") is False
@@ -165,22 +185,34 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 
         @staticmethod
         def getMemberCount():
-            """Return get member count."""
+            """Return Member Count.
+
+            Inputs: none. Output: `SimpleNamespace` result.
+            """
             return SimpleNamespace(val="bad")
 
         @staticmethod
         def getMembers():
-            """Return get members."""
+            """Return Members.
+
+            Inputs: none. Output: `object` result.
+            """
             return object()
 
         @staticmethod
         def getExperimenters():
-            """Return get experimenters."""
+            """Return Experimenters.
+
+            Inputs: none. Output: `object` result.
+            """
             return object()
 
         @staticmethod
         def getExperimenterIds():
-            """Return get experimenter identifiers."""
+            """Return Experimenter IDs.
+
+            Inputs: none. Output: `object` result.
+            """
             return object()
 
     bad_count_group = _BadCountGroup()
@@ -216,7 +248,13 @@ def test_owner_permission_and_group_helpers_cover_remaining_fallbacks(monkeypatc
 def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
     monkeypatch,
 ):
-    """Verify test project iteration payload and wrapper he behavior."""
+    """Verify project iteration payload and wrapper helpers cover remaining paths.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     assert list(index_view._iter_accessible_projects(None)) == []
 
     all_groups_project = SimpleNamespace(name="all-groups")
@@ -225,15 +263,25 @@ def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
         """Represent service opts."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.current_group = "4"
             self.restore_failed = False
 
         def getOmeroGroup(self):
-            """Return get OMERO group."""
+            """Return OMERO Group.
+
+            Inputs: none. Output: `self.current_group`.
+            """
             return self.current_group
 
         def setOmeroGroup(self, value):
-            """Store set OMERO group."""
+            """Set OMERO Group.
+
+            Inputs: `value`. Output: None. Raises on invalid or unavailable state.
+            """
             if value == "4" and self.restore_failed:
                 raise RuntimeError("restore failed")
             self.current_group = value
@@ -257,12 +305,19 @@ def test_project_iteration_payload_and_wrapper_helpers_cover_remaining_paths(
 
         @staticmethod
         def getObjects(object_type, opts=None):
-            """Return get objects."""
+            """Return Objects.
+
+            Inputs: `object_type`, `opts`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise RuntimeError("query failed")
 
         @staticmethod
         def listProjects():
-            """Return list projects."""
+            """Return list projects.
+
+            Inputs: none. Output: list.
+            """
             return [SimpleNamespace(name="listed")]
 
     assert [

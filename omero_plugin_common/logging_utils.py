@@ -9,7 +9,10 @@ _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
 
 
 def _safe_text(value: Any) -> str:
-    """Handle safe text."""
+    """Return safe text.
+
+    Inputs: `value`. Output: `str`.
+    """
     try:
         return str(value)
     except Exception:
@@ -19,6 +22,8 @@ def _safe_text(value: Any) -> str:
 def sanitize_log_value(value: Any) -> str:
     """Return a single-line representation safe for structured log sinks.
 
+    Inputs: `value`. Output: `str`.
+
     Replaces carriage return and newline characters to prevent log injection
     (forged extra log lines) when logging untrusted input.
     """
@@ -27,7 +32,10 @@ def sanitize_log_value(value: Any) -> str:
 
 
 def summarize_process_output(stdout: Any, stderr: Any) -> str:
-    """Return a low-sensitivity summary of command output for logs."""
+    """Return a low-sensitivity summary of command output for logs.
+
+    Inputs: `stdout`, `stderr`. Output: `str`.
+    """
     stdout_text = _safe_text("" if stdout is None else stdout)
     stderr_text = _safe_text("" if stderr is None else stderr)
     return (
@@ -56,7 +64,10 @@ _REDACTED_VALUE = "REDACTED"
 
 
 def _quote_userinfo(value: str) -> str:
-    """Handle quote userinfo."""
+    """Quote userinfo.
+
+    Inputs: `value`. Output: `str`.
+    """
     try:
         return quote(value, safe="")
     except UnicodeError:
@@ -64,7 +75,10 @@ def _quote_userinfo(value: str) -> str:
 
 
 def _redacted_netloc(parsed) -> str:
-    """Handle redacted netloc."""
+    """Redacted netloc.
+
+    Inputs: `parsed`. Output: `str`.
+    """
     hostname = parsed.hostname or ""
     if ":" in hostname and not hostname.startswith("["):
         hostname = f"[{hostname}]"
@@ -79,7 +93,10 @@ def _redacted_netloc(parsed) -> str:
 
 
 def _redact_query(query: str) -> str:
-    """Handle redact query."""
+    """Redact query.
+
+    Inputs: `query`. Output: `str`.
+    """
     pairs = [
         (key, _REDACTED_VALUE if key.lower() in _SENSITIVE_QUERY_KEYS else value)
         for key, value in parse_qsl(query, keep_blank_values=True)
@@ -88,7 +105,10 @@ def _redact_query(query: str) -> str:
 
 
 def sanitize_url_for_logging(url: Any) -> str:
-    """Return a URL with obvious credentials redacted for logging."""
+    """Return a URL with obvious credentials redacted for logging.
+
+    Inputs: `url`. Output: `str`.
+    """
     raw = _safe_text("" if url is None else url).strip()
     if not raw:
         return ""
@@ -111,7 +131,10 @@ def sanitize_url_for_logging(url: Any) -> str:
 
 
 def sanitized_exc_info(exc: BaseException):
-    """Return exc_info with sanitized exception text while preserving traceback."""
+    """Return exc_info with sanitized exception text while preserving traceback.
+
+    Inputs: `exc`. Output: tuple.
+    """
     safe_message = sanitize_log_value(exc)
     exc_type = type(exc)
     try:
@@ -125,17 +148,25 @@ def sanitized_exc_info(exc: BaseException):
 
 
 def _gateway_logging_configured() -> bool:
-    """Handle gateway logging configured."""
+    """Gateway logging configured.
+
+    Inputs: none. Output: `bool`.
+    """
     return bool(getattr(configure_omero_gateway_logging, "_configured", False))
 
 
 def _set_gateway_logging_configured(configured: bool) -> None:
-    """Handle set gateway logging configured."""
+    """Set gateway logging configured.
+
+    Inputs: `configured`. Output: None.
+    """
     setattr(configure_omero_gateway_logging, "_configured", configured)
 
 
 def configure_omero_gateway_logging() -> None:
     """Reduce noisy OMERO gateway debug logs in production web logs.
+
+    Inputs: none. Output: None.
 
     OMERO's ``setOmeroShare()`` helper emits a debug line on every regular
     non-share request because ``omero.share`` is not present in default

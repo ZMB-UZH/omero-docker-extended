@@ -20,12 +20,18 @@ JSON_OBJECT_REQUIRED_ERROR = "Request body must be a JSON object."
 
 
 def current_username(request, conn):
-    """Handle current username."""
+    """Return current username.
+
+    Inputs: `request`, `conn`. Output: `_current_username` result.
+    """
     return _current_username(request, conn)
 
 
 def load_json_body(request):
-    """Return load JSON body."""
+    """Return load JSON body.
+
+    Inputs: `request`. Output: tuple.
+    """
     payload, error = parse_json_body(request)
     if error:
         return None, error
@@ -33,7 +39,10 @@ def load_json_body(request):
 
 
 def load_json_object(request):
-    """Return load JSON object."""
+    """Return load JSON object.
+
+    Inputs: `request`. Output: tuple.
+    """
     payload, error = load_json_body(request)
     if error:
         return None, error
@@ -43,10 +52,17 @@ def load_json_object(request):
 
 
 def require_non_root_user(view_func):
-    """Handle require non root user."""
+    """Non root user.
+
+    Inputs: `view_func`. Output: computed value.
+    """
 
     @wraps(view_func)
     def _wrapped(request, *args, conn=None, url=None, **kwargs):
+        """Wrapped.
+
+        Inputs: `request`, `conn`, `url`, `*args`, `**kwargs`. Output: computed value.
+        """
         remaining_args = args
         if remaining_args and conn is None:
             conn = remaining_args[0]
@@ -68,7 +84,10 @@ def require_non_root_user(view_func):
 
 
 def resolve_omero_host_port(conn):
-    """Return resolve OMERO host port."""
+    """Return resolve OMERO host port.
+
+    Inputs: `conn`. Output: tuple.
+    """
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
     if not host:
@@ -89,7 +108,10 @@ def resolve_omero_host_port(conn):
 
 
 def validate_user_password(conn, password):
-    """Validate validate user password."""
+    """Validate user password.
+
+    Inputs: `conn`, `password`. Output: tuple.
+    """
     if not password:
         return False, "Password is required."
     username = current_username(None, conn)

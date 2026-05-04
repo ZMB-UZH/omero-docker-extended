@@ -10,10 +10,17 @@ class _ValueBox:
     """Represent value box."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._value`.
+        """
         return self._value
 
 
@@ -22,10 +29,17 @@ class _BrokenValueBox:
 
     @staticmethod
     def getValue():
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("boom")
 
     def __str__(self) -> str:
+        """Return the string representation.
+
+        Inputs: none. Output: `str`.
+        """
         return "fallback-text"
 
 
@@ -33,29 +47,48 @@ class _OwnerStub:
     """Represent owner stub."""
 
     def __init__(self, owner_id, *, ome_name=None, name=None, first_name=None):
+        """Initialize the instance.
+
+        Inputs: `owner_id`, `ome_name`, `name`, `first_name`. Output: None.
+        """
         self._owner_id = owner_id
         self._ome_name = ome_name
         self._name = name
         self._first_name = first_name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_ValueBox` result.
+        """
         return _ValueBox(self._owner_id)
 
     def getOmeName(self):
-        """Return get ome name."""
+        """Return the fake OMERO name.
+
+        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
+        state.
+        """
         if self._ome_name is None:
             raise AttributeError("missing ome name")
         return _ValueBox(self._ome_name)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
+        state.
+        """
         if self._name is None:
             raise AttributeError("missing display name")
         return _ValueBox(self._name)
 
     def getFirstName(self):
-        """Return get first name."""
+        """Return the fake first name.
+
+        Inputs: none. Output: `_ValueBox` result. Raises on invalid or unavailable
+        state.
+        """
         if self._first_name is None:
             raise AttributeError("missing first name")
         return _ValueBox(self._first_name)
@@ -66,7 +99,10 @@ class _OwnerWithBrokenId:
 
     @staticmethod
     def getId():
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("broken owner id")
 
 
@@ -74,15 +110,25 @@ class _DetailsStub:
     """Represent details stub."""
 
     def __init__(self, *, owner=None, permissions=None):
+        """Initialize the instance.
+
+        Inputs: `owner`, `permissions`. Output: None.
+        """
         self._owner = owner
         self._permissions = permissions
 
     def getOwner(self):
-        """Return get owner."""
+        """Return the fake owner.
+
+        Inputs: none. Output: `self._owner`.
+        """
         return self._owner
 
     def getPermissions(self):
-        """Return get permissions."""
+        """Return fake permissions.
+
+        Inputs: none. Output: `self._permissions`.
+        """
         return self._permissions
 
 
@@ -90,20 +136,33 @@ class _PermissionsStub:
     """Represent permissions stub."""
 
     def __init__(self, *, can_read, can_write):
+        """Initialize the instance.
+
+        Inputs: `can_read`, `can_write`. Output: None.
+        """
         self._can_read = can_read
         self._can_write = can_write
 
     def isRead(self):
-        """Handle is read."""
+        """Return whether Read.
+
+        Inputs: none. Output: `self._can_read`.
+        """
         return self._can_read
 
     def isWrite(self):
-        """Handle is write."""
+        """Return whether Write.
+
+        Inputs: none. Output: `self._can_write`.
+        """
         return self._can_write
 
 
 def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permissions():
-    """Verify test OMERO helper accessors cover value resol behavior."""
+    """Verify OMERO helper accessors cover value resolution owner fallbacks and permissions.
+
+    Inputs: none. Output: None.
+    """
     internal = SimpleNamespace(_obj=SimpleNamespace(id=SimpleNamespace(val=17)))
     via_method = SimpleNamespace(getId=lambda: _ValueBox(42))
     missing = SimpleNamespace(
@@ -199,7 +258,10 @@ def test_omero_helper_accessors_cover_value_resolution_owner_fallbacks_and_permi
 
 
 def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_payload_keys():
-    """Verify test request and string helpers cover user re behavior."""
+    """Verify request and string helpers cover user resolution JSON fallbacks and payload keys.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     conn = SimpleNamespace(
         getUser=lambda: SimpleNamespace(getName=lambda: "omero-user")
     )
@@ -214,7 +276,10 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
 
         @staticmethod
         def getUser():
-            """Return get user."""
+            """Return the fake user.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("connection unavailable")
 
     assert request_utils.current_username(request, conn) == "omero-user"
@@ -252,18 +317,31 @@ def test_request_and_string_helpers_cover_user_resolution_json_fallbacks_and_pay
 
 
 def test_omero_helper_debug_logs_sanitize_exception_text(caplog):
-    """Verify test OMERO helper debug logs sanitize excepti behavior."""
+    """Verify OMERO helper debug logs sanitize exception text.
+
+    Inputs: `caplog`. Output: `_ValueBox` result. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class ObjectWithUnsafeInternalId:
         """Represent object with unsafe internal identifier."""
 
         @property
         def _obj(self):
+            """Obj.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad\nid")
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: `_ValueBox` result.
+            """
             return _ValueBox(31)
 
     caplog.set_level(logging.DEBUG, logger=omero_helpers.__name__)

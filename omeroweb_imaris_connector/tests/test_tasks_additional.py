@@ -13,7 +13,10 @@ TEST_SERVICE_AUTH_VALUE = "job-auth-fixture"
 
 
 def _install_omero_stubs() -> None:
-    """Handle install OMERO stubs."""
+    """Install OMERO stubs.
+
+    Inputs: none. Output: None.
+    """
     omero_module = types.ModuleType("omero")
     omero_module.ClientError = type("ClientError", (Exception,), {})
     omero_module.SecurityViolation = type("SecurityViolation", (Exception,), {})
@@ -32,26 +35,42 @@ def _install_omero_stubs() -> None:
 
 
 def _install_celery_stubs() -> None:
-    """Handle install celery stubs."""
+    """Install celery stubs.
+
+    Inputs: none. Output: None.
+    """
     celery_module = types.ModuleType("celery")
 
     class _DummyCelery:
         """Test double for dummy celery."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None.
+            """
             self.conf = types.SimpleNamespace(update=lambda **_kwargs: None)
 
         @staticmethod
         def autodiscover_tasks(*_args, **_kwargs):
-            """Handle autodiscover tasks."""
+            """Autodiscover tasks.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None.
+            """
             return None
 
         @staticmethod
         def task(*args, **kwargs):
-            """Handle task."""
+            """Task.
+
+            Inputs: `*args`, `**kwargs`. Output: computed value.
+            """
 
             def _decorator(fn):
-                """Handle decorator."""
+                """Decorator.
+
+                Inputs: `fn`. Output: `fn`.
+                """
                 return fn
 
             return _decorator
@@ -70,7 +89,10 @@ def _install_celery_stubs() -> None:
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Handle set required env."""
+    """Set required environment.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     values = {
         "OMERO_IMS_USE_CELERY": "true",
         "OMERO_IMS_USE_JOB_SERVICE_SESSION": "true",
@@ -97,7 +119,10 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_tasks(monkeypatch: pytest.MonkeyPatch):
-    """Handle import tasks."""
+    """Import tasks.
+
+    Inputs: `monkeypatch`. Output: `tasks`.
+    """
     _set_required_env(monkeypatch)
     _install_omero_stubs()
     _install_celery_stubs()
@@ -116,7 +141,10 @@ def _import_tasks(monkeypatch: pytest.MonkeyPatch):
 def test_cli_resolution_output_parsing_and_connection_session_key(
     monkeypatch, tmp_path
 ):
-    """Verify test cli resolution output parsing and connec behavior."""
+    """Verify cli resolution output parsing and connection session key.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
@@ -161,7 +189,10 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
 def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     monkeypatch, tmp_path, caplog
 ):
-    """Verify test run script via OMERO cli covers success behavior."""
+    """Verify run script via OMERO cli covers success and failure paths.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: `types.SimpleNamespace` result.
+    """
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
@@ -171,7 +202,11 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     captured = {}
 
     def successful_run(cmd, *, timeout, check, env, **_kwargs):
-        """Handle successful run."""
+        """Successful run.
+
+        Inputs: `cmd`, `timeout`, `check`, `env`, `**_kwargs`. Output:
+        `types.SimpleNamespace` result.
+        """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
         captured["env"] = {
@@ -250,7 +285,10 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
 
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
-    """Verify test session and job service connections cove behavior."""
+    """Verify session and job service connections cover success and validation.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
     tasks = _import_tasks(monkeypatch)
     detach_calls = []
     join_calls = []
@@ -260,7 +298,10 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
 
         @staticmethod
         def joinSession(session_key):
-            """Handle join session."""
+            """Join session.
+
+            Inputs: `session_key`. Output: `types.SimpleNamespace` result.
+            """
             join_calls.append(session_key)
             return types.SimpleNamespace(
                 detachOnDestroy=lambda: detach_calls.append(True)
@@ -270,6 +311,10 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
         """Test double for dummy gateway."""
 
         def __init__(self, *args, **kwargs):
+            """Initialize the instance.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
             self.kwargs = kwargs
             self.connected = kwargs.get("host") == "omeroserver"
             self.SERVICE_OPTS = types.SimpleNamespace(
@@ -277,7 +322,10 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
             )
 
         def connect(self):
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: `self.connected`.
+            """
             return self.connected
 
     monkeypatch.setattr(
@@ -316,7 +364,10 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
 def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
     monkeypatch, tmp_path
 ):
-    """Verify test run IMS export task updates failure meta behavior."""
+    """Verify run IMS export task updates failure meta and closes connections.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     tasks = _import_tasks(monkeypatch)
     updates = []
     closed = []
@@ -361,7 +412,10 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
 def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     monkeypatch, tmp_path
 ):
-    """Verify test task helpers cover cli resolution connec behavior."""
+    """Verify task helpers cover cli resolution connection errors and success.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: bool.
+    """
     tasks = _import_tasks(monkeypatch)
 
     monkeypatch.setattr(tasks.os.path, "exists", lambda path: False)
@@ -436,11 +490,18 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         """Represent failing gateway."""
 
         def __init__(self, *args, **kwargs):
+            """Initialize the instance.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=lambda value: None)
 
         @staticmethod
         def connect():
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: none. Output: bool.
+            """
             return False
 
     monkeypatch.setattr(tasks, "BlitzGateway", _FailingGateway)
@@ -534,7 +595,10 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
 def test_task_helpers_cover_security_validation_and_close_warning_paths(
     monkeypatch,
 ):
-    """Verify test task helpers cover security validation a behavior."""
+    """Verify task helpers cover security validation and close warning paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     tasks = _import_tasks(monkeypatch)
 
     assert tasks._get_connection_session_key(None) is None

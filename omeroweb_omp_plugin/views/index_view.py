@@ -43,7 +43,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_owner_id(obj):
-    """Handle get owner identifier."""
+    """Return owner ID.
+
+    Inputs: `obj`. Output: computed value or None.
+    """
     if obj is None:
         return None
     try:
@@ -65,7 +68,10 @@ def _get_owner_id(obj):
 
 
 def _current_user_id(conn):
-    """Handle current user identifier."""
+    """Return current user ID.
+
+    Inputs: `conn`. Output: computed value or None.
+    """
     try:
         user = conn.getUser()
         if user is not None:
@@ -77,7 +83,10 @@ def _current_user_id(conn):
 
 
 def _is_owned_by_user(obj, user_id):
-    """Handle is owned by user."""
+    """Return whether owned by user.
+
+    Inputs: `obj`, `user_id`. Output: bool.
+    """
     if obj is None or user_id is None:
         return False
     owner_id = _get_owner_id(obj)
@@ -90,7 +99,10 @@ def _is_owned_by_user(obj, user_id):
 
 
 def _get_owner_username(obj):
-    """Handle get owner username."""
+    """Return owner username.
+
+    Inputs: `obj`. Output: computed value.
+    """
     if obj is None:
         return ""
     owner = None
@@ -127,7 +139,10 @@ def _get_owner_username(obj):
 
 
 def _get_permissions(obj):
-    """Handle get permissions."""
+    """Return permissions.
+
+    Inputs: `obj`. Output: `permissions` or None.
+    """
     try:
         details = obj.getDetails()
         permissions = details.getPermissions() if details else None
@@ -148,7 +163,10 @@ def _get_permissions(obj):
 
 
 def _permissions_flag(permissions, attr):
-    """Handle permissions flag."""
+    """Permissions flag.
+
+    Inputs: `permissions`, `attr`. Output: computed value.
+    """
     try:
         flag = getattr(permissions, attr)
     except Exception:
@@ -162,7 +180,10 @@ def _permissions_flag(permissions, attr):
 
 
 def _has_read_write_permissions(obj):
-    """Handle has read write permissions."""
+    """Return whether read write permissions.
+
+    Inputs: `obj`. Output: bool.
+    """
     permissions = _get_permissions(obj)
     if permissions is None:
         return False
@@ -172,7 +193,10 @@ def _has_read_write_permissions(obj):
 
 
 def _has_read_annotate_permissions(obj):
-    """Handle has read annotate permissions."""
+    """Return whether read annotate permissions.
+
+    Inputs: `obj`. Output: bool.
+    """
     permissions = _get_permissions(obj)
     if permissions is None:
         return False
@@ -185,7 +209,10 @@ def _has_read_annotate_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
-    """Handle iter accessible projects."""
+    """Accessible projects.
+
+    Inputs: `conn`. Output: yielded values.
+    """
     if conn is None:
         return
     current_group = None
@@ -238,7 +265,10 @@ def _iter_accessible_projects(conn):
 
 
 def _iter_member_groups(conn):
-    """Handle iter member groups."""
+    """Member groups.
+
+    Inputs: `conn`. Output: computed value.
+    """
     if conn is None:
         return []
     try:
@@ -259,7 +289,10 @@ def _iter_member_groups(conn):
 
 
 def _group_member_count(conn, group):
-    """Handle group member count."""
+    """Group member count.
+
+    Inputs: `conn`, `group`. Output: computed value.
+    """
     for attr in (
         "getMemberCount",
         "getMembers",
@@ -299,13 +332,19 @@ def _group_member_count(conn, group):
 
 
 def _group_has_other_members(conn, group):
-    """Handle group has other members."""
+    """Group has other members.
+
+    Inputs: `conn`, `group`. Output: bool.
+    """
     count = _group_member_count(conn, group)
     return count > 1
 
 
 def _group_is_read_write(group):
-    """Check if group has read-write permissions (RWRW-- or similar)"""
+    """If group has read-write permissions (RWRW-- or similar).
+
+    Inputs: `group`. Output: bool.
+    """
     permissions = _get_permissions(group)
     if permissions is None:
         return False
@@ -327,7 +366,10 @@ def _group_is_read_write(group):
 
 
 def _group_is_read_annotate(group):
-    """Check if group has read-annotate permissions (RWRA-- or similar)"""
+    """If group has read-annotate permissions (RWRA-- or similar).
+
+    Inputs: `group`. Output: bool.
+    """
     permissions = _get_permissions(group)
     if permissions is None:
         return False
@@ -348,7 +390,10 @@ def _group_is_read_annotate(group):
 
 
 def _has_collaboration_groups(conn):
-    """Handle has collaboration groups."""
+    """Return whether collaboration groups.
+
+    Inputs: `conn`. Output: bool.
+    """
     for group in _iter_member_groups(conn):
         if not _group_has_other_members(conn, group):
             continue
@@ -358,7 +403,10 @@ def _has_collaboration_groups(conn):
 
 
 def _get_object_group(obj):
-    """Get the group that an object (project/dataset/image) belongs to"""
+    """Return object group.
+
+    Inputs: `obj`. Output: `group` or None.
+    """
     try:
         details = obj.getDetails()
         if details:
@@ -370,7 +418,10 @@ def _get_object_group(obj):
 
 
 def _is_user_in_group(conn, group_id, user_id):
-    """Check if a user is a member of a specific group"""
+    """Return whether user in group.
+
+    Inputs: `conn`, `group_id`, `user_id`. Output: bool.
+    """
     if group_id is None or user_id is None:
         return False
     try:
@@ -384,7 +435,10 @@ def _is_user_in_group(conn, group_id, user_id):
 
 
 def _collect_project_payload(conn, user_id):
-    """Handle collect project payload."""
+    """Collect project payload.
+
+    Inputs: `conn`, `user_id`. Output: dict.
+    """
     owned_projects = []
     collab_projects = []
     annotate_projects = []
@@ -446,7 +500,10 @@ def _collect_project_payload(conn, user_id):
 
 
 def _get_accessible_project(conn, project_id, user_id):
-    """Handle get accessible project."""
+    """Return accessible project.
+
+    Inputs: `conn`, `project_id`, `user_id`. Output: tuple.
+    """
     if not project_id:
         return None, None
     try:
@@ -471,12 +528,18 @@ def _get_accessible_project(conn, project_id, user_id):
 
 
 def _suggest_separator_regex(filenames):
-    """Handle suggest separator regex."""
+    """Suggest separator regex.
+
+    Inputs: `filenames`. Output: `suggest_separator_regex` result.
+    """
     return suggest_separator_regex(filenames)
 
 
 def _safe_index_messages_json():
-    """Handle safe index messages JSON."""
+    """Return safe index messages JSON.
+
+    Inputs: none. Output: computed value.
+    """
     try:
         return json.dumps(messages.index_messages())
     except Exception as exc:
@@ -492,7 +555,10 @@ def _safe_index_messages_json():
 @require_non_root_user
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
-    """OMP filename+metadata harverster UI"""
+    """OMP filename+metadata harverster UI.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     projects: dict[str, list[Any]] = {
         "owned": [],
         "read_annotate": [],
@@ -501,7 +567,10 @@ def index(request, conn=None, _url=None, **kwargs):
     user_id = None
 
     def build_index_context(extra=None):
-        """Build build index context."""
+        """Index context.
+
+        Inputs: `extra`. Output: `context`.
+        """
         context = {
             "projects": projects,
             "error_message": "",
@@ -1126,7 +1195,10 @@ def index(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def list_projects(request, conn=None, _url=None, **kwargs):
-    """Return list projects."""
+    """Return list projects.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload)
@@ -1134,6 +1206,9 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
-    """Handle root status."""
+    """Root status.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

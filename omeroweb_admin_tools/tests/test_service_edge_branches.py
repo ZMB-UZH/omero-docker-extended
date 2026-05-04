@@ -16,6 +16,10 @@ class _FakeDockerResponse:
     """Test double for fake docker response."""
 
     def __init__(self, status: int, payload: bytes):
+        """Initialize the instance.
+
+        Inputs: `status`, `payload`. Output: None.
+        """
         self.status = status
         self.status_code = status
         self._payload = payload
@@ -23,7 +27,10 @@ class _FakeDockerResponse:
         self.text = payload.decode("utf-8", errors="replace")
 
     def read(self):
-        """Return read."""
+        """Read data from the resource.
+
+        Inputs: none. Output: `self._payload`.
+        """
         return self._payload
 
 
@@ -31,26 +38,42 @@ class _FakeDockerConnection:
     """Test double for fake docker connection."""
 
     def __init__(self, response=None, *, request_error=None):
+        """Initialize the instance.
+
+        Inputs: `response`, `request_error`. Output: None.
+        """
         self._response = response
         self._request_error = request_error
         self.closed = False
 
     def request(self, method, path):
-        """Handle request."""
+        """Request.
+
+        Inputs: `method`, `path`. Output: None. Raises on invalid or unavailable state.
+        """
         if self._request_error is not None:
             raise self._request_error
 
     def getresponse(self):
-        """Return getresponse."""
+        """Return the HTTP response.
+
+        Inputs: none. Output: `self._response`.
+        """
         return self._response
 
     def close(self):
-        """Handle close."""
+        """Close the resource.
+
+        Inputs: none. Output: None.
+        """
         self.closed = True
 
 
 def _log_config(url: str = "https://loki:3100") -> LogConfig:
-    """Handle log config."""
+    """Log config.
+
+    Inputs: `url`. Output: `LogConfig`.
+    """
     return LogConfig(
         loki_url=url,
         lookback_seconds=900,
@@ -65,7 +88,13 @@ def _log_config(url: str = "https://loki:3100") -> LogConfig:
 def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
     monkeypatch, tmp_path
 ):
-    """Verify test system diagnostics helpers cover cached behavior."""
+    """Verify system diagnostics helpers cover cached runtime and socket edges.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `real_import` result. Raises on invalid
+    or unavailable state.
+
+    or unavailable state.
+    """
     monkeypatch.setenv("FLOAT_ENV", "not-a-number")
     assert system_diagnostics._to_float_env("FLOAT_ENV", 2.5) == 2.5
 
@@ -90,7 +119,13 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
         real_import = builtins.__import__
 
         def _fake_import(name, *args, **kwargs):
-            """Handle fake import."""
+            """Fake import.
+
+            Inputs: `name`, `*args`, `**kwargs`. Output: `real_import` result. Raises on
+            invalid or unavailable state.
+
+            invalid or unavailable state.
+            """
             if name == "psycopg2":
                 raise ImportError("missing psycopg2")
             return real_import(name, *args, **kwargs)
@@ -120,15 +155,25 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
         """Test double for fake socket."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.timeout = None
             self.connected_path = None
 
         def settimeout(self, timeout):
-            """Store settimeout."""
+            """Set the socket timeout.
+
+            Inputs: `timeout`. Output: None.
+            """
             self.timeout = timeout
 
         def connect(self, path):
-            """Handle connect."""
+            """Open the connection.
+
+            Inputs: `path`. Output: None.
+            """
             self.connected_path = path
 
     fake_socket = _FakeSocket()
@@ -238,7 +283,10 @@ def test_system_diagnostics_helpers_cover_cached_runtime_and_socket_edges(
 
 
 def test_log_query_helpers_cover_validation_inference_and_job_execution(monkeypatch):
-    """Verify test log query helpers cover validation infer behavior."""
+    """Verify log query helpers cover validation inference and job execution.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     assert log_query_module._estimate_log_entries_size("invalid") == 0
     assert log_query_module._estimate_log_entries_size((object(),)) == 0
     assert log_query_module._estimate_label_cache_size(("only-one-item",)) == 0

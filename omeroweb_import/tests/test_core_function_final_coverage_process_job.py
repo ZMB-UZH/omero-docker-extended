@@ -19,12 +19,18 @@ class _Lock:
 
     @staticmethod
     def acquire(timeout=None):
-        """Handle acquire."""
+        """Acquire the lock.
+
+        Inputs: `timeout`. Output: bool.
+        """
         return True
 
     @staticmethod
     def release():
-        """Handle release."""
+        """Release the lock.
+
+        Inputs: none. Output: None.
+        """
         return None
 
 
@@ -32,30 +38,49 @@ class _ImportedImage:
     """Represent imported image."""
 
     def __init__(self, image_id: int, name: str):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `name`. Output: None.
+        """
         self.id = image_id
         self._name = name
         self.saved = 0
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def setName(self, name):
-        """Store set name."""
+        """Set Name.
+
+        Inputs: `name`. Output: None.
+        """
         self._name = name
 
     def save(self):
-        """Store save."""
+        """Persist the object state.
+
+        Inputs: none. Output: None.
+        """
         self.saved += 1
 
     @staticmethod
     def listParents():
-        """Return list parents."""
+        """Return list parents.
+
+        Inputs: none. Output: list.
+        """
         return [SimpleNamespace(getId=lambda: 77)]
 
 
 def _base_job(job_id: str) -> dict:
-    """Handle base job."""
+    """Base job.
+
+    Inputs: `job_id`. Output: `dict`.
+    """
     return {
         "job_id": job_id,
         "username": "alice",
@@ -73,7 +98,10 @@ def _install_process_job_defaults(
     job: dict,
     upload_root: Path,
 ):
-    """Handle install process job defaults."""
+    """Install process job defaults.
+
+    Inputs: `monkeypatch`, `job`, `upload_root`. Output: computed value.
+    """
     saved_jobs: list[dict] = []
     job_state = {"job": job}
 
@@ -162,7 +190,10 @@ def _install_process_job_defaults(
     )
 
     def _save_job(payload):
-        """Handle save job."""
+        """Save job.
+
+        Inputs: `payload`. Output: bool.
+        """
         saved_jobs.append(copy.deepcopy(payload))
         job_state["job"] = payload
         return True
@@ -175,7 +206,10 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test core function remaining helper paths cov behavior."""
+    """Verify core function remaining helper paths cover last direct branches.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `job_state['job']`.
+    """
     assert (
         core_functions._has_read_write_permissions(
             SimpleNamespace(
@@ -353,7 +387,10 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
     monkeypatch.setattr(core_functions, "_resolve_job_batch_size", lambda job_dict: 1)
 
     def _update_job(job_id, mutator):
-        """Handle update job."""
+        """Update job.
+
+        Inputs: `job_id`, `mutator`. Output: `job_state['job']`.
+        """
         job_state["job"] = mutator(job_state["job"])
         return job_state["job"]
 
@@ -381,7 +418,10 @@ def test_core_function_remaining_helper_paths_cover_last_direct_branches(
 def test_process_import_job_returns_early_when_jobs_disappear_or_are_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Verify test process import job returns early when jo behavior."""
+    """Verify process import job returns early when jobs disappear or are terminal.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._process_import_job("m" * 32)
 
@@ -406,7 +446,10 @@ def test_process_import_job_handles_group_lookup_close_warning_and_missing_uploa
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job handles group lookup behavior."""
+    """Verify process import job handles group lookup close warning and missing upload root.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     job = _base_job("p" * 32)
     job["group_id"] = 17
     upload_root = tmp_path / "uploads" / job["job_id"]
@@ -434,7 +477,10 @@ def test_process_import_job_marks_jobs_error_when_dataset_preparation_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job marks jobs error when behavior."""
+    """Verify process import job marks jobs error when dataset preparation fails.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     job = _base_job("q" * 32)
     upload_root = tmp_path / "uploads" / job["job_id"]
     upload_root.mkdir(parents=True)
@@ -460,7 +506,10 @@ def test_process_import_job_cleans_up_import_payloads_and_unlinks_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job cleans up import payl behavior."""
+    """Verify process import job cleans up import payloads and unlinks files.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     job = _base_job("r" * 32)
     job["files"] = [{"relative_path": "demo.ome.tif", "size": 3, "status": "uploaded"}]
     upload_root = tmp_path / "uploads" / job["job_id"]
@@ -512,7 +561,10 @@ def test_process_import_job_reports_sem_edx_service_connection_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job reports sem edx servi behavior."""
+    """Verify process import job reports sem edx service connection failures.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     job = _base_job("s" * 32)
     job["special_upload"] = "sem_edx_spectra"
     job["sem_edx_associations"] = {"image-1.ome.tif": ["spectra.txt"]}
@@ -533,7 +585,13 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job reuses plot cache and behavior."""
+    """Verify process import job reuses plot cache and handles reconnect failures.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `_Conn` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     job = _base_job("t" * 32)
     job["special_upload"] = "sem_edx_spectra"
     job["dataset_map"] = {"Dataset": 77}
@@ -571,11 +629,20 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("expired connection")
 
     def _open_service_connection(*args, **kwargs):
-        """Handle open service connection."""
+        """Open service connection.
+
+        Inputs: `*args`, `**kwargs`. Output: `_Conn` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         open_calls["count"] += 1
         if open_calls["count"] == 1:
             return _Conn()
@@ -609,7 +676,10 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Verify test process import job logs sem edx outer ex behavior."""
+    """Verify process import job logs sem edx outer exceptions.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: None.
+    """
     job = _base_job("u" * 32)
     job["special_upload"] = "sem_edx_spectra"
     job["dataset_map"] = {"Dataset": 77}
@@ -652,7 +722,10 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
 def test_start_import_thread_covers_missing_job_and_thread_start_failures(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Verify test start import thread covers missing job a behavior."""
+    """Verify start import thread covers missing job and thread start failures.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
     core_functions._start_import_thread("v" * 32)
 
@@ -669,12 +742,19 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
         """Represent broken thread."""
 
         def __init__(self, *args, **kwargs):
+            """Initialize the instance.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
             self.args = args
             self.kwargs = kwargs
 
         @staticmethod
         def start():
-            """Run start."""
+            """Start the operation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("thread start failed")
 
     monkeypatch.setattr(core_functions.threading, "Thread", _BrokenThread)
@@ -686,7 +766,13 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job handles NGFF converte behavior."""
+    """Verify process import job handles NGFF converter mixed outcomes and synthetic entries.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `SimpleNamespace` result. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     job = _base_job("x" * 32)
     job["special_upload"] = "ngff_converter"
     job["ngff_converter_settings"] = {"compression": "zlib"}
@@ -764,7 +850,13 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
     )
 
     def _run(cmd, timeout):
-        """Handle run."""
+        """Return a fake conversion result for cmd and timeout.
+
+        Inputs: `cmd`, `timeout`. Output: `SimpleNamespace` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         source_name = Path(cmd[0]).name
         zarr_output = Path(cmd[1])
         if source_name == "fail.lif":
@@ -837,7 +929,10 @@ def test_process_import_job_marks_ngff_converter_jobs_error_when_every_conversio
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """Verify test process import job marks NGFF converter behavior."""
+    """Verify process import job marks NGFF converter jobs error when every conversion fails.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     job = _base_job("y" * 32)
     job["special_upload"] = "ngff_converter"
     job["ngff_converter_settings"] = {"compression": "zlib"}

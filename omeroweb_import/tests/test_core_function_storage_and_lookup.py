@@ -10,10 +10,17 @@ class _ImageId:
     """Represent image identifier."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._value`.
+        """
         return self._value
 
 
@@ -21,10 +28,17 @@ class _ImageRow:
     """Represent image row."""
 
     def __init__(self, image_id):
+        """Initialize the instance.
+
+        Inputs: `image_id`. Output: None.
+        """
         self._image_id = image_id
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_ImageId` result.
+        """
         return _ImageId(self._image_id)
 
 
@@ -32,9 +46,17 @@ class _UnlockedLock:
     """Represent unlocked lock."""
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: `self`.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
@@ -42,14 +64,25 @@ class _FailingLock:
     """Represent failing lock."""
 
     def __enter__(self):
+        """Enter the context manager.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise core_functions.portalocker.exceptions.LockException("busy")
 
     def __exit__(self, exc_type, exc, tb):
+        """Exit the context manager.
+
+        Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+        """
         return False
 
 
 def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch):
-    """Verify test timeout expired handles invalid negative behavior."""
+    """Verify timeout expired handles invalid negative and elapsed values.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(core_functions.time, "time", lambda: 15.0)
     assert core_functions._timeout_expired(10.0, "bad") is False
     assert core_functions._timeout_expired(10.0, -1) is False
@@ -60,7 +93,10 @@ def test_timeout_expired_handles_invalid_negative_and_elapsed_values(monkeypatch
 def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     tmp_path, monkeypatch
 ):
-    """Verify test job storage helpers cover missing corrup behavior."""
+    """Verify job storage helpers cover missing corrupt and lock failure paths.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `_FailingLock` result.
+    """
     jobs_root = tmp_path / "jobs"
     jobs_root.mkdir()
     job_id = "c" * 32
@@ -94,7 +130,10 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
     lock_calls = []
 
     def failing_lock(*args, **kwargs):
-        """Handle failing lock."""
+        """Failing lock.
+
+        Inputs: `*args`, `**kwargs`. Output: `_FailingLock` result.
+        """
         lock_calls.append((args, kwargs))
         return _FailingLock()
 
@@ -134,21 +173,34 @@ def test_job_storage_helpers_cover_missing_corrupt_and_lock_failure_paths(
 
 
 def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monkeypatch):
-    """Verify test batch find images by name covers dataset behavior."""
+    """Verify batch find images by name covers dataset global and failure paths.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
 
     class _Params:
         """Represent params."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.values = {}
 
         def addLong(self, key, value):
-            """Handle add long."""
+            """Add long.
+
+            Inputs: `key`, `value`. Output: `self`.
+            """
             self.values[key] = value
             return self
 
         def addList(self, key, value):
-            """Handle add list."""
+            """Add list.
+
+            Inputs: `key`, `value`. Output: `self`.
+            """
             self.values[key] = list(value)
             return self
 
@@ -166,7 +218,10 @@ def test_batch_find_images_by_name_covers_dataset_global_and_failure_paths(monke
     }
 
     def find_all_by_query(query, params, opts):
-        """Handle find all by query."""
+        """Find all by query.
+
+        Inputs: `query`, `params`, `opts`. Output: list.
+        """
         queries.append((query, dict(params.values)))
         return [_ImageRow(11), _ImageRow(12)]
 

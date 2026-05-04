@@ -46,12 +46,18 @@ _SAFE_RENDERING_ENV = "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING"
 
 
 def _safe_rendering_enabled():
-    """Handle safe rendering enabled."""
+    """Return safe rendering enabled.
+
+    Inputs: none. Output: `get_bool_env` result.
+    """
     return get_bool_env(_SAFE_RENDERING_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def _require_webgateway_callable(module, name):
-    """Handle require webgateway callable."""
+    """Webgateway callable.
+
+    Inputs: `module`, `name`. Output: `hook`. Raises on invalid or unavailable state.
+    """
     hook = getattr(module, name, None)
     if callable(hook):
         return hook
@@ -63,21 +69,35 @@ class _StoreBackedChannelWrapper:
     """Represent store backed channel wrapper."""
 
     def __init__(self, channel, override):
+        """Initialize the instance.
+
+        Inputs: `channel`, `override`. Output: None.
+        """
         self._channel = channel
         self._override = override or {}
 
     def __getattr__(self, name):
+        """Return a dynamic attribute value by name.
+
+        Inputs: `name`. Output: `getattr` result.
+        """
         return getattr(self._channel, name)
 
     def getLabel(self):
-        """Return get label."""
+        """Return Label.
+
+        Inputs: none. Output: computed value.
+        """
         label = self._override.get("label")
         if label:
             return label
         return self._channel.getLabel()
 
     def getColor(self):
-        """Return get color."""
+        """Return Color.
+
+        Inputs: none. Output: computed value.
+        """
         color = self._override.get("color")
         if color is None:
             return self._channel.getColor()
@@ -86,14 +106,20 @@ class _StoreBackedChannelWrapper:
         return ColorHolder.fromRGBA(color[0], color[1], color[2], 255)
 
     def isActive(self):
-        """Handle is active."""
+        """Return whether Active.
+
+        Inputs: none. Output: computed value.
+        """
         active = self._override.get("active")
         if active is None:
             return self._channel.isActive()
         return bool(active)
 
     def isInverted(self):
-        """Handle is inverted."""
+        """Return whether Inverted.
+
+        Inputs: none. Output: computed value.
+        """
         inverted = self._override.get("inverted")
         if inverted is None:
             value = self._channel.isInverted()
@@ -101,14 +127,20 @@ class _StoreBackedChannelWrapper:
         return bool(inverted)
 
     def getWindowStart(self):
-        """Return get window start."""
+        """Return Window Start.
+
+        Inputs: none. Output: computed value.
+        """
         window = self._override.get("window")
         if window is None:
             return self._channel.getWindowStart()
         return window[0]
 
     def getWindowEnd(self):
-        """Return get window end."""
+        """Return Window End.
+
+        Inputs: none. Output: computed value.
+        """
         window = self._override.get("window")
         if window is None:
             return self._channel.getWindowEnd()
@@ -116,7 +148,10 @@ class _StoreBackedChannelWrapper:
 
 
 def _decorate_store_backed_channels(image, channels):
-    """Handle decorate store backed channels."""
+    """Decorate store backed channels.
+
+    Inputs: `image`, `channels`. Output: computed value.
+    """
     if not channels:
         return channels
 
@@ -129,7 +164,10 @@ def _decorate_store_backed_channels(image, channels):
 
 
 def _get_store_backed_image(conn, iid):
-    """Handle get store backed image."""
+    """Return store backed image.
+
+    Inputs: `conn`, `iid`. Output: `image` or None.
+    """
     image = conn.getObject("Image", iid)
     if image is None or not is_store_backed_image(image):
         return None
@@ -137,7 +175,10 @@ def _get_store_backed_image(conn, iid):
 
 
 def _store_backed_render_response(image, request, z=None, t=None, download=False):
-    """Handle store backed render response."""
+    """Backed render response.
+
+    Inputs: `image`, `request`, `z`, `t`, `download`. Output: computed value.
+    """
     requested_format = request.GET.get("format", "jpeg")
     pil_image = render_store_backed_pil_image(image, z=z, t=t)
     payload, content_type, suffix = encode_store_backed_pil_image(
@@ -159,7 +200,10 @@ def _store_backed_render_response(image, request, z=None, t=None, download=False
 
 
 def _store_backed_pixel_range(node):
-    """Handle store backed pixel range."""
+    """Backed pixel range.
+
+    Inputs: `node`. Output: tuple.
+    """
     metadata = getattr(node, "metadata", {}) or {}
     contrast_limits = metadata.get("contrast_limits") or []
     values: list[float] = []
@@ -179,7 +223,10 @@ def _store_backed_pixel_range(node):
 
 
 def _store_backed_rendering_model(channels):
-    """Handle store backed rendering model."""
+    """Backed rendering model.
+
+    Inputs: `channels`. Output: computed value.
+    """
     if len(channels) > 1:
         return "color"
     if not channels:
@@ -194,7 +241,10 @@ def _store_backed_rendering_model(channels):
 
 
 def _store_backed_project(image):
-    """Handle store backed project."""
+    """Backed project.
+
+    Inputs: `image`. Output: `image.getProject` result or None.
+    """
     try:
         return image.getProject()
     except Exception:
@@ -203,7 +253,10 @@ def _store_backed_project(image):
 
 
 def _store_backed_parent_context(image):
-    """Handle store backed parent context."""
+    """Backed parent context.
+
+    Inputs: `image`. Output: tuple.
+    """
     dataset = None
     well = None
     try:
@@ -225,7 +278,10 @@ def _store_backed_parent_context(image):
 
 
 def _truthy_attribute(entity, name, default):
-    """Handle truthy attribute."""
+    """Truthy attribute.
+
+    Inputs: `entity`, `name`, `default`. Output: computed value.
+    """
     if entity is None:
         return default
     value = getattr(entity, name)
@@ -233,14 +289,20 @@ def _truthy_attribute(entity, name, default):
 
 
 def _store_backed_well_id(well):
-    """Handle store backed well identifier."""
+    """Backed well ID.
+
+    Inputs: `well`. Output: computed value.
+    """
     if well is None:
         return ""
     return well.id.val or ""
 
 
 def _store_backed_metadata(image):
-    """Handle store backed metadata."""
+    """Backed metadata.
+
+    Inputs: `image`. Output: dict.
+    """
     project = _store_backed_project(image)
     dataset, well = _store_backed_parent_context(image)
 
@@ -265,7 +327,12 @@ def _store_backed_metadata(image):
 
 
 def _exception_text(exc):
-    """Handle exception text."""
+    """Exception text.
+
+    Inputs: `exc`. Output: `'\n'.join` result.
+
+        '.join` result.
+    """
     parts = [
         str(exc),
         getattr(exc, "message", None),
@@ -275,7 +342,10 @@ def _exception_text(exc):
 
 
 def _is_known_rendering_engine_failure(exc):
-    """Handle is known rendering engine failure."""
+    """Return whether known rendering engine failure.
+
+    Inputs: `exc`. Output: bool.
+    """
     text = _exception_text(exc)
     return is_known_tile_size_failure(exc) or (
         "Error instantiating pixel buffer" in text
@@ -284,7 +354,10 @@ def _is_known_rendering_engine_failure(exc):
 
 
 def _pixel_size_in_microns(image):
-    """Handle pixel size in microns."""
+    """Pixel size in microns.
+
+    Inputs: `image`. Output: `pixel_size`.
+    """
     pixel_size = {}
     for axis, getter in (
         ("x", image.getPixelSizeX),
@@ -304,7 +377,10 @@ def _pixel_size_in_microns(image):
 
 
 def _regular_image_marshal_base_payload(image):
-    """Handle regular image marshal base payload."""
+    """Regular image marshal base payload.
+
+    Inputs: `image`. Output: dict.
+    """
     return {
         "id": image.id,
         "meta": _store_backed_metadata(image),
@@ -318,7 +394,10 @@ def _regular_image_marshal_base_payload(image):
 
 
 def _regular_image_rendering_engine_or_payload(image, payload):
-    """Handle regular image rendering engine or payload."""
+    """Regular image rendering engine or payload.
+
+    Inputs: `image`, `payload`. Output: tuple.
+    """
     try:
         rendering_engine_ready = prepare_image_rendering_engine(image)
         if not rendering_engine_ready:
@@ -334,7 +413,10 @@ def _regular_image_rendering_engine_or_payload(image, payload):
 
 
 def _apply_regular_tile_metadata(payload, image, rendering_engine):
-    """Handle apply regular tile metadata."""
+    """Apply regular tile metadata.
+
+    Inputs: `payload`, `image`, `rendering_engine`. Output: `levels`.
+    """
     levels = rendering_engine.getResolutionLevels()
     tiles = levels > 1
     payload["tiles"] = tiles
@@ -361,7 +443,10 @@ def _apply_regular_tile_metadata(payload, image, rendering_engine):
 
 
 def _regular_nominal_magnification(image):
-    """Handle regular nominal magnification."""
+    """Regular nominal magnification.
+
+    Inputs: `image`. Output: bool.
+    """
     objective_settings = image.getObjectiveSettings()
     return (
         objective_settings is not None
@@ -371,7 +456,10 @@ def _regular_nominal_magnification(image):
 
 
 def _regular_viewer_settings(request):
-    """Handle regular viewer settings."""
+    """Regular viewer settings.
+
+    Inputs: `request`. Output: computed value.
+    """
     try:
         return request.session.get("server_settings", {}).get("viewer", {})
     except Exception:
@@ -379,7 +467,10 @@ def _regular_viewer_settings(request):
 
 
 def _regular_initial_zoom(viewer_settings, levels):
-    """Handle regular initial zoom."""
+    """Regular initial zoom.
+
+    Inputs: `viewer_settings`, `levels`. Output: computed value.
+    """
     init_zoom = viewer_settings.get("initial_zoom_level", 0)
     if init_zoom is not None and init_zoom < 0:
         return levels + init_zoom
@@ -387,7 +478,10 @@ def _regular_initial_zoom(viewer_settings, levels):
 
 
 def _apply_regular_viewer_metadata(payload, image, viewer_settings, levels):
-    """Handle apply regular viewer metadata."""
+    """Apply regular viewer metadata.
+
+    Inputs: `payload`, `image`, `viewer_settings`, `levels`. Output: None.
+    """
     init_zoom = _regular_initial_zoom(viewer_settings, levels)
     payload.update(
         {
@@ -407,14 +501,20 @@ def _apply_regular_viewer_metadata(payload, image, viewer_settings, levels):
 
 
 def _apply_regular_objective_metadata(payload, image):
-    """Handle apply regular objective metadata."""
+    """Apply regular objective metadata.
+
+    Inputs: `payload`, `image`. Output: None.
+    """
     nominal_magnification = _regular_nominal_magnification(image)
     if nominal_magnification is not None:
         payload["nominalMagnification"] = nominal_magnification
 
 
 def _apply_regular_channel_metadata(payload, image, rendering_engine):
-    """Handle apply regular channel metadata."""
+    """Apply regular channel metadata.
+
+    Inputs: `payload`, `image`, `rendering_engine`. Output: None.
+    """
     try:
         payload["pixel_range"] = image.getPixelRange()
         payload["channels"] = [
@@ -443,7 +543,10 @@ def _apply_regular_channel_metadata(payload, image, rendering_engine):
 
 
 def _marshal_regular_image_data_with_safe_tile_size(image, request):
-    """Handle marshal regular image data with safe tile size."""
+    """Marshal regular image data with safe tile size.
+
+    Inputs: `image`, `request`. Output: computed value.
+    """
     payload = _regular_image_marshal_base_payload(image)
     rendering_engine, fallback_payload = _regular_image_rendering_engine_or_payload(
         image, payload
@@ -460,7 +563,10 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
 
 
 def _select_marshaled_key(payload, key):
-    """Handle select marshaled key."""
+    """Select marshaled key.
+
+    Inputs: `payload`, `key`. Output: computed value or None.
+    """
     result = payload
     for part in key.split("."):
         if not isinstance(result, dict):
@@ -470,12 +576,21 @@ def _select_marshaled_key(payload, key):
 
 
 def _regular_region_bad_request(message):
-    """Handle regular region bad request."""
+    """Regular region bad request.
+
+    Inputs: `message`. Output: `HttpResponseBadRequest` result.
+    """
     return HttpResponseBadRequest(message, content_type="text/plain; charset=utf-8")
 
 
 def _prepared_regular_region_image(request, iid, conn=None):
-    """Handle prepared regular region image."""
+    """Prepared regular region image.
+
+    Inputs: `request`, `iid`, `conn`. Output: `prepared_image`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     from omeroweb.webgateway import views as webgateway_views
 
     server_id = request.session["connector"]["server_id"]
@@ -494,7 +609,10 @@ def _prepared_regular_region_image(request, iid, conn=None):
 
 
 def _regular_max_tile_length(conn):
-    """Handle regular max tile length."""
+    """Regular max tile length.
+
+    Inputs: `conn`. Output: computed value.
+    """
     max_tile_length = 1024
     if conn is None:
         return max_tile_length
@@ -511,7 +629,10 @@ def _regular_max_tile_length(conn):
 
 
 def _regular_requested_tile_size(fields, width, height, conn=None):
-    """Handle regular requested tile size."""
+    """Regular requested tile size.
+
+    Inputs: `fields`, `width`, `height`, `conn`. Output: computed value.
+    """
     if len(fields) <= 4:
         return width, height
     requested_tile_size = [int(fields[3]), int(fields[4])]
@@ -526,7 +647,10 @@ def _regular_requested_tile_size(fields, width, height, conn=None):
 
 
 def _regular_viewer_level(viewer_level, max_viewer_level):
-    """Handle regular viewer level."""
+    """Regular viewer level.
+
+    Inputs: `viewer_level`, `max_viewer_level`. Output: tuple.
+    """
     if viewer_level < 0:
         return None, "invalid resolution level"
     if max_viewer_level == 0:
@@ -540,7 +664,10 @@ def _regular_viewer_level(viewer_level, max_viewer_level):
 
 
 def _regular_tile_region_args(request, image, conn=None):
-    """Handle regular tile region args."""
+    """Regular tile region args.
+
+    Inputs: `request`, `image`, `conn`. Output: computed value.
+    """
     try:
         prepare_image_rendering_engine(image)
         width, height = get_safe_image_tile_size(image, conn=conn)
@@ -561,7 +688,10 @@ def _regular_tile_region_args(request, image, conn=None):
 
 
 def _regular_explicit_region_args(region):
-    """Handle regular explicit region args."""
+    """Regular explicit region args.
+
+    Inputs: `region`. Output: computed value.
+    """
     try:
         x, y, width, height = [int(value) for value in region.split(",")]
     except Exception:
@@ -572,7 +702,10 @@ def _regular_explicit_region_args(region):
 
 
 def _regular_region_args(request, image, conn=None):
-    """Handle regular region args."""
+    """Regular region args.
+
+    Inputs: `request`, `image`, `conn`. Output: call result.
+    """
     if request.GET.get("tile"):
         return _regular_tile_region_args(request, image, conn=conn)
     region = request.GET.get("region")
@@ -582,7 +715,13 @@ def _regular_region_args(request, image, conn=None):
 
 
 def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=None):
-    """Handle render regular image region with safe tile size."""
+    """Render regular image region with safe tile size.
+
+    Inputs: `request`, `iid`, `z`, `t`, `conn`. Output: computed value. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     image, compress_quality = _prepared_regular_region_image(request, iid, conn=conn)
     region_args = _regular_region_args(request, image, conn=conn)
     if isinstance(region_args, HttpResponse):
@@ -605,7 +744,11 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
 
 def _safe_regular_image_marshal(original_image_marshal, image, key=None, request=None):
-    """Handle safe regular image marshal."""
+    """Return safe regular image marshal.
+
+    Inputs: `original_image_marshal`, `image`, `key`, `request`. Output: computed value.
+    Raises on invalid or unavailable state.
+    """
     try:
         return original_image_marshal(image, key=key, request=request)
     except Exception as exc:
@@ -618,7 +761,10 @@ def _safe_regular_image_marshal(original_image_marshal, image, key=None, request
 
 
 def _install_safe_image_marshal_overrides(webgateway_marshal):
-    """Handle install safe image marshal overrides."""
+    """Install safe image marshal overrides.
+
+    Inputs: `webgateway_marshal`. Output: computed value.
+    """
     if getattr(
         webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False
     ):
@@ -628,6 +774,10 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
 
     @wraps(original_image_marshal)
     def safe_image_marshal(image, key=None, request=None):
+        """Return safe image marshal.
+
+        Inputs: `image`, `key`, `request`. Output: call result.
+        """
         return _safe_regular_image_marshal(
             original_image_marshal,
             image,
@@ -670,7 +820,11 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
 def _load_metadata_preview_with_safe_rendering(
     request, c_type, c_id, conn=None, share_id=None, **kwargs
 ):
-    """Handle load metadata preview with safe rendering."""
+    """Load metadata preview with safe rendering.
+
+    Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
+    `context`. Raises on invalid or unavailable state.
+    """
     from omeroweb.webclient import views as webclient_views
 
     context: dict[str, Any] = {}
@@ -736,7 +890,10 @@ def _load_metadata_preview_with_safe_rendering(
 
 
 def _store_backed_level_metadata(image, node):
-    """Handle store backed level metadata."""
+    """Backed level metadata.
+
+    Inputs: `image`, `node`. Output: tuple.
+    """
     level_count = get_store_backed_level_count(node) if node is not None else 1
     level_sizes = (
         get_store_backed_level_sizes(node)
@@ -755,7 +912,10 @@ def _store_backed_level_metadata(image, node):
 
 
 def _store_backed_tiles_enabled(image, level_count):
-    """Handle store backed tiles enabled."""
+    """Backed tiles enabled.
+
+    Inputs: `image`, `level_count`. Output: `tiles`.
+    """
     tiles = level_count > 1
     conn = get_image_connection(image)
     if not tiles and conn is not None:
@@ -774,7 +934,10 @@ def _store_backed_tiles_enabled(image, level_count):
 
 
 def _store_backed_projection(image):
-    """Handle store backed projection."""
+    """Backed projection.
+
+    Inputs: `image`. Output: computed value.
+    """
     try:
         return image.getProjection()
     except Exception:
@@ -782,7 +945,10 @@ def _store_backed_projection(image):
 
 
 def _store_backed_pixel_sizes(image):
-    """Handle store backed pixel sizes."""
+    """Backed pixel sizes.
+
+    Inputs: `image`. Output: `pixel_size`.
+    """
     pixel_size = {}
     for axis, getter in (
         ("x", image.getPixelSizeX),
@@ -807,7 +973,11 @@ def _store_backed_base_image_data(
     pixel_size,
     projection,
 ):
-    """Handle store backed base image data."""
+    """Backed base image data.
+
+    Inputs: `image`, `request`, `node`, `channels`, `tiles`, `pixel_size`, `projection`.
+    Output: dict.
+    """
     return {
         "id": image.id,
         "meta": _store_backed_metadata(image),
@@ -846,7 +1016,10 @@ def _store_backed_base_image_data(
 
 
 def _apply_store_backed_init_zoom(payload, request, level_count):
-    """Handle apply store backed init zoom."""
+    """Apply store backed init zoom.
+
+    Inputs: `payload`, `request`, `level_count`. Output: None.
+    """
     viewer_settings = request.session.get("server_settings", {}).get("viewer", {})
     init_zoom = viewer_settings.get("initial_zoom_level", 0)
     if init_zoom is not None:
@@ -856,7 +1029,10 @@ def _apply_store_backed_init_zoom(payload, request, level_count):
 
 
 def _apply_store_backed_objective(payload, image):
-    """Handle apply store backed objective."""
+    """Apply store backed objective.
+
+    Inputs: `payload`, `image`. Output: None.
+    """
     try:
         objective_settings = image.getObjectiveSettings()
     except Exception:
@@ -877,7 +1053,11 @@ def _apply_store_backed_tile_metadata(
     level_sizes,
     zoom_scaling,
 ):
-    """Handle apply store backed tile metadata."""
+    """Apply store backed tile metadata.
+
+    Inputs: `payload`, `tiles`, `tile_size`, `level_count`, `level_sizes`,
+    `zoom_scaling`. Output: None.
+    """
     if tiles:
         payload.update(
             {
@@ -892,7 +1072,10 @@ def _apply_store_backed_tile_metadata(
 
 
 def _store_backed_image_data(image, request):
-    """Handle store backed image data."""
+    """Backed image data.
+
+    Inputs: `image`, `request`. Output: `payload`.
+    """
     node = load_store_backed_image_node(image)
     channels = _decorate_store_backed_channels(image, image.getChannels(noRE=True))
     level_count, level_sizes, tile_size, zoom_scaling = _store_backed_level_metadata(
@@ -922,7 +1105,10 @@ def _store_backed_image_data(image, request):
 
 
 def _store_backed_region_response(image, request, z=None, t=None, conn=None):
-    """Handle store backed region response."""
+    """Backed region response.
+
+    Inputs: `image`, `request`, `z`, `t`, `conn`. Output: computed value.
+    """
     node = load_store_backed_image_node(image)
     if node is None:
         return HttpResponseBadRequest("store-backed image data not found")
@@ -994,7 +1180,10 @@ def _store_backed_region_response(image, request, z=None, t=None, conn=None):
 
 
 def _patch_urlpatterns(urlpatterns, replacements):
-    """Handle patch urlpatterns."""
+    """Patch urlpatterns.
+
+    Inputs: `urlpatterns`, `replacements`. Output: None.
+    """
     for pattern in urlpatterns:
         if isinstance(pattern, URLResolver):
             _patch_urlpatterns(pattern.url_patterns, replacements)
@@ -1008,7 +1197,10 @@ def _patch_urlpatterns(urlpatterns, replacements):
 
 
 def _unwrap_callback(callback, *, depth):
-    """Handle unwrap callback."""
+    """Unwrap callback.
+
+    Inputs: `callback`, `depth`. Output: `unwrapped`.
+    """
     unwrapped = callback
     for _ in range(depth):
         unwrapped = getattr(unwrapped, "__wrapped__", unwrapped)
@@ -1016,7 +1208,10 @@ def _unwrap_callback(callback, *, depth):
 
 
 def _store_backed_thumbnail_size(request, w=None, h=None):
-    """Handle store backed thumbnail size."""
+    """Backed thumbnail size.
+
+    Inputs: `request`, `w`, `h`. Output: computed value.
+    """
     server_settings = request.session.get("server_settings", {}).get("browser", {})
     default_size = server_settings.get("thumb_default_size", 96)
     if w is None:
@@ -1027,7 +1222,10 @@ def _store_backed_thumbnail_size(request, w=None, h=None):
 
 
 def _batch_thumbnail_size(request, w=None):
-    """Handle batch thumbnail size."""
+    """Batch thumbnail size.
+
+    Inputs: `request`, `w`. Output: computed value.
+    """
     if w is not None:
         return w
     server_settings = request.session.get("server_settings", {}).get("browser", {})
@@ -1035,10 +1233,17 @@ def _batch_thumbnail_size(request, w=None):
 
 
 def _make_get_channels_override(original_get_channels):
-    """Handle make get channels override."""
+    """Channels override.
+
+    Inputs: `original_get_channels`. Output: computed value.
+    """
 
     @wraps(original_get_channels)
     def get_channels_override(self, *args, **kwargs):
+        """Return channels override.
+
+        Inputs: `*args`, `**kwargs`. Output: computed value.
+        """
         if not is_store_backed_image(self):
             return original_get_channels(self, *args, **kwargs)
         channels = original_get_channels(self, noRE=True)
@@ -1048,7 +1253,10 @@ def _make_get_channels_override(original_get_channels):
 
 
 def _make_render_thumbnail_override(original_render_thumbnail, webgateway_views):
-    """Handle make render thumbnail override."""
+    """Thumbnail override.
+
+    Inputs: `original_render_thumbnail`, `webgateway_views`. Output: computed value.
+    """
 
     @wraps(original_render_thumbnail)
     def render_thumbnail_override(
@@ -1060,6 +1268,13 @@ def _make_render_thumbnail_override(original_render_thumbnail, webgateway_views)
         _defcb=None,
         **kwargs,
     ):
+        """Render thumbnail override.
+
+        Inputs: `request`, `iid`, `w`, `h`, `conn`, `_defcb`, `**kwargs`. Output: call
+        result.
+
+        result.
+        """
         image = _get_store_backed_image(conn, iid)
         if image is None:
             return original_render_thumbnail(
@@ -1083,7 +1298,10 @@ def _make_render_thumbnail_override(original_render_thumbnail, webgateway_views)
 
 
 def _store_backed_thumbnail_entries(image_ids, conn, size, z_index, t_index):
-    """Handle store backed thumbnail entries."""
+    """Backed thumbnail entries.
+
+    Inputs: `image_ids`, `conn`, `size`, `z_index`, `t_index`. Output: tuple.
+    """
     response: dict[Any, str | None] = {}
     regular_ids: list[Any] = []
     for image_id in image_ids:
@@ -1112,7 +1330,10 @@ def _store_backed_thumbnail_entries(image_ids, conn, size, z_index, t_index):
 
 
 def _add_regular_thumbnail_entries(response, conn, regular_ids, size):
-    """Handle add regular thumbnail entries."""
+    """Add regular thumbnail entries.
+
+    Inputs: `response`, `conn`, `regular_ids`, `size`. Output: None.
+    """
     if not regular_ids:
         return
     thumbnails = conn.getThumbnailSet([rlong(i) for i in regular_ids], size)
@@ -1132,10 +1353,17 @@ def _add_regular_thumbnail_entries(response, conn, regular_ids, size):
 
 
 def _make_get_thumbnails_json_override(original_get_thumbnails_json, webgateway_views):
-    """Handle make get thumbnails JSON override."""
+    """Thumbnails JSON override with.
+
+    Inputs: `original_get_thumbnails_json`, `webgateway_views`. Output: computed value.
+    """
 
     @wraps(original_get_thumbnails_json)
     def get_thumbnails_json_override(request, w=None, conn=None, **kwargs):
+        """Return thumbnails JSON override.
+
+        Inputs: `request`, `w`, `conn`, `**kwargs`. Output: computed value.
+        """
         image_ids = list(set(webgateway_views.get_longs(request, "id")))
         if len(image_ids) <= 1:
             return original_get_thumbnails_json(request, w=w, conn=conn, **kwargs)
@@ -1158,10 +1386,17 @@ def _make_get_thumbnails_json_override(original_get_thumbnails_json, webgateway_
 
 
 def _make_render_image_override(original_render_image):
-    """Handle make render image override."""
+    """Image override.
+
+    Inputs: `original_render_image`. Output: computed value.
+    """
 
     @wraps(original_render_image)
     def render_image_override(request, iid, z=None, t=None, conn=None, **kwargs):
+        """Render image override.
+
+        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: computed value.
+        """
         image = _get_store_backed_image(conn, iid)
         if image is None:
             return original_render_image(request, iid, z=z, t=t, conn=conn, **kwargs)
@@ -1186,7 +1421,14 @@ def _regular_image_region_response(
     conn=None,
     **kwargs,
 ):
-    """Handle regular image region response."""
+    """Regular image region response.
+
+    Inputs: `original_render_image_region_impl`, `safe_rendering_on`, `request`, `iid`,
+    `z`, `t`, `conn`, `**kwargs`. Output: call result. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     try:
         return original_render_image_region_impl(
             request,
@@ -1213,10 +1455,18 @@ def _make_render_image_region_override(
     original_render_image_region_impl,
     safe_rendering_on,
 ):
-    """Handle make render image region override."""
+    """Image region override with.
+
+    Inputs: `original_render_image_region`, `original_render_image_region_impl`,
+    `safe_rendering_on`. Output: computed value.
+    """
 
     @wraps(original_render_image_region)
     def render_image_region_override(request, iid, z, t, conn=None, **kwargs):
+        """Render image region override.
+
+        Inputs: `request`, `iid`, `z`, `t`, `conn`, `**kwargs`. Output: call result.
+        """
         image = _get_store_backed_image(conn, iid)
         if image is None:
             return _regular_image_region_response(
@@ -1241,7 +1491,10 @@ def _make_render_image_region_override(
 
 
 def _select_payload_key(payload, key):
-    """Handle select payload key."""
+    """Select payload key.
+
+    Inputs: `payload`, `key`. Output: computed value.
+    """
     if key is None:
         return payload
     return _select_marshaled_key(payload, key)
@@ -1256,7 +1509,14 @@ def _regular_image_data_json_response(
     _internal=False,
     **kwargs,
 ):
-    """Handle regular image data JSON response."""
+    """Regular image data JSON response.
+
+    Inputs: `original_image_data_json_impl`, `safe_rendering_on`, `image`, `request`,
+    `conn`, `_internal`, `**kwargs`. Output: computed value. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     try:
         return original_image_data_json_impl(
             request,
@@ -1279,10 +1539,18 @@ def _make_image_data_json_override(
     original_image_data_json_impl,
     safe_rendering_on,
 ):
-    """Handle make image data JSON override."""
+    """Image data JSON override with.
+
+    Inputs: `original_image_data_json`, `original_image_data_json_impl`,
+    `safe_rendering_on`. Output: computed value.
+    """
 
     @wraps(original_image_data_json)
     def image_data_json_override(request, conn=None, _internal=False, **kwargs):
+        """Image data JSON override.
+
+        Inputs: `request`, `conn`, `_internal`, `**kwargs`. Output: computed value.
+        """
         image = conn.getObject("Image", kwargs["iid"])
         if image is None:
             return original_image_data_json_impl(
@@ -1313,12 +1581,23 @@ def _make_load_metadata_preview_override(
     original_load_metadata_preview_impl,
     safe_rendering_on,
 ):
-    """Handle make load metadata preview override."""
+    """Metadata preview override with.
+
+    Inputs: `original_load_metadata_preview`, `original_load_metadata_preview_impl`,
+    `safe_rendering_on`. Output: computed value. Raises on invalid or unavailable state.
+    """
 
     @wraps(original_load_metadata_preview)
     def load_metadata_preview_override(
         request, c_type, c_id, conn=None, share_id=None, **kwargs
     ):
+        """Load metadata preview override.
+
+        Inputs: `request`, `c_type`, `c_id`, `conn`, `share_id`, `**kwargs`. Output:
+        call result. Raises on invalid or unavailable state.
+
+        call result. Raises on invalid or unavailable state.
+        """
         try:
             return original_load_metadata_preview_impl(
                 request,
@@ -1352,7 +1631,12 @@ def _decorate_webgateway_overrides(
     render_image_region_override,
     load_metadata_preview_override,
 ):
-    """Handle decorate webgateway overrides."""
+    """Decorate webgateway overrides.
+
+    Inputs: `webgateway_views`, `webclient_views`, `get_thumbnails_json_override`,
+    `image_data_json_override`, `render_image_override`, `render_image_region_override`,
+    `load_metadata_preview_override`. Output: dict.
+    """
     return {
         "get_thumbnails_json": login_required()(
             webgateway_views.jsonp(get_thumbnails_json_override)
@@ -1378,7 +1662,12 @@ def _apply_webgateway_overrides(
     render_thumbnail_override,
     decorated_overrides,
 ):
-    """Handle apply webgateway overrides."""
+    """Apply webgateway overrides.
+
+    Inputs: `webclient_gateway`, `webgateway_views`, `webclient_views`,
+    `webgateway_urls`, `webclient_urls`, `get_channels_override`,
+    `render_thumbnail_override`, `decorated_overrides`. Output: None.
+    """
     decorated_get_thumbnails_json = decorated_overrides["get_thumbnails_json"]
     decorated_image_data_json = decorated_overrides["image_data_json"]
     decorated_render_image = decorated_overrides["render_image"]
@@ -1416,7 +1705,10 @@ def _apply_webgateway_overrides(
 
 
 def install_webgateway_overrides():
-    """Handle install webgateway overrides."""
+    """Install webgateway overrides.
+
+    Inputs: none. Output: None.
+    """
     try:
         from omeroweb.webgateway import urls as webgateway_urls
         from omeroweb.webgateway import views as webgateway_views

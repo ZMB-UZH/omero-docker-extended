@@ -34,10 +34,13 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+# Write a log message. Inputs: shell arguments and environment. Output: command status and side effects.
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
 
+# Print an error and exit. Inputs: shell arguments and environment. Output: command status and side effects.
 die() { log "FATAL: $*" >&2; exit 1; }
 
+# Check environment. Inputs: shell arguments and environment. Output: command status and side effects.
 check_env() {
     local missing=()
     for var in OMERO_DB_HOST OMERO_DB_PORT OMERO_DB_NAME OMERO_DB_USER OMERO_DB_PASS \
@@ -49,6 +52,7 @@ check_env() {
     fi
 }
 
+# Wait for database. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_db() {
     local host="$1" port="$2" user="$3" dbname="$4" retries=30 delay=5
     log "Waiting for $dbname at $host:$port ..."
@@ -63,6 +67,7 @@ wait_for_db() {
     die "Database $dbname at $host:$port did not become ready after $((retries * delay))s"
 }
 
+# Execute logged command. Inputs: shell arguments and environment. Output: command status and side effects.
 run_logged_command() {
     local status
 
@@ -78,7 +83,7 @@ run_logged_command() {
 # Core maintenance functions
 # ---------------------------------------------------------------------------
 
-# run_vacuum_analyze <host> <port> <dbname> <user> <password>
+# Execute vacuum analyze. Inputs: shell arguments and environment. Output: command status and side effects.
 run_vacuum_analyze() {
     local host="$1" port="$2" dbname="$3" user="$4"
     local lock_timeout="${PG_MAINTENANCE_LOCK_TIMEOUT:-2s}"
@@ -107,7 +112,7 @@ run_vacuum_analyze() {
     fi
 }
 
-# run_reindex <host> <port> <dbname> <user> <password>
+# Execute reindex. Inputs: shell arguments and environment. Output: command status and side effects.
 run_reindex() {
     local host="$1" port="$2" dbname="$3" user="$4"
     local lock_timeout="${PG_MAINTENANCE_LOCK_TIMEOUT:-2s}"
@@ -141,6 +146,7 @@ run_reindex() {
 # Orchestration
 # ---------------------------------------------------------------------------
 
+# Do vacuum analyze. Inputs: shell arguments and environment. Output: command status and side effects.
 do_vacuum_analyze() {
     log "========== Starting VACUUM ANALYZE =========="
     wait_for_db "$OMERO_DB_HOST" "$OMERO_DB_PORT" "$OMERO_DB_USER" "$OMERO_DB_NAME"
@@ -151,6 +157,7 @@ do_vacuum_analyze() {
     log "========== VACUUM ANALYZE finished =========="
 }
 
+# Do reindex. Inputs: shell arguments and environment. Output: command status and side effects.
 do_reindex() {
     log "========== Starting REINDEX (CONCURRENTLY) =========="
     wait_for_db "$OMERO_DB_HOST" "$OMERO_DB_PORT" "$OMERO_DB_USER" "$OMERO_DB_NAME"
@@ -164,6 +171,7 @@ do_reindex() {
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     local action="${1:-}"
 

@@ -16,14 +16,20 @@ from omeroweb_admin_tools.views import index_view
 
 
 def _unwrap_view(func):
-    """Handle unwrap view."""
+    """Unwrap view.
+
+    Inputs: `func`. Output: `func`.
+    """
     while hasattr(func, "__wrapped__"):
         func = func.__wrapped__
     return func
 
 
 def _payload(response):
-    """Handle payload."""
+    """Payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
@@ -31,6 +37,10 @@ class _AttrUser:
     """Represent attr user."""
 
     def __init__(self, first_name, last_name, username):
+        """Initialize the instance.
+
+        Inputs: `first_name`, `last_name`, `username`. Output: None.
+        """
         self.firstName = SimpleNamespace(val=first_name)
         self.lastName = SimpleNamespace(val=last_name)
         self.omeName = SimpleNamespace(val=username)
@@ -40,11 +50,18 @@ class _AttrGroup:
     """Represent attr group."""
 
     def __init__(self, name, permissions):
+        """Initialize the instance.
+
+        Inputs: `name`, `permissions`. Output: None.
+        """
         self.name = SimpleNamespace(val=name)
         self._permissions = permissions
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `SimpleNamespace` result.
+        """
         return SimpleNamespace(getPermissions=lambda: self._permissions)
 
 
@@ -52,31 +69,51 @@ class _PermissionText:
     """Represent permission text."""
 
     def __init__(self, text, *, read=False, write=False, annotate=False):
+        """Initialize the instance.
+
+        Inputs: `text`, `read`, `write`, `annotate`. Output: None.
+        """
         self._text = text
         self._read = read
         self._write = write
         self._annotate = annotate
 
     def __str__(self):
+        """Return the string representation.
+
+        Inputs: none. Output: `self._text`.
+        """
         return self._text
 
     def isGroupRead(self):
-        """Handle is group read."""
+        """Return whether Group Read.
+
+        Inputs: none. Output: `self._read`.
+        """
         return self._read
 
     def isGroupWrite(self):
-        """Handle is group write."""
+        """Return whether Group Write.
+
+        Inputs: none. Output: `self._write`.
+        """
         return self._write
 
     def isGroupAnnotate(self):
-        """Handle is group annotate."""
+        """Return whether Group Annotate.
+
+        Inputs: none. Output: `self._annotate`.
+        """
         return self._annotate
 
 
 def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
     monkeypatch,
 ) -> None:
-    """Verify test proxy helpers cover request failures and behavior."""
+    """Verify proxy helpers cover request failures and cookie edge cases.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         index_view.requests,
         "request",
@@ -128,7 +165,10 @@ def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
 
 
 def test_root_gated_views_cover_simple_render_and_guard_paths(monkeypatch) -> None:
-    """Verify test root gated views cover simple render and behavior."""
+    """Verify root gated views cover simple render and guard paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     sentinel = JsonResponse({"error": "root required"}, status=403)
 
@@ -221,7 +261,10 @@ def test_root_gated_views_cover_simple_render_and_guard_paths(monkeypatch) -> No
 
 
 def test_identity_group_and_permission_helpers_cover_attribute_fallbacks() -> None:
-    """Verify test identity group and permission helpers co behavior."""
+    """Verify identity group and permission helpers cover attribute fallbacks.
+
+    Inputs: none. Output: None.
+    """
     attr_user = _AttrUser("Ada", "Lovelace", "ada")
     attr_group = _AttrGroup("scientists", _PermissionText("rwra--"))
     bad_id = SimpleNamespace(getId=lambda: SimpleNamespace(getValue=lambda: "bad-id"))
@@ -300,7 +343,10 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Verify test logs views and compose helpers cover val behavior."""
+    """Verify logs views and compose helpers cover validation paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     log_config = LogConfig(
         loki_url="https://loki.example.test:3100",
         lookback_seconds=900,
@@ -339,7 +385,11 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
         since_ns=None,
         text_query=None,
     ):
-        """Handle fetch logs."""
+        """Fetch logs.
+
+        Inputs: `config`, `containers`, `lookback_seconds`, `max_entries`,
+        `internal_files`, `since_ns`, `text_query`. Output: `list` result.
+        """
         captured["containers"] = containers
         captured["internal_files"] = internal_files
         captured["since_ns"] = since_ns
@@ -493,7 +543,10 @@ def test_logs_views_and_compose_helpers_cover_validation_paths(
 
 
 def test_proxy_quota_and_diagnostics_views_cover_error_paths(monkeypatch) -> None:
-    """Verify test proxy quota and diagnostics views cover behavior."""
+    """Verify proxy quota and diagnostics views cover error paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     grafana_proxy = _unwrap_view(index_view.grafana_proxy)
     prometheus_proxy = _unwrap_view(index_view.prometheus_proxy)
     storage_quota_data = _unwrap_view(index_view.storage_quota_data)

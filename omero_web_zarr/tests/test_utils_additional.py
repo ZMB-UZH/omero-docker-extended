@@ -15,7 +15,10 @@ from omero_web_zarr import utils
 
 
 def _write_minimal_store(root: Path) -> None:
-    """Handle write minimal store."""
+    """Write minimal store.
+
+    Inputs: `root`. Output: None.
+    """
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
 
@@ -23,7 +26,10 @@ def _write_minimal_store(root: Path) -> None:
 def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
     tmp_path, monkeypatch
 ):
-    """Verify test path and external lsid helpers cover add behavior."""
+    """Verify path and external lsid helpers cover additional invalid inputs.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `self`.
+    """
     assert utils.resolve_local_zarr_store(None) is None
     assert utils.resolve_local_zarr_store("https://example.invalid/demo.zarr") is None
     assert utils.resolve_local_zarr_store("file://") is None
@@ -47,7 +53,10 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
         """Represent params."""
 
         def addId(self, image_id):
-            """Handle add identifier."""
+            """Add ID.
+
+            Inputs: `image_id`. Output: `self`.
+            """
             self.image_id = image_id
             return self
 
@@ -89,7 +98,10 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
 def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
     monkeypatch, tmp_path
 ):
-    """Verify test node and channel helpers cover cache mis behavior."""
+    """Verify node and channel helpers cover cache mismatch and error paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     image = SimpleNamespace(id=7)
     monkeypatch.setattr(
         utils,
@@ -169,7 +181,10 @@ def test_node_and_channel_helpers_cover_cache_mismatch_and_error_paths(
 
 
 def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypatch):
-    """Verify test plane render and encoding helpers cover behavior."""
+    """Verify plane render and encoding helpers cover remaining utils paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     original_render_store_backed_plane = utils.render_store_backed_plane
 
     with pytest.raises(ValueError, match="no image data"):
@@ -264,7 +279,10 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
 def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallbacks(
     tmp_path, monkeypatch
 ):
-    """Verify test store backed metadata helpers cover syml behavior."""
+    """Verify store backed metadata helpers cover symlink resolution and reader fallbacks.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: list.
+    """
     store_root = tmp_path / "store.zarr"
     _write_minimal_store(store_root)
 
@@ -346,6 +364,10 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
         """Represent reader."""
 
         def __call__(self):
+            """The callable instance with.
+
+            Inputs: none. Output: list.
+            """
             return [SimpleNamespace(data=None), SimpleNamespace(data=[])]
 
     fake_io_module.parse_url = lambda current_root, fmt=None: object()
@@ -354,7 +376,10 @@ def test_store_backed_metadata_helpers_cover_symlink_resolution_and_reader_fallb
 
 
 def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) -> None:
-    """Verify test store metadata file resolution rejects p behavior."""
+    """Verify store metadata file resolution rejects paths outside store.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     store_root = tmp_path / "secure.zarr"
     _write_minimal_store(store_root)
     (store_root / ".zattrs").write_text(
@@ -396,7 +421,10 @@ def test_store_metadata_file_resolution_rejects_paths_outside_store(tmp_path) ->
 
 
 def test_store_backed_axis_and_size_helpers_cover_fallback_shapes() -> None:
-    """Verify test store backed axis and size helpers cover behavior."""
+    """Verify store backed axis and size helpers cover fallback shapes.
+
+    Inputs: none. Output: None.
+    """
     fallback_node = SimpleNamespace(
         data=[np.zeros((2, 3, 4), dtype=np.uint8)],
         metadata={"axes": [{"name": "y"}]},
@@ -413,7 +441,10 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
     monkeypatch,
     tmp_path,
 ):
-    """Verify test store backed utils cover root attrs rgb behavior."""
+    """Verify store backed utils cover root attrs rgb rendering and tile size fallback.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     store_root = tmp_path / "root.zarr"
     store_root.mkdir()
     (store_root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
@@ -449,7 +480,10 @@ def test_store_backed_utils_cover_root_attrs_rgb_rendering_and_tile_size_fallbac
         _re = None
 
         def _prepareRenderingEngine(self):
-            """Handle prepare rendering engine."""
+            """Prepare Rendering Engine.
+
+            Inputs: none. Output: None.
+            """
             self._re = None
 
     assert utils.get_safe_image_tile_size(_FallbackImage()) == (64, 32)

@@ -20,7 +20,10 @@ class TmpCleanupRegressionTests(TestCase):
     """Test cases for tmp cleanup regression tests."""
 
     def test_safe_mark_path_for_deferred_cleanup_marks_directory_root(self):
-        """Verify test safe mark path for deferred cleanup mark behavior."""
+        """Verify safe mark path for deferred cleanup marks directory root.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target = root / "upload-job"
@@ -39,7 +42,10 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("1120", marker.read_text(encoding="utf-8").strip())
 
     def test_safe_mark_path_for_deferred_cleanup_marks_file_sidecar(self):
-        """Verify test safe mark path for deferred cleanup mark behavior."""
+        """Verify safe mark path for deferred cleanup marks file sidecar.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target = root / "job.json"
@@ -58,7 +64,10 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertEqual("2300", marker.read_text(encoding="utf-8").strip())
 
     def test_tmp_cleaner_respects_active_directory_retention_marker(self):
-        """Verify test tmp cleaner respects active directory re behavior."""
+        """Verify temporary cleaner respects active directory retention marker.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             target_dir = root / "omeroweb-import" / "data" / "job123"
@@ -94,7 +103,10 @@ class TmpCleanupRegressionTests(TestCase):
             )
 
     def test_tmp_cleaner_respects_active_file_retention_marker(self):
-        """Verify test tmp cleaner respects active file retenti behavior."""
+        """Verify temporary cleaner respects active file retention marker.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             job_file = root / "omeroweb-import" / "jobs" / "job123.json"
@@ -131,7 +143,10 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertTrue(marker.exists())
 
     def test_tmp_cleaner_deletes_expired_retained_file(self):
-        """Verify test tmp cleaner deletes expired retained file."""
+        """Verify temporary cleaner deletes expired retained file.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             job_file = root / "omeroweb-import" / "jobs" / "job123.json"
@@ -168,7 +183,10 @@ class TmpCleanupRegressionTests(TestCase):
             self.assertFalse(job_file.exists())
 
     def test_tmp_cleaner_preserves_structural_namespace_directories(self):
-        """Namespace dirs (depth-1) and their tmp/ subdirs must survive cleanup."""
+        """Namespace dirs (depth-1) and their tmp/ subdirs must survive cleanup.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             for ns in ("omero-web", "omero-server", "omeroweb-import"):
@@ -203,7 +221,10 @@ class TmpCleanupRegressionTests(TestCase):
                 )
 
     def test_tmp_cleaner_still_deletes_deep_empty_subdirectories(self):
-        """Non-structural dirs deeper than depth-2 should still be pruned."""
+        """Non-structural dirs deeper than depth-2 should still be pruned.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "omero-web" / "tmp").mkdir(parents=True)

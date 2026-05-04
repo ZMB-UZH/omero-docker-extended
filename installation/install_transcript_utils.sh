@@ -10,6 +10,7 @@ fi
 . "${_ENV_ASSIGNMENT_HELPER_PATH}"
 unset _INSTALL_TRANSCRIPT_UTILS_DIR _ENV_ASSIGNMENT_HELPER_PATH
 
+# Install transcript timestamp utc. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_timestamp_utc() {
     if [ -n "${OMERO_INSTALL_TRANSCRIPT_TIMESTAMP:-}" ]; then
         printf '%s' "${OMERO_INSTALL_TRANSCRIPT_TIMESTAMP}"
@@ -19,6 +20,7 @@ install_transcript_timestamp_utc() {
     date -u +%Y%m%dT%H%M%SZ
 }
 
+# Install transcript load paths environment value. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_load_paths_env_value() {
     local env_file_path="$1"
     local variable_name="$2"
@@ -54,6 +56,7 @@ install_transcript_load_paths_env_value() {
     )
 }
 
+# Install transcript resolve final path. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_resolve_final_path() {
     local source_name="$1"
     local env_file_path="$2"
@@ -75,6 +78,7 @@ install_transcript_resolve_final_path() {
     printf '%s/installation_logs/%s_%s.log' "${data_path%/}" "${source_name}" "${timestamp_utc}"
 }
 
+# Install transcript publish final path if needed. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_publish_final_path_if_needed() {
     local source_name="$1"
     local env_file_path="$2"
@@ -97,6 +101,7 @@ install_transcript_publish_final_path_if_needed() {
     echo "Installation transcript will be saved to: ${final_path}"
 }
 
+# Install transcript record text. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_record_text() {
     local text="${1:-}"
 
@@ -107,6 +112,7 @@ install_transcript_record_text() {
     printf '%s' "${text}" >> "${OMERO_INSTALL_TRANSCRIPT_TMP_LOG}"
 }
 
+# Install transcript record line. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_record_line() {
     local text="${1:-}"
 
@@ -117,6 +123,7 @@ install_transcript_record_line() {
     printf '%s\n' "${text}" >> "${OMERO_INSTALL_TRANSCRIPT_TMP_LOG}"
 }
 
+# Install transcript build reexec command. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_build_reexec_command() {
     local mode="$1"
     local script_path="$2"
@@ -141,6 +148,7 @@ install_transcript_build_reexec_command() {
     printf '%q ' "${cmd[@]}"
 }
 
+# Install transcript finalize. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_finalize() {
     local temp_log_path="$1"
     local metadata_path="$2"
@@ -170,6 +178,7 @@ install_transcript_finalize() {
     printf '%s\n' "${final_path}"
 }
 
+# Install transcript enable. Inputs: shell arguments and environment. Output: command status and side effects.
 install_transcript_enable() {
     local env_file_path="$1"
     local script_path="$2"

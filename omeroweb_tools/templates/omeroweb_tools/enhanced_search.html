@@ -457,6 +457,7 @@
             .find((chunk) => chunk.startsWith('csrftoken='))
             ?.split('=')[1] || '';
 
+        // Set Root Warning. Inputs: none. Output: return value.
         const setRootWarning = () => {
             if (!warningEl) {
                 return;
@@ -489,6 +490,7 @@
         const settingsMenuBtn = document.getElementById('settings_menu_btn');
         const settingsMenu = document.getElementById('settings_menu');
 
+        // Show Settings Menu. Inputs: show. Output: return value.
         function showSettingsMenu(show) {
             if (!settingsMenu) {
                 return;
@@ -520,6 +522,7 @@
             }
         });
 
+        // Post JSON. Inputs: url, payload. Output: Promise result.
         const postJson = async (url, payload) => {
             const response = await fetch(url, {
                 method: 'POST',
@@ -537,6 +540,7 @@
             return data;
         };
 
+        // Show Live Status. Inputs: message, state. Output: return value.
         const showLiveStatus = (message, state = 'busy') => {
             if (!liveStatusEl) {
                 return;
@@ -546,6 +550,7 @@
             liveStatusEl.hidden = !message;
         };
 
+        // Clear Live Status. Inputs: none. Output: return value.
         const clearLiveStatus = () => {
             if (!liveStatusEl) {
                 return;
@@ -555,8 +560,10 @@
             }, 1600);
         };
 
+        // Normalize Saved Query Name. Inputs: value. Output: return value.
         const normalizeSavedQueryName = (value) => String(value || '').trim().replace(/\s+/g, ' ');
 
+        // Sync Primary Layout Min Width. Inputs: none. Output: return value.
         const syncPrimaryLayoutMinWidth = () => {
             const layout = document.querySelector('.tools-search-layout');
             const primaryGrid = document.querySelector('.tools-search-grid--primary');
@@ -574,6 +581,7 @@
             syncIndexSettingToggleAlignment();
         };
 
+        // Sync Index Setting Toggle Alignment. Inputs: none. Output: return value.
         const syncIndexSettingToggleAlignment = () => {
             const body = document.getElementById('tools-search-metadata-index-body');
             const panel = body?.querySelector('.tools-search-settings-panel');
@@ -597,6 +605,7 @@
             );
         };
 
+        // Update Save Query Button State. Inputs: none. Output: return value.
         const updateSaveQueryButtonState = () => {
             const saveQueryButton = document.getElementById('save-query-btn');
             const savedQueryNameInput = document.getElementById('saved-query-name');
@@ -611,6 +620,7 @@
                 || Boolean(searchSubmitButton?.disabled);
         };
 
+        // Clear Search Validation Status. Inputs: none. Output: return value.
         const clearSearchValidationStatus = () => {
             if (!liveStatusEl || liveStatusEl.dataset.state !== 'error') {
                 return;
@@ -621,6 +631,7 @@
             }
         };
 
+        // Show Page Loader. Inputs: title, message. Output: return value.
         const showPageLoader = (title, message) => {
             if (!pageLoaderEl) {
                 return;
@@ -635,6 +646,7 @@
             pageLoaderEl.setAttribute('aria-hidden', 'false');
         };
 
+        // Hide Page Loader. Inputs: none. Output: return value.
         const hidePageLoader = () => {
             if (!pageLoaderEl) {
                 return;
@@ -643,6 +655,7 @@
             pageLoaderEl.setAttribute('aria-hidden', 'true');
         };
 
+        // Set Button Busy. Inputs: button, isBusy, busyText. Output: return value.
         const setButtonBusy = (button, isBusy, busyText) => {
             if (!button) {
                 return;
@@ -655,10 +668,12 @@
             button.textContent = isBusy ? busyText : button.dataset.defaultLabel;
         };
 
+        // Return whether sync State Running. Inputs: state. Output: return value.
         const isSyncStateRunning = (state) => (
             String(state?.status || '').toLowerCase() === 'running'
         );
 
+        // Set sync Button Availability. Inputs: button, isRunning. Output: return value.
         const setSyncButtonAvailability = (button, isRunning = null) => {
             if (!button) {
                 return;
@@ -678,6 +693,7 @@
                 || running;
         };
 
+        // Bind Page Load Links. Inputs: root. Output: return value.
         const bindPageLoadLinks = (root = document) => {
             root.querySelectorAll('[data-page-load-message]').forEach((link) => {
                 if (link.dataset.pageLoadBound === 'true') {
@@ -701,9 +717,11 @@
                 : []
         );
 
+        // Return collapsed Sections Payload. Inputs: none. Output: return value.
         const collapsedSectionsPayload = () => supportedCollapsibleSections
             .filter((section) => collapsedSections.has(section));
 
+        // Update Collapsible Body Height. Inputs: body. Output: return value.
         const updateCollapsibleBodyHeight = (body) => {
             if (!body || body.getAttribute('aria-hidden') === 'true') {
                 return;
@@ -714,6 +732,7 @@
             );
         };
 
+        // Return persist Collapsed Sections. Inputs: none. Output: Promise result.
         const persistCollapsedSections = async () => {
             if (blockedForRoot || !settingsAccessible) {
                 return;
@@ -732,6 +751,7 @@
             }
         };
 
+        // Set Collapsible Section State. Inputs: button, collapsed, { persist. Output: return value.
         const setCollapsibleSectionState = (button, collapsed, { persist = false } = {}) => {
             const sectionKey = button?.dataset.collapsibleToggle;
             const bodyId = button?.getAttribute('aria-controls');
@@ -767,16 +787,19 @@
             }
         };
 
+        // Release Precollapsed Card. Inputs: card. Output: return value.
         const releasePrecollapsedCard = (card) => {
             card?.classList.remove('tools-search-card--precollapsed');
         };
 
+        // Release Precollapsed Cards. Inputs: none. Output: return value.
         const releasePrecollapsedCards = () => {
             document
                 .querySelectorAll('.tools-search-card--precollapsed')
                 .forEach(releasePrecollapsedCard);
         };
 
+        // Initialize Collapsible Sections. Inputs: none. Output: return value.
         const initializeCollapsibleSections = () => {
             document.querySelectorAll('.tools-search-section-toggle').forEach((button) => {
                 const sectionKey = button.dataset.collapsibleToggle;
@@ -800,6 +823,7 @@
         const maxConcurrentPreviewLoads = 4;
         let activePreviewLoads = 0;
 
+        // Flush Preview Load Queue. Inputs: none. Output: return value.
         const flushPreviewLoadQueue = () => {
             while (activePreviewLoads < maxConcurrentPreviewLoads && previewLoadQueue.length) {
                 const nextCard = previewLoadQueue.shift();
@@ -810,6 +834,7 @@
             }
         };
 
+        // Queue Preview Card. Inputs: card. Output: return value.
         const queuePreviewCard = (card) => {
             if (
                 !card
@@ -824,6 +849,7 @@
             flushPreviewLoadQueue();
         };
 
+        // Load Preview Card. Inputs: card. Output: return value.
         const loadPreviewCard = (card) => {
             if (!card || card.dataset.previewState === 'loading' || card.dataset.previewState === 'loaded') {
                 return;
@@ -840,6 +866,7 @@
             activePreviewLoads += 1;
             const preloader = new Image();
             preloader.decoding = 'async';
+            // Finalize Preview Load. Inputs: none. Output: return value.
             const finalizePreviewLoad = () => {
                 activePreviewLoads = Math.max(0, activePreviewLoads - 1);
                 flushPreviewLoadQueue();
@@ -859,6 +886,7 @@
             preloader.src = thumbnailUrl;
         };
 
+        // Initialize Preview Loading. Inputs: none. Output: return value.
         const initializePreviewLoading = () => {
             const cards = Array.from(document.querySelectorAll('.tools-search-preview'));
             if (!cards.length) {
@@ -883,6 +911,7 @@
             cards.forEach((card) => observer.observe(card));
         };
 
+        // Format Status Timestamp. Inputs: value. Output: return value.
         const formatStatusTimestamp = (value) => {
             if (!value) {
                 return '';
@@ -907,6 +936,7 @@
             return `${values.day} ${values.month} ${values.year}, ${values.hour}:${values.minute} ${period}`.trim();
         };
 
+        // Build Current Query Payload. Inputs: none. Output: return value.
         const buildCurrentQueryPayload = () => {
             if (!enhancedSearchForm) {
                 return { page: 1 };
@@ -924,6 +954,7 @@
         const dateFormat = 'dd-mm-yy';
         const dateInputDigits = 8;
         const earliestSelectableDate = new Date(2010, 0, 1);
+        // Return today Date. Inputs: none. Output: return value.
         const todayDate = (() => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -935,8 +966,10 @@
         const datepickerProxyByInput = new WeakMap();
         const dateInputByProxy = new WeakMap();
 
+        // Return digits Only. Inputs: value. Output: return value.
         const digitsOnly = (value) => String(value || '').replace(/\D/g, '').slice(0, dateInputDigits);
 
+        // Format Date Digits. Inputs: value. Output: return value.
         const formatDateDigits = (value) => {
             const digits = digitsOnly(value);
             if (digits.length <= 2) {
@@ -948,6 +981,7 @@
             return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
         };
 
+        // Parse Strict Date Input. Inputs: value. Output: return value.
         const parseStrictDateInput = (value) => {
             const normalized = String(value || '').trim();
             if (!normalized || !window.jQuery?.datepicker) {
@@ -962,6 +996,7 @@
             }
         };
 
+        // Format Strict Date Input. Inputs: date. Output: return value.
         const formatStrictDateInput = (date) => {
             if (!date || Number.isNaN(date.getTime())) {
                 return '';
@@ -975,6 +1010,7 @@
             return `${day}-${month}-${year}`;
         };
 
+        // Normalize Calendar Date. Inputs: date. Output: return value.
         const normalizeCalendarDate = (date) => {
             if (!date || Number.isNaN(date.getTime())) {
                 return null;
@@ -982,11 +1018,13 @@
             return new Date(date.getFullYear(), date.getMonth(), date.getDate());
         };
 
+        // Return whether Future Calendar Date. Inputs: date. Output: return value.
         const isFutureCalendarDate = (date) => {
             const normalizedDate = normalizeCalendarDate(date);
             return Boolean(normalizedDate && normalizedDate.getTime() > todayDate.getTime());
         };
 
+        // Return whether Before Earliest Selectable Date. Inputs: date. Output: return value.
         const isBeforeEarliestSelectableDate = (date) => {
             const normalizedDate = normalizeCalendarDate(date);
             return Boolean(
@@ -994,6 +1032,7 @@
             );
         };
 
+        // Return whether Potentially Valid Date Input. Inputs: value. Output: return value.
         const isPotentiallyValidDateInput = (value) => {
             const formatted = String(value || '').trim();
             if (!formatted) {
@@ -1030,6 +1069,7 @@
             return true;
         };
 
+        // Set Date Input Validity. Inputs: input, isValid. Output: return value.
         const setDateInputValidity = (input, isValid) => {
             if (!input) {
                 return;
@@ -1038,6 +1078,7 @@
             input.setAttribute('aria-invalid', isValid ? 'false' : 'true');
         };
 
+        // Sync Datepicker Proxy Value. Inputs: input, dateValue. Output: return value.
         const syncDatepickerProxyValue = (input, dateValue) => {
             if (!window.jQuery?.datepicker) {
                 return;
@@ -1049,6 +1090,7 @@
             window.jQuery(proxy).datepicker('setDate', dateValue || null);
         };
 
+        // Return active Datepicker Input. Inputs: none. Output: return value.
         const activeDatepickerInput = () => {
             if (openDatepickerInput) {
                 return openDatepickerInput;
@@ -1057,6 +1099,7 @@
             return dateInputByProxy.get(lastInput) || null;
         };
 
+        // Update Datepicker Bounds. Inputs: none. Output: return value.
         const updateDatepickerBounds = () => {
             if (!window.jQuery?.datepicker) {
                 return;
@@ -1084,6 +1127,7 @@
             }
         };
 
+        // Validate Date Input. Inputs: input, { syncPicker. Output: return value.
         const validateDateInput = (input, { syncPicker = true } = {}) => {
             if (!input) {
                 return true;
@@ -1125,11 +1169,13 @@
             return true;
         };
 
+        // Initialize Date Inputs. Inputs: none. Output: return value.
         const initializeDateInputs = () => {
             const dateInputs = Array.from(document.querySelectorAll('.tools-search-date-input'));
             if (!dateInputs.length) {
                 return;
             }
+            // Set Date Control Active. Inputs: input, isActive. Output: side effects.
             const setDateControlActive = (input, isActive) => {
                 input
                     ?.closest('.tools-search-date-control')
@@ -1163,6 +1209,7 @@
             });
             if (window.jQuery?.datepicker) {
                 const $ = window.jQuery;
+                // Install Datepicker Pointer Guard. Inputs: none. Output: return value.
                 const installDatepickerPointerGuard = () => {
                     document.addEventListener('mousedown', (event) => {
                         const target = event.target instanceof Element
@@ -1291,6 +1338,7 @@
             updateSearchSubmitState();
         };
 
+        // Update Search Submit State. Inputs: none. Output: return value.
         const updateSearchSubmitState = () => {
             if (!searchSubmitButton) {
                 return;
@@ -1337,6 +1385,7 @@
             }
         };
 
+        // Perform handle Clear Search Click. Inputs: event. Output: side effects.
         const handleClearSearchClick = (event) => {
             event.preventDefault();
             hidePageLoader();
@@ -1415,6 +1464,7 @@
             });
         };
 
+        // Update sync Table. Inputs: states. Output: return value.
         const updateSyncTable = (states) => {
             const body = document.getElementById('sync-state-body');
             if (!body || !Array.isArray(states)) {
@@ -1462,6 +1512,7 @@
             );
         };
 
+        // Refresh sync State. Inputs: none. Output: Promise result.
         const refreshSyncState = async () => {
             const response = await fetch(syncStateUrl, { credentials: 'same-origin' });
             if (!response.ok) {
@@ -1472,6 +1523,7 @@
             return true;
         };
 
+        // Update Saved Query List. Inputs: items. Output: return value.
         const updateSavedQueryList = (items) => {
             const container = document.getElementById('saved-query-list');
             if (!container) {
@@ -1532,6 +1584,7 @@
             );
         };
 
+        // Return handle Delete Query Click. Inputs: event. Output: Promise result.
         const handleDeleteQueryClick = async (event) => {
             const button = event.currentTarget;
             showLiveStatus('Deleting saved search…');
@@ -1557,7 +1610,9 @@
         });
         const indexedScopeSelect = document.getElementById('indexed_scope');
         const indexedScopeField = indexedScopeSelect?.closest('.tools-search-field--scope');
+        // Activate Indexed Scope. Inputs: none. Output: return value.
         const activateIndexedScope = () => indexedScopeField?.classList.add('is-select-active');
+        // Deactivate Indexed Scope. Inputs: none. Output: return value.
         const deactivateIndexedScope = () => indexedScopeField?.classList.remove('is-select-active');
         window.OmeroEnhancedSearchIndexedScope?.init({
             onStoredScopeApplied: updateSearchSubmitState,

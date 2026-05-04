@@ -7,7 +7,10 @@ from omero_plugin_common import logging_utils
 
 
 def test_configure_omero_gateway_logging_sets_info_level() -> None:
-    """Verify test configure OMERO gateway logging sets inf behavior."""
+    """Verify configure OMERO gateway logging sets info level.
+
+    Inputs: none. Output: None.
+    """
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
     previous_flag = logging_utils._gateway_logging_configured()
@@ -26,7 +29,10 @@ def test_configure_omero_gateway_logging_sets_info_level() -> None:
 
 
 def test_configure_omero_gateway_logging_is_idempotent() -> None:
-    """Verify test configure OMERO gateway logging is idemp behavior."""
+    """Verify configure OMERO gateway logging is idempotent.
+
+    Inputs: none. Output: None.
+    """
     logger = logging.getLogger("omero.gateway.utils")
     previous_level = logger.level
     previous_flag = logging_utils._gateway_logging_configured()
@@ -44,7 +50,10 @@ def test_configure_omero_gateway_logging_is_idempotent() -> None:
 
 
 def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
-    """Verify test sanitize log value escapes newlines and behavior."""
+    """Verify sanitize log value escapes newlines and carriage returns.
+
+    Inputs: none. Output: None.
+    """
     assert (
         logging_utils.sanitize_log_value("line1\nline2\rline3")
         == "line1\\\\nline2\\\\rline3"
@@ -52,17 +61,27 @@ def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
 
 
 def test_sanitize_log_value_handles_non_string_values() -> None:
-    """Verify test sanitize log value handles non string va behavior."""
+    """Verify sanitize log value handles non string values.
+
+    Inputs: none. Output: None.
+    """
     assert logging_utils.sanitize_log_value(123) == "123"
 
 
 def test_sanitize_log_value_handles_unprintable_values() -> None:
-    """Verify test sanitize log value handles unprintable v behavior."""
+    """Verify sanitize log value handles unprintable values.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
 
     class Unprintable:
         """Represent unprintable."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad\nstring")
 
     assert (
@@ -78,7 +97,10 @@ def test_sanitize_log_value_handles_unprintable_values() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
-    """Verify test sanitize URL for logging redacts sensiti behavior."""
+    """Verify sanitize URL for logging redacts sensitive query values.
+
+    Inputs: none. Output: None.
+    """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://example.org/api?token=secret&ok=value&session_key=abc123&auth=key"
     )
@@ -98,7 +120,10 @@ def test_sanitize_url_for_logging_redacts_sensitive_query_values() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo() -> None:
-    """Verify test sanitize URL for logging redacts userinfo."""
+    """Verify sanitize URL for logging redacts userinfo.
+
+    Inputs: none. Output: None.
+    """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://alice:supersecret@example.org/path"
     )
@@ -107,7 +132,10 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo_with_invalid_port() -> None:
-    """Verify test sanitize URL for logging redacts userinf behavior."""
+    """Verify sanitize URL for logging redacts userinfo with invalid port.
+
+    Inputs: none. Output: None.
+    """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://alice:supersecret@example.org:bad-port/path"
     )
@@ -117,7 +145,10 @@ def test_sanitize_url_for_logging_redacts_userinfo_with_invalid_port() -> None:
 
 
 def test_sanitize_url_for_logging_redacts_userinfo_when_username_is_malformed() -> None:
-    """Verify test sanitize URL for logging redacts userinf behavior."""
+    """Verify sanitize URL for logging redacts userinfo when username is malformed.
+
+    Inputs: none. Output: None.
+    """
     sanitized = logging_utils.sanitize_url_for_logging(
         "https://bad\ud800:supersecret@example.org/path?token=secret"
     )
@@ -129,10 +160,16 @@ def test_sanitize_url_for_logging_redacts_userinfo_when_username_is_malformed() 
 
 
 def test_sanitized_exc_info_escapes_exception_message() -> None:
-    """Verify test sanitized exc info escapes exception mes behavior."""
+    """Verify sanitized exc info escapes exception message.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
 
     def sanitized_info_for_test_exception():
-        """Handle sanitized info for test exception."""
+        """Sanitized info for test exception.
+
+        Inputs: none. Output: call result. Raises on invalid or unavailable state.
+        """
         try:
             raise RuntimeError("secret\nline")
         except RuntimeError as exc:

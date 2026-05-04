@@ -11,10 +11,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self.val`.
+        """
         return self.val
 
 
@@ -22,22 +29,35 @@ class _Owner:
     """Represent owner."""
 
     def __init__(self, owner_id, *, ome_name=None, first_name=None):
+        """Initialize the instance.
+
+        Inputs: `owner_id`, `ome_name`, `first_name`. Output: None.
+        """
         self._owner_id = owner_id
         self._ome_name = ome_name
         self._first_name = first_name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._owner_id)
 
     def getOmeName(self):
-        """Return get ome name."""
+        """Return the fake OMERO name.
+
+        Inputs: none. Output: `self._ome_name`. Raises on invalid or unavailable state.
+        """
         if self._ome_name is None:
             raise RuntimeError("no ome name")
         return self._ome_name
 
     def getFirstName(self):
-        """Return get first name."""
+        """Return the fake first name.
+
+        Inputs: none. Output: `self._first_name`.
+        """
         return self._first_name
 
 
@@ -45,15 +65,25 @@ class _Permissions:
     """Represent permissions."""
 
     def __init__(self, can_read, can_write):
+        """Initialize the instance.
+
+        Inputs: `can_read`, `can_write`. Output: None.
+        """
         self._can_read = can_read
         self._can_write = can_write
 
     def isRead(self):
-        """Handle is read."""
+        """Return whether Read.
+
+        Inputs: none. Output: `self._can_read`.
+        """
         return self._can_read
 
     def isWrite(self):
-        """Handle is write."""
+        """Return whether Write.
+
+        Inputs: none. Output: `self._can_write`.
+        """
         return self._can_write
 
 
@@ -61,15 +91,25 @@ class _Details:
     """Represent details."""
 
     def __init__(self, *, owner=None, permissions=None):
+        """Initialize the instance.
+
+        Inputs: `owner`, `permissions`. Output: None.
+        """
         self._owner = owner
         self._permissions = permissions
 
     def getOwner(self):
-        """Return get owner."""
+        """Return the fake owner.
+
+        Inputs: none. Output: `self._owner`.
+        """
         return self._owner
 
     def getPermissions(self):
-        """Return get permissions."""
+        """Return fake permissions.
+
+        Inputs: none. Output: `self._permissions`.
+        """
         return self._permissions
 
 
@@ -86,6 +126,11 @@ class _NamedProject:
         permissions=None,
         children=None,
     ):
+        """Initialize the instance.
+
+        Inputs: `project_id`, `name`, `owner_id`, `owner_name`, `permissions`,
+        `children`. Output: None.
+        """
         self._project_id = project_id
         self._name = name
         self._details = _Details(
@@ -95,19 +140,31 @@ class _NamedProject:
         self._children = list(children or [])
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._project_id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `self._details`.
+        """
         return self._details
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._children)
 
 
@@ -115,15 +172,25 @@ class _DatasetChild:
     """Represent dataset child."""
 
     def __init__(self, dataset_id, name):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`. Output: None.
+        """
         self._dataset_id = dataset_id
         self._name = name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._dataset_id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -131,15 +198,25 @@ class _ExistingDataset:
     """Represent existing dataset."""
 
     def __init__(self, dataset_id):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`. Output: None.
+        """
         self._dataset_id = dataset_id
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._dataset_id)
 
 
 def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
-    """Verify test owner and permission helpers cover fallb behavior."""
+    """Verify owner and permission helpers cover fallback paths.
+
+    Inputs: none. Output: None.
+    """
     owner = _Owner(7, ome_name="alice")
     details_obj = SimpleNamespace(
         getDetails=lambda: _Details(owner=owner, permissions=_Permissions(True, True))
@@ -163,7 +240,10 @@ def test_owner_and_permission_helpers_cover_fallback_paths() -> None:
 
 
 def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() -> None:
-    """Verify test iter accessible projects and collect pro behavior."""
+    """Verify iter accessible projects and collect project payload cover fallbacks.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     service_opts = SimpleNamespace(
         current="5",
         set_calls=[],
@@ -183,7 +263,13 @@ def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() 
     )
 
     def _get_objects(model, opts=None):
-        """Handle get objects."""
+        """Return objects.
+
+        Inputs: `model`, `opts`. Output: `iter` result. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         assert model == "Project"
         if opts is None and service_opts.current == "-1":
             raise RuntimeError("cross-group query failed")
@@ -213,7 +299,10 @@ def test_iter_accessible_projects_and_collect_project_payload_cover_fallbacks() 
 def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     monkeypatch,
 ) -> None:
-    """Verify test dataset target helpers cover existing ne behavior."""
+    """Verify dataset target helpers cover existing new and planned units.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     project = _NamedProject(
         3,
         "Project",
@@ -224,10 +313,17 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
         """Represent new dataset."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.name = None
 
         def setName(self, value):
-            """Store set name."""
+            """Set Name.
+
+            Inputs: `value`. Output: None.
+            """
             self.name = value
 
     monkeypatch.setattr(core_functions, "DatasetI", _NewDataset)
@@ -242,7 +338,13 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     )
 
     def _get_objects(model, *args, **kwargs):
-        """Handle get objects."""
+        """Return objects.
+
+        Inputs: `model`, `*args`, `**kwargs`. Output: `iter` result. Raises on invalid
+        or unavailable state.
+
+        or unavailable state.
+        """
         if model == "Dataset":
             name = kwargs.get("attributes", {}).get("name")
             if name == "Existing":
@@ -358,7 +460,10 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,
 ) -> None:
-    """Verify test request path dataset preparation covers behavior."""
+    """Verify request path dataset preparation covers success and failure.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     group_calls = []
 
     class _Conn:
@@ -453,16 +558,26 @@ def test_request_path_dataset_preparation_covers_success_and_failure(
 def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
     monkeypatch,
 ) -> None:
-    """Verify test dataset creation helpers cover cache lin behavior."""
+    """Verify dataset creation helpers cover cache link and failure paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
 
     class _NewDataset:
         """Represent new dataset."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.name = None
 
         def setName(self, value):
-            """Store set name."""
+            """Set Name.
+
+            Inputs: `value`. Output: None.
+            """
             self.name = value
 
     link_calls = []
@@ -517,7 +632,10 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
 def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
     monkeypatch,
 ) -> None:
-    """Verify test request path dataset helpers cover fallb behavior."""
+    """Verify request path dataset helpers cover fallback and save failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
@@ -619,7 +737,10 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
 def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_branches(
     monkeypatch,
 ) -> None:
-    """Verify test request path job preparation and dataset behavior."""
+    """Verify request path job preparation and dataset target guards cover remaining branches.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     saved = {}
     monkeypatch.setattr(core_functions, "_load_job", lambda job_id: {"job_id": job_id})
     monkeypatch.setattr(
@@ -829,7 +950,10 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _missing_background_user_connection(*args, **kwargs):
-        """Handle missing background user connection."""
+        """Missing background user connection.
+
+        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        """
         yield None
 
     monkeypatch.setattr(
@@ -858,10 +982,17 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
         """Represent user conn."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.closed = False
 
         def close(self):
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             self.closed = True
             raise RuntimeError("user close exploded")
 
@@ -869,7 +1000,10 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
 
     @contextmanager
     def _background_user_connection(*args, **kwargs):
-        """Handle background user connection."""
+        """Background user connection.
+
+        Inputs: `*args`, `**kwargs`. Output: yielded values.
+        """
         try:
             yield user_conn
         finally:

@@ -18,34 +18,55 @@ _HELD_JOB_LOCKS = local()
 
 
 def _validate_job_id(job_id):
-    """Handle validate job identifier."""
+    """Validate job ID.
+
+    Inputs: `job_id`. Output: `uuid.UUID(hex=job_id.lower()).hex`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     if not isinstance(job_id, str) or not _JOB_ID_RE.fullmatch(job_id):
         raise ValueError("Invalid job id.")
     return uuid.UUID(hex=job_id.lower()).hex
 
 
 def _jobs_root() -> Path:
-    """Handle jobs root."""
+    """Jobs root.
+
+    Inputs: none. Output: `Path`.
+    """
     return Path(JOBS_DIR)
 
 
 def _validated_job_path(job_id, suffix: str) -> Path:
-    """Handle validated job path."""
+    """Validated job path.
+
+    Inputs: `job_id`, `suffix`. Output: `Path`.
+    """
     return _jobs_root() / f"{_validate_job_id(job_id)}{suffix}"
 
 
 def get_job_path(job_id):
-    """Get filesystem path for job JSON file."""
+    """Return job path.
+
+    Inputs: `job_id`. Output: `str` result.
+    """
     return str(_validated_job_path(job_id, ".json"))
 
 
 def get_job_lock_path(job_id):
-    """Get filesystem path for job lock file."""
+    """Return job lock path.
+
+    Inputs: `job_id`. Output: `str` result.
+    """
     return str(_validated_job_path(job_id, ".lock"))
 
 
 def _held_job_locks() -> Counter[str]:
-    """Handle held job locks."""
+    """Held job locks.
+
+    Inputs: none. Output: `Counter[str]`.
+    """
     locks = getattr(_HELD_JOB_LOCKS, "locks", None)
     if locks is None:
         locks = Counter()
@@ -55,7 +76,10 @@ def _held_job_locks() -> Counter[str]:
 
 @contextmanager
 def mark_job_lock_held(job_id):
-    """Mark the current thread as owning a job lock for nested saves."""
+    """Mark the current thread as owning a job lock for nested saves.
+
+    Inputs: `job_id`. Output: yielded values.
+    """
     try:
         lock_key = str(_validated_job_path(job_id, ".lock"))
     except ValueError:
@@ -72,7 +96,10 @@ def mark_job_lock_held(job_id):
 
 
 def load_job(job_id):
-    """Load job data from filesystem."""
+    """Load job.
+
+    Inputs: `job_id`. Output: `json.load` result or None.
+    """
     try:
         path = _validated_job_path(job_id, ".json")
         lock_path = _validated_job_path(job_id, ".lock")
@@ -88,7 +115,10 @@ def load_job(job_id):
 
 
 def save_job(job_dict):
-    """Save job data to filesystem."""
+    """Save job data to filesystem.
+
+    Inputs: `job_dict`. Output: None.
+    """
     path = _validated_job_path(job_dict["job_id"], ".json")
     lock_path = _validated_job_path(job_dict["job_id"], ".lock")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,7 +131,10 @@ def save_job(job_dict):
 
 
 def _write_job_file(path, job_dict):
-    """Handle write job file."""
+    """Write job file.
+
+    Inputs: `path`, `job_dict`. Output: None.
+    """
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(

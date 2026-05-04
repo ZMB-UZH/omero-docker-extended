@@ -9,7 +9,10 @@ from omeroweb_admin_tools.views.index_view import _proxy_http_request
 
 
 def _make_headers(values: dict[str, str]) -> HTTPMessage:
-    """Handle make headers."""
+    """Headers.
+
+    Inputs: `values`. Output: `HTTPMessage`.
+    """
     message = HTTPMessage()
     for key, value in values.items():
         message[key] = value
@@ -25,7 +28,10 @@ class _DummyDjangoRequest:
 
 
 def _install_proxy_backend_stub(monkeypatch, handler) -> None:
-    """Handle install proxy backend stub."""
+    """Install proxy backend stub.
+
+    Inputs: `monkeypatch`, `handler`. Output: None.
+    """
 
     def fake_backend_request(
         *,
@@ -36,7 +42,11 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
         headers,
         timeout_seconds,
     ):
-        """Handle fake backend request."""
+        """Fake backend request.
+
+        Inputs: `base_url`, `method`, `request_target`, `data`, `headers`,
+        `timeout_seconds`. Output: `handler` result.
+        """
         return handler(
             method,
             f"{base_url.rstrip('/')}{request_target}",
@@ -55,7 +65,10 @@ def _install_proxy_backend_stub(monkeypatch, handler) -> None:
 def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
     monkeypatch,
 ) -> None:
-    """Verify test proxy HTTP request suppresses prometheus behavior."""
+    """Verify proxy HTTP request suppresses prometheus live notification stream.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
     read_called = {"value": False}
 
     class DummyResponse:
@@ -66,12 +79,19 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 
         @property
         def content(self):
+            """Return response content.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             read_called["value"] = True
             raise AssertionError("streaming payload should not be fully read")
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None.
+            """
             return None
 
     _install_proxy_backend_stub(
@@ -96,12 +116,19 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
     monkeypatch,
 ) -> None:
-    """Verify test proxy HTTP request returns gateway timeo behavior."""
+    """Verify proxy HTTP request returns gateway timeout for backend timeout.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Handle fake request."""
+        """Fake request.
+
+        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
+        Output: None. Raises on invalid or unavailable state.
+        """
         raise requests.Timeout("timed out")
 
     _install_proxy_backend_stub(monkeypatch, fake_request)
@@ -122,12 +149,19 @@ def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
 def test_proxy_http_request_returns_gateway_timeout_for_socket_timeout(
     monkeypatch,
 ) -> None:
-    """Verify test proxy HTTP request returns gateway timeo behavior."""
+    """Verify proxy HTTP request returns gateway timeout for socket timeout.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
 
     def fake_request(
         method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
     ):
-        """Handle fake request."""
+        """Fake request.
+
+        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
+        Output: None. Raises on invalid or unavailable state.
+        """
         raise socket.timeout("socket timed out")
 
     _install_proxy_backend_stub(monkeypatch, fake_request)

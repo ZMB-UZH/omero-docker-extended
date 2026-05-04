@@ -24,7 +24,10 @@ def _point_in_rounded_rect(
     bottom: float,
     radius: float,
 ) -> bool:
-    """Return True when the point lies inside the rounded rectangle."""
+    """Return True when the point lies inside the rounded rectangle.
+
+    Inputs: `px`, `py`, `left`, `top`, `right`, `bottom`, `radius`. Output: `bool`.
+    """
     clamp_x = min(max(px, left + radius), right - radius)
     clamp_y = min(max(py, top + radius), bottom - radius)
     dx = px - clamp_x
@@ -42,7 +45,11 @@ def _point_on_rounded_rect_border(
     radius: float,
     stroke_width: float,
 ) -> bool:
-    """Return True when the point lies on the rounded rectangle border."""
+    """Return True when the point lies on the rounded rectangle border.
+
+    Inputs: `px`, `py`, `left`, `top`, `right`, `bottom`, `radius`, `stroke_width`.
+    Output: `bool`.
+    """
     if not _point_in_rounded_rect(px, py, left, top, right, bottom, radius):
         return False
 
@@ -66,7 +73,10 @@ def _distance_to_segment(
     bx: float,
     by: float,
 ) -> float:
-    """Return the Euclidean distance from a point to a line segment."""
+    """Return the Euclidean distance from a point to a line segment.
+
+    Inputs: `px`, `py`, `ax`, `ay`, `bx`, `by`. Output: `float`.
+    """
     dx = bx - ax
     dy = by - ay
     if dx == 0.0 and dy == 0.0:
@@ -87,14 +97,20 @@ def _point_on_circle_border(
     radius: float,
     stroke_width: float,
 ) -> bool:
-    """Return True when the point lies on a circle outline."""
+    """Return True when the point lies on a circle outline.
+
+    Inputs: `px`, `py`, `cx`, `cy`, `radius`, `stroke_width`. Output: `bool`.
+    """
     distance = ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
     half_stroke = stroke_width / 2.0
     return (radius - half_stroke) <= distance <= (radius + half_stroke)
 
 
 def _pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
-    """Render a small neutral placeholder icon on a transparent canvas."""
+    """A small neutral placeholder icon on a transparent canvas.
+
+    Inputs: `x`, `y`. Output: `tuple[int, int, int, int]`.
+    """
     px = x + 0.5
     py = y + 0.5
 
@@ -113,7 +129,10 @@ def _pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
 
 
 def build_png_bytes() -> bytes:
-    """Build the fallback PNG bytes."""
+    """The fallback PNG bytes.
+
+    Inputs: none. Output: `bytes`.
+    """
     rows = bytearray()
     for y in range(HEIGHT):
         rows.append(0)
@@ -124,7 +143,10 @@ def build_png_bytes() -> bytes:
     ihdr = struct.pack(">IIBBBBB", WIDTH, HEIGHT, 8, 6, 0, 0, 0)
 
     def chunk(tag: bytes, payload: bytes) -> bytes:
-        """Handle chunk."""
+        """Chunk.
+
+        Inputs: `tag`, `payload`. Output: `bytes`.
+        """
         checksum = zlib.crc32(tag + payload) & 0xFFFFFFFF
         return (
             struct.pack(">I", len(payload))
@@ -144,7 +166,10 @@ def build_png_bytes() -> bytes:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Validate parse args."""
+    """Parse args.
+
+    Inputs: `argv`. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description="Write the deterministic fallback branding logo PNG."
     )
@@ -153,7 +178,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Write the fallback logo PNG to the requested path."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     args = parse_args(argv)
     output_path = args.output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

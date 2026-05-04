@@ -11,7 +11,10 @@ from omero_plugin_common import process_utils
 
 
 def test_run_captures_output_env_and_cwd(tmp_path: Path) -> None:
-    """Verify test run captures output env and cwd."""
+    """Verify run captures output environment and cwd.
+
+    Inputs: `tmp_path`. Output: None.
+    """
     workdir = tmp_path / "workdir"
     workdir.mkdir()
     env = dict(os.environ)
@@ -37,7 +40,10 @@ def test_run_captures_output_env_and_cwd(tmp_path: Path) -> None:
 
 
 def test_run_raises_called_process_error_with_captured_output() -> None:
-    """Verify test run raises called process error with cap behavior."""
+    """Verify run raises called process error with captured output.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(process_utils.CalledProcessError) as excinfo:
         process_utils.run(
             [
@@ -55,7 +61,10 @@ def test_run_raises_called_process_error_with_captured_output() -> None:
 
 
 def test_run_raises_timeout_with_partial_output() -> None:
-    """Verify test run raises timeout with partial output."""
+    """Verify run raises timeout with partial output.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(process_utils.TimeoutExpired) as excinfo:
         process_utils.run(
             [
@@ -72,7 +81,10 @@ def test_run_raises_timeout_with_partial_output() -> None:
 
 
 def test_process_errors_do_not_render_command_values() -> None:
-    """Verify test process errors do not render command values."""
+    """Verify process errors do not render command values.
+
+    Inputs: none. Output: None.
+    """
     failure = process_utils.CalledProcessError(2, ["tool", "--token", "secret"])
     timeout = process_utils.TimeoutExpired(["tool", "--token", "secret"], 5)
 
@@ -83,7 +95,10 @@ def test_process_errors_do_not_render_command_values() -> None:
 
 
 def test_run_streaming_collects_output_and_invokes_tick_callback() -> None:
-    """Verify test run streaming collects output and invoke behavior."""
+    """Verify run streaming collects output and invokes tick callback.
+
+    Inputs: none. Output: None.
+    """
     ticks: list[tuple[int, float]] = []
 
     result = process_utils.run_streaming(
@@ -111,7 +126,10 @@ def test_run_streaming_collects_output_and_invokes_tick_callback() -> None:
 
 
 def test_run_streaming_rejects_non_positive_tick_interval() -> None:
-    """Verify test run streaming rejects non positive tick behavior."""
+    """Verify run streaming rejects non positive tick interval.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(ValueError, match="tick_interval"):
         process_utils.run_streaming(
             [sys.executable, "-c", "print('never-started')"],
@@ -120,10 +138,19 @@ def test_run_streaming_rejects_non_positive_tick_interval() -> None:
 
 
 def test_run_rejects_invalid_timeout_before_spawning(monkeypatch) -> None:
-    """Verify test run rejects invalid timeout before spawning."""
+    """Verify run rejects invalid timeout before spawning.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
 
     def fail_popen(*_args, **_kwargs):
-        """Handle fail popen."""
+        """Fail popen.
+
+        Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         raise AssertionError("invalid timeout must not spawn a process")
 
     monkeypatch.setattr(process_utils, "_popen", fail_popen)
@@ -142,10 +169,19 @@ def test_run_rejects_invalid_timeout_before_spawning(monkeypatch) -> None:
 
 
 def test_run_streaming_rejects_invalid_timing_before_spawning(monkeypatch) -> None:
-    """Verify test run streaming rejects invalid timing bef behavior."""
+    """Verify run streaming rejects invalid timing before spawning.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
 
     def fail_popen(*_args, **_kwargs):
-        """Handle fail popen."""
+        """Fail popen.
+
+        Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         raise AssertionError("invalid timing must not spawn a process")
 
     monkeypatch.setattr(process_utils, "_popen", fail_popen)
@@ -164,7 +200,10 @@ def test_run_streaming_rejects_invalid_timing_before_spawning(monkeypatch) -> No
 
 
 def test_run_streaming_terminates_process_when_tick_callback_fails(monkeypatch) -> None:
-    """Verify test run streaming terminates process when ti behavior."""
+    """Verify run streaming terminates process when tick callback fails.
+
+    Inputs: `monkeypatch`. Output: None. Raises on invalid or unavailable state.
+    """
 
     class TickFailProcess:
         """Represent tick fail process."""
@@ -173,21 +212,34 @@ def test_run_streaming_terminates_process_when_tick_callback_fails(monkeypatch) 
         returncode = None
 
         def __init__(self) -> None:
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.killed = False
 
         @staticmethod
         def poll():
-            """Handle poll."""
+            """Return process completion status.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         def kill(self):
-            """Handle kill."""
+            """Terminate the process.
+
+            Inputs: none. Output: None.
+            """
             self.killed = True
             self.returncode = -9
 
         @staticmethod
         def communicate(timeout=None):
-            """Handle communicate."""
+            """Return process output.
+
+            Inputs: `timeout`. Output: tuple.
+            """
             _ = timeout
             return b"", b""
 
@@ -196,18 +248,30 @@ def test_run_streaming_terminates_process_when_tick_callback_fails(monkeypatch) 
     monotonic_values = iter((100.0, 100.1))
 
     def fake_popen(*_args, **_kwargs):
-        """Handle fake popen."""
+        """Fake popen.
+
+        Inputs: `*_args`, `**_kwargs`. Output: `process`.
+        """
         return process
 
     def fail_on_second_tick(_pid: int, _elapsed: float) -> None:
-        """Handle fail on second tick."""
+        """Fail on second tick.
+
+        Inputs: `_pid`, `_elapsed`. Output: None. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         nonlocal tick_count
         tick_count += 1
         if tick_count > 1:
             raise RuntimeError("tick failed")
 
     def fake_monotonic() -> float:
-        """Handle fake monotonic."""
+        """Fake monotonic.
+
+        Inputs: none. Output: `float`.
+        """
         try:
             return next(monotonic_values)
         except StopIteration:
@@ -227,7 +291,10 @@ def test_run_streaming_terminates_process_when_tick_callback_fails(monkeypatch) 
 
 
 def test_run_rejects_invalid_command_arguments() -> None:
-    """Verify test run rejects invalid command arguments."""
+    """Verify run rejects invalid command arguments.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(ValueError, match="non-empty executable"):
         process_utils.run([])
 
@@ -239,7 +306,10 @@ def test_run_rejects_invalid_command_arguments() -> None:
 
 
 def test_run_rejects_invalid_environment_and_workdir_inputs() -> None:
-    """Verify test run rejects invalid environment and work behavior."""
+    """Verify run rejects invalid environment and workdir inputs.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(
         ValueError, match="Environment variables must not contain NUL bytes"
     ):
@@ -252,37 +322,55 @@ def test_run_rejects_invalid_environment_and_workdir_inputs() -> None:
 
 
 def test_internal_output_helpers_cover_empty_stream_inputs() -> None:
-    """Verify test internal output helpers cover empty stre behavior."""
+    """Verify internal output helpers cover empty stream inputs.
+
+    Inputs: none. Output: None.
+    """
     assert process_utils._decode_output(None) == ""
     assert process_utils._decode_output(b"invalid-\xff") == "invalid-\ufffd"
 
 
 def test_terminate_handles_process_exit_race() -> None:
-    """Verify test terminate handles process exit race."""
+    """Verify terminate handles process exit race.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
 
     class RacingProcess:
         """Represent racing process."""
 
         @staticmethod
         def poll():
-            """Handle poll."""
+            """Return process completion status.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def kill():
-            """Handle kill."""
+            """Terminate the process.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise ProcessLookupError
 
         @staticmethod
         def communicate():
-            """Handle communicate."""
+            """Return process output.
+
+            Inputs: none. Output: tuple.
+            """
             return b"out", b"err"
 
     assert process_utils._terminate(RacingProcess()) == (b"out", b"err")  # type: ignore[arg-type]
 
 
 def test_run_streaming_timeout_preserves_partial_output() -> None:
-    """Verify test run streaming timeout preserves partial behavior."""
+    """Verify run streaming timeout preserves partial output.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(process_utils.TimeoutExpired) as excinfo:
         process_utils.run_streaming(
             [
@@ -301,7 +389,10 @@ def test_run_streaming_timeout_preserves_partial_output() -> None:
 def test_run_streaming_collects_process_finished_at_timeout_boundary(
     monkeypatch,
 ) -> None:
-    """Verify test run streaming collects process finished behavior."""
+    """Verify run streaming collects process finished at timeout boundary.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
 
     class FinishedProcess:
         """Represent finished process."""
@@ -311,7 +402,10 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
 
         @staticmethod
         def communicate(timeout=None):
-            """Handle communicate."""
+            """Return process output.
+
+            Inputs: `timeout`. Output: tuple.
+            """
             assert timeout == 0
             return b"done\n", b""
 
@@ -325,7 +419,10 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
     )
 
     def monotonic() -> float:
-        """Handle monotonic."""
+        """Monotonic.
+
+        Inputs: none. Output: `float`.
+        """
         try:
             return next(times)
         except StopIteration:
@@ -346,7 +443,10 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
 
 
 def test_run_streaming_raises_called_process_error_with_output() -> None:
-    """Verify test run streaming raises called process erro behavior."""
+    """Verify run streaming raises called process error with output.
+
+    Inputs: none. Output: None.
+    """
     with pytest.raises(process_utils.CalledProcessError) as excinfo:
         process_utils.run_streaming(
             [
@@ -364,7 +464,10 @@ def test_run_streaming_raises_called_process_error_with_output() -> None:
 
 
 def test_run_handles_large_unbroken_output() -> None:
-    """Verify test run handles large unbroken output."""
+    """Verify run handles large unbroken output.
+
+    Inputs: none. Output: None.
+    """
     payload_size = 200_000
 
     result = process_utils.run(
@@ -381,7 +484,10 @@ def test_run_handles_large_unbroken_output() -> None:
 
 
 def test_run_streaming_handles_large_unbroken_output() -> None:
-    """Verify test run streaming handles large unbroken output."""
+    """Verify run streaming handles large unbroken output.
+
+    Inputs: none. Output: None.
+    """
     payload_size = 200_000
 
     result = process_utils.run_streaming(
@@ -402,10 +508,16 @@ def test_run_streaming_handles_large_unbroken_output() -> None:
 
 
 def test_run_works_inside_running_event_loop() -> None:
-    """Verify test run works inside running event loop."""
+    """Verify run works inside running event loop.
+
+    Inputs: none. Output: None.
+    """
 
     async def _exercise() -> None:
-        """Handle exercise."""
+        """Exercise.
+
+        Inputs: none. Output: None.
+        """
         result = process_utils.run(
             [sys.executable, "-c", "print('loop-ok')"],
         )
@@ -421,10 +533,16 @@ def test_run_works_inside_running_event_loop() -> None:
 
 
 def test_run_inside_running_event_loop_propagates_command_errors() -> None:
-    """Verify test run inside running event loop propagates behavior."""
+    """Verify run inside running event loop propagates command errors.
+
+    Inputs: none. Output: None.
+    """
 
     async def _exercise() -> None:
-        """Handle exercise."""
+        """Exercise.
+
+        Inputs: none. Output: None.
+        """
         with pytest.raises(process_utils.CalledProcessError) as excinfo:
             process_utils.run(
                 [sys.executable, "-c", "import sys; sys.exit(9)"],

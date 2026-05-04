@@ -17,15 +17,24 @@ class VultureIntegrationContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def read_text(self, relative_path: str) -> str:
-        """Return read text."""
+        """Return read text.
+
+        Inputs: `relative_path`. Output: `str`.
+        """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
     def test_python_style_doc_covers_vulture_workflow_and_local_runner(self) -> None:
-        """Verify test python style doc covers vulture workflow behavior."""
+        """Verify python style doc covers vulture workflow and local runner.
+
+        Inputs: none. Output: None.
+        """
         doc_text = self.read_text("docs/reference/python-style-and-linting.md")
         self.assertIn(".github/workflows/vulture.yml", doc_text)
         self.assertIn("python3 tools/vulture_check.py", doc_text)
@@ -33,7 +42,10 @@ class VultureIntegrationContractTests(TestCase):
         self.assertIn("tracked production Python files", doc_text)
 
     def test_vulture_requirements_are_hash_pinned(self) -> None:
-        """Verify test vulture requirements are hash pinned."""
+        """Verify vulture requirements are hash pinned.
+
+        Inputs: none. Output: None.
+        """
         compiled = self.read_text(".github/requirements/vulture-ci.txt")
         self.assertIn("pip-compile", compiled)
         self.assertIn("vulture==2.16", compiled)
@@ -41,7 +53,10 @@ class VultureIntegrationContractTests(TestCase):
         self.assertIn("--hash=sha256:", compiled)
 
     def test_vulture_workflow_is_pinned_and_uses_repo_runner(self) -> None:
-        """Verify test vulture workflow is pinned and uses repo behavior."""
+        """Verify vulture workflow is pinned and uses repo runner.
+
+        Inputs: none. Output: None.
+        """
         workflow = yaml.safe_load(self.read_text(".github/workflows/vulture.yml"))
         triggers = workflow[True]
         self.assertNotIn("pull_request", triggers)
@@ -88,7 +103,10 @@ class VultureIntegrationContractTests(TestCase):
         )
 
     def test_scope_keeps_only_tracked_production_python_files(self) -> None:
-        """Verify test scope keeps only tracked production pyth behavior."""
+        """Verify scope keeps only tracked production python files.
+
+        Inputs: none. Output: None.
+        """
         include = (
             "tools/vulture_check.py",
             "startup/50-config.py",
@@ -120,7 +138,10 @@ class VultureIntegrationContractTests(TestCase):
                 )
 
     def test_list_vulture_targets_uses_git_ls_files_and_safe_directory(self) -> None:
-        """Verify test list vulture targets uses git ls files a behavior."""
+        """Verify list vulture targets uses git ls files and safe directory.
+
+        Inputs: none. Output: None.
+        """
         repo_root = self.repo_root
         tracked_files = "\n".join(
             [
@@ -165,7 +186,10 @@ class VultureIntegrationContractTests(TestCase):
         )
 
     def test_build_vulture_command_uses_current_python_and_threshold(self) -> None:
-        """Verify test build vulture command uses current pytho behavior."""
+        """Verify build vulture command uses current python and threshold.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(
             [
                 vulture_check.sys.executable,

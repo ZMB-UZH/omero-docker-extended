@@ -11,10 +11,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self.val`.
+        """
         return self.val
 
 
@@ -22,11 +29,18 @@ class _BadValue:
     """Represent bad value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     @staticmethod
     def getValue():
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("bad wrapped value")
 
 
@@ -34,15 +48,25 @@ class _Params:
     """Represent params."""
 
     def __init__(self):
+        """Initialize the instance.
+
+        Inputs: none. Output: None.
+        """
         self.values = {}
 
     def add(self, key, value):
-        """Handle add."""
+        """Add.
+
+        Inputs: `key`, `value`. Output: None.
+        """
         self.values[key] = value
 
 
 def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch):
-    """Verify test annotation service covers wrapped values behavior."""
+    """Verify annotation service covers wrapped values and query failures.
+
+    Inputs: `monkeypatch`. Output: list. Raises on invalid or unavailable state.
+    """
     monkeypatch.setattr(
         annotation_service,
         "get_env",
@@ -62,6 +86,10 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
         """Represent named value."""
 
         def __init__(self, name, value):
+            """Initialize the instance.
+
+            Inputs: `name`, `value`. Output: None.
+            """
             self.name = name
             self.value = value
 
@@ -78,7 +106,13 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Handle projection."""
+            """Projection.
+
+            Inputs: `hql`, `params`, `service_opts`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             raise RuntimeError("query failed")
 
     qs_backed_ann = SimpleNamespace(
@@ -99,10 +133,17 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("map wrapper unavailable")
 
         def __iter__(self):
+            """Return an iterator for the instance.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("cannot iterate wrapped values")
 
     unreadable_ann = SimpleNamespace(getMapValue=_UnreadableMapValue)
@@ -113,7 +154,13 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Handle projection."""
+            """Projection.
+
+            Inputs: `hql`, `params`, `service_opts`. Output: list. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             if "where l.parent.id = :iid and a.ns = :ns" in hql:
                 return [[_Value(1)], [_Value(2)]]
             if "join a.mapValue mv" in hql:
@@ -155,13 +202,22 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
 def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_failures(
     monkeypatch,
 ):
-    """Verify test delete existing annotations handles spar behavior."""
+    """Verify delete existing annotations handles sparse annotations and cleanup failures.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setattr(annotation_service, "ParametersI", _Params)
     monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "")
 
     def _get_id(obj):
-        """Handle get identifier."""
+        """Return ID.
+
+        Inputs: `obj`. Output: `getattr` result. Raises on invalid or unavailable state.
+        """
         if getattr(obj, "explode_id", False):
             raise RuntimeError("id lookup failed")
         return getattr(obj, "id", None)
@@ -173,7 +229,10 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("namespace missing")
 
     plugin_cleanup_result = annotation_service.delete_existing_annotations(
@@ -207,7 +266,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     delete_attempts = []
 
     def _find_link_ids(_conn, annotation_id):
-        """Handle find link identifiers."""
+        """Find link IDs.
+
+        Inputs: `_conn`, `annotation_id`. Output: list. Raises on invalid or unavailable
+        state.
+
+        state.
+        """
         if annotation_id == 13:
             raise RuntimeError("link query failed")
         if annotation_id in deleted_annotation_ids:
@@ -233,9 +298,17 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
         """Represent broken len map value."""
 
         def __bool__(self):
+            """Return the truth value for the instance.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         def __len__(self):
+            """Return the instance length.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("cannot measure pairs")
 
     class _AnnotationQueryService:
@@ -243,7 +316,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def projection(hql, params, service_opts=None):
-            """Handle projection."""
+            """Projection.
+
+            Inputs: `hql`, `params`, `service_opts`. Output: computed value. Raises on
+            invalid or unavailable state.
+
+            invalid or unavailable state.
+            """
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
                 aid = params.values["aid"]
                 if aid == 14:
@@ -266,12 +345,19 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def getQueryService():
-            """Return get query service."""
+            """Return Query Service.
+
+            Inputs: none. Output: `_AnnotationQueryService` result.
+            """
             return _AnnotationQueryService()
 
         @staticmethod
         def getObject(kind, obj_id):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `kind`, `obj_id`. Output: `annotations.get` result. Raises on
+            invalid or unavailable state.
+            """
             if kind == "ImageAnnotationLink":
                 raise RuntimeError("link lookup unavailable")
             if kind == "MapAnnotation" and obj_id == 12:
@@ -280,7 +366,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
         @staticmethod
         def deleteObjects(kind, object_ids, wait=True):
-            """Handle delete objects."""
+            """Delete Objects.
+
+            Inputs: `kind`, `object_ids`, `wait`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             delete_attempts.extend((kind, object_id, wait) for object_id in object_ids)
             for object_id in object_ids:
                 if object_id == 12:
@@ -317,7 +409,13 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
 
 def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
-    """Verify test rate limit covers dummy cache cleanup an behavior."""
+    """Verify rate limit covers dummy cache cleanup and blocked state.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     current_time = [100.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
 
@@ -332,22 +430,36 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
         """Test double for dummy cache."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.deleted = []
 
         @staticmethod
         def get(key):
-            """Return get."""
+            """Return the requested value.
+
+            Inputs: `key`. Output: dict.
+            """
             return {"actions": "bad", "blocked_until": "bad"}
 
         @staticmethod
         def set(key, value, timeout=None):
-            """Store set."""
+            """Store the provided value.
+
+            Inputs: `key`, `value`, `timeout`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise AssertionError(
                 "django dummy cache backend should not be used directly"
             )
 
         def delete(self, key):
-            """Handle delete."""
+            """Delete.
+
+            Inputs: `key`. Output: None.
+            """
             self.deleted.append(key)
 
     dummy_cache = _DummyCache()
@@ -380,11 +492,17 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
     state = {}
 
     def _cache_get(_key):
-        """Handle cache get."""
+        """Cache get.
+
+        Inputs: `_key`. Output: dict.
+        """
         return {"actions": "bad", "blocked_until": 150.0}
 
     def _cache_set(key, value, timeout):
-        """Handle cache set."""
+        """Cache set.
+
+        Inputs: `key`, `value`, `timeout`. Output: bool.
+        """
         state["value"] = value
         state["timeout"] = timeout
         return True
@@ -404,7 +522,10 @@ def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):
 
 
 def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
-    """Verify test rate limit non dummy cache and delete mi behavior."""
+    """Verify rate limit non dummy cache and delete miss paths.
+
+    Inputs: `monkeypatch`. Output: dict.
+    """
     current_time = [10.0]
     monkeypatch.setattr(rate_limit.time, "time", lambda: current_time[0])
 
@@ -419,18 +540,27 @@ def test_rate_limit_non_dummy_cache_and_delete_miss_paths(monkeypatch):
 
         @staticmethod
         def get(key):
-            """Return get."""
+            """Return the requested value.
+
+            Inputs: `key`. Output: dict.
+            """
             backend_calls.append(("get", key))
             return {"cached": key}
 
         @staticmethod
         def set(key, value, timeout=None):
-            """Store set."""
+            """Store the provided value.
+
+            Inputs: `key`, `value`, `timeout`. Output: None.
+            """
             backend_calls.append(("set", key, value, timeout))
 
         @staticmethod
         def delete(key):
-            """Handle delete."""
+            """Delete.
+
+            Inputs: `key`. Output: None.
+            """
             backend_calls.append(("delete", key))
 
     monkeypatch.setattr(rate_limit, "DummyCache", type("_OtherDummyCache", (), {}))

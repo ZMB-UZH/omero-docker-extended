@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 def current_username(request, conn):
-    """Resolve the current username from the OMERO connection or Django request."""
+    """Return current username.
+
+    Inputs: `request`, `conn`. Output: computed value or None.
+    """
     try:
         user = conn.getUser()
         if user:
@@ -31,7 +34,10 @@ def current_username(request, conn):
 
 
 def load_request_data(request):
-    """Load request payload preferring JSON, falling back to POST form data."""
+    """Load request data.
+
+    Inputs: `request`. Output: computed value.
+    """
     try:
         return json.loads(request.body.decode("utf-8"))
     except Exception:
@@ -39,7 +45,10 @@ def load_request_data(request):
 
 
 def parse_json_body(request) -> Tuple[Optional[Any], Optional[str]]:
-    """Parse JSON from request body, returning data and a safe error string."""
+    """Parse JSON body.
+
+    Inputs: `request`. Output: `Tuple[Optional[Any], Optional[str]]`.
+    """
     try:
         raw_body = request.body.decode("utf-8")
     except Exception:

@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
+# Print an error and exit. Inputs: shell arguments and environment. Output: command status and side effects.
 die() {
     printf 'FATAL: %s\n' "$*" >&2
     exit 1

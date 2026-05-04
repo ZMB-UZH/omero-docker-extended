@@ -8,7 +8,10 @@ _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?(?!:)|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def _parse_separator_fragment(separator_fragment):
-    """Handle parse separator fragment."""
+    """Parse separator fragment.
+
+    Inputs: `separator_fragment`. Output: tuple. Raises on invalid or unavailable state.
+    """
     if separator_fragment == r"\s":
         return "", True
     if separator_fragment.startswith("\\"):
@@ -21,7 +24,10 @@ def _parse_separator_fragment(separator_fragment):
 
 
 def _extract_separator_fragments(pattern):
-    """Handle extract separator fragments."""
+    """Extract separator fragments.
+
+    Inputs: `pattern`. Output: tuple. Raises on invalid or unavailable state.
+    """
     if (
         not isinstance(pattern, str)
         or not pattern
@@ -104,7 +110,10 @@ def _extract_separator_fragments(pattern):
 
 
 def _split_on_separator_fragments(value, fragments, match_whitespace):
-    """Handle split on separator fragments."""
+    """Split on separator fragments.
+
+    Inputs: `value`, `fragments`, `match_whitespace`. Output: `parts`.
+    """
     parts: list[str] = []
     current: list[str] = []
     index = 0
@@ -148,7 +157,10 @@ def _split_on_separator_fragments(value, fragments, match_whitespace):
 
 
 def is_supported_separator_pattern(sep_pattern):
-    """Return whether is supported separator pattern."""
+    """Return whether supported separator pattern.
+
+    Inputs: `sep_pattern`. Output: bool.
+    """
     try:
         _extract_separator_fragments(sep_pattern)
     except ValueError:
@@ -157,8 +169,9 @@ def is_supported_separator_pattern(sep_pattern):
 
 
 def parse_filename(filename, sep_pattern):
-    """
-    Parse filename into parts using separator pattern.
+    """Parse filename.
+
+    Inputs: `filename`, `sep_pattern`. Output: `parts`.
 
     Args:
         filename: Image filename to parse

@@ -12,10 +12,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -23,20 +30,33 @@ class _Image:
     """Represent image."""
 
     def __init__(self, image_id, name, *, fileset=None):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `name`, `fileset`. Output: None.
+        """
         self.id = image_id
         self._name = name
         self._fileset = fileset
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def getFileset(self):
-        """Return get fileset."""
+        """Return Fileset.
+
+        Inputs: none. Output: computed value.
+        """
         if callable(self._fileset):
             return self._fileset()
         return self._fileset
@@ -46,21 +66,34 @@ class _Dataset:
     """Represent dataset."""
 
     def __init__(self, dataset_id, name, images, *, owner_id=7):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`, `images`, `owner_id`. Output: None.
+        """
         self.id = dataset_id
         self.owner_id = owner_id
         self._name = name
         self._images = list(images)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._name)
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._images)
 
 
@@ -68,15 +101,25 @@ class _Project:
     """Represent project."""
 
     def __init__(self, datasets):
+        """Initialize the instance.
+
+        Inputs: `datasets`. Output: None.
+        """
         self._datasets = list(datasets)
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._datasets)
 
 
 def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
-    """Verify test filename parser covers group class white behavior."""
+    """Verify filename parser covers group class whitespace and validation edges.
+
+    Inputs: none. Output: None. Raises on invalid or unavailable state.
+    """
     assert filename_parser._parse_separator_fragment(r"\s") == ("", True)
     assert filename_parser._parse_separator_fragment(r"\.") == (".", False)
     assert filename_parser._extract_separator_fragments(r"[\.-]+") == (
@@ -134,7 +177,13 @@ def test_filename_parser_covers_group_class_whitespace_and_validation_edges():
 def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
     monkeypatch,
 ):
-    """Verify test image service covers runtime fallbacks a behavior."""
+    """Verify image service covers runtime fallbacks and format detection edges.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setattr(
         image_service,
         "get_id",
@@ -165,7 +214,11 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
-            """Return get objects."""
+            """Return Objects.
+
+            Inputs: `object_type`, `ids`, `obj_ids`. Output: list. Raises on invalid or
+            unavailable state.
+            """
             assert object_type == "Image"
             if ids is not None:
                 raise TypeError("legacy signature")
@@ -180,12 +233,20 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
         @staticmethod
         def getObjects(object_type, ids=None, obj_ids=None):
-            """Return get objects."""
+            """Return Objects.
+
+            Inputs: `object_type`, `ids`, `obj_ids`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise RuntimeError("bulk fetch unavailable")
 
         @staticmethod
         def getObject(object_type, image_id):
-            """Return get object."""
+            """Return Object.
+
+            Inputs: `object_type`, `image_id`. Output: `_Image` result. Raises on
+            invalid or unavailable state.
+            """
             assert object_type == "Image"
             if image_id == 1:
                 raise RuntimeError("transient lookup failure")
@@ -209,7 +270,10 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
         @staticmethod
         def listChildren():
-            """Return list children."""
+            """Return list children.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("broken project")
 
     assert (
@@ -267,25 +331,43 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
         """Represent original file."""
 
         def __init__(self, *, format_value=None, name=None):
+            """Initialize the instance.
+
+            Inputs: `format_value`, `name`. Output: None.
+            """
             self._format_value = format_value
             self._name = name
 
         def getFormat(self):
-            """Return get format."""
+            """Return Format.
+
+            Inputs: none. Output: computed value.
+            """
             return None if self._format_value is None else _Value(self._format_value)
 
         def getName(self):
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: `self._name`.
+            """
             return self._name
 
     class _UsedFile:
         """Represent used file."""
 
         def __init__(self, original_file):
+            """Initialize the instance.
+
+            Inputs: `original_file`. Output: None.
+            """
             self._original_file = original_file
 
         def getOriginalFile(self):
-            """Return get original file."""
+            """Return Original File.
+
+            Inputs: none. Output: `self._original_file`. Raises on invalid or
+            unavailable state.
+            """
             if isinstance(self._original_file, Exception):
                 raise self._original_file
             return self._original_file
@@ -294,11 +376,18 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
         """Represent fileset."""
 
         def __init__(self, used_files=None, *, explode=False):
+            """Initialize the instance.
+
+            Inputs: `used_files`, `explode`. Output: None.
+            """
             self._used_files = list(used_files or [])
             self._explode = explode
 
         def copyUsedFiles(self):
-            """Handle copy used files."""
+            """Copy Used Files.
+
+            Inputs: none. Output: `list` result. Raises on invalid or unavailable state.
+            """
             if self._explode:
                 raise RuntimeError("copy failed")
             return list(self._used_files)
@@ -308,7 +397,10 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad image name")
 
     image_from_fileset_extension = _Image(
@@ -404,19 +496,28 @@ def test_image_service_covers_runtime_fallbacks_and_format_detection_edges(
 
 
 def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_logging():
-    """Verify test extract acquisition metadata covers inne behavior."""
+    """Verify extract acquisition metadata covers inner fallbacks and outer error logging.
+
+    Inputs: none. Output: computed value. Raises on invalid or unavailable state.
+    """
 
     class _ObjectiveSettings:
         """Represent objective settings."""
 
         @staticmethod
         def getID():
-            """Return get identifier."""
+            """Return ID.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing objective id")
 
         @staticmethod
         def getCorrectionCollar():
-            """Return get correction collar."""
+            """Return Correction Collar.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing collar")
 
     class _Channel:
@@ -424,22 +525,34 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 
         @staticmethod
         def getIndex():
-            """Return get index."""
+            """Return Index.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing index")
 
         @staticmethod
         def getLabel():
-            """Return get label."""
+            """Return Label.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing label")
 
         @staticmethod
         def getEmissionWave():
-            """Return get emission wave."""
+            """Return Emission Wave.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing emission")
 
         @staticmethod
         def getExcitationWave():
-            """Return get excitation wave."""
+            """Return Excitation Wave.
+
+            Inputs: none. Output: '405'.
+            """
             return "405"
 
     class _Detector:
@@ -447,23 +560,36 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 
         @staticmethod
         def getID():
-            """Return get identifier."""
+            """Return ID.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing detector id")
 
         @staticmethod
         def getBinning():
-            """Return get binning."""
+            """Return Binning.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing binning")
 
         @staticmethod
         def getGain():
-            """Return get gain."""
+            """Return Gain.
+
+            Inputs: none. Output: '1.5'.
+            """
             return "1.5"
 
     class _BrokenMetadata:
         """Represent broken metadata."""
 
         def __len__(self):
+            """Return the instance length.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("len failed")
 
     class _ImageWithInnerFailures:
@@ -471,32 +597,50 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: 7.
+            """
             return 7
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: '2026-03-31T12:00:00'.
+            """
             return "2026-03-31T12:00:00"
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: `_ObjectiveSettings` result.
+            """
             return _ObjectiveSettings()
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: list.
+            """
             return [_Channel()]
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: list.
+            """
             return [_Detector()]
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: `_BrokenMetadata` result.
+            """
             return _BrokenMetadata()
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithInnerFailures())
@@ -511,32 +655,50 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing id")
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no acquisition date")
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no objective")
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no channels")
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no detectors")
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no metadata")
 
     assert (
@@ -547,60 +709,101 @@ def test_extract_acquisition_metadata_covers_inner_fallbacks_and_outer_error_log
 def test_extract_acquisition_metadata_persists_long_values_despite_store_close_failure(
     monkeypatch,
 ):
-    """Verify test extract acquisition metadata persists lo behavior."""
+    """Verify extract acquisition metadata persists long values despite store close failure.
+
+    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _OriginalFileStub:
         """Represent original file stub."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self._id = _Value(321)
 
         def setName(self, value):
-            """Store set name."""
+            """Set Name.
+
+            Inputs: `value`. Output: None.
+            """
             self.name = value
 
         def setPath(self, value):
-            """Store set path."""
+            """Set Path.
+
+            Inputs: `value`. Output: None.
+            """
             self.path = value
 
         def setSize(self, value):
-            """Store set size."""
+            """Set Size.
+
+            Inputs: `value`. Output: None.
+            """
             self.size = value
 
         def setMimetype(self, value):
-            """Store set mimetype."""
+            """Set Mimetype.
+
+            Inputs: `value`. Output: None.
+            """
             self.mimetype = value
 
         def getId(self):
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: `self._id`.
+            """
             return self._id
 
     class _FileAnnotationStub:
         """Represent file annotation stub."""
 
         def setNs(self, value):
-            """Store set ns."""
+            """Set Ns.
+
+            Inputs: `value`. Output: None.
+            """
             self.ns = value
 
         def setFile(self, value):
-            """Store set file."""
+            """Set File.
+
+            Inputs: `value`. Output: None.
+            """
             self.file = value
 
     class _ImageAnnotationLinkStub:
         """Represent image annotation link stub."""
 
         def setParent(self, value):
-            """Store set parent."""
+            """Set Parent.
+
+            Inputs: `value`. Output: None.
+            """
             self.parent = value
 
         def setChild(self, value):
-            """Store set child."""
+            """Set Child.
+
+            Inputs: `value`. Output: None.
+            """
             self.child = value
 
     class _ImageStub:
         """Represent image stub."""
 
         def __init__(self, image_id, loaded):
+            """Initialize the instance.
+
+            Inputs: `image_id`, `loaded`. Output: None.
+            """
             self.image_id = image_id
             self.loaded = loaded
 
@@ -608,35 +811,58 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         """Represent raw store."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.file_id = None
             self.saved_payload = None
             self.saved = False
 
         def setFileId(self, value):
-            """Store set file identifier."""
+            """Set File ID.
+
+            Inputs: `value`. Output: None.
+            """
             self.file_id = value
 
         def write(self, payload, offset, length):
-            """Store write."""
+            """Write data to the resource.
+
+            Inputs: `payload`, `offset`, `length`. Output: None.
+            """
             self.saved_payload = payload
 
         def save(self):
-            """Store save."""
+            """Persist the object state.
+
+            Inputs: none. Output: None.
+            """
             self.saved = True
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     class _UpdateService:
         """Represent update service."""
 
         def __init__(self):
+            """Initialize the instance.
+
+            Inputs: none. Output: None.
+            """
             self.saved_objects = []
 
         def saveAndReturnObject(self, obj):
-            """Store save and return object."""
+            """Save and return object.
+
+            Inputs: `obj`. Output: `obj`.
+            """
             self.saved_objects.append(obj)
             return obj
 
@@ -665,32 +891,50 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: 7.
+            """
             return 7
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: `_Value` result.
+            """
             return _Value("x" * 260)
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: list.
+            """
             return []
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: list.
+            """
             return []
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: None.
+            """
             return None
 
     cleaned = metadata_service.extract_acquisition_metadata(_ImageWithLongMetadata())
@@ -706,7 +950,13 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
     assert update_service.saved_objects[-1].parent.loaded is False
 
     def _image_with_identifier(image_id, update_service, raw_store):
-        """Handle image with identifier."""
+        """Image with identifier.
+
+        Inputs: `image_id`, `update_service`, `raw_store`. Output: computed value or
+        None.
+
+        None.
+        """
 
         class _ImageWithIdentifier:
             """Represent image with identifier."""
@@ -721,32 +971,50 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
 
             @staticmethod
             def getId():
-                """Return get identifier."""
+                """Return the fake OMERO identifier.
+
+                Inputs: none. Output: `image_id`.
+                """
                 return image_id
 
             @staticmethod
             def getAcquisitionDate():
-                """Return get acquisition date."""
+                """Return Acquisition Date.
+
+                Inputs: none. Output: `_Value` result.
+                """
                 return _Value("y" * 260)
 
             @staticmethod
             def getObjectiveSettings():
-                """Return get objective settings."""
+                """Return Objective Settings.
+
+                Inputs: none. Output: None.
+                """
                 return None
 
             @staticmethod
             def getChannels():
-                """Return get channels."""
+                """Return Channels.
+
+                Inputs: none. Output: list.
+                """
                 return []
 
             @staticmethod
             def getDetectorSettings():
-                """Return get detector settings."""
+                """Return Detector Settings.
+
+                Inputs: none. Output: list.
+                """
                 return []
 
             @staticmethod
             def loadOriginalMetadata():
-                """Return load original metadata."""
+                """Return load original metadata.
+
+                Inputs: none. Output: None.
+                """
                 return None
 
         return _ImageWithIdentifier()
@@ -774,32 +1042,50 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: 11.
+            """
             return 11
 
         @staticmethod
         def getAcquisitionDate():
-            """Return get acquisition date."""
+            """Return Acquisition Date.
+
+            Inputs: none. Output: `_Value` result.
+            """
             return _Value("z" * 260)
 
         @staticmethod
         def getObjectiveSettings():
-            """Return get objective settings."""
+            """Return Objective Settings.
+
+            Inputs: none. Output: None.
+            """
             return None
 
         @staticmethod
         def getChannels():
-            """Return get channels."""
+            """Return Channels.
+
+            Inputs: none. Output: list.
+            """
             return []
 
         @staticmethod
         def getDetectorSettings():
-            """Return get detector settings."""
+            """Return Detector Settings.
+
+            Inputs: none. Output: list.
+            """
             return []
 
         @staticmethod
         def loadOriginalMetadata():
-            """Return load original metadata."""
+            """Return load original metadata.
+
+            Inputs: none. Output: None.
+            """
             return None
 
     no_connection_cleaned = metadata_service.extract_acquisition_metadata(
@@ -813,7 +1099,11 @@ def test_extract_acquisition_metadata_persists_long_values_despite_store_close_f
         """Represent failing raw store."""
 
         def write(self, payload, offset, length):
-            """Store write."""
+            """Write data to the resource.
+
+            Inputs: `payload`, `offset`, `length`. Output: None. Raises on invalid or
+            unavailable state.
+            """
             raise RuntimeError("write failed")
 
     failing_update = _UpdateService()

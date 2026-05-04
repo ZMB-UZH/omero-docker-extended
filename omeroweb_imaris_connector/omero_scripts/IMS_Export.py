@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,7 +37,10 @@ subprocess = process_utils
 
 
 def _existing_regular_path(path):
-    """Handle existing regular path."""
+    """Return existing regular path.
+
+    Inputs: `path`. Output: computed value or None.
+    """
     try:
         path_text = os.fspath(path)
     except TypeError:
@@ -53,7 +57,9 @@ def _existing_regular_path(path):
 
 
 def _get_export_root():
-    """Resolve the IMS export root directory, with a safe fallback.
+    """Return export root.
+
+    Inputs: none. Output: computed value.
 
     This function is intentionally NOT called at module level so that the
     OMERO processor can parse script parameters without triggering side
@@ -73,7 +79,10 @@ def _get_export_root():
 
 
 def _safe_filename(name, fallback="image"):
-    """Create a filesystem-safe filename (no path separators, no control chars)."""
+    """Return safe filename.
+
+    Inputs: `name`, `fallback`. Output: `name`.
+    """
     if name is None:
         name = ""
     name = str(name)
@@ -97,7 +106,10 @@ def _safe_filename(name, fallback="image"):
 
 
 def _ensure_bioformats_jar(install_dir):
-    """Ensure Bio-Formats jar exists where ImarisConvertBioformats expects it."""
+    """Ensure bioformats jar.
+
+    Inputs: `install_dir`. Output: `jar_path` or None.
+    """
     jar_dir = os.path.join(install_dir, BIOFORMATS_SUBDIR)
     jar_path = os.path.join(jar_dir, BIOFORMATS_JAR_NAME)
     cache_dir = os.path.join(install_dir, BIOFORMATS_ARTIFACTS_SUBDIR)
@@ -148,7 +160,10 @@ def _ensure_bioformats_jar(install_dir):
 
 
 def _read_expected_sha256(path):
-    """Handle read expected sha256."""
+    """Read expected sha256.
+
+    Inputs: `path`. Output: `token` or None.
+    """
     checksum_path = _existing_regular_path(path)
     if checksum_path is None:
         return None
@@ -164,7 +179,10 @@ def _read_expected_sha256(path):
 
 
 def _write_expected_sha256(path, sha256_value):
-    """Handle write expected sha256."""
+    """Write expected sha256.
+
+    Inputs: `path`, `sha256_value`. Output: bool.
+    """
     tmp_path = path + ".tmp"
     try:
         with open(tmp_path, "w", encoding="ascii") as handle:
@@ -185,7 +203,13 @@ def _write_expected_sha256(path, sha256_value):
 
 
 def _sha256_file(path):
-    """Handle sha256 file."""
+    """Sha256 file.
+
+    Inputs: `path`. Output: `digest.hexdigest` result. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     source_path = _existing_regular_path(path)
     if source_path is None:
         raise FileNotFoundError(path)
@@ -197,7 +221,10 @@ def _sha256_file(path):
 
 
 def _is_valid_bioformats_jar(path, expected_sha256=None):
-    """Handle is valid bioformats jar."""
+    """Return whether valid bioformats jar.
+
+    Inputs: `path`, `expected_sha256`. Output: bool.
+    """
     if not os.path.exists(path):
         return False
 
@@ -215,7 +242,11 @@ def _is_valid_bioformats_jar(path, expected_sha256=None):
 def _copy_bioformats_jar(
     source_path, destination_path, expected_sha256, file_mode, description
 ):
-    """Handle copy bioformats jar."""
+    """Copy bioformats jar.
+
+    Inputs: `source_path`, `destination_path`, `expected_sha256`, `file_mode`,
+    `description`. Output: bool.
+    """
     tmp_path = destination_path + ".tmp"
     try:
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
@@ -242,8 +273,10 @@ def _copy_bioformats_jar(
 
 
 def _get_voxel_size_from_image(image):
-    """
-    Return voxel sizes (vx, vy, vz) in micrometers as floats.
+    """Return voxel sizes (vx, vy, vz) in micrometers as floats.
+
+    Inputs: `image`. Output: tuple.
+
     ImarisConvert fails if any axis has voxel size <= 0, so we ensure safe defaults.
 
     Fallback policy (minimal, safe):
@@ -291,7 +324,10 @@ def _get_voxel_size_from_image(image):
 
 
 def _managed_repository_root_from_value(source, value):
-    """Resolve a managed repository root from a configured value."""
+    """A managed repository root from a configured value.
+
+    Inputs: `source`, `value`. Output: call result or None.
+    """
     try:
         managed_root = str(value or "").strip()
     except Exception:
@@ -314,7 +350,10 @@ def _managed_repository_root_from_value(source, value):
 
 
 def _get_managed_repository_root(conn):
-    """Return the configured OMERO managed repository root."""
+    """Return the configured OMERO managed repository root.
+
+    Inputs: `conn`. Output: call result or None.
+    """
     if _CONFIG_MANAGED_DIR_ENV in os.environ:
         return _managed_repository_root_from_value(
             _CONFIG_MANAGED_DIR_ENV,
@@ -338,7 +377,10 @@ def _get_managed_repository_root(conn):
 
 
 def _managed_original_file_path(managed_root, file_path, file_name):
-    """Handle managed original file path."""
+    """Managed original file path.
+
+    Inputs: `managed_root`, `file_path`, `file_name`. Output: `str` result or None.
+    """
     relative_dir = str(file_path or "").strip().strip("/\\")
     relative_name = str(file_name or "").strip().strip("/\\")
     if "\x00" in relative_dir or "\x00" in relative_name:
@@ -359,7 +401,10 @@ def _managed_original_file_path(managed_root, file_path, file_name):
 
 
 def _absolute_original_file_path(file_path, file_name):
-    """Return an absolute OriginalFile path when OMERO stores one directly."""
+    """Return an absolute OriginalFile path when OMERO stores one directly.
+
+    Inputs: `file_path`, `file_name`. Output: `str` result or None.
+    """
     path_text = str(file_path or "").strip()
     name_text = str(file_name or "").strip().strip("/\\")
     if "\x00" in path_text or "\x00" in name_text:
@@ -381,7 +426,10 @@ def _absolute_original_file_path(file_path, file_name):
 
 
 def get_original_file_path(conn, image):
-    """Return get original file path."""
+    """Return original file path.
+
+    Inputs: `conn`, `image`. Output: computed value or None.
+    """
     try:
         fileset = image.getFileset()
         if not fileset:
@@ -410,7 +458,10 @@ def get_original_file_path(conn, image):
 
 
 def convert_to_ims(image, input_file, output_file):
-    """Handle convert to IMS."""
+    """Convert to IMS.
+
+    Inputs: `image`, `input_file`, `output_file`. Output: computed value.
+    """
     try:
         # Prefer the binary installed by startup/51-install-imarisconvert.sh
         converter = shutil.which("imarisconvert")
@@ -495,7 +546,10 @@ def convert_to_ims(image, input_file, output_file):
 
 
 def _build_export_path(export_root, image, image_id):
-    """Handle build export path."""
+    """Export path.
+
+    Inputs: `export_root`, `image`, `image_id`. Output: `os.path.join` result.
+    """
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}")
@@ -504,7 +558,10 @@ def _build_export_path(export_root, image, image_id):
 
 
 def _build_intermediate_ome_tiff_path(export_root, image, image_id):
-    """Build a temporary OME-TIFF source path for conversion."""
+    """A temporary OME-TIFF source path for conversion.
+
+    Inputs: `export_root`, `image`, `image_id`. Output: `os.path.join` result.
+    """
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}", "source")
@@ -513,7 +570,10 @@ def _build_intermediate_ome_tiff_path(export_root, image, image_id):
 
 
 def _write_binary_chunk(handle, chunk):
-    """Write one OMERO export chunk and return the byte count."""
+    """Write binary chunk.
+
+    Inputs: `handle`, `chunk`. Output: computed value.
+    """
     if chunk is None:
         return 0
     if isinstance(chunk, str):
@@ -524,24 +584,29 @@ def _write_binary_chunk(handle, chunk):
     return len(chunk)
 
 
-def _write_ome_tiff_from_image_wrapper(image, output_file):
-    """Export an OMERO image wrapper to an OME-TIFF file."""
+def _write_ome_tiff_from_image_wrapper(image, output_handle):
+    """Write OME tiff from image wrapper.
+
+    Inputs: `image`, `output_handle`. Output: bool.
+    """
     exporter = getattr(image, "exportOmeTiff", None)
     if not callable(exporter):
         return False
     exported = exporter(bufsize=EXPORT_READ_CHUNK_BYTES)
-    with open(output_file, "wb") as handle:
-        if isinstance(exported, tuple) and len(exported) == 2:
-            _size, chunks = exported
-            total = 0
-            for chunk in chunks:
-                total += _write_binary_chunk(handle, chunk)
-            return total > 0
-        return _write_binary_chunk(handle, exported) > 0
+    if isinstance(exported, tuple) and len(exported) == 2:
+        _size, chunks = exported
+        total = 0
+        for chunk in chunks:
+            total += _write_binary_chunk(output_handle, chunk)
+        return total > 0
+    return _write_binary_chunk(output_handle, exported) > 0
 
 
-def _write_ome_tiff_from_exporter(conn, image_id, output_file):
-    """Export an OMERO image to OME-TIFF through the raw exporter service."""
+def _write_ome_tiff_from_exporter(conn, image_id, output_handle):
+    """Write OME tiff from exporter.
+
+    Inputs: `conn`, `image_id`, `output_handle`. Output: bool.
+    """
     create_exporter = getattr(conn, "createExporter", None)
     if not callable(create_exporter):
         return False
@@ -559,14 +624,13 @@ def _write_ome_tiff_from_exporter(conn, image_id, output_file):
         total_size = int(total_size)
         offset = 0
         written = 0
-        with open(output_file, "wb") as handle:
-            while offset < total_size:
-                chunk_size = min(EXPORT_READ_CHUNK_BYTES, total_size - offset)
-                chunk = exporter.read(offset, chunk_size)
-                if not chunk:
-                    break
-                written += _write_binary_chunk(handle, chunk)
-                offset += len(chunk)
+        while offset < total_size:
+            chunk_size = min(EXPORT_READ_CHUNK_BYTES, total_size - offset)
+            chunk = exporter.read(offset, chunk_size)
+            if not chunk:
+                break
+            written += _write_binary_chunk(output_handle, chunk)
+            offset += len(chunk)
         return written > 0 and written == total_size
     finally:
         close = getattr(exporter, "close", None)
@@ -575,45 +639,76 @@ def _write_ome_tiff_from_exporter(conn, image_id, output_file):
 
 
 def _materialize_ome_tiff_source(conn, image, image_id, export_root):
-    """Create a converter-readable OME-TIFF source through OMERO APIs."""
+    """A converter-readable OME-TIFF source through OMERO APIs.
+
+    Inputs: `conn`, `image`, `image_id`, `export_root`. Output: computed value or None.
+    """
     output_file = _build_intermediate_ome_tiff_path(export_root, image, image_id)
-    tmp_file = output_file + ".tmp"
-    try:
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        for writer in (
-            lambda path: _write_ome_tiff_from_image_wrapper(image, path),
-            lambda path: _write_ome_tiff_from_exporter(conn, image_id, path),
-        ):
+    output_dir = os.path.dirname(output_file)
+
+    def write_from_wrapper(handle):
+        """Write from wrapper.
+
+        Inputs: `handle`. Output: call result.
+        """
+        return _write_ome_tiff_from_image_wrapper(image, handle)
+
+    def write_from_exporter(handle):
+        """Write from exporter.
+
+        Inputs: `handle`. Output: call result.
+        """
+        return _write_ome_tiff_from_exporter(conn, image_id, handle)
+
+    os.makedirs(output_dir, exist_ok=True)
+    for writer in (write_from_wrapper, write_from_exporter):
+        tmp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=output_dir,
+                prefix=".ims-export-",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                tmp_file = handle.name
+                wrote_source = writer(handle)
+                if wrote_source:
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            if wrote_source:
+                os.chmod(tmp_file, _PRIVATE_FILE_MODE)
+                os.replace(tmp_file, output_file)
+                print(f"Prepared OME-TIFF source via OMERO API: {output_file}")
+                return output_file
+        except Exception as exc:
+            print(f"WARNING: OMERO OME-TIFF export attempt failed: {exc}")
             try:
-                if writer(tmp_file):
-                    os.chmod(tmp_file, _PRIVATE_FILE_MODE)
-                    os.replace(tmp_file, output_file)
-                    print(f"Prepared OME-TIFF source via OMERO API: {output_file}")
-                    return output_file
-            except Exception as exc:
-                print(f"WARNING: OMERO OME-TIFF export attempt failed: {exc}")
+                if tmp_file and os.path.exists(tmp_file):
+                    os.remove(tmp_file)
+            except OSError as cleanup_exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in IMS_Export.py",
+                    exc_info=cleanup_exc,
+                )
+        finally:
+            if tmp_file and os.path.exists(tmp_file):
                 try:
-                    if os.path.exists(tmp_file):
-                        os.remove(tmp_file)
+                    os.remove(tmp_file)
                 except OSError as cleanup_exc:
                     logger.debug(
                         "Suppressed non-fatal exception in IMS_Export.py",
                         exc_info=cleanup_exc,
                     )
-        print("ERROR: OMERO OME-TIFF export did not produce a readable source file")
-        return None
-    finally:
-        try:
-            if os.path.exists(tmp_file):
-                os.remove(tmp_file)
-        except OSError as cleanup_exc:
-            logger.debug(
-                "Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc
-            )
+    print("ERROR: OMERO OME-TIFF export did not produce a readable source file")
+    return None
 
 
 def _remove_intermediate_source(path):
-    """Remove a generated converter source file."""
+    """Remove intermediate source.
+
+    Inputs: `path`. Output: None.
+    """
     try:
         if path and os.path.exists(path):
             os.remove(path)
@@ -622,7 +717,10 @@ def _remove_intermediate_source(path):
 
 
 def run_conversion(conn, image_id, export_root):
-    """Run run conversion."""
+    """Convert an OMERO image to IMS and return the export result.
+
+    Inputs: `conn`, `image_id`, `export_root`. Output: tuple.
+    """
     image = conn.getObject("Image", image_id)
     if not image:
         return (False, f"Image {image_id} not found", None)
@@ -669,7 +767,10 @@ def run_script():
     # NOT at module level, so the OMERO processor can parse parameters without
     # triggering filesystem side-effects that cause ValidationException:
     # 'Can't find params for <id>'.
-    """Run run script."""
+    """The script entrypoint.
+
+    Inputs: none. Output: None.
+    """
     export_root = _get_export_root()
     os.makedirs(export_root, exist_ok=True)
 

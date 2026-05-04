@@ -72,7 +72,10 @@ from .utils import current_username, json_error, load_json_body, require_non_roo
 @login_required()
 @ensure_csrf_cookie
 def index(request, conn=None, _url=None, **kwargs):
-    """Handle index."""
+    """Index.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `render` result.
+    """
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
@@ -106,7 +109,10 @@ def index(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def list_projects(request, conn=None, _url=None, **kwargs):
-    """Return list projects."""
+    """Return list projects.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload, safe=False)
@@ -114,7 +120,10 @@ def list_projects(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 def root_status(request, conn=None, _url=None, **kwargs):
-    """Handle root status."""
+    """Root status.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
 
@@ -122,7 +131,10 @@ def root_status(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_upload(request, conn=None, _url=None, **kwargs):
-    """Run start upload."""
+    """Start upload.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     try:
         return _start_upload(request, conn)
     except Exception as exc:
@@ -134,13 +146,19 @@ def start_upload(request, conn=None, _url=None, **kwargs):
 
 
 def _upload_start_payload(request):
-    """Return a dictionary payload for upload-start requests."""
+    """Return a dictionary payload for upload-start requests.
+
+    Inputs: `request`. Output: computed value.
+    """
     payload = load_json_body(request)
     return payload if isinstance(payload, dict) else {}
 
 
 def _upload_start_roots_response():
-    """Prepare upload-start roots and return an error response when unavailable."""
+    """Upload start roots response.
+
+    Inputs: none. Output: tuple.
+    """
     upload_root = _get_upload_root()
     if _ensure_dir(upload_root) and _ensure_dir(_get_jobs_root()):
         return upload_root, None
@@ -149,7 +167,10 @@ def _upload_start_roots_response():
 
 
 def _upload_start_identity(payload):
-    """Validate upload-start idempotency and dataset override fields."""
+    """Upload start identity.
+
+    Inputs: `payload`. Output: tuple.
+    """
     client_upload_id, client_upload_id_error = _normalize_client_upload_id(
         payload.get("client_upload_id")
     )
@@ -166,7 +187,10 @@ def _upload_start_identity(payload):
 
 
 def _upload_start_files_payload(payload):
-    """Return the upload-start file list or a validation response."""
+    """Return the upload-start file list or a validation response.
+
+    Inputs: `payload`. Output: tuple.
+    """
     files = payload.get("files") or []
     if not isinstance(files, list):
         files = []
@@ -177,7 +201,10 @@ def _upload_start_files_payload(payload):
 
 
 def _upload_start_options(payload):
-    """Normalize optional upload-start mode settings."""
+    """Upload start options.
+
+    Inputs: `payload`. Output: tuple.
+    """
     special_upload = (payload.get("special_upload") or "").strip()
     compatibility_enabled = payload.get("compatibility_enabled")
     if compatibility_enabled is None:
@@ -206,7 +233,10 @@ def _upload_start_options(payload):
 
 
 def _upload_start_batch_size(payload):
-    """Return the normalized upload-start job batch size."""
+    """Return the normalized upload-start job batch size.
+
+    Inputs: `payload`. Output: call result.
+    """
     default_batch_size = _get_env_int(
         UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
     )
@@ -214,7 +244,11 @@ def _upload_start_batch_size(payload):
 
 
 def _upload_path_conflict(rel_path, seen_relative_paths, seen_parent_paths):
-    """Return a path hierarchy conflict message for an upload path, if any."""
+    """Return a path hierarchy conflict message for an upload path, if any.
+
+    Inputs: `rel_path`, `seen_relative_paths`, `seen_parent_paths`. Output: computed
+    value or None.
+    """
     if rel_path in seen_relative_paths:
         return f"Duplicate file path: {rel_path}"
     if rel_path in seen_parent_paths:
@@ -229,7 +263,10 @@ def _upload_path_conflict(rel_path, seen_relative_paths, seen_parent_paths):
 
 
 def _upload_start_file_path(entry, seen_relative_paths, seen_parent_paths):
-    """Validate and reserve one upload-start relative path."""
+    """Upload start file path.
+
+    Inputs: `entry`, `seen_relative_paths`, `seen_parent_paths`. Output: tuple.
+    """
     raw_name = entry.get("relative_path") or entry.get("name")
     rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
     if rel_error:
@@ -251,7 +288,10 @@ def _upload_start_file_path(entry, seen_relative_paths, seen_parent_paths):
 
 
 def _upload_start_file_size(raw_size):
-    """Normalize an upload-start file size."""
+    """Upload start file size.
+
+    Inputs: `raw_size`. Output: `max` result. Raises on invalid or unavailable state.
+    """
     try:
         if raw_size is None:
             raise ValueError
@@ -262,7 +302,10 @@ def _upload_start_file_size(raw_size):
 
 
 def _upload_start_file_flags(entry, rel_path, special_upload):
-    """Return compatibility/import skip flags for one upload-start file."""
+    """Return compatibility/import skip flags for one upload-start file.
+
+    Inputs: `entry`, `rel_path`, `special_upload`. Output: tuple.
+    """
     compatibility_skip = bool(entry.get("compatibility_skip"))
     import_skip = bool(entry.get("import_skip"))
     filename = PurePosixPath(rel_path).name
@@ -284,7 +327,11 @@ def _normalize_upload_start_file(
     seen_relative_paths,
     seen_parent_paths,
 ):
-    """Normalize one upload-start file descriptor."""
+    """Normalize upload start file.
+
+    Inputs: `entry`, `upload_root`, `special_upload`, `seen_relative_paths`,
+    `seen_parent_paths`. Output: tuple.
+    """
     if not isinstance(entry, dict):
         return None, str(entry)
 
@@ -322,7 +369,10 @@ def _normalize_upload_start_file(
 
 
 def _normalize_upload_start_files(request, conn, upload_root, files, special_upload):
-    """Normalize upload-start files and enforce batch limits."""
+    """Normalize upload start files.
+
+    Inputs: `request`, `conn`, `upload_root`, `files`, `special_upload`. Output: tuple.
+    """
     normalized = []
     total_bytes = 0
     invalid = []
@@ -370,7 +420,11 @@ def _upload_start_special_settings(
     raw_ngff_converter_settings,
     normalized_files,
 ):
-    """Normalize special upload settings for persisted upload jobs."""
+    """Upload start special settings.
+
+    Inputs: `special_upload`, `raw_sem_edx_associations`, `raw_sem_edx_settings`,
+    `raw_ngff_converter_settings`, `normalized_files`. Output: tuple.
+    """
     sem_edx_associations = _normalize_sem_edx_associations(
         raw_sem_edx_associations, normalized_files
     )
@@ -388,7 +442,10 @@ def _upload_start_special_settings(
 
 
 def _upload_start_orphan_dataset_name(dataset_name_override, normalized_files):
-    """Return a generated orphan dataset name when upload paths need one."""
+    """Return a generated orphan dataset name when upload paths need one.
+
+    Inputs: `dataset_name_override`, `normalized_files`. Output: computed value or None.
+    """
     if dataset_name_override:
         return None
     needs_orphan_dataset = any(
@@ -399,7 +456,10 @@ def _upload_start_orphan_dataset_name(dataset_name_override, normalized_files):
 
 
 def _upload_start_group_name(conn, current_group_id):
-    """Resolve an OMERO group name from an event-context group ID."""
+    """Upload start group name.
+
+    Inputs: `conn`, `current_group_id`. Output: bool or None.
+    """
     try:
         group_obj = conn.getObject("ExperimenterGroup", int(current_group_id))
     except Exception:
@@ -410,7 +470,10 @@ def _upload_start_group_name(conn, current_group_id):
 
 
 def _upload_start_group_context(conn, username):
-    """Return the active OMERO group context for a new upload job."""
+    """Return the active OMERO group context for a new upload job.
+
+    Inputs: `conn`, `username`. Output: tuple.
+    """
     current_group_id = None
     current_group_name = None
     try:
@@ -435,7 +498,10 @@ def _upload_start_group_context(conn, username):
 
 
 def _start_upload(request, conn):
-    """Handle start upload."""
+    """Start upload.
+
+    Inputs: `request`, `conn`. Output: computed value.
+    """
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
 
@@ -567,7 +633,10 @@ def _start_upload(request, conn):
 @login_required()
 @require_non_root_user
 def upload_files(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle upload files."""
+    """Upload files.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     try:
         return _upload_files(request, job_id, conn)
     except Exception as exc:
@@ -580,7 +649,10 @@ def upload_files(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _find_job_upload_entry(job, rel_path, statuses=("pending", "error")):
-    """Handle find job upload entry."""
+    """Find job upload entry.
+
+    Inputs: `job`, `rel_path`, `statuses`. Output: `entry` or None.
+    """
     allowed_statuses = set(statuses or ())
     for entry in job.get("files", []):
         if (
@@ -592,7 +664,10 @@ def _find_job_upload_entry(job, rel_path, statuses=("pending", "error")):
 
 
 def _job_owned_by_request(job, request, conn):
-    """Handle job owned by request."""
+    """Job owned by request.
+
+    Inputs: `job`, `request`, `conn`. Output: computed value.
+    """
     if not isinstance(job, dict):
         return False
     job_username = str(job.get("username") or "").strip()
@@ -601,7 +676,10 @@ def _job_owned_by_request(job, request, conn):
 
 
 def _load_owned_job(request, conn, job_id, missing_error):
-    """Handle load owned job."""
+    """Load owned job.
+
+    Inputs: `request`, `conn`, `job_id`, `missing_error`. Output: tuple.
+    """
     if not _safe_job_id(job_id):
         return None, json_error(missing_error)
     job = _load_job(job_id)
@@ -611,7 +689,10 @@ def _load_owned_job(request, conn, job_id, missing_error):
 
 
 def _prepare_ready_job_for_import_start(job_id, job, conn):
-    """Handle prepare ready job for import start."""
+    """Prepare ready job for import start.
+
+    Inputs: `job_id`, `job`, `conn`. Output: tuple.
+    """
     prepared_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
     if prep_error:
         return prepared_job or job, prep_error
@@ -624,20 +705,28 @@ def _prepare_ready_job_for_import_start(job_id, job, conn):
 
 
 def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
-    """Handle prepare uploaded job dataset targets."""
+    """Prepare uploaded job dataset targets.
+
+    Inputs: `job_id`, `job`, `conn`. Output: call result.
+    """
     return _prepare_uploaded_job_for_request_path_import(job_id, job, conn)
 
 
 def _prepare_job_import_datasets(job_id, job, conn):
-    """
-    Compatibility wrapper retained for tests and callers that patch this symbol
+    """Compatibility wrapper retained for tests and callers that patch this symbol.
+
+    Inputs: `job_id`, `job`, `conn`. Output: call result.
+
     to assert request handlers do not perform heavy dataset preparation inline.
     """
     return _prepare_uploaded_job_dataset_targets(job_id, job, conn)
 
 
 def _upload_internal_error_response(job_id, detail, *, context: str):
-    """Handle upload internal error response."""
+    """Upload internal error response.
+
+    Inputs: `job_id`, `detail`, `context`. Output: `json_error` result.
+    """
     logger.warning(
         "%s for upload job %s: %s",
         context,
@@ -648,7 +737,10 @@ def _upload_internal_error_response(job_id, detail, *, context: str):
 
 
 def _import_internal_error_response(job_id, detail, *, context: str):
-    """Handle import internal error response."""
+    """Import internal error response.
+
+    Inputs: `job_id`, `detail`, `context`. Output: `json_error` result.
+    """
     logger.warning(
         "%s for import job %s: %s",
         context,
@@ -659,21 +751,30 @@ def _import_internal_error_response(job_id, detail, *, context: str):
 
 
 def _get_session_key(conn):
-    """Handle get session key."""
+    """Return session key.
+
+    Inputs: `conn`. Output: `_core_get_session_key` result.
+    """
     from .core_functions import _get_session_key as _core_get_session_key
 
     return _core_get_session_key(conn)
 
 
 def _get_or_create_dataset(conn, name, dataset_map, project_id=None):
-    """Handle get or create dataset."""
+    """Return or create dataset.
+
+    Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: call result.
+    """
     from .core_functions import _get_or_create_dataset as _core_get_or_create_dataset
 
     return _core_get_or_create_dataset(conn, name, dataset_map, project_id=project_id)
 
 
 def _parse_chunk_int(raw_value, field_name):
-    """Handle parse chunk int."""
+    """Parse chunk int.
+
+    Inputs: `raw_value`, `field_name`. Output: tuple.
+    """
     try:
         value = int(raw_value)
     except (TypeError, ValueError):
@@ -688,12 +789,18 @@ def _parse_chunk_int(raw_value, field_name):
 
 
 def _as_bool(raw_value):
-    """Handle as bool."""
+    """As bool.
+
+    Inputs: `raw_value`. Output: bool.
+    """
     return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _normalize_client_upload_id(raw_value):
-    """Normalize an optional client-provided upload retry identifier."""
+    """Normalize client upload ID.
+
+    Inputs: `raw_value`. Output: tuple.
+    """
     value = str(raw_value or "").strip()
     if not value:
         return "", None
@@ -705,7 +812,10 @@ def _normalize_client_upload_id(raw_value):
 
 
 def _resolve_upload_project(conn, raw_project_id):
-    """Resolve and authorize an optional upload target project."""
+    """Resolve upload project.
+
+    Inputs: `conn`, `raw_project_id`. Output: tuple.
+    """
     raw_project_id = (raw_project_id or "").strip()
     if not raw_project_id:
         return None, "", None
@@ -725,7 +835,10 @@ def _resolve_upload_project(conn, raw_project_id):
 
 
 def _upload_job_response(job):
-    """Build the upload-start response for a persisted job."""
+    """Upload job response.
+
+    Inputs: `job`. Output: dict.
+    """
     job_id = job.get("job_id")
     return {
         "ok": True,
@@ -741,7 +854,11 @@ def _upload_job_response(job):
 
 
 def _same_upload_manifest(job, normalized_files, dataset_name_override, project_id):
-    """Return whether a retry matches the already-created upload job."""
+    """Return whether a retry matches the already-created upload job.
+
+    Inputs: `job`, `normalized_files`, `dataset_name_override`, `project_id`. Output:
+    bool.
+    """
     if job.get("dataset_name_override") != dataset_name_override:
         return False
     if job.get("project_id") != project_id:
@@ -758,7 +875,10 @@ def _same_upload_manifest(job, normalized_files, dataset_name_override, project_
 
 
 def _find_client_upload_job(username, client_upload_id):
-    """Find an existing upload job for an idempotent client retry."""
+    """Find client upload job.
+
+    Inputs: `username`, `client_upload_id`. Output: `job` or None.
+    """
     if not username or not client_upload_id:
         return None
     try:
@@ -790,7 +910,11 @@ def _client_upload_retry_response(
     dataset_name_override,
     project_id,
 ):
-    """Return an existing upload response for a matching client retry id."""
+    """Return an existing upload response for a matching client retry id.
+
+    Inputs: `username`, `client_upload_id`, `normalized_files`, `dataset_name_override`,
+    `project_id`. Output: computed value or None.
+    """
     if not client_upload_id:
         return None
     existing_job = _find_client_upload_job(username, client_upload_id)
@@ -811,7 +935,10 @@ def _client_upload_retry_response(
 
 
 def _uploaded_file_sha256(upload):
-    """Hash an uploaded chunk and rewind it for later saving."""
+    """Hash an uploaded chunk and rewind it for later saving.
+
+    Inputs: `upload`. Output: tuple.
+    """
     digest = hashlib.sha256()
     try:
         for piece in upload.chunks():
@@ -827,12 +954,18 @@ def _uploaded_file_sha256(upload):
 
 
 def _is_sha256_digest(value):
-    """Return whether a text value is a lowercase SHA-256 hex digest."""
+    """Return whether a text value is a lowercase SHA-256 hex digest.
+
+    Inputs: `value`. Output: bool.
+    """
     return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
 def _complete_chunk_upload_response(job_id, conn, entry, rel_path):
-    """Mark an uploaded file complete and return the chunk response."""
+    """Mark an uploaded file complete and return the chunk response.
+
+    Inputs: `job_id`, `conn`, `entry`, `rel_path`. Output: computed value.
+    """
     updated_job = _apply_upload_updates(
         job_id, [{"upload_id": entry.get("upload_id"), "status": "uploaded"}], []
     )
@@ -872,7 +1005,10 @@ def _complete_chunk_upload_response(job_id, conn, entry, rel_path):
 
 
 def _chunk_upload_already_complete_response(job, rel_path):
-    """Return an idempotent completion response for an already uploaded file."""
+    """Return an idempotent completion response for an already uploaded file.
+
+    Inputs: `job`, `rel_path`. Output: `JsonResponse` result.
+    """
     return JsonResponse(
         {
             "ok": True,
@@ -889,7 +1025,10 @@ def _chunk_upload_already_complete_response(job, rel_path):
 
 
 def _chunk_upload_incomplete_retry_response(rel_path, existing_size):
-    """Return an idempotent response for a previously staged non-final chunk."""
+    """Return an idempotent response for a previously staged non-final chunk.
+
+    Inputs: `rel_path`, `existing_size`. Output: `JsonResponse` result.
+    """
     return JsonResponse(
         {
             "ok": True,
@@ -904,7 +1043,10 @@ def _chunk_upload_incomplete_retry_response(rel_path, existing_size):
 
 
 def _find_chunk_upload_entry(job, rel_path):
-    """Return the upload entry accepted by chunked upload handling."""
+    """Return the upload entry accepted by chunked upload handling.
+
+    Inputs: `job`, `rel_path`. Output: computed value or None.
+    """
     entry = _find_job_upload_entry(job, rel_path)
     if entry is not None:
         return entry
@@ -918,7 +1060,10 @@ def _find_chunk_upload_entry(job, rel_path):
 
 
 def _chunk_upload_error_response(job_id, entry, rel_path, upload_error):
-    """Persist and return a staged-upload error response."""
+    """Persist and return a staged-upload error response.
+
+    Inputs: `job_id`, `entry`, `rel_path`, `upload_error`. Output: `json_error` result.
+    """
     if not (
         _is_managed_upload_internal_error(upload_error)
         or isinstance(upload_error, OSError)
@@ -950,7 +1095,10 @@ def _chunk_upload_error_response(job_id, entry, rel_path, upload_error):
 
 
 def _validate_uploaded_chunk_checksum(upload, expected_checksum):
-    """Validate a client-provided chunk checksum when present."""
+    """Validate uploaded chunk checksum.
+
+    Inputs: `upload`, `expected_checksum`. Output: `json_error` result or None.
+    """
     if not expected_checksum:
         return None
     if not _is_sha256_digest(expected_checksum):
@@ -988,7 +1136,12 @@ def _idempotent_chunk_retry_response(
     file_size,
     expected_checksum,
 ):
-    """Return a response for a chunk retry already present in staging."""
+    """Return a response for a chunk retry already present in staging.
+
+    Inputs: `request`, `job_id`, `conn`, `job`, `job_root`, `entry`, `rel_path`,
+    `staged_path`, `existing_size`, `chunk_start`, `chunk_end`, `file_size`,
+    `expected_checksum`. Output: computed value or None.
+    """
     if existing_size <= chunk_start or not expected_checksum:
         return None
     already_saved, match_error = _staged_upload_chunk_matches(
@@ -1020,7 +1173,11 @@ def _idempotent_chunk_retry_response(
 
 
 def _reset_staged_chunk_upload(job_id, job_root, entry, rel_path, staged_path):
-    """Reset the staged file for a first-chunk retry."""
+    """Reset the staged file for a first-chunk retry.
+
+    Inputs: `job_id`, `job_root`, `entry`, `rel_path`, `staged_path`. Output: call
+    result or None.
+    """
     reset_error = _reset_staged_upload_file(job_root, staged_path)
     if reset_error:
         return _chunk_upload_error_response(job_id, entry, rel_path, reset_error)
@@ -1036,7 +1193,11 @@ def _prepare_staged_chunk_write(
     existing_size,
     chunk_start,
 ):
-    """Validate or reset staged bytes before appending a chunk."""
+    """Prepare staged chunk write.
+
+    Inputs: `job_id`, `job_root`, `entry`, `rel_path`, `staged_path`, `existing_size`,
+    `chunk_start`. Output: computed value or None.
+    """
     if chunk_start == 0:
         return _reset_staged_chunk_upload(
             job_id, job_root, entry, rel_path, staged_path
@@ -1058,7 +1219,10 @@ def _prepare_staged_chunk_write(
 
 
 def _incomplete_chunk_upload_response(rel_path, saved_size):
-    """Return the standard response for a chunked upload still in progress."""
+    """Return the standard response for a chunked upload still in progress.
+
+    Inputs: `rel_path`, `saved_size`. Output: `JsonResponse` result.
+    """
     return JsonResponse(
         {
             "ok": True,
@@ -1082,7 +1246,11 @@ def _chunk_write_validation_response(
     file_size,
     is_last_chunk,
 ):
-    """Return a chunk write validation error, an incomplete response, or None."""
+    """Return a chunk write validation error, an incomplete response, or None.
+
+    Inputs: `job_id`, `rel_path`, `bytes_written`, `saved_size`, `chunk_start`,
+    `chunk_end`, `file_size`, `is_last_chunk`. Output: computed value or None.
+    """
     expected_chunk_size = chunk_end - chunk_start
     if bytes_written != expected_chunk_size:
         logger.warning(
@@ -1117,7 +1285,10 @@ def _chunk_write_validation_response(
 
 
 def _chunk_upload_request_metadata(request):
-    """Validate and return chunk upload request metadata."""
+    """And return chunk upload request metadata.
+
+    Inputs: `request`. Output: tuple.
+    """
     upload = request.FILES.get("file")
     if upload is None:
         return None, json_error(errors.upload_chunk_missing_file(), status=400)
@@ -1156,7 +1327,10 @@ def _chunk_upload_request_metadata(request):
 
 
 def _handle_chunk_upload(request, job_id, conn, job, job_root):
-    """Handle handle chunk upload."""
+    """Handle chunk upload.
+
+    Inputs: `request`, `job_id`, `conn`, `job`, `job_root`. Output: computed value.
+    """
     metadata, metadata_error = _chunk_upload_request_metadata(request)
     if metadata_error is not None:
         return metadata_error
@@ -1232,7 +1406,10 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
 
 
 def _upload_files(request, job_id, conn):
-    """Handle upload files."""
+    """Upload files.
+
+    Inputs: `request`, `job_id`, `conn`. Output: computed value.
+    """
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
@@ -1406,7 +1583,10 @@ def _upload_files(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def import_step(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle import step."""
+    """Import step.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     try:
         return _import_step(request, job_id, conn)
     except Exception as exc:
@@ -1419,7 +1599,10 @@ def import_step(request, job_id, conn=None, _url=None, **kwargs):
 
 
 def _import_step(request, job_id, conn):
-    """Handle import step."""
+    """Import step.
+
+    Inputs: `request`, `job_id`, `conn`. Output: computed value.
+    """
     safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
@@ -1460,7 +1643,10 @@ def _import_step(request, job_id, conn):
 @login_required()
 @require_non_root_user
 def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle confirm import."""
+    """Confirm import.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1501,7 +1687,10 @@ def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle prune upload."""
+    """Prune upload.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -1531,7 +1720,10 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
     upload_root = _get_upload_root() / job_id
 
     def apply_prune(job_dict):
-        """Handle apply prune."""
+        """Apply prune.
+
+        Inputs: `job_dict`. Output: `job_dict`.
+        """
         removed = []
         kept_entries = []
         for entry in job_dict.get("files", []):
@@ -1614,7 +1806,10 @@ def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_status(request, job_id, conn=None, _url=None, **kwargs):
-    """Handle job status."""
+    """Job status.
+
+    Inputs: `request`, `job_id`, `conn`, `_url`, `**kwargs`. Output: computed value.
+    """
     job, error_response = _load_owned_job(
         request,
         conn,

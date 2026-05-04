@@ -15,7 +15,10 @@ class ReadmeBadgeGenerationTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.metadata_path = cls.repo_root / ".github" / "readme_badges.json"
         cls.upstream_sources = agent_skill_provenance.load_upstream_sources(
@@ -23,7 +26,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
 
     def test_readme_badges_match_generated_block(self) -> None:
-        """Verify test readme badges match generated block."""
+        """Verify readme badges match generated block.
+
+        Inputs: none. Output: None.
+        """
         readme_text = (self.repo_root / "README.md").read_text(encoding="utf-8")
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
         expected_block = update_readme_badges.render_badge_block(
@@ -35,7 +41,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
 
     def test_generated_badges_follow_expected_order(self) -> None:
-        """Verify test generated badges follow expected order."""
+        """Verify generated badges follow expected order.
+
+        Inputs: none. Output: None.
+        """
         metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
         badge_block = update_readme_badges.render_badge_block(
             metadata, self.upstream_sources
@@ -100,7 +109,10 @@ class ReadmeBadgeGenerationTests(TestCase):
     def test_generated_commit_activity_badge_uses_repo_slug_and_default_branch(
         self,
     ) -> None:
-        """Verify test generated commit activity badge uses rep behavior."""
+        """Verify generated commit activity badge uses repo slug and default branch.
+
+        Inputs: none. Output: None.
+        """
         metadata = update_readme_badges.RepoMetadata(
             host="github.com",
             owner="example-owner",
@@ -233,7 +245,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
 
     def test_canonical_badge_metadata_file_exists_and_is_complete(self) -> None:
-        """Verify test canonical badge metadata file exists and behavior."""
+        """Verify canonical badge metadata file exists and is complete.
+
+        Inputs: none. Output: None.
+        """
         payload = json.loads(self.metadata_path.read_text(encoding="utf-8"))
         self.assertEqual(
             {
@@ -249,7 +264,10 @@ class ReadmeBadgeGenerationTests(TestCase):
             self.assertTrue(str(payload[key]).strip(), f"{key} must not be empty")
 
     def test_resolve_repo_metadata_prefers_canonical_metadata_file(self) -> None:
-        """Verify test resolve repo metadata prefers canonical behavior."""
+        """Verify resolve repo metadata prefers canonical metadata file.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch("tools.update_readme_badges._run_git") as mocked_run_git:
             metadata = update_readme_badges.resolve_repo_metadata(self.repo_root)
 
@@ -266,7 +284,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         mocked_run_git.assert_not_called()
 
     def test_remote_url_parsing_supports_public_and_private_clone_styles(self) -> None:
-        """Verify test remote URL parsing supports public and p behavior."""
+        """Verify remote URL parsing supports public and private clone styles.
+
+        Inputs: none. Output: None.
+        """
         cases = {
             "git@github.com:ZMB-UZH/omero-docker-extended.git": (
                 "github.com",
@@ -287,7 +308,10 @@ class ReadmeBadgeGenerationTests(TestCase):
                 )
 
     def test_run_git_marks_repo_root_as_safe_directory(self) -> None:
-        """Verify test run git marks repo root as safe directory."""
+        """Verify run git marks repo root as safe directory.
+
+        Inputs: none. Output: None.
+        """
         with (
             mock.patch(
                 "tools.update_readme_badges.agent_skill_provenance.resolve_required_executable",

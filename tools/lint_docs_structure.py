@@ -64,7 +64,10 @@ REQUIRED_INDEX_LINKS: tuple[str, ...] = (
 
 
 def validate_required_paths(repo_root: Path) -> list[ValidationError]:
-    """Validate that required docs and mapping files exist."""
+    """Validate required paths.
+
+    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    """
     errors: list[ValidationError] = []
     for rel_path in REQUIRED_PATHS:
         candidate: Path = repo_root / rel_path
@@ -74,7 +77,10 @@ def validate_required_paths(repo_root: Path) -> list[ValidationError]:
 
 
 def validate_index_links(repo_root: Path) -> list[ValidationError]:
-    """Validate required links are present in docs index."""
+    """Validate index links.
+
+    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    """
     index_path: Path = repo_root / "docs/index.md"
     if not index_path.exists():
         return [ValidationError("Missing docs/index.md; cannot validate links")]
@@ -92,7 +98,10 @@ def validate_index_links(repo_root: Path) -> list[ValidationError]:
 
 
 def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
-    """Validate compact agent surfaces and their routing contracts."""
+    """Validate context surfaces.
+
+    Inputs: `repo_root`. Output: `list[ValidationError]`.
+    """
     errors: list[ValidationError] = []
     for rel_path, contract in CONTEXT_SURFACE_CONTRACTS.items():
         path = repo_root / rel_path
@@ -120,7 +129,10 @@ def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
 
 
 def run_validations(repo_root: Path) -> Sequence[ValidationError]:
-    """Run all validations and return aggregated errors."""
+    """All validations and return aggregated errors.
+
+    Inputs: `repo_root`. Output: `Sequence[ValidationError]`.
+    """
     errors: list[ValidationError] = []
     validators: Iterable = (
         validate_required_paths,
@@ -133,7 +145,10 @@ def run_validations(repo_root: Path) -> Sequence[ValidationError]:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """Parse args.
+
+    Inputs: `argv`. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description="Validate repository documentation structure and agent surfaces."
     )
@@ -147,7 +162,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Program entrypoint."""
+    """Execute the command entrypoint.
+
+    Inputs: `argv`. Output: `int`.
+    """
     args = parse_args(argv)
     repo_root = args.repo_root
     errors: Sequence[ValidationError] = run_validations(repo_root)

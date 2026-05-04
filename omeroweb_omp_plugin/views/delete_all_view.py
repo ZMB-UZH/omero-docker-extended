@@ -31,8 +31,10 @@ OMERO = OMERO_CLI
 @login_required()
 @require_non_root_user
 def delete_all_keyvaluepairs(request, conn=None, _url=None, **kwargs):
-    """
-    Delete ALL MapAnnotations for ALL images in a given project using OMERO CLI.
+    """Delete all keyvaluepairs.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+
     - Logs in once with the current OMERO.web user + provided password
     - Deletes in batches for speed
     """

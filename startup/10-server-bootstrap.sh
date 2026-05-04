@@ -2,10 +2,12 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Write a log message. Inputs: shell arguments and environment. Output: command status and side effects.
 log() {
     echo "[server-bootstrap] $*"
 }
 
+# Return whether non negative integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_non_negative_integer() {
     case "$1" in
         ""|*[!0-9]*) return 1 ;;
@@ -13,14 +15,17 @@ is_non_negative_integer() {
     esac
 }
 
+# Return whether positive integer. Inputs: shell arguments and environment. Output: success or failure status.
 is_positive_integer() {
     is_non_negative_integer "$1" && [ "$1" -gt 0 ]
 }
 
+# Return whether tcp port. Inputs: shell arguments and environment. Output: success or failure status.
 is_tcp_port() {
     is_positive_integer "$1" && [ "$1" -le 65535 ]
 }
 
+# Return whether environment variable name. Inputs: shell arguments and environment. Output: success or failure status.
 is_env_var_name() {
     case "$1" in
         ""|[0-9]*|*[!A-Za-z0-9_]*) return 1 ;;
@@ -28,6 +33,7 @@ is_env_var_name() {
     esac
 }
 
+# Return whether OMERO group name. Inputs: shell arguments and environment. Output: success or failure status.
 is_omero_group_name() {
     case "$1" in
         ""|*[!A-Za-z0-9_.-]*) return 1 ;;
@@ -35,6 +41,7 @@ is_omero_group_name() {
     esac
 }
 
+# Return whether truthy bool. Inputs: shell arguments and environment. Output: success or failure status.
 is_truthy_bool() {
     case "$1" in
         1|true|yes|on) return 0 ;;
@@ -42,6 +49,7 @@ is_truthy_bool() {
     esac
 }
 
+# Return whether falsey bool. Inputs: shell arguments and environment. Output: success or failure status.
 is_falsey_bool() {
     case "$1" in
         0|false|no|off) return 0 ;;
@@ -49,6 +57,7 @@ is_falsey_bool() {
     esac
 }
 
+# Require positive integer environment variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_positive_integer_env_var() {
     local var_name="$1"
     local value="${!var_name-}"
@@ -69,6 +78,7 @@ require_positive_integer_env_var() {
     fi
 }
 
+# Require tcp port environment variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_tcp_port_env_var() {
     local var_name="$1"
     local value="${!var_name-}"
@@ -89,6 +99,7 @@ require_tcp_port_env_var() {
     fi
 }
 
+# Require nonempty environment variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_nonempty_env_var() {
     local var_name="$1"
     local value="${!var_name-}"
@@ -104,6 +115,7 @@ require_nonempty_env_var() {
     fi
 }
 
+# Require set environment variable. Inputs: shell arguments and environment. Output: command status and side effects.
 require_set_env_var() {
     local var_name="$1"
 
@@ -124,6 +136,7 @@ DROPBOX_USER_DIR_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-user-dir-sync.statu
 DROPBOX_USER_DIR_SYNC_HELPER="${SCRIPT_DIR}/dropbox_user_dir_sync.py"
 DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status"
 JOB_SERVICE_GROUP_SYNC_HELPER="${SCRIPT_DIR}/job_service_group_sync.py"
+# Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
     if [[ -n "${configured_bin}" ]]; then
@@ -159,6 +172,7 @@ require_nonempty_env_var "OMERO_CLI_USER"
 require_nonempty_env_var "OMERO_CLI_HOST"
 require_tcp_port_env_var "OMERO_CLI_PORT"
 
+# Resolve OMERO cli tmpdir. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_cli_tmpdir() {
     local candidate="${OMERO_TMPDIR:-${TMPDIR:-${OMERO_TEMPDIR:-}}}"
 
@@ -170,6 +184,7 @@ resolve_omero_cli_tmpdir() {
     printf "%s\n" "${candidate}"
 }
 
+# Resolve server venv python. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_server_venv_python() {
     local server_root=""
     local candidate=""
@@ -186,10 +201,12 @@ resolve_server_venv_python() {
     exit 1
 }
 
+# Trim whitespace. Inputs: shell arguments and environment. Output: command status and side effects.
 trim_whitespace() {
     printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+# Normalize directory path. Inputs: shell arguments and environment. Output: command status and side effects.
 normalize_dir_path() {
     local path=""
     path="$(trim_whitespace "$1")"
@@ -202,6 +219,7 @@ normalize_dir_path() {
     printf "%s\n" "${path}"
 }
 
+# Perform expected managed repository root. Inputs: shell arguments and environment. Output: command status and side effects.
 expected_managed_repository_root() {
     local configured_managed_dir=""
     local normalized_omero_dir=""
@@ -241,6 +259,7 @@ expected_managed_repository_root() {
     printf "%s\n" "${normalized_managed_dir}"
 }
 
+# Find unexpected server managed repository directories. Inputs: shell arguments and environment. Output: command status and side effects.
 find_unexpected_server_managed_repository_dirs() {
     local expected_root=""
     local server_root=""
@@ -264,6 +283,7 @@ find_unexpected_server_managed_repository_dirs() {
     done < <(find "${server_root}" -type d \( -name "${expected_basename}" -o -name 'ManagedRepository' \) -print 2>/dev/null | sort -u)
 }
 
+# Validate managed repository configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_managed_repository_configuration() {
     local expected_root=""
     local -a unexpected_roots=()
@@ -286,6 +306,7 @@ validate_managed_repository_configuration() {
     fi
 }
 
+# Verify managed repository runtime safety. Inputs: shell arguments and environment. Output: command status and side effects.
 verify_managed_repository_runtime_safety() {
     local expected_root=""
     local actual_root=""
@@ -322,6 +343,7 @@ verify_managed_repository_runtime_safety() {
     return 0
 }
 
+# Execute OMERO. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero() {
     if [[ "$(id -u)" -ne 0 ]]; then
         "${OMERO_BIN}" "$@"
@@ -358,6 +380,7 @@ run_omero() {
         "${OMERO_BIN}" "$@"
 }
 
+# Write cli keepalive config. Inputs: shell arguments and environment. Output: command status and side effects.
 write_cli_keepalive_config() {
     local keepalive_seconds="${1:?BUG: write_cli_keepalive_config requires keepalive seconds}"
     local base_config="${ICE_CONFIG:-}"
@@ -413,6 +436,7 @@ write_cli_keepalive_config() {
     printf '%s\n' "${config_path}"
 }
 
+# Execute OMERO with keepalive. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_with_keepalive() {
     local keepalive_seconds="${1:?BUG: run_omero_with_keepalive requires keepalive seconds}"
     shift
@@ -446,6 +470,7 @@ run_omero_with_keepalive() {
     return "${rc}"
 }
 
+# Ensure tmpdir permissions. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_tmpdir_permissions() {
     local requested_owner="$1"
     local tmp_root="${OMERO_TMP_PATH:-}"
@@ -490,6 +515,7 @@ ensure_tmpdir_permissions() {
         exit 1
     fi
 
+    # Prepare runtime temporary directory. Inputs: shell arguments and environment. Output: command status and side effects.
     prepare_runtime_tmp_dir() {
         local candidate_dir="$1"
         local candidate_omero_py_dir="${candidate_dir}/omero"
@@ -629,6 +655,7 @@ ensure_tmpdir_permissions() {
     log "OMERO temp directory ready: ${TMPDIR}"
 }
 
+# Validate ldap configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_ldap_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -656,6 +683,7 @@ validate_ldap_configuration() {
     log "LDAP enabled; required secret-backed LDAP settings are present"
 }
 
+# Validate ldap new user group configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_ldap_new_user_group_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -678,6 +706,7 @@ validate_ldap_new_user_group_configuration() {
     fi
 }
 
+# Validate job service bootstrap configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_job_service_bootstrap_configuration() {
     require_nonempty_env_var "OMERO_JOB_SERVICE_USERNAME"
     require_nonempty_env_var "OMERO_JOB_SERVICE_JOIN_ALL_GROUPS"
@@ -720,6 +749,7 @@ validate_job_service_bootstrap_configuration() {
     fi
 }
 
+# Validate binary repository cleanse configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_binary_repository_cleanse_configuration() {
     local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
 
@@ -755,6 +785,7 @@ validate_binary_repository_cleanse_configuration() {
     fi
 }
 
+# Validate repository lock cleanup configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_repository_lock_cleanup_configuration() {
     local enabled="${OMERO_REPOSITORY_LOCK_CLEANUP_ON_START:-1}"
 
@@ -764,6 +795,7 @@ validate_repository_lock_cleanup_configuration() {
     fi
 }
 
+# Validate rendering cache cleanup configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_rendering_cache_cleanup_configuration() {
     local enabled="${OMERO_RENDERING_CACHE_CLEANUP_ON_START:-0}"
 
@@ -773,6 +805,7 @@ validate_rendering_cache_cleanup_configuration() {
     fi
 }
 
+# Cleanup rendering caches. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_rendering_caches() {
     local enabled="${OMERO_RENDERING_CACHE_CLEANUP_ON_START:-0}"
 
@@ -831,6 +864,7 @@ cleanup_rendering_caches() {
     fi
 }
 
+# Validate Zarr pixel buffer configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_zarr_pixel_buffer_configuration() {
     local enabled="${OMERO_ZARR_PIXEL_BUFFER_ENABLED:-false}"
 
@@ -840,6 +874,7 @@ validate_zarr_pixel_buffer_configuration() {
     fi
 }
 
+# Toggle Zarr pixel buffer plugin. Inputs: shell arguments and environment. Output: command status and side effects.
 toggle_zarr_pixel_buffer_plugin() {
     local enabled="${OMERO_ZARR_PIXEL_BUFFER_ENABLED:-false}"
     local server_lib="${SERVER_HOME}/lib/server"
@@ -881,6 +916,7 @@ toggle_zarr_pixel_buffer_plugin() {
     fi
 }
 
+# Validate repo root sync configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_repo_root_sync_configuration() {
     local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
     local jitter="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
@@ -914,6 +950,7 @@ validate_repo_root_sync_configuration() {
     fi
 }
 
+# Validate dropbox user directory sync configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_dropbox_user_dir_sync_configuration() {
     require_nonempty_env_var "OMERO_DROPBOX_ENABLED"
     require_nonempty_env_var "OMERO_DROPBOX_USER_DIR_SYNC_ENABLED"
@@ -1069,6 +1106,7 @@ validate_dropbox_user_dir_sync_configuration() {
         --allow-world-writable "${allow_world_writable}" || exit 1
 }
 
+# Cleanup stale repository lock files. Inputs: shell arguments and environment. Output: command status and side effects.
 cleanup_stale_repository_lock_files() {
     local enabled="${OMERO_REPOSITORY_LOCK_CLEANUP_ON_START:-1}"
     local repository_lock_root="${OMERO_DIR%/}/.omero/repository"
@@ -1107,6 +1145,7 @@ cleanup_stale_repository_lock_files() {
     log "Removed ${removed_count} stale repository lock file(s) from ${repository_lock_root}"
 }
 
+# Apply ldap runtime configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 apply_ldap_runtime_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -1144,6 +1183,7 @@ apply_ldap_runtime_configuration() {
     log "Applied LDAP runtime configuration from environment"
 }
 
+# Check writable directory. Inputs: shell arguments and environment. Output: command status and side effects.
 check_writable_dir() {
     local path="$1"
     local label="$2"
@@ -1172,6 +1212,7 @@ check_writable_dir() {
     log "${label} writable after ownership fix: ${path}"
 }
 
+# Reset runtime if requested. Inputs: shell arguments and environment. Output: command status and side effects.
 reset_runtime_if_requested() {
     if [[ "${RESET_OMERO_RUNTIME:-0}" != "1" ]]; then
         return
@@ -1184,6 +1225,7 @@ reset_runtime_if_requested() {
     fi
 }
 
+# Configure script python. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_script_python() {
     local venv_py
     venv_py="$(resolve_server_venv_python)"
@@ -1191,6 +1233,7 @@ configure_script_python() {
     log "Configured omero.scripts.python=${venv_py}"
 }
 
+# Configure import runtime paths. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_import_runtime_paths() {
     local shared_tmp_path="${OMERO_TMP_PATH:-}"
     local runtime_state_path="${SERVER_VAR_DIR%/}/managed-zarr-runtime.env"
@@ -1211,6 +1254,7 @@ configure_import_runtime_paths() {
     log "Wrote import runtime path state to ${runtime_state_path}"
 }
 
+# Ensure certificate sans. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_certificate_sans() {
     local cert_pem="${CERTS_DIR}/server.pem"
     local san_value="DNS:localhost,DNS:omeroserver"
@@ -1232,6 +1276,7 @@ ensure_certificate_sans() {
     fi
 }
 
+# Schedule job service bootstrap. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
     local job_user="${OMERO_JOB_SERVICE_USERNAME}"
@@ -1276,6 +1321,7 @@ schedule_job_service_bootstrap() {
 
         echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait}s, poll=${poll_interval}s)"
 
+        # Wait for server. Inputs: shell arguments and environment. Output: command status and side effects.
         wait_for_server() {
             local wait_seconds="$1"
             local deadline=$(( $(date +%s) + wait_seconds ))
@@ -1290,6 +1336,7 @@ schedule_job_service_bootstrap() {
             return 1
         }
 
+        # Execute job service group sync helper. Inputs: shell arguments and environment. Output: command status and side effects.
         run_job_service_group_sync_helper() {
             local venv_py=""
             local cli_home=""
@@ -1330,6 +1377,7 @@ schedule_job_service_bootstrap() {
             fi
         }
 
+        # Sync once. Inputs: shell arguments and environment. Output: command status and side effects.
         sync_once() {
             local ready_wait="$1"
             
@@ -1377,6 +1425,7 @@ schedule_job_service_bootstrap() {
     log "Scheduled background job-service bootstrap + hourly group sync (interval=${interval}s)"
 }
 
+# Schedule ldap group bootstrap. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_ldap_group_bootstrap() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -1457,6 +1506,7 @@ schedule_ldap_group_bootstrap() {
     log "Scheduled background LDAP group bootstrap for static group '${ldap_group_setting}'"
 }
 
+# Perform repo root sync stable prefix depth. Inputs: shell arguments and environment. Output: command status and side effects.
 repo_root_sync_stable_prefix_depth() {
     local python_bin="${1:?BUG: repo_root_sync_stable_prefix_depth requires a python path}"
 
@@ -1469,6 +1519,7 @@ repo_root_sync_stable_prefix_depth() {
         --repo-template "${CONFIG_omero_fs_repo_path:-}"
 }
 
+# Execute repo root sync helper. Inputs: shell arguments and environment. Output: command status and side effects.
 run_repo_root_sync_helper() {
     local python_bin="${1:?BUG: run_repo_root_sync_helper requires a python path}"
     local cli_home="${2:?BUG: run_repo_root_sync_helper requires a CLI home}"
@@ -1490,6 +1541,7 @@ run_repo_root_sync_helper() {
         "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" "$@"
 }
 
+# Build repo root sync plan. Inputs: shell arguments and environment. Output: command status and side effects.
 build_repo_root_sync_plan() {
     local python_bin="${1:?BUG: build_repo_root_sync_plan requires a python path}"
     local cli_home="${2:?BUG: build_repo_root_sync_plan requires a CLI home}"
@@ -1502,6 +1554,7 @@ build_repo_root_sync_plan() {
         --ldap-group "${CONFIG_omero_ldap_new__user__group:-}"
 }
 
+# Perform lookup repo root prefix. Inputs: shell arguments and environment. Output: command status and side effects.
 lookup_repo_root_prefix() {
     local python_bin="${1:?BUG: lookup_repo_root_prefix requires a python path}"
     local cli_home="${2:?BUG: lookup_repo_root_prefix requires a CLI home}"
@@ -1517,6 +1570,7 @@ lookup_repo_root_prefix() {
         --expected-managed-dir "${managed_repo_root}"
 }
 
+# Resolve cli home. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_cli_home() {
     local cli_user="$1"
     local cli_home=""
@@ -1529,6 +1583,7 @@ resolve_cli_home() {
     printf "%s\n" "${cli_home}"
 }
 
+# Write repo root sync status. Inputs: shell arguments and environment. Output: command status and side effects.
 write_repo_root_sync_status() {
     local status="$1"
     local last_success_epoch="${2:-0}"
@@ -1548,6 +1603,7 @@ EOF
     mv "${tmp_status_file}" "${REPO_ROOT_SYNC_STATUS_FILE}"
 }
 
+# Execute repo root bootstrap once. Inputs: shell arguments and environment. Output: command status and side effects.
 run_repo_root_bootstrap_once() {
     local root_pass="$1"
     local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
@@ -1707,6 +1763,7 @@ run_repo_root_bootstrap_once() {
     return 0
 }
 
+# Schedule repo root sync. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_repo_root_sync() {
     local root_pass="${ROOTPASS:-}"
     local repo_path="${CONFIG_omero_fs_repo_path:-}"
@@ -1757,6 +1814,7 @@ schedule_repo_root_sync() {
     log "Scheduled background managed-repository shared-prefix sync (interval=${interval}s)"
 }
 
+# Write dropbox ice bootstrap status. Inputs: shell arguments and environment. Output: command status and side effects.
 write_dropbox_ice_bootstrap_status() {
     local status="$1"
     local action="$2"
@@ -1775,6 +1833,7 @@ EOF
     mv "${tmp_status_file}" "${DROPBOX_ICE_BOOTSTRAP_STATUS_FILE}"
 }
 
+# Wait for dropbox ice admin. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_dropbox_ice_admin() {
     local wait_seconds="$1"
     local poll_interval="$2"
@@ -1790,6 +1849,7 @@ wait_for_dropbox_ice_admin() {
     return 1
 }
 
+# Perform dropbox ice admin ready. Inputs: shell arguments and environment. Output: command status and side effects.
 dropbox_ice_admin_ready() {
     local internal_cfg="${SERVER_HOME}/etc/internal.cfg"
 
@@ -1798,6 +1858,7 @@ dropbox_ice_admin_ready() {
         && run_dropbox_ice_command server list >/dev/null 2>&1
 }
 
+# Wait for dropbox user directory sync API. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_dropbox_user_dir_sync_api() {
     local wait_seconds="$1"
     local poll_interval="$2"
@@ -1838,6 +1899,7 @@ wait_for_dropbox_user_dir_sync_api() {
     return 1
 }
 
+# Perform environment variable value is empty. Inputs: shell arguments and environment. Output: command status and side effects.
 env_var_value_is_empty() {
     local env_name="$1"
 
@@ -1849,6 +1911,7 @@ env_var_value_is_empty() {
     [[ -z "${env_value_ref-}" ]]
 }
 
+# Execute dropbox ice command. Inputs: shell arguments and environment. Output: command status and side effects.
 run_dropbox_ice_command() {
     local out=""
     local rc=0
@@ -1861,6 +1924,7 @@ run_dropbox_ice_command() {
     return "${rc}"
 }
 
+# Start dropbox ice server. Inputs: shell arguments and environment. Output: command status and side effects.
 start_dropbox_ice_server() {
     local server_name="$1"
     local out=""
@@ -1885,6 +1949,7 @@ start_dropbox_ice_server() {
     return "${rc}"
 }
 
+# Execute dropbox ice bootstrap once. Inputs: shell arguments and environment. Output: command status and side effects.
 run_dropbox_ice_bootstrap_once() {
     local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
     local poll_interval="${OMERO_DROPBOX_ICE_BOOTSTRAP_READINESS_POLL_SECONDS}"
@@ -1944,6 +2009,7 @@ run_dropbox_ice_bootstrap_once() {
     echo "[$(date -u)] DropBox Ice servers are enabled and started"
 }
 
+# Schedule dropbox ice bootstrap. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_dropbox_ice_bootstrap() {
     local enabled="${OMERO_DROPBOX_ENABLED}"
     local startup_wait="${OMERO_DROPBOX_ICE_BOOTSTRAP_STARTUP_WAIT_SECONDS}"
@@ -2002,6 +2068,7 @@ schedule_dropbox_ice_bootstrap() {
     log "Scheduled background DropBox Ice bootstrap"
 }
 
+# Write dropbox user directory sync status. Inputs: shell arguments and environment. Output: command status and side effects.
 write_dropbox_user_dir_sync_status() {
     local status="$1"
     local message="$2"
@@ -2025,6 +2092,7 @@ EOF
     mv "${tmp_status_file}" "${DROPBOX_USER_DIR_SYNC_STATUS_FILE}"
 }
 
+# Execute dropbox user directory sync once. Inputs: shell arguments and environment. Output: command status and side effects.
 run_dropbox_user_dir_sync_once() {
     local wait_seconds="${1:-0}"
     local venv_py=""
@@ -2101,6 +2169,7 @@ run_dropbox_user_dir_sync_once() {
     fi
 }
 
+# Schedule dropbox user directory sync. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_dropbox_user_dir_sync() {
     local enabled="${OMERO_DROPBOX_USER_DIR_SYNC_ENABLED}"
     local interval="${OMERO_DROPBOX_USER_DIR_SYNC_INTERVAL_SECONDS}"
@@ -2139,6 +2208,7 @@ schedule_dropbox_user_dir_sync() {
     log "Scheduled background DropBox user directory sync (interval=${interval}s)"
 }
 
+# Schedule binary repository cleanse. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_binary_repository_cleanse() {
     local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
     local root_pass="${ROOTPASS:-}"
@@ -2219,6 +2289,7 @@ schedule_binary_repository_cleanse() {
 
     log "Scheduled background binary repository cleanse for ${data_dir}"
 }
+# Install figure script. Inputs: shell arguments and environment. Output: command status and side effects.
 install_figure_script() {
     local figure_version="${OMERO_FIGURE_VERSION:-}"
     if [[ -z "${figure_version}" ]]; then
@@ -2292,6 +2363,7 @@ install_figure_script() {
     chmod -R a+rX "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
 }
 
+# Schedule script registration. Inputs: shell arguments and environment. Output: command status and side effects.
 schedule_script_registration() {
     if [[ "${REGISTER_OFFICIAL_SCRIPTS:-0}" != "1" ]]; then
         return
@@ -2443,6 +2515,7 @@ EOF
     log "Scheduled background idempotent official script registration"
 }
 
+# Acquire lockdir. Inputs: shell arguments and environment. Output: command status and side effects.
 acquire_lockdir() {
     local lockdir="$1"
     local pidfile="${2:-}"
@@ -2462,12 +2535,14 @@ acquire_lockdir() {
 
     current_boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)"
 
+    # Read proc start ticks. Inputs: shell arguments and environment. Output: command status and side effects.
     _read_proc_start_ticks() {
         local target_pid="$1"
         [[ -r "/proc/${target_pid}/stat" ]] || return 1
         awk '{print $22}' "/proc/${target_pid}/stat" 2>/dev/null
     }
 
+    # Normalize lock path. Inputs: shell arguments and environment. Output: command status and side effects.
     _normalize_lock_path() {
         local target_path="$1"
         [[ -e "${target_path}" ]] || return 0
@@ -2481,6 +2556,7 @@ acquire_lockdir() {
         fi
     }
 
+    # Write lock metadata. Inputs: shell arguments and environment. Output: command status and side effects.
     _write_lock_metadata() {
         local target_lockdir="$1"
         local target_pid="$2"
@@ -2561,6 +2637,7 @@ acquire_lockdir() {
     return 0
 }
 
+# Release lockdir. Inputs: shell arguments and environment. Output: command status and side effects.
 release_lockdir() {
     local lockdir="$1"
     local pidfile="${2:-}"
@@ -2571,6 +2648,7 @@ release_lockdir() {
 }
 
 
+# Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     log "Starting consolidated startup flow"
 

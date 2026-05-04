@@ -3,6 +3,7 @@
 
 set -euo pipefail
 
+# Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local explicit="${OMERO_WEB_OMERO_BIN:-${OMERO_BIN:-}}"
     local venv_dir=""

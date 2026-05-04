@@ -13,7 +13,10 @@ from omeroweb_admin_tools.services.system_diagnostics import (
 
 
 def test_build_log_config_validates_environment_values(monkeypatch):
-    """Verify test build log config validates environment v behavior."""
+    """Verify build log config validates environment values.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(
         admin_config,
         "require_env",
@@ -72,7 +75,10 @@ def test_build_log_config_validates_environment_values(monkeypatch):
 
 
 def _result(check_id: str, status: str) -> DiagnosticCheckResult:
-    """Handle result."""
+    """Return result.
+
+    Inputs: `check_id`, `status`. Output: `DiagnosticCheckResult`.
+    """
     return DiagnosticCheckResult(
         check_id=check_id,
         label=check_id,
@@ -84,7 +90,13 @@ def _result(check_id: str, status: str) -> DiagnosticCheckResult:
 
 
 def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
-    """Verify test system diagnostics edge branches cover r behavior."""
+    """Verify system diagnostics edge branches cover runtime failures.
+
+    Inputs: `monkeypatch`. Output: computed value or None. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     monkeypatch.delenv("EMPTY_PRIMARY", raising=False)
     monkeypatch.setenv("EMPTY_PRIMARY", " ")
     assert (
@@ -103,7 +115,10 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     calls = []
 
     def docker_api(path, timeout_seconds=4.0):
-        """Handle docker API."""
+        """Docker API.
+
+        Inputs: `path`, `timeout_seconds`. Output: tuple.
+        """
         calls.append(path)
         if path.startswith("/containers/json"):
             return True, [{}], ""
@@ -160,36 +175,59 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
 
         @staticmethod
         def cursor():
-            """Handle cursor."""
+            """Return a database cursor.
+
+            Inputs: none. Output: computed value or None.
+            """
 
             class _Cursor:
                 """Represent cursor."""
 
                 @staticmethod
                 def execute(query):
-                    """Run execute."""
+                    """Execute the query or command.
+
+                    Inputs: `query`. Output: None.
+                    """
                     return None
 
                 @staticmethod
                 def fetchone():
-                    """Handle fetchone."""
+                    """Return one result row.
+
+                    Inputs: none. Output: None.
+                    """
                     return None
 
                 def __enter__(self):
+                    """Enter the context manager.
+
+                    Inputs: none. Output: `self`.
+                    """
                     return self
 
                 def __exit__(self, exc_type, exc, tb):
+                    """Exit the context manager.
+
+                    Inputs: `exc_type`, `exc`, `tb`. Output: bool.
+                    """
                     return False
 
             return _Cursor()
 
         @staticmethod
         def close():
-            """Handle close."""
+            """Close the resource.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("close failed")
 
     def _psycopg2_connection():
-        """Handle psycopg2 connection."""
+        """Psycopg2 connection.
+
+        Inputs: none. Output: call result.
+        """
         return type(
             "Psycopg2",
             (),

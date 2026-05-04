@@ -16,17 +16,27 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self.val = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self.val`.
+        """
         return self.val
 
 
 def test_core_function_misc_final_edges_cover_remaining_helper_branches(
     monkeypatch, tmp_path: Path
 ):
-    """Verify test core function misc final edges cover rem behavior."""
+    """Verify core function misc final edges cover remaining helper branches.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     monkeypatch.setattr(
         core_functions,
         "_entry_requires_name_normalization",
@@ -163,7 +173,13 @@ def test_core_function_misc_final_edges_cover_remaining_helper_branches(
 def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
-    """Verify test managed path and import candidate helper behavior."""
+    """Verify managed path and import candidate helpers cover remaining lines.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `self.should_match`. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     real_os_open = os.open
     real_os_stat = os.stat
 
@@ -305,19 +321,33 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         __hash__ = None
 
         def __init__(self, should_match=False):
+            """Initialize the instance.
+
+            Inputs: `should_match`. Output: None.
+            """
             self.should_match = should_match
 
         @staticmethod
         def resolve():
-            """Return resolve."""
+            """Resolve and return the path.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise OSError("resolve failed")
 
         def __eq__(self, other):
+            """Eq.
+
+            Inputs: `other`. Output: `self.should_match`.
+            """
             return self.should_match
 
         @staticmethod
         def relative_to(other):
-            """Handle relative to."""
+            """Relative to.
+
+            Inputs: `other`. Output: None. Raises on invalid or unavailable state.
+            """
             raise ValueError("outside")
 
     monkeypatch.setattr(
@@ -403,11 +433,17 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
 def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
     monkeypatch, tmp_path: Path
 ):
-    """Verify test core function routing and native Zarr he behavior."""
+    """Verify core function routing and native Zarr helpers cover remaining lines.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: `state['job']`.
+    """
     state = {"job": {"compatibility_status": "pending"}}
 
     def _update_job(job_id, mutator):
-        """Handle update job."""
+        """Update job.
+
+        Inputs: `job_id`, `mutator`. Output: `state['job']`.
+        """
         state["job"] = mutator(state["job"])
         return state["job"]
 
@@ -417,11 +453,18 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
         """Represent thread."""
 
         def __init__(self, *, target, args, daemon):
+            """Initialize the instance.
+
+            Inputs: `target`, `args`, `daemon`. Output: None.
+            """
             self.args = args
 
         @staticmethod
         def start():
-            """Run start."""
+            """Start the operation.
+
+            Inputs: none. Output: None.
+            """
             thread_starts.append("started")
 
     monkeypatch.setattr(core_functions, "_update_job", _update_job)
@@ -502,7 +545,10 @@ def test_core_function_routing_and_native_zarr_helpers_cover_remaining_lines(
 def test_import_job_entry_covers_remaining_zarr_routing_paths(
     monkeypatch, tmp_path: Path
 ):
-    """Verify test import job entry covers remaining Zarr r behavior."""
+    """Verify import job entry covers remaining Zarr routing paths.
+
+    Inputs: `monkeypatch`, `tmp_path`. Output: None.
+    """
     zarr_path = tmp_path / "plate.ome.zarr"
     zarr_path.mkdir()
     upload_root = tmp_path / "uploads"
@@ -612,7 +658,13 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Verify test core function import name and compatibil behavior."""
+    """Verify core function import name and compatibility edges cover remaining guards.
+
+    Inputs: `monkeypatch`, `tmp_path`, `caplog`. Output: computed value. Raises on
+    invalid or unavailable state.
+
+    invalid or unavailable state.
+    """
     managed_dir = tmp_path / "managed"
     original_directory_is_usable = core_functions._directory_is_usable
     monkeypatch.setattr(
@@ -631,10 +683,17 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
 
         @staticmethod
         def is_dir():
-            """Return whether is dir."""
+            """Return whether directory.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise OSError("stat failed")
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: '/broken'.
+            """
             return "/broken"
 
     assert original_directory_is_usable(_BrokenPath()) is False
@@ -700,7 +759,10 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
 
         @staticmethod
         def is_dir():
-            """Return whether is dir."""
+            """Return whether directory.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
     monkeypatch.setattr(
@@ -733,20 +795,33 @@ def test_core_function_import_name_and_compatibility_edges_cover_remaining_guard
         """Represent image."""
 
         def __init__(self, image_id: int, name: str):
+            """Initialize the instance.
+
+            Inputs: `image_id`, `name`. Output: None.
+            """
             self.id = image_id
             self._name = name
             self.saved = 0
 
         def getName(self):
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: `self._name`.
+            """
             return self._name
 
         def setName(self, name):
-            """Store set name."""
+            """Set Name.
+
+            Inputs: `name`. Output: None.
+            """
             self._name = name
 
         def save(self):
-            """Store save."""
+            """Persist the object state.
+
+            Inputs: none. Output: None.
+            """
             self.saved += 1
 
     mismatch_images = {

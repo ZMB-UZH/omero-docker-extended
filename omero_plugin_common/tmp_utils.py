@@ -14,14 +14,20 @@ TMP_PATH_ENV = "OMERO_TMP_PATH"
 
 
 def _validate_path_component(value: str, *, label: str) -> str:
-    """Handle validate path component."""
+    """Validate path component.
+
+    Inputs: `value`, `label`. Output: `str`. Raises on invalid or unavailable state.
+    """
     if value in {"", ".", ".."} or "/" in value or "\\" in value or "\x00" in value:
         raise ValueError(f"{label} must be a single safe path component.")
     return value
 
 
 def _append_components(base: Path, components: Iterable[str]) -> Path:
-    """Handle append components."""
+    """Append components.
+
+    Inputs: `base`, `components`. Output: `Path`.
+    """
     path = base
     for component in components:
         path /= _validate_path_component(str(component), label="temporary subdirectory")
@@ -29,7 +35,10 @@ def _append_components(base: Path, components: Iterable[str]) -> Path:
 
 
 def get_tmp_base() -> Path:
-    """Return the configured root temporary directory."""
+    """Return the configured root temporary directory.
+
+    Inputs: none. Output: `Path`. Raises on invalid or unavailable state.
+    """
     value = os.environ.get(TMP_PATH_ENV)
     if not value or value.strip() == "":
         raise RuntimeError(
@@ -41,7 +50,10 @@ def get_tmp_base() -> Path:
 
 
 def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Path:
-    """Return a caller-namespaced temp path, creating it only on request."""
+    """Return a caller-namespaced temp path, creating it only on request.
+
+    Inputs: `subdir`, `create`. Output: `Path`.
+    """
     caller_plugin = _validate_path_component(
         _detect_caller_plugin(),
         label="plugin temporary directory",
@@ -55,7 +67,10 @@ def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Pa
 
 
 def _detect_caller_plugin() -> str:
-    """Return the hyphenated top-level ``omeroweb_*`` caller package."""
+    """Return the hyphenated top-level ``omeroweb_*`` caller package.
+
+    Inputs: none. Output: `str`.
+    """
     for frame_info in inspect.stack():
         module = inspect.getmodule(frame_info[0])
         if module is None:

@@ -34,7 +34,10 @@ _DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
 
 
 def _validated_delete_object_id(value, label: str) -> int:
-    """Handle validated delete object identifier."""
+    """Validated delete object ID.
+
+    Inputs: `value`, `label`. Output: `int`. Raises on invalid or unavailable state.
+    """
     object_id = int(value)
     if object_id <= 0:
         raise ValueError(f"Invalid {label}.")
@@ -42,7 +45,13 @@ def _validated_delete_object_id(value, label: str) -> int:
 
 
 def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
-    """Handle run OMERO delete."""
+    """OMERO delete.
+
+    Inputs: `cli_base_cmd`, `object_kind`, `object_id`. Output: `process_utils.run`
+    result. Raises on invalid or unavailable state.
+
+    result. Raises on invalid or unavailable state.
+    """
     if object_kind not in _DELETE_TARGET_KINDS:
         raise ValueError("Unsupported OMERO delete target.")
     validated_id = _validated_delete_object_id(object_id, f"{object_kind} id")
@@ -60,7 +69,10 @@ def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
 @login_required()
 @require_non_root_user
 def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
-    """Delete ONLY plugin-generated MapAnnotations for a project."""
+    """Delete plugin keyvaluepairs.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     try:
         if request.method != "POST":
             return JsonResponse(

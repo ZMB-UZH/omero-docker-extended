@@ -13,10 +13,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -24,15 +31,25 @@ class _Owner:
     """Represent owner."""
 
     def __init__(self, owner_id, name="owner"):
+        """Initialize the instance.
+
+        Inputs: `owner_id`, `name`. Output: None.
+        """
         self._id = owner_id
         self._name = name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._id)
 
     def getOmeName(self):
-        """Return get ome name."""
+        """Return the fake OMERO name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -50,6 +67,11 @@ class _Permissions:
         group_write=False,
         group_annotate=False,
     ):
+        """Initialize the instance.
+
+        Inputs: `label`, `read`, `write`, `annotate`, `group_read`, `group_write`,
+        `group_annotate`. Output: None.
+        """
         self._label = label
         self._read = read
         self._write = write
@@ -59,34 +81,59 @@ class _Permissions:
         self._group_annotate = group_annotate
 
     def __str__(self):
+        """Return the string representation.
+
+        Inputs: none. Output: `self._label`.
+        """
         return self._label
 
     def isRead(self):
-        """Handle is read."""
+        """Return whether Read.
+
+        Inputs: none. Output: `self._read`.
+        """
         return self._read
 
     def isWrite(self):
-        """Handle is write."""
+        """Return whether Write.
+
+        Inputs: none. Output: `self._write`.
+        """
         return self._write
 
     def isAnnotate(self):
-        """Handle is annotate."""
+        """Return whether Annotate.
+
+        Inputs: none. Output: `self._annotate`.
+        """
         return self._annotate
 
     def canAnnotate(self):
-        """Handle can annotate."""
+        """Return whether Annotate.
+
+        Inputs: none. Output: `self._annotate`.
+        """
         return self._annotate
 
     def isGroupRead(self):
-        """Handle is group read."""
+        """Return whether Group Read.
+
+        Inputs: none. Output: `self._group_read`.
+        """
         return self._group_read
 
     def isGroupWrite(self):
-        """Handle is group write."""
+        """Return whether Group Write.
+
+        Inputs: none. Output: `self._group_write`.
+        """
         return self._group_write
 
     def isGroupAnnotate(self):
-        """Handle is group annotate."""
+        """Return whether Group Annotate.
+
+        Inputs: none. Output: `self._group_annotate`.
+        """
         return self._group_annotate
 
 
@@ -94,20 +141,33 @@ class _Details:
     """Represent details."""
 
     def __init__(self, *, owner=None, permissions=None, group=None):
+        """Initialize the instance.
+
+        Inputs: `owner`, `permissions`, `group`. Output: None.
+        """
         self._owner = owner
         self._permissions = permissions
         self._group = group
 
     def getOwner(self):
-        """Return get owner."""
+        """Return the fake owner.
+
+        Inputs: none. Output: `self._owner`.
+        """
         return self._owner
 
     def getPermissions(self):
-        """Return get permissions."""
+        """Return fake permissions.
+
+        Inputs: none. Output: `self._permissions`.
+        """
         return self._permissions
 
     def getGroup(self):
-        """Return get group."""
+        """Return Group.
+
+        Inputs: none. Output: `self._group`.
+        """
         return self._group
 
 
@@ -115,25 +175,41 @@ class _Group:
     """Represent group."""
 
     def __init__(self, group_id, permissions, member_count=1):
+        """Initialize the instance.
+
+        Inputs: `group_id`, `permissions`, `member_count`. Output: None.
+        """
         self.id = group_id
         self._permissions = permissions
         self._member_count = member_count
         self._details = _Details(permissions=permissions)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `self._details`.
+        """
         return self._details
 
     def getPermissions(self):
-        """Return get permissions."""
+        """Return fake permissions.
+
+        Inputs: none. Output: `self._permissions`.
+        """
         return self._permissions
 
     def getMemberCount(self):
-        """Return get member count."""
+        """Return Member Count.
+
+        Inputs: none. Output: `self._member_count`.
+        """
         return self._member_count
 
 
@@ -141,6 +217,10 @@ class _Project:
     """Represent project."""
 
     def __init__(self, project_id, name, *, owner=None, permissions=None, group=None):
+        """Initialize the instance.
+
+        Inputs: `project_id`, `name`, `owner`, `permissions`, `group`. Output: None.
+        """
         self.id = project_id
         self._name = name
         self._owner = owner
@@ -153,23 +233,38 @@ class _Project:
         )
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: `self._details`.
+        """
         return self._details
 
     def getOwner(self):
-        """Return get owner."""
+        """Return the fake owner.
+
+        Inputs: none. Output: `self._owner`.
+        """
         return self._owner
 
     def getPermissions(self):
-        """Return get permissions."""
+        """Return fake permissions.
+
+        Inputs: none. Output: `self._permissions`.
+        """
         return self._permissions
 
 
@@ -177,15 +272,25 @@ class _Dataset:
     """Represent dataset."""
 
     def __init__(self, dataset_id, name):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`. Output: None.
+        """
         self.id = dataset_id
         self._name = name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -193,15 +298,25 @@ class _ImageObject:
     """Represent image object."""
 
     def __init__(self, image_id, name):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `name`. Output: None.
+        """
         self.id = image_id
         self._name = name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self.id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -209,7 +324,10 @@ class _BrokenProject(_Project):
     """Represent broken project."""
 
     def getDetails(self):
-        """Return get details."""
+        """Return Details.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("details unavailable")
 
 
@@ -217,15 +335,25 @@ class _ServiceOpts:
     """Represent service opts."""
 
     def __init__(self, initial_group="4"):
+        """Initialize the instance.
+
+        Inputs: `initial_group`. Output: None.
+        """
         self.current_group = initial_group
         self.set_calls = []
 
     def getOmeroGroup(self):
-        """Return get OMERO group."""
+        """Return OMERO Group.
+
+        Inputs: none. Output: `self.current_group`.
+        """
         return self.current_group
 
     def setOmeroGroup(self, value):
-        """Store set OMERO group."""
+        """Set OMERO Group.
+
+        Inputs: `value`. Output: None.
+        """
         self.set_calls.append(value)
         self.current_group = value
 
@@ -234,6 +362,10 @@ class _Conn:
     """Represent conn."""
 
     def __init__(self, user_id=10, username="alice"):
+        """Initialize the instance.
+
+        Inputs: `user_id`, `username`. Output: None.
+        """
         self.SERVICE_OPTS = _ServiceOpts()
         self._user = SimpleNamespace(
             getId=lambda: _Value(user_id),
@@ -249,15 +381,25 @@ class _Conn:
         self.raise_opts_groups = False
 
     def getUser(self):
-        """Return get user."""
+        """Return the fake user.
+
+        Inputs: none. Output: `self._user`.
+        """
         return self._user
 
     def getGroupsMemberOf(self):
-        """Return get groups member of."""
+        """Return Groups Member Of.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self.groups)
 
     def getObjects(self, object_type, opts=None):
-        """Return get objects."""
+        """Return Objects.
+
+        Inputs: `object_type`, `opts`. Output: `iter` result. Raises on invalid or
+        unavailable state.
+        """
         if object_type == "Project":
             if opts == {"group": "-1"}:
                 if self.raise_opts_groups:
@@ -273,22 +415,34 @@ class _Conn:
         raise AssertionError(f"Unexpected object request: {object_type}")
 
     def listProjects(self):
-        """Return list projects."""
+        """Return list projects.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self.list_projects)
 
     def getObject(self, object_type, object_id):
-        """Return get object."""
+        """Return Object.
+
+        Inputs: `object_type`, `object_id`. Output: `self.project_by_id.get` result.
+        """
         assert object_type == "Project"
         return self.project_by_id.get(int(object_id))
 
 
 def _json_payload(response):
-    """Handle JSON payload."""
+    """JSON payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def test_owner_and_permission_helpers_use_fallback_accessors():
-    """Verify test owner and permission helpers use fallbac behavior."""
+    """Verify owner and permission helpers use fallback accessors.
+
+    Inputs: none. Output: None.
+    """
     owner = _Owner(7, "alice")
     read_write = _Permissions("rwrw--", read=True, write=True)
     read_annotate = _Permissions(
@@ -316,7 +470,10 @@ def test_owner_and_permission_helpers_use_fallback_accessors():
 
 
 def test_iter_accessible_projects_restores_group_after_fallback():
-    """Verify test iter accessible projects restores group behavior."""
+    """Verify iter accessible projects restores group after fallback.
+
+    Inputs: none. Output: None.
+    """
     conn = _Conn()
     project = _Project(1, "Fallback")
     conn.projects = [project]
@@ -330,7 +487,10 @@ def test_iter_accessible_projects_restores_group_after_fallback():
 
 
 def test_group_helpers_detect_collaboration_modes_and_membership():
-    """Verify test group helpers detect collaboration modes behavior."""
+    """Verify group helpers detect collaboration modes and membership.
+
+    Inputs: none. Output: None.
+    """
     conn = _Conn()
     rw_group = _Group(1, _Permissions("rwrw--", group_read=True, group_write=True), 3)
     ra_group = _Group(
@@ -368,7 +528,10 @@ def test_group_helpers_detect_collaboration_modes_and_membership():
 def test_collect_project_payload_separates_owned_and_collaboration_projects(
     monkeypatch,
 ):
-    """Verify test collect project payload separates owned behavior."""
+    """Verify collect project payload separates owned and collaboration projects.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     owner = _Owner(10, "alice")
     other_owner = _Owner(11, "bob")
@@ -412,7 +575,10 @@ def test_collect_project_payload_separates_owned_and_collaboration_projects(
 
 
 def test_get_accessible_project_returns_expected_access_levels():
-    """Verify test get accessible project returns expected behavior."""
+    """Verify get accessible project returns expected access levels.
+
+    Inputs: none. Output: None.
+    """
     conn = _Conn()
     owner = _Owner(10, "alice")
     other_owner = _Owner(11, "bob")
@@ -428,7 +594,10 @@ def test_get_accessible_project_returns_expected_access_levels():
 
 
 def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch):
-    """Verify test index list datasets requires project and behavior."""
+    """Verify index list datasets requires project and uses owner filter.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     request = factory.post("/", data={"action": "list_datasets", "project": "5"})
     conn = _Conn()
@@ -459,7 +628,10 @@ def test_index_list_datasets_requires_project_and_uses_owner_filter(monkeypatch)
 
 
 def test_index_ai_regex_returns_local_suggestion(monkeypatch):
-    """Verify test index ai regex returns local suggestion."""
+    """Verify index AI regex returns local suggestion.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -499,7 +671,10 @@ def test_index_ai_regex_returns_local_suggestion(monkeypatch):
 
 
 def test_index_ai_parse_attaches_image_ids(monkeypatch):
-    """Verify test index ai parse attaches image identifiers."""
+    """Verify index AI parse attaches image IDs.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -549,7 +724,10 @@ def test_index_ai_parse_attaches_image_ids(monkeypatch):
 
 
 def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
-    """Verify test index preview renders rows and caps vari behavior."""
+    """Verify index preview renders rows and caps variables.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -610,7 +788,10 @@ def test_index_preview_renders_rows_and_caps_variables(monkeypatch):
 
 
 def test_list_projects_and_root_status_return_json(monkeypatch):
-    """Verify test list projects and root status return JSON."""
+    """Verify list projects and root status return JSON.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     conn = _Conn(username="root")
     monkeypatch.setattr(
@@ -631,7 +812,10 @@ def test_list_projects_and_root_status_return_json(monkeypatch):
 
 
 def test_permission_and_group_helpers_support_attribute_style_wrappers():
-    """Verify test permission and group helpers support att behavior."""
+    """Verify permission and group helpers support attribute style wrappers.
+
+    Inputs: none. Output: None.
+    """
     permissions = _Permissions("rwrw--", read=True, write=True)
     attr_owner = SimpleNamespace(
         getName="alice-property",
@@ -658,7 +842,10 @@ def test_permission_and_group_helpers_support_attribute_style_wrappers():
 def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
     monkeypatch,
 ):
-    """Verify test index ai regex remote paths cover creden behavior."""
+    """Verify index AI regex remote paths cover credential and provider failures.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     factory = RequestFactory()
     request = factory.post(
         "/",
@@ -747,7 +934,10 @@ def test_index_ai_regex_remote_paths_cover_credential_and_provider_failures(
 
 
 def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
-    """Verify test index ai parse validates provider inputs behavior."""
+    """Verify index AI parse validates provider inputs and rate limits.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -820,7 +1010,10 @@ def test_index_ai_parse_validates_provider_inputs_and_rate_limits(monkeypatch):
 def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
     monkeypatch,
 ):
-    """Verify test index preview rejects invalid ai payload behavior."""
+    """Verify index preview rejects invalid AI payloads regexes and empty results.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     rendered = {}
 
@@ -924,7 +1117,10 @@ def test_index_preview_rejects_invalid_ai_payloads_regexes_and_empty_results(
 
 
 def test_index_landing_page_and_top_level_error_paths(monkeypatch):
-    """Verify test index landing page and top level error p behavior."""
+    """Verify index landing page and top level error paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     rendered = {}
     monkeypatch.setattr(
@@ -974,47 +1170,79 @@ def test_index_landing_page_and_top_level_error_paths(monkeypatch):
 
 
 def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkeypatch):
-    """Verify test helper fallback paths cover group member behavior."""
+    """Verify helper fallback paths cover group membership and permission text.
+
+    Inputs: `monkeypatch`. Output: computed value. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     class _OwnerByName:
         """Represent owner by name."""
 
         def __init__(self, owner_id):
+            """Initialize the instance.
+
+            Inputs: `owner_id`. Output: None.
+            """
             self._owner_id = owner_id
 
         def getId(self):
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: `SimpleNamespace` result.
+            """
             return SimpleNamespace(val=self._owner_id)
 
         @staticmethod
         def getOmeName():
-            """Return get ome name."""
+            """Return the fake OMERO name.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("missing ome name")
 
         @staticmethod
         def getName():
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: 'fallback-name'.
+            """
             return "fallback-name"
 
     class _PermissionText:
         """Represent permission text."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("string conversion failed")
 
         @staticmethod
         def isGroupRead():
-            """Handle is group read."""
+            """Return whether Group Read.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
         @staticmethod
         def isGroupWrite():
-            """Handle is group write."""
+            """Return whether Group Write.
+
+            Inputs: none. Output: bool.
+            """
             return False
 
         @staticmethod
         def isGroupAnnotate():
-            """Handle is group annotate."""
+            """Return whether Group Annotate.
+
+            Inputs: none. Output: bool.
+            """
             return True
 
     owner = _OwnerByName(41)
@@ -1046,7 +1274,10 @@ def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkey
 
 
 def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkeypatch):
-    """Verify test index request validation paths cover JSO behavior."""
+    """Verify index request validation paths cover JSON errors and rate limits.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -1149,7 +1380,10 @@ def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkey
 
 
 def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
-    """Verify test index ai provider and preview fallbacks behavior."""
+    """Verify index AI provider and preview fallbacks cover error paths.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     conn = _Conn()
     monkeypatch.setattr(
         index_view, "_collect_project_payload", lambda *_args: {"owned": []}
@@ -1281,29 +1515,47 @@ def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
 
 
 def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypatch):
-    """Verify test index helper and validation edges cover behavior."""
+    """Verify index helper and validation edges cover remaining branch paths.
+
+    Inputs: `monkeypatch`. Output: `SimpleNamespace` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
 
     class _OwnerWithVal:
         """Represent owner with val."""
 
         @staticmethod
         def getOmeName():
-            """Return get ome name."""
+            """Return the fake OMERO name.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no ome name")
 
         @staticmethod
         def getName():
-            """Return get name."""
+            """Return the fake object name.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no display name")
 
         @staticmethod
         def getFirstName():
-            """Return get first name."""
+            """Return the fake first name.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("no first name")
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: `SimpleNamespace` result.
+            """
             return SimpleNamespace(val=77)
 
     project = SimpleNamespace(getDetails=lambda: None, getOwner=_OwnerWithVal)
@@ -1326,6 +1578,10 @@ def test_index_helper_and_validation_edges_cover_remaining_branch_paths(monkeypa
         """Represent broken permission text."""
 
         def __str__(self):
+            """Return the string representation.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("bad permissions")
 
     broken_group = SimpleNamespace(

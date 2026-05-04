@@ -1,6 +1,9 @@
 from typing import Any
 
 class Reader:
+    # Initialize the instance. Inputs: *args, **kwargs. Output: None.
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    # Call the object. Inputs: *args, **kwargs. Output: Any.
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+    # Return an iterator. Inputs: none. Output: Any.
     def __iter__(self) -> Any: ...

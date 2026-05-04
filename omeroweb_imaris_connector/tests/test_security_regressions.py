@@ -16,6 +16,10 @@ class _BaseResponse:
     """Represent base response."""
 
     def __init__(self, content="", status=200, content_type=None):
+        """Initialize the instance.
+
+        Inputs: `content`, `status`, `content_type`. Output: None.
+        """
         self.status_code = status
         self.content_type = content_type
         self.headers = {}
@@ -25,9 +29,17 @@ class _BaseResponse:
             self.content = str(content).encode("utf-8")
 
     def __setitem__(self, key, value):
+        """The item for the requested key.
+
+        Inputs: `key`, `value`. Output: None.
+        """
         self.headers[key] = value
 
     def __getitem__(self, key):
+        """Return the item for the requested key.
+
+        Inputs: `key`. Output: `self.headers[key]`.
+        """
         return self.headers[key]
 
 
@@ -35,6 +47,10 @@ class _JsonResponse(_BaseResponse):
     """Represent JSON response."""
 
     def __init__(self, payload=None, status=200, **_kwargs):
+        """Initialize the instance.
+
+        Inputs: `payload`, `status`, `**_kwargs`. Output: None.
+        """
         self.payload = payload
         super().__init__(
             json.dumps(payload or {}).encode("utf-8"),
@@ -51,6 +67,10 @@ class _HttpResponseBadRequest(_HttpResponse):
     """Represent HTTP response bad request."""
 
     def __init__(self, content="Bad Request", **kwargs):
+        """Initialize the instance.
+
+        Inputs: `content`, `**kwargs`. Output: None.
+        """
         super().__init__(content, status=400, **kwargs)
 
 
@@ -58,7 +78,10 @@ class _DummyQueryDict(dict):
     """Test double for dummy query dict."""
 
     def urlencode(self):
-        """Handle urlencode."""
+        """Urlencode.
+
+        Inputs: none. Output: `urllib.parse.urlencode` result.
+        """
         return urllib.parse.urlencode(self)
 
 
@@ -66,6 +89,10 @@ class _DummyRequest:
     """Test double for dummy request."""
 
     def __init__(self, query: dict[str, str], path: str = "/imaris/export/"):
+        """Initialize the instance.
+
+        Inputs: `query`, `path`. Output: None.
+        """
         self.GET = _DummyQueryDict(query)
         self.path = path
         self.META = {}
@@ -73,12 +100,18 @@ class _DummyRequest:
 
     @staticmethod
     def build_absolute_uri(path: str) -> str:
-        """Build build absolute uri."""
+        """Absolute uri.
+
+        Inputs: `path`. Output: `str`.
+        """
         return f"https://omero.example.org{path}"
 
 
 def _install_django_stubs() -> None:
-    """Handle install django stubs."""
+    """Install django stubs.
+
+    Inputs: none. Output: None.
+    """
     django_module = types.ModuleType("django")
     django_http = types.ModuleType("django.http")
     django_http.JsonResponse = _JsonResponse
@@ -89,7 +122,10 @@ def _install_django_stubs() -> None:
 
 
 def _install_omero_stubs() -> None:
-    """Handle install OMERO stubs."""
+    """Install OMERO stubs.
+
+    Inputs: none. Output: None.
+    """
     omero_module = types.ModuleType("omero")
     omero_module.ClientError = type("ClientError", (Exception,), {})
     omero_module.SecurityViolation = type("SecurityViolation", (Exception,), {})
@@ -112,26 +148,42 @@ def _install_omero_stubs() -> None:
 
 
 def _install_celery_stubs() -> None:
-    """Handle install celery stubs."""
+    """Install celery stubs.
+
+    Inputs: none. Output: None.
+    """
     celery_module = types.ModuleType("celery")
 
     class _DummyCelery:
         """Test double for dummy celery."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None.
+            """
             self.conf = types.SimpleNamespace(update=lambda **_kwargs: None)
 
         @staticmethod
         def autodiscover_tasks(*_args, **_kwargs):
-            """Handle autodiscover tasks."""
+            """Autodiscover tasks.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None.
+            """
             return None
 
         @staticmethod
         def task(*args, **kwargs):
-            """Handle task."""
+            """Task.
+
+            Inputs: `*args`, `**kwargs`. Output: computed value.
+            """
 
             def _decorator(fn):
-                """Handle decorator."""
+                """Decorator.
+
+                Inputs: `fn`. Output: `fn`.
+                """
                 return fn
 
             return _decorator
@@ -150,7 +202,10 @@ def _install_celery_stubs() -> None:
 
 
 def _install_omeroweb_stub() -> None:
-    """Handle install omeroweb stub."""
+    """Install omeroweb stub.
+
+    Inputs: none. Output: None.
+    """
     omeroweb_module = types.ModuleType("omeroweb")
     decorators_module = types.ModuleType("omeroweb.decorators")
     decorators_module.login_required = lambda *args, **kwargs: lambda view: view
@@ -159,7 +214,10 @@ def _install_omeroweb_stub() -> None:
 
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Handle set required env."""
+    """Set required environment.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     values = {
         "OMERO_IMS_USE_CELERY": "true",
         "OMERO_IMS_USE_JOB_SERVICE_SESSION": "true",
@@ -184,7 +242,10 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_modules(monkeypatch: pytest.MonkeyPatch):
-    """Handle import modules."""
+    """Import modules.
+
+    Inputs: `monkeypatch`. Output: tuple.
+    """
     _set_required_env(monkeypatch)
     _install_django_stubs()
     _install_omero_stubs()
@@ -208,7 +269,10 @@ def _import_modules(monkeypatch: pytest.MonkeyPatch):
 def test_imaris_export_ignores_request_backend_override_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test imaris export ignores request backend ov behavior."""
+    """Verify imaris export ignores request backend override params.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     _tasks, views = _import_modules(monkeypatch)
     request = _DummyRequest(
         {
@@ -253,7 +317,10 @@ def test_imaris_export_ignores_request_backend_override_params(
 def test_imaris_export_status_hides_backend_failure_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test imaris export status hides backend failu behavior."""
+    """Verify imaris export status hides backend failure details.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     _tasks, views = _import_modules(monkeypatch)
     request = _DummyRequest({"job": "celery-123"})
 
@@ -280,7 +347,10 @@ def test_imaris_export_status_hides_backend_failure_details(
 def test_build_failure_meta_uses_generic_error_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test build failure meta uses generic error me behavior."""
+    """Verify build failure meta uses generic error message.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     tasks, _views = _import_modules(monkeypatch)
 
     payload = tasks._build_failure_meta(RuntimeError("database password leaked"))
@@ -293,7 +363,10 @@ def test_build_failure_meta_uses_generic_error_message(
 def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_service_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test run IMS export task prefers user session behavior."""
+    """Verify run IMS export task prefers user session key for cli even in job service mode.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
     dummy_conn = types.SimpleNamespace(
@@ -337,7 +410,10 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
 def test_run_ims_export_task_uses_cli_with_user_session_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test run IMS export task uses cli with user s behavior."""
+    """Verify run IMS export task uses cli with user session key.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
     dummy_conn = types.SimpleNamespace(close=lambda: None)
@@ -378,7 +454,10 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
 def test_run_ims_export_task_uses_job_service_session_key_when_user_session_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify test run IMS export task uses job service ses behavior."""
+    """Verify run IMS export task uses job service session key when user session missing.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
     dummy_conn = types.SimpleNamespace(

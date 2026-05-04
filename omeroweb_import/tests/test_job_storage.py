@@ -6,14 +6,20 @@ from omeroweb_import.services.jobs import job_storage
 
 
 def _job_id() -> str:
-    """Handle job identifier."""
+    """Job ID.
+
+    Inputs: none. Output: `str`.
+    """
     return "a" * 32
 
 
 def test_job_storage_batch_and_compatibility_helpers_cover_threshold_and_status_logic(
     monkeypatch,
 ):
-    """Verify test job storage batch and compatibility help behavior."""
+    """Verify job storage batch and compatibility helpers cover threshold and status logic.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setenv(job_storage.UPLOAD_BATCH_FILES_ENV, "2")
     job = {
         "files": [
@@ -89,7 +95,13 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     tmp_path,
     monkeypatch,
 ):
-    """Verify test job storage file access helpers cover lo behavior."""
+    """Verify job storage file access helpers cover lock fallback retry and corrupt updates.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: `real_lock` result. Raises on invalid or
+    unavailable state.
+
+    unavailable state.
+    """
     payload = {"job_id": _job_id(), "status": "ready"}
     path = tmp_path / f"{_job_id()}.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -103,6 +115,13 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
         """Represent raising lock."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_storage.portalocker, "Lock", _RaisingLock)
@@ -112,7 +131,13 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
     attempts = {"count": 0}
 
     def flaky_lock(*args, **kwargs):
-        """Handle flaky lock."""
+        """Flaky lock.
+
+        Inputs: `*args`, `**kwargs`. Output: `real_lock` result. Raises on invalid or
+        unavailable state.
+
+        unavailable state.
+        """
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise job_storage.portalocker.exceptions.LockException("busy")
@@ -131,6 +156,13 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
         """Represent always fail lock."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_storage.portalocker, "Lock", _AlwaysFailLock)
@@ -163,7 +195,10 @@ def test_job_storage_file_access_helpers_cover_lock_fallback_retry_and_corrupt_u
 
 
 def test_job_storage_append_helpers_store_timestamped_messages(monkeypatch):
-    """Verify test job storage append helpers store timesta behavior."""
+    """Verify job storage append helpers store timestamped messages.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(job_storage.time, "time", lambda: 123.5)
     job = {}
 
@@ -178,7 +213,13 @@ def test_job_storage_remaining_edges_cover_empty_paths_and_failed_update_retries
     tmp_path,
     monkeypatch,
 ):
-    """Verify test job storage remaining edges cover empty behavior."""
+    """Verify job storage remaining edges cover empty paths and failed update retries.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     monkeypatch.setenv("EDGE_BATCH_SIZE", "not-a-number")
     assert job_storage.get_env_int("EDGE_BATCH_SIZE", 4, 1, 10) == 4
     assert job_storage.should_start_compatibility_check({"files": []}) is False
@@ -191,6 +232,13 @@ def test_job_storage_remaining_edges_cover_empty_paths_and_failed_update_retries
         """Represent always fail lock."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_storage.portalocker, "Lock", _AlwaysFailLock)
@@ -213,7 +261,13 @@ def test_job_storage_load_job_covers_locked_success_and_failed_fallback_reads(
     tmp_path,
     monkeypatch,
 ):
-    """Verify test job storage load job covers locked succe behavior."""
+    """Verify job storage load job covers locked success and failed fallback reads.
+
+    Inputs: `tmp_path`, `monkeypatch`. Output: None. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
     payload = {"job_id": _job_id(), "status": "ready"}
     path = tmp_path / f"{_job_id()}.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -224,6 +278,13 @@ def test_job_storage_load_job_covers_locked_success_and_failed_fallback_reads(
         """Represent failing lock."""
 
         def __init__(self, *_args, **_kwargs):
+            """Initialize the instance.
+
+            Inputs: `*_args`, `**_kwargs`. Output: None. Raises on invalid or
+            unavailable state.
+
+            unavailable state.
+            """
             raise job_storage.portalocker.exceptions.LockException("busy")
 
     monkeypatch.setattr(job_storage.portalocker, "Lock", _FailingLock)

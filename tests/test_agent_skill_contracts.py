@@ -315,7 +315,10 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.skill_dirs = {
             path.name: path
@@ -351,7 +354,11 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def parse_frontmatter(skill_text: str) -> dict[str, object]:
-        """Validate parse frontmatter."""
+        """Parse frontmatter.
+
+        Inputs: `skill_text`. Output: `dict[str, object]`. Raises on invalid or
+        unavailable state.
+        """
         if not skill_text.startswith("---\n"):
             raise AssertionError("Skill file is missing frontmatter")
         _, frontmatter_text, _ = skill_text.split("---\n", 2)
@@ -362,7 +369,10 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def _normalize_repo_reference(token: str) -> str:
-        """Handle normalize repo reference."""
+        """Normalize repo reference.
+
+        Inputs: `token`. Output: `str`.
+        """
         normalized = token.strip().strip("'\"").rstrip(".,:;)")
         if normalized.endswith("/"):
             return normalized
@@ -370,7 +380,10 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @classmethod
     def extract_repo_references(cls, text: str) -> set[str]:
-        """Return extract repo references."""
+        """Return extract repo references.
+
+        Inputs: `text`. Output: `set[str]`.
+        """
         references: set[str] = set()
         for span in INLINE_CODE_RE.findall(text):
             if "://" in span:
@@ -389,7 +402,10 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @classmethod
     def assert_repo_reference_exists(cls, reference: str) -> None:
-        """Handle assert repo reference exists."""
+        """Assert repo reference exists.
+
+        Inputs: `reference`. Output: None. Raises on invalid or unavailable state.
+        """
         if reference in ALLOWED_OPTIONAL_REPO_REFERENCES:
             return
         if "*" in reference:
@@ -405,7 +421,10 @@ class AgentSkillContractTests(unittest.TestCase):
     def run_smoke_command(
         cls, smoke_check: SmokeCheck
     ) -> subprocess.CompletedProcess[str]:
-        """Run run smoke command."""
+        """One configured skill smoke command.
+
+        Inputs: `smoke_check`. Output: `subprocess.CompletedProcess[str]`.
+        """
         command = smoke_check.command
         if (
             smoke_check.fallback_command is not None
@@ -429,14 +448,20 @@ class AgentSkillContractTests(unittest.TestCase):
 
     @staticmethod
     def _resolve_smoke_command(command: tuple[str, ...]) -> tuple[str, ...]:
-        """Handle resolve smoke command."""
+        """Resolve smoke command.
+
+        Inputs: `command`. Output: `tuple[str, ...]`.
+        """
         if not command or command[0] != "python3":
             return command
         return (sys.executable, *command[1:])
 
     @staticmethod
     def _host_python_has_plugin_runtime() -> bool:
-        """Handle host python has plugin runtime."""
+        """Host python has plugin runtime.
+
+        Inputs: none. Output: `bool`.
+        """
         for module_name in ("django", "omeroweb"):
             try:
                 if importlib.util.find_spec(module_name) is None:
@@ -446,7 +471,10 @@ class AgentSkillContractTests(unittest.TestCase):
         return True
 
     def test_upstream_sources_doc_matches_adapted_skill_frontmatter(self) -> None:
-        """Verify test upstream sources doc matches adapted ski behavior."""
+        """Verify upstream sources doc matches adapted skill frontmatter.
+
+        Inputs: none. Output: None.
+        """
         adapted_skill_names = {
             name
             for name, frontmatter in self.frontmatters.items()
@@ -464,7 +492,10 @@ class AgentSkillContractTests(unittest.TestCase):
                 )
 
     def test_adapted_overlays_are_smaller_than_vendored_upstream_sources(self) -> None:
-        """Verify test adapted overlays are smaller than vendor behavior."""
+        """Verify adapted overlays are smaller than vendored upstream sources.
+
+        Inputs: none. Output: None.
+        """
         for skill_name, frontmatter in self.frontmatters.items():
             upstream_path = frontmatter.get("upstream")
             if not isinstance(upstream_path, str):
@@ -489,7 +520,10 @@ class AgentSkillContractTests(unittest.TestCase):
                 )
 
     def test_high_frequency_skills_stay_compact(self) -> None:
-        """Verify test high frequency skills stay compact."""
+        """Verify high frequency skills stay compact.
+
+        Inputs: none. Output: None.
+        """
         for skill_name, max_nonempty_lines in self.COMPACT_SKILL_LINE_BUDGETS.items():
             with self.subTest(skill_name=skill_name):
                 local_lines = [
@@ -506,7 +540,10 @@ class AgentSkillContractTests(unittest.TestCase):
     def test_active_skills_do_not_retain_generic_upstream_harness_instructions(
         self,
     ) -> None:
-        """Verify test active skills do not retain generic upst behavior."""
+        """Verify active skills do not retain generic upstream harness instructions.
+
+        Inputs: none. Output: None.
+        """
         for skill_name, skill_text in self.skill_texts.items():
             with self.subTest(skill_name=skill_name):
                 combined_text = f"{skill_text}\n{self.adapter_texts[skill_name]}"
@@ -518,7 +555,10 @@ class AgentSkillContractTests(unittest.TestCase):
                     )
 
     def test_agent_surfaces_use_only_valid_repo_references(self) -> None:
-        """Verify test agent surfaces use only valid repo refer behavior."""
+        """Verify agent surfaces use only valid repo references.
+
+        Inputs: none. Output: None.
+        """
         surfaces = {
             "AGENTS.md": (self.repo_root / "AGENTS.md").read_text(encoding="utf-8"),
             "docs/reference/ai-agent-skills.md": (
@@ -547,7 +587,10 @@ class AgentSkillContractTests(unittest.TestCase):
                     self.assert_repo_reference_exists(reference)
 
     def test_claude_hooks_use_portable_repo_local_commands(self) -> None:
-        """Verify test claude hooks use portable repo local com behavior."""
+        """Verify claude hooks use portable repo local commands.
+
+        Inputs: none. Output: None.
+        """
         settings_text = (self.repo_root / ".claude" / "settings.json").read_text(
             encoding="utf-8"
         )
@@ -564,7 +607,10 @@ class AgentSkillContractTests(unittest.TestCase):
         self.assertIn("tools/env_safety_guard.py", settings_text)
 
     def test_root_test_stubs_support_importlib_discovery(self) -> None:
-        """Verify test root test stubs support importlib discovery."""
+        """Verify root test stubs support importlib discovery.
+
+        Inputs: none. Output: None.
+        """
         for module_name in (
             "celery",
             "celery.states",
@@ -585,7 +631,10 @@ class AgentSkillContractTests(unittest.TestCase):
                 self.assertEqual(module_name, spec.name)
 
     def test_agent_split_test_surfaces_cover_every_repo_suite(self) -> None:
-        """Verify test agent split test surfaces cover every re behavior."""
+        """Verify agent split test surfaces cover every repo suite.
+
+        Inputs: none. Output: None.
+        """
         discovered = {"tests/"}
         discovered.update(
             f"{path.relative_to(self.repo_root).as_posix()}/"
@@ -616,7 +665,10 @@ class AgentSkillContractTests(unittest.TestCase):
                     self.assertIn(suite, surface_text)
 
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
-        """Verify test agent surfaces avoid host specific clone behavior."""
+        """Verify agent surfaces avoid host specific clone paths.
+
+        Inputs: none. Output: None.
+        """
         surfaces = {
             ".claude/settings.json": (
                 self.repo_root / ".claude" / "settings.json"
@@ -659,7 +711,10 @@ class AgentSkillContractTests(unittest.TestCase):
                 self.assertNotIn("/home/itservice/", surface_text)
 
     def test_smoke_command_coverage_spans_every_skill(self) -> None:
-        """Verify test smoke command coverage spans every skill."""
+        """Verify smoke command coverage spans every skill.
+
+        Inputs: none. Output: None.
+        """
         expected_skills = set(self.skill_dirs)
         covered_skills: set[str] = set()
         for smoke_check in SMOKE_CHECKS:
@@ -667,7 +722,10 @@ class AgentSkillContractTests(unittest.TestCase):
         self.assertEqual(expected_skills, covered_skills)
 
     def test_smoke_commands_pass(self) -> None:
-        """Verify test smoke commands pass."""
+        """Verify smoke commands pass.
+
+        Inputs: none. Output: None.
+        """
         for smoke_check in SMOKE_CHECKS:
             with self.subTest(
                 smoke_check=smoke_check.name,

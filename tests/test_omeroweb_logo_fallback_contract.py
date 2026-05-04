@@ -9,11 +9,17 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None.
+        """
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_omeroweb_dockerfile_copies_logo_fallback_writer(self) -> None:
-        """Verify test omeroweb dockerfile copies logo fallback behavior."""
+        """Verify omeroweb dockerfile copies logo fallback writer.
+
+        Inputs: none. Output: None.
+        """
         dockerfile_text = (
             self.repo_root / "docker" / "omero-web.Dockerfile"
         ).read_text(encoding="utf-8")
@@ -23,7 +29,10 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
         )
 
     def test_web_bootstrap_uses_logo_fallback_writer_path(self) -> None:
-        """Verify test web bootstrap uses logo fallback writer behavior."""
+        """Verify web bootstrap uses logo fallback writer path.
+
+        Inputs: none. Output: None.
+        """
         bootstrap_text = (self.repo_root / "startup" / "10-web-bootstrap.sh").read_text(
             encoding="utf-8"
         )

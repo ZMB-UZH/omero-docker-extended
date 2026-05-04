@@ -11,12 +11,18 @@ from omeroweb_omp_plugin.views import ai_credentials_view, index_view
 
 
 def _json_payload(response):
-    """Handle JSON payload."""
+    """JSON payload.
+
+    Inputs: `response`. Output: `json.loads` result.
+    """
     return json.loads(response.content.decode("utf-8"))
 
 
 def _unwrap_view(func):
-    """Handle unwrap view."""
+    """Unwrap view.
+
+    Inputs: `func`. Output: `func`.
+    """
     while hasattr(func, "__wrapped__"):
         func = func.__wrapped__
     return func
@@ -26,10 +32,17 @@ class _Value:
     """Represent value."""
 
     def __init__(self, value):
+        """Initialize the instance.
+
+        Inputs: `value`. Output: None.
+        """
         self._raw_value = value
 
     def getValue(self):
-        """Return get value."""
+        """Return the fake OMERO value.
+
+        Inputs: none. Output: `self._raw_value`.
+        """
         return self._raw_value
 
 
@@ -37,15 +50,25 @@ class _Image:
     """Represent image."""
 
     def __init__(self, image_id, name):
+        """Initialize the instance.
+
+        Inputs: `image_id`, `name`. Output: None.
+        """
         self._id = image_id
         self._name = name
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
 
@@ -53,20 +76,33 @@ class _Dataset:
     """Represent dataset."""
 
     def __init__(self, dataset_id, name, images):
+        """Initialize the instance.
+
+        Inputs: `dataset_id`, `name`, `images`. Output: None.
+        """
         self._id = dataset_id
         self._name = name
         self._images = list(images)
 
     def getId(self):
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(self._id)
 
     def getName(self):
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: `self._name`.
+        """
         return self._name
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._images)
 
 
@@ -74,10 +110,17 @@ class _Project:
     """Represent project."""
 
     def __init__(self, datasets):
+        """Initialize the instance.
+
+        Inputs: `datasets`. Output: None.
+        """
         self._datasets = list(datasets)
 
     def listChildren(self):
-        """Return list children."""
+        """Return list children.
+
+        Inputs: none. Output: `list` result.
+        """
         return list(self._datasets)
 
 
@@ -86,21 +129,34 @@ class _ExplodingFormatImage:
 
     @property
     def getFileset(self):
+        """Return Fileset.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         raise RuntimeError("format failure")
 
     @staticmethod
     def getId():
-        """Return get identifier."""
+        """Return the fake OMERO identifier.
+
+        Inputs: none. Output: `_Value` result.
+        """
         return _Value(1)
 
     @staticmethod
     def getName():
-        """Return get name."""
+        """Return the fake object name.
+
+        Inputs: none. Output: 'sample.tif'.
+        """
         return "sample.tif"
 
 
 def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
-    """Verify test list models covers claude custom and emp behavior."""
+    """Verify list models covers claude custom and empty model sets.
+
+    Inputs: `monkeypatch`. Output: `self._payload`.
+    """
     monkeypatch.setattr(ai_credentials_view, "current_username", lambda *_args: "alice")
     monkeypatch.setattr(
         ai_credentials_view,
@@ -112,11 +168,18 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
         """Represent response."""
 
         def __init__(self, payload):
+            """Initialize the instance.
+
+            Inputs: `payload`. Output: None.
+            """
             self.status_code = 200
             self._payload = payload
 
         def json(self):
-            """Handle JSON."""
+            """Return the JSON payload.
+
+            Inputs: none. Output: `self._payload`.
+            """
             return self._payload
 
     monkeypatch.setattr(
@@ -169,10 +232,19 @@ def test_list_models_covers_claude_custom_and_empty_model_sets(monkeypatch):
 def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
     monkeypatch,
 ):
-    """Verify test annotation and image services cover rema behavior."""
+    """Verify annotation and image services cover remaining nonfatal edge paths.
+
+    Inputs: `monkeypatch`. Output: `object` result. Raises on invalid or unavailable
+    state.
+
+    state.
+    """
 
     def _query_service():
-        """Handle query service."""
+        """Query service.
+
+        Inputs: none. Output: `object` result.
+        """
         return object()
 
     class _NamedValueWithBrokenGetter:
@@ -182,7 +254,10 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
 
         @staticmethod
         def getValue():
-            """Return get value."""
+            """Return the fake OMERO value.
+
+            Inputs: none. Output: None. Raises on invalid or unavailable state.
+            """
             raise RuntimeError("value unavailable")
 
     map_ann = SimpleNamespace(
@@ -238,30 +313,49 @@ def test_annotation_and_image_services_cover_remaining_nonfatal_edge_paths(
 
 
 def test_index_view_covers_remaining_group_helper_and_action_guard_edges(monkeypatch):
-    """Verify test index view covers remaining group helper behavior."""
+    """Verify index view covers remaining group helper and action guard edges.
+
+    Inputs: `monkeypatch`. Output: computed value.
+    """
 
     class _Group:
         """Represent group."""
 
         def __init__(self, permissions, member_count=1):
+            """Initialize the instance.
+
+            Inputs: `permissions`, `member_count`. Output: None.
+            """
             self._permissions = permissions
             self._member_count = member_count
 
         def getDetails(self):
-            """Return get details."""
+            """Return Details.
+
+            Inputs: none. Output: `SimpleNamespace` result.
+            """
             return SimpleNamespace(getPermissions=lambda: self._permissions)
 
         def getPermissions(self):
-            """Return get permissions."""
+            """Return fake permissions.
+
+            Inputs: none. Output: `self._permissions`.
+            """
             return self._permissions
 
         def getMemberCount(self):
-            """Return get member count."""
+            """Return Member Count.
+
+            Inputs: none. Output: `self._member_count`.
+            """
             return self._member_count
 
         @staticmethod
         def getId():
-            """Return get identifier."""
+            """Return the fake OMERO identifier.
+
+            Inputs: none. Output: `_Value` result.
+            """
             return _Value(1)
 
     blank_group = _Group(None, member_count=1)

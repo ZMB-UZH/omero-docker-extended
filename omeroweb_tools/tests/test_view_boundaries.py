@@ -11,7 +11,10 @@ from omeroweb_tools.views import index_view, utils as view_utils
 
 
 def test_index_and_root_status_reflect_current_root_state(monkeypatch):
-    """Verify test index and root status reflect current ro behavior."""
+    """Verify index and root status reflect current root state.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     captured = {}
     monkeypatch.setattr(
         index_view,
@@ -34,7 +37,10 @@ def test_index_and_root_status_reflect_current_root_state(monkeypatch):
 def test_start_scope_sync_view_rejects_bad_method_bad_json_and_unknown_current_user(
     monkeypatch,
 ):
-    """Verify test start scope sync view rejects bad method behavior."""
+    """Verify start scope sync view rejects bad method bad JSON and unknown current user.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -77,7 +83,10 @@ def test_start_scope_sync_view_rejects_bad_method_bad_json_and_unknown_current_u
 
 
 def test_sync_state_view_returns_current_refresh_state(monkeypatch):
-    """Verify test sync state view returns current refresh behavior."""
+    """Verify sync state view returns current refresh state.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -105,7 +114,10 @@ def test_sync_state_view_returns_current_refresh_state(monkeypatch):
 
 
 def test_sync_state_view_returns_database_error_when_settings_unavailable(monkeypatch):
-    """Verify test sync state view returns database error w behavior."""
+    """Verify sync state view returns database error when settings unavailable.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(
         index_view,
@@ -125,7 +137,10 @@ def test_sync_state_view_returns_database_error_when_settings_unavailable(monkey
 
 
 def test_enhanced_search_view_treats_corrupt_collapsed_sections_as_empty(monkeypatch):
-    """Verify test enhanced search view treats corrupt coll behavior."""
+    """Verify enhanced search view treats corrupt collapsed sections as empty.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     captured = {}
     monkeypatch.setattr(
         index_view,
@@ -178,7 +193,10 @@ def test_enhanced_search_view_treats_corrupt_collapsed_sections_as_empty(monkeyp
 
 
 def test_save_user_settings_view_rejects_non_post_and_invalid_json(monkeypatch):
-    """Verify test save user settings view rejects non post behavior."""
+    """Verify save user settings view rejects non post and invalid JSON.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
     get_request = RequestFactory().get("/omeroweb_tools/enhanced-search/settings/")
@@ -216,7 +234,10 @@ def test_save_user_settings_view_rejects_non_post_and_invalid_json(monkeypatch):
 def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
     monkeypatch,
 ):
-    """Verify test saved query views cover validation delet behavior."""
+    """Verify saved query views cover validation delete and fallback redirect.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
     save_bad_method = RequestFactory().get(
@@ -440,7 +461,10 @@ def test_saved_query_views_cover_validation_delete_and_fallback_redirect(
 
 
 def test_save_query_view_returns_saved_queries_after_success(monkeypatch):
-    """Verify test save query view returns saved queries af behavior."""
+    """Verify save query view returns saved queries after success.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     saved = []
     monkeypatch.setattr(
@@ -483,7 +507,10 @@ def test_save_query_view_returns_saved_queries_after_success(monkeypatch):
 
 
 def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
-    """Verify test save query view normalizes name and hand behavior."""
+    """Verify save query view normalizes name and handles store failure.
+
+    Inputs: `monkeypatch`. Output: None.
+    """
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
     saved = []
     monkeypatch.setattr(
@@ -571,7 +598,10 @@ def test_save_query_view_normalizes_name_and_handles_store_failure(monkeypatch):
 
 
 def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeypatch):
-    """Verify test view utils cover JSON root guard host re behavior."""
+    """Verify view utils cover JSON root guard host resolution and validation.
+
+    Inputs: `monkeypatch`. Output: dict.
+    """
     monkeypatch.setattr(
         view_utils,
         "_current_username",
@@ -603,7 +633,10 @@ def test_view_utils_cover_json_root_guard_host_resolution_and_validation(monkeyp
 
     @view_utils.require_non_root_user
     def _guarded_view(request, conn=None, url=None, **kwargs):
-        """Handle guarded view."""
+        """Guarded view.
+
+        Inputs: `request`, `conn`, `url`, `**kwargs`. Output: dict.
+        """
         guarded_calls.append((conn, url))
         return {"ok": True}
 

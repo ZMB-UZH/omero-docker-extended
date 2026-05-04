@@ -27,6 +27,7 @@ CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"
 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"
 CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="${CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR:-/var/lib/crowdsec/data}"
 
+# Return whether true. Inputs: shell arguments and environment. Output: success or failure status.
 is_true() {
     case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
         1|true|yes|on) return 0 ;;
@@ -34,6 +35,7 @@ is_true() {
     esac
 }
 
+# Return whether placeholder value. Inputs: shell arguments and environment. Output: success or failure status.
 is_placeholder_value() {
     local legacy_placeholder_prefix="CHANGE"
 
@@ -56,6 +58,7 @@ is_placeholder_value() {
 #   2. Check for the nft binary on the mounted host root filesystem (/host).
 #   3. Fallback: assume iptables (legacy).
 # ---------------------------------------------------------------------------
+# Detect firewall backend. Inputs: shell arguments and environment. Output: stdout text and command status.
 detect_firewall_backend() {
     # Method 1: nft binary available inside the container AND kernel supports it.
     if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
@@ -78,6 +81,7 @@ detect_firewall_backend() {
 # ---------------------------------------------------------------------------
 # Bouncer binary validation
 # ---------------------------------------------------------------------------
+# Validate bouncer binary. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_bouncer_binary() {
     if command -v crowdsec-firewall-bouncer >/dev/null 2>&1; then
         echo "Firewall bouncer binary detected: $(command -v crowdsec-firewall-bouncer)"
@@ -96,6 +100,7 @@ validate_bouncer_binary() {
 # ---------------------------------------------------------------------------
 # Validate that the container can manipulate the host firewall
 # ---------------------------------------------------------------------------
+# Validate firewall access. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_firewall_access() {
     _backend="$1"
 
@@ -120,6 +125,7 @@ validate_firewall_access() {
     return 0
 }
 
+# List nft sets with prefix. Inputs: shell arguments and environment. Output: stdout text and command status.
 list_nft_sets_with_prefix() {
     _family="$1"
     _table="$2"
@@ -129,6 +135,7 @@ list_nft_sets_with_prefix() {
         awk -v prefix="${_prefix}" '$1 == "set" && index($2, prefix) == 1 { print $2 }'
 }
 
+# Wait for nft sets. Inputs: shell arguments and environment. Output: command status and side effects.
 wait_for_nft_sets() {
     _family="$1"
     _table="$2"
@@ -150,6 +157,7 @@ wait_for_nft_sets() {
     return 1
 }
 
+# Ensure nft forward chain. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_nft_forward_chain() {
     _family="$1"
     _table="$2"
@@ -177,6 +185,7 @@ ensure_nft_forward_chain() {
     done
 }
 
+# Count lines. Inputs: shell arguments and environment. Output: stdout text and command status.
 count_lines() {
     awk 'NF { count++ } END { print count + 0 }'
 }
@@ -188,6 +197,7 @@ count_lines() {
 #   $1 — API key (raw string from 'cscli bouncers add ... -o raw')
 #   $2 — firewall backend ("nftables" or "iptables")
 # ---------------------------------------------------------------------------
+# Generate bouncer config. Inputs: shell arguments and environment. Output: command status and side effects.
 generate_bouncer_config() {
     _api_key="$1"
     _backend="$2"
@@ -272,6 +282,7 @@ IPTCFG
 # (tables + sets), then discovers the set names and adds FORWARD-hook chains
 # in each table.
 # ---------------------------------------------------------------------------
+# Add nftables forward chains. Inputs: shell arguments and environment. Output: command status and side effects.
 add_nftables_forward_chains() {
     echo "Adding nftables FORWARD-hook chains for Docker traffic protection..."
 
@@ -440,14 +451,17 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
 fi
 
 # --- Console enrollment (optional, free tier) -----------------------------
+# Perform crowdsec install enrollment done marker path. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_install_enrollment_done_marker_path() {
     printf '%s' "${CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR%/}/.console-enrollment-install.done"
 }
 
+# Perform crowdsec has install enrollment done marker. Inputs: shell arguments and environment. Output: command status and side effects.
 crowdsec_has_install_enrollment_done_marker() {
     [ -f "$(crowdsec_install_enrollment_done_marker_path)" ]
 }
 
+# Mark crowdsec install enrollment done. Inputs: shell arguments and environment. Output: command status and side effects.
 mark_crowdsec_install_enrollment_done() {
     local marker_path=""
 
@@ -457,6 +471,7 @@ mark_crowdsec_install_enrollment_done() {
     chmod 0600 "${marker_path}" 2>/dev/null || true
 }
 
+# Configure console enrollment. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_console_enrollment() {
     local enroll_key="${CROWDSEC_ENROLL_KEY:-}"
     local engine_name="${CROWDSEC_ENGINE_NAME:-}"

@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 @login_required()
 @require_non_root_user
 def delete_api_keys(request, conn=None, _url=None, **kwargs):
-    """Handle delete API keys."""
+    """Delete API keys.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -55,7 +58,10 @@ def delete_api_keys(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def delete_variable_sets(request, conn=None, _url=None, **kwargs):
-    """Handle delete variable sets."""
+    """Delete variable sets.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 
@@ -86,7 +92,10 @@ def delete_variable_sets(request, conn=None, _url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def delete_all_data(request, conn=None, _url=None, **kwargs):
-    """Handle delete all data."""
+    """Delete all data.
+
+    Inputs: `request`, `conn`, `_url`, `**kwargs`. Output: `JsonResponse` result.
+    """
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
 

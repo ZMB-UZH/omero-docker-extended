@@ -19,7 +19,10 @@ class PathUsageExporterContractTests(TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Store set up class."""
+        """Set Up Class.
+
+        Inputs: none. Output: None. Raises on invalid or unavailable state.
+        """
         spec = importlib.util.spec_from_file_location(
             "path_usage_exporter", EXPORTER_PATH
         )
@@ -35,7 +38,10 @@ class PathUsageExporterContractTests(TestCase):
         ).read_text(encoding="utf-8")
 
     def test_exporter_image_runs_as_dedicated_non_root_user(self) -> None:
-        """Verify test exporter image runs as dedicated non roo behavior."""
+        """Verify exporter image runs as dedicated non root user.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn("addgroup -S omero-path-exporter", self.dockerfile_text)
         self.assertIn(
             "adduser -S -D -H -G omero-path-exporter omero-path-exporter",
@@ -44,7 +50,10 @@ class PathUsageExporterContractTests(TestCase):
         self.assertIn("USER omero-path-exporter", self.dockerfile_text)
 
     def test_installation_assigns_textfile_directory_to_exporter_uid_gid(self) -> None:
-        """Verify test installation assigns textfile directory behavior."""
+        """Verify installation assigns textfile directory to exporter uid gid.
+
+        Inputs: none. Output: None.
+        """
         self.assertIn(
             'PATH_USAGE_EXPORTER_IMAGE="${PATH_USAGE_EXPORTER_IMAGE:-path-usage-exporter:custom}"',
             self.installation_script_text,
@@ -63,7 +72,10 @@ class PathUsageExporterContractTests(TestCase):
         )
 
     def test_path_translation_requires_absolute_host_paths(self) -> None:
-        """Verify test path translation requires absolute host behavior."""
+        """Verify path translation requires absolute host paths.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(
             self.exporter.host_path_for_df("/srv/omero/../data", "/host"),
             "/host/srv/data",
@@ -76,7 +88,10 @@ class PathUsageExporterContractTests(TestCase):
             self.exporter.host_path_for_df("relative/path", "/host")
 
     def test_prometheus_labels_are_escaped_in_rendered_metrics(self) -> None:
-        """Verify test prometheus labels are escaped in rendere behavior."""
+        """Verify prometheus labels are escaped in rendered metrics.
+
+        Inputs: none. Output: None.
+        """
         path_value = '/data/"quoted\\line\nnext'
         mountpoint = '/host/data/"quoted\\mount\nnext'
 
@@ -93,7 +108,10 @@ class PathUsageExporterContractTests(TestCase):
         self.assertIn('omero_path_used_ratio{kind="omero_data"', metrics)
 
     def test_df_usage_times_out_and_rejects_malformed_numbers(self) -> None:
-        """Verify test df usage times out and rejects malformed behavior."""
+        """Verify df usage times out and rejects malformed numbers.
+
+        Inputs: none. Output: None.
+        """
         with mock.patch.object(
             self.exporter.subprocess,
             "run",
@@ -116,7 +134,10 @@ class PathUsageExporterContractTests(TestCase):
             self.assertIsNone(self.exporter.df_usage("/host/data"))
 
     def test_write_metrics_uses_atomic_temp_file_in_output_directory(self) -> None:
-        """Verify test write metrics uses atomic temp file in o behavior."""
+        """Verify write metrics uses atomic temp file in output directory.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "omero_paths.prom"
 

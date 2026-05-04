@@ -27,24 +27,36 @@ class RegressionGuardSelfCheckTests(unittest.TestCase):
     def test_selfcheck_passes(self) -> None:
         # ``selfcheck`` proves every rule fires on its fixture and that the
         # canonical good fixture stays silent. It returns 0 on success.
-        """Verify test selfcheck passes."""
+        """Verify selfcheck passes.
+
+        Inputs: none. Output: None.
+        """
         self.assertEqual(regression_guard.selfcheck(), 0)
 
     def test_repository_tree_is_clean(self) -> None:
-        """Verify test repository tree is clean."""
+        """Verify repository tree is clean.
+
+        Inputs: none. Output: None.
+        """
         findings = regression_guard.scan_paths(REPO_ROOT, paths=None)
         rendered = "\n".join(f.render() for f in findings)
         self.assertEqual(findings, [], f"unexpected findings:\n{rendered}")
 
     def test_catalog_has_minimum_coverage(self) -> None:
-        """Verify test catalog has minimum coverage."""
+        """Verify catalog has minimum coverage.
+
+        Inputs: none. Output: None.
+        """
         ids = {rule.id for rule in regression_guard.CATALOG}
         # The catalog must continue to cover the historical hot families.
         for required in {"RG001", "RG002", "RG005", "RG009", "RG012", "RG015"}:
             self.assertIn(required, ids)
 
     def test_every_rule_has_fixture_and_metadata(self) -> None:
-        """Verify test every rule has fixture and metadata."""
+        """Verify every rule has fixture and metadata.
+
+        Inputs: none. Output: None.
+        """
         fixtures = regression_guard._selfcheck_fixtures()
         for rule in regression_guard.CATALOG:
             self.assertIn(rule.id, fixtures, f"missing fixture for {rule.id}")
@@ -59,7 +71,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
 
     @staticmethod
     def _scan_one(rel_name: str, content: str) -> list[regression_guard.Finding]:
-        """Handle scan one."""
+        """Scan one.
+
+        Inputs: `rel_name`, `content`. Output: `list[regression_guard.Finding]`.
+        """
         with tempfile.TemporaryDirectory(prefix="rg_engine_") as tmp:
             root = Path(tmp)
             target = root / rel_name
@@ -71,7 +86,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
         # ``except (TypeError, ValueError): continue`` is a deliberate
         # type-narrowing pattern used in production parsers and must not be
         # treated as a regression. RG002 fires only on broad excepts.
-        """Verify test specific exception handler is not flagged."""
+        """Verify specific exception handler is not flagged.
+
+        Inputs: none. Output: None.
+        """
         findings = self._scan_one(
             "module/specific.py",
             "def f():\n"
@@ -83,7 +101,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
         self.assertEqual(rule_hits, [])
 
     def test_broad_exception_handler_is_flagged(self) -> None:
-        """Verify test broad exception handler is flagged."""
+        """Verify broad exception handler is flagged.
+
+        Inputs: none. Output: None.
+        """
         findings = self._scan_one(
             "module/broad.py",
             "def f():\n    try: do()\n    except Exception:\n        pass\n",
@@ -91,7 +112,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
         self.assertTrue(any(f.rule_id == "RG002" for f in findings))
 
     def test_test_files_skip_assert_rule(self) -> None:
-        """Verify test test files skip assert rule."""
+        """Verify module paths skip the assert-statement rule.
+
+        Inputs: none. Output: None.
+        """
         findings = self._scan_one(
             "module/tests/test_assert_ok.py",
             "def test_ok():\n    assert 1 == 1\n",
@@ -99,7 +123,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
         self.assertFalse(any(f.rule_id == "RG001" for f in findings))
 
     def test_runtime_data_roots_are_not_scanned_as_source(self) -> None:
-        """Verify test runtime data roots are not scanned as so behavior."""
+        """Verify runtime data roots are not scanned as source.
+
+        Inputs: none. Output: None.
+        """
         with tempfile.TemporaryDirectory(prefix="rg_runtime_") as tmp:
             root = Path(tmp)
             runtime_file = root / "omero_data" / "ManagedRepository" / "secret.txt"
@@ -110,7 +137,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
             self.assertEqual(regression_guard.scan_paths(root, [runtime_file]), [])
 
     def test_chmod_safe_mode_is_not_flagged(self) -> None:
-        """Verify test chmod safe mode is not flagged."""
+        """Verify chmod safe mode is not flagged.
+
+        Inputs: none. Output: None.
+        """
         findings = self._scan_one(
             "module/safe_chmod.py",
             "import os\nos.chmod('/srv/x', 0o640)\n",
@@ -120,7 +150,10 @@ class RegressionGuardEngineTests(unittest.TestCase):
     def test_pinned_action_is_not_flagged(self) -> None:
         # Build the 40-char hex SHA at runtime so DevSkim DS173237 does not
         # treat it as a token-shaped literal in the test source.
-        """Verify test pinned action is not flagged."""
+        """Verify pinned action is not flagged.
+
+        Inputs: none. Output: None.
+        """
         sha = "0" * 40
         findings = self._scan_one(
             ".github/workflows/sample.yml",
@@ -135,19 +168,28 @@ class RegressionGuardCliTests(unittest.TestCase):
     """Test cases for regression guard cli tests."""
 
     def test_catalog_text_render(self) -> None:
-        """Verify test catalog text render."""
+        """Verify catalog text render.
+
+        Inputs: none. Output: None.
+        """
         text = regression_guard.render_text()
         self.assertIn("RG001", text)
         self.assertIn("RG015", text)
 
     def test_catalog_markdown_render_is_self_describing(self) -> None:
-        """Verify test catalog markdown render is self describing."""
+        """Verify catalog markdown render is self describing.
+
+        Inputs: none. Output: None.
+        """
         md = regression_guard.render_markdown()
         self.assertIn("python3 tools/regression_guard.py", md)
         self.assertIn("| `RG001` |", md)
 
     def test_catalog_json_round_trip(self) -> None:
-        """Verify test catalog JSON round trip."""
+        """Verify catalog JSON round trip.
+
+        Inputs: none. Output: None.
+        """
         payload = json.loads(regression_guard.render_json())
         self.assertEqual(len(payload), len(regression_guard.CATALOG))
         for entry in payload:

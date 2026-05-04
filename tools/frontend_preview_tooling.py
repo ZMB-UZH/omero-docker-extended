@@ -27,25 +27,37 @@ NODE_ARCHIVE_RE = re.compile(
 
 
 def load_manifest() -> dict[str, object]:
-    """Load the pinned host-tooling manifest."""
+    """Load manifest.
+
+    Inputs: none. Output: `dict[str, object]`.
+    """
     return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 
 def normalize_version(version_text: str) -> tuple[int, ...]:
-    """Turn a semver-like string into a comparable integer tuple."""
+    """Turn a semver-like string into a comparable integer tuple.
+
+    Inputs: `version_text`. Output: `tuple[int, ...]`.
+    """
     cleaned = version_text.strip().lstrip("v").split("-", 1)[0]
     return tuple(int(part) for part in cleaned.split("."))
 
 
 def default_tool_dir() -> Path:
-    """Return the default cache-backed install location."""
+    """Return the default cache-backed install location.
+
+    Inputs: none. Output: `Path`.
+    """
     xdg_cache_home = os.environ.get("XDG_CACHE_HOME")
     cache_root = Path(xdg_cache_home) if xdg_cache_home else Path.home() / ".cache"
     return cache_root / "omero-agent-frontend-preview"
 
 
 def default_node_dir(version: str, arch: str) -> Path:
-    """Return the default host-side pinned Node.js install directory."""
+    """Return the default host-side pinned Node.js install directory.
+
+    Inputs: `version`, `arch`. Output: `Path`.
+    """
     override_root = os.environ.get("OMERO_AGENT_NODE_DIR")
     if override_root:
         return Path(override_root).expanduser()
@@ -57,7 +69,10 @@ def default_node_dir(version: str, arch: str) -> Path:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """Parse args.
+
+    Inputs: none. Output: `argparse.Namespace`.
+    """
     parser = argparse.ArgumentParser(
         description=(
             "Bootstrap the pinned host-side Vite/Vitest preview toolchain and run "
@@ -123,7 +138,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def ensure_command_available(command: str) -> str:
-    """Return the absolute path for a required host command."""
+    """Return the absolute path for a required host command.
+
+    Inputs: `command`. Output: `str`. Raises on invalid or unavailable state.
+    """
     command_path = shutil.which(command)
     if not command_path:
         raise RuntimeError(f"Required host command '{command}' is not available.")
@@ -131,7 +149,10 @@ def ensure_command_available(command: str) -> str:
 
 
 def ensure_node_version(manifest: dict[str, object]) -> None:
-    """Verify that host Node.js exactly matches the pinned LTS version."""
+    """Verify that host Node.js exactly matches the pinned LTS version.
+
+    Inputs: `manifest`. Output: None. Raises on invalid or unavailable state.
+    """
     node_bin = ensure_command_available("node")
     ensure_command_available("npm")
     node_version = subprocess.run(
@@ -153,7 +174,10 @@ def ensure_node_version(manifest: dict[str, object]) -> None:
 
 
 def build_package_json(manifest: dict[str, object]) -> dict[str, object]:
-    """Build the package.json payload written into the host tooling cache."""
+    """The package.json payload written into the host tooling cache.
+
+    Inputs: `manifest`. Output: `dict[str, object]`.
+    """
     return {
         "name": manifest["name"],
         "private": True,
@@ -164,7 +188,10 @@ def build_package_json(manifest: dict[str, object]) -> dict[str, object]:
 
 
 def write_package_json(tool_dir: Path, manifest: dict[str, object]) -> bool:
-    """Write the desired package.json and report whether it changed."""
+    """Write package JSON.
+
+    Inputs: `tool_dir`, `manifest`. Output: `bool`.
+    """
     package_json_path = tool_dir / "package.json"
     desired = build_package_json(manifest)
     desired_text = json.dumps(desired, indent=2, sort_keys=True) + "\n"
@@ -180,7 +207,10 @@ def write_package_json(tool_dir: Path, manifest: dict[str, object]) -> bool:
 
 
 def ensure_tooling(tool_dir: Path, manifest: dict[str, object]) -> Path:
-    """Install or refresh the host-side frontend tooling in the cache dir."""
+    """Install or refresh the host-side frontend tooling in the cache dir.
+
+    Inputs: `tool_dir`, `manifest`. Output: `Path`.
+    """
     ensure_node_version(manifest)
     tool_dir.mkdir(parents=True, exist_ok=True)
     package_changed = write_package_json(tool_dir, manifest)
@@ -200,7 +230,10 @@ def ensure_tooling(tool_dir: Path, manifest: dict[str, object]) -> Path:
 
 
 def node_linux_arch() -> str:
-    """Return the official Node.js Linux binary arch for this host."""
+    """Return the official Node.js Linux binary arch for this host.
+
+    Inputs: none. Output: `str`. Raises on invalid or unavailable state.
+    """
     if sys.platform != "linux":
         raise RuntimeError(
             "The pinned Node.js installer supports Linux hosts only. Install "
@@ -217,7 +250,11 @@ def node_linux_arch() -> str:
 
 
 def node_release_path(version: str, filename: str) -> str:
-    """Return a validated Node.js release download path."""
+    """Return a validated Node.js release download path.
+
+    Inputs: `version`, `filename`. Output: `str`. Raises on invalid or unavailable
+    state.
+    """
     if not NODE_VERSION_RE.fullmatch(version):
         raise RuntimeError(f"Invalid Node.js version in manifest: {version}.")
     archive_match = NODE_ARCHIVE_RE.fullmatch(filename)
@@ -230,7 +267,11 @@ def node_release_path(version: str, filename: str) -> str:
 
 
 def download_node_release_file(version: str, filename: str, destination: Path) -> None:
-    """Download a validated Node.js release artifact from the official host."""
+    """Download a validated Node.js release artifact from the official host.
+
+    Inputs: `version`, `filename`, `destination`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     path = node_release_path(version, filename)
     curl_bin = ensure_command_available("curl")
     url = f"https://{NODE_RELEASE_HOST}{path}"
@@ -265,7 +306,10 @@ def download_node_release_file(version: str, filename: str, destination: Path) -
 
 
 def sha256_hex(path: Path) -> str:
-    """Return the SHA-256 digest for a file."""
+    """Return the SHA-256 digest for a file.
+
+    Inputs: `path`. Output: `str`.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -274,7 +318,11 @@ def sha256_hex(path: Path) -> str:
 
 
 def expected_sha256(shasums_path: Path, filename: str) -> str:
-    """Return the expected digest for a Node.js release artifact."""
+    """Return the expected digest for a Node.js release artifact.
+
+    Inputs: `shasums_path`, `filename`. Output: `str`. Raises on invalid or unavailable
+    state.
+    """
     for line in shasums_path.read_text(encoding="utf-8").splitlines():
         digest, separator, artifact_name = line.partition("  ")
         if separator and artifact_name == filename:
@@ -283,7 +331,11 @@ def expected_sha256(shasums_path: Path, filename: str) -> str:
 
 
 def verify_sha256(archive_path: Path, shasums_path: Path, filename: str) -> None:
-    """Verify the downloaded Node.js archive against official SHA-256 data."""
+    """Verify the downloaded Node.js archive against official SHA-256 data.
+
+    Inputs: `archive_path`, `shasums_path`, `filename`. Output: None. Raises on invalid
+    or unavailable state.
+    """
     expected = expected_sha256(shasums_path, filename)
     actual = sha256_hex(archive_path)
     if actual != expected:
@@ -293,7 +345,10 @@ def verify_sha256(archive_path: Path, shasums_path: Path, filename: str) -> None
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
-    """Return whether path is inside parent without requiring newer pathlib APIs."""
+    """Return whether path is inside parent without requiring newer pathlib APIs.
+
+    Inputs: `path`, `parent`. Output: `bool`.
+    """
     try:
         path.relative_to(parent)
     except ValueError:
@@ -302,7 +357,10 @@ def is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def tar_member_kind(member: tarfile.TarInfo) -> str:
-    """Return the supported archive member kind or reject it."""
+    """Return the supported archive member kind or reject it.
+
+    Inputs: `member`. Output: `str`. Raises on invalid or unavailable state.
+    """
     if member.isfile():
         return "file"
     if member.isdir():
@@ -317,7 +375,11 @@ def tar_member_kind(member: tarfile.TarInfo) -> str:
 def checked_member_path(
     member: tarfile.TarInfo, destination: Path, destination_root: Path
 ) -> Path:
-    """Return the destination path for a tar member after containment checks."""
+    """Return the destination path for a tar member after containment checks.
+
+    Inputs: `member`, `destination`, `destination_root`. Output: `Path`. Raises on
+    invalid or unavailable state.
+    """
     member_path = (destination / member.name).resolve()
     if not is_relative_to(member_path, destination_root):
         raise RuntimeError(f"Refusing to extract unsafe archive member: {member.name}")
@@ -330,7 +392,11 @@ def checked_link_target(
     destination: Path,
     destination_root: Path,
 ) -> None:
-    """Validate that a symlink or hard link remains inside the extraction root."""
+    """That a symlink or hard link remains inside the extraction root.
+
+    Inputs: `member`, `member_path`, `destination`, `destination_root`. Output: None.
+    Raises on invalid or unavailable state.
+    """
     link_target = Path(member.linkname)
     if link_target.is_absolute():
         raise RuntimeError(f"Refusing to extract absolute link target: {member.name}")
@@ -341,7 +407,10 @@ def checked_link_target(
 
 
 def extract_directory_member(member: tarfile.TarInfo, member_path: Path) -> None:
-    """Create a tar directory member with archive permissions."""
+    """Extract directory member.
+
+    Inputs: `member`, `member_path`. Output: None.
+    """
     member_path.mkdir(parents=True, exist_ok=True)
     os.chmod(member_path, member.mode & 0o777)
 
@@ -349,7 +418,11 @@ def extract_directory_member(member: tarfile.TarInfo, member_path: Path) -> None
 def extract_file_member(
     archive: tarfile.TarFile, member: tarfile.TarInfo, member_path: Path
 ) -> None:
-    """Extract one regular file member after overwrite checks."""
+    """Extract one regular file member after overwrite checks.
+
+    Inputs: `archive`, `member`, `member_path`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     if member_path.exists() or member_path.is_symlink():
         raise RuntimeError(f"Refusing to overwrite archive member: {member.name}")
     member_path.parent.mkdir(parents=True, exist_ok=True)
@@ -364,7 +437,11 @@ def extract_file_member(
 def create_link_member(
     member: tarfile.TarInfo, member_path: Path, destination: Path
 ) -> None:
-    """Create a validated symlink or hard link member."""
+    """Create link member.
+
+    Inputs: `member`, `member_path`, `destination`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     if member_path.exists() or member_path.is_symlink():
         raise RuntimeError(f"Refusing to overwrite archive link: {member.name}")
     member_path.parent.mkdir(parents=True, exist_ok=True)
@@ -378,7 +455,10 @@ def create_link_member(
 
 
 def safe_extract_tar_xz(archive_path: Path, destination: Path) -> None:
-    """Extract a tar.xz archive without allowing path traversal."""
+    """Extract a tar.xz archive without allowing path traversal.
+
+    Inputs: `archive_path`, `destination`. Output: None.
+    """
     destination_root = destination.resolve()
     with tarfile.open(archive_path, "r:xz") as archive:
         links: list[tuple[tarfile.TarInfo, Path]] = []
@@ -397,7 +477,10 @@ def safe_extract_tar_xz(archive_path: Path, destination: Path) -> None:
 
 
 def installed_node_version(node_dir: Path) -> str | None:
-    """Return the installed Node.js version string, if present and runnable."""
+    """Return the installed Node.js version string, if present and runnable.
+
+    Inputs: `node_dir`. Output: `str | None`.
+    """
     node_bin = node_dir / "bin" / "node"
     if not node_bin.is_file():
         return None
@@ -413,7 +496,11 @@ def installed_node_version(node_dir: Path) -> str | None:
 
 
 def install_pinned_node(node_dir: Path, version: str) -> Path:
-    """Install the manifest-pinned Linux Node.js binary under node_dir."""
+    """Install the manifest-pinned Linux Node.js binary under node_dir.
+
+    Inputs: `node_dir`, `version`. Output: `Path`. Raises on invalid or unavailable
+    state.
+    """
     arch = node_linux_arch()
     required_version = f"v{version}"
     current_version = installed_node_version(node_dir)
@@ -449,7 +536,10 @@ def install_pinned_node(node_dir: Path, version: str) -> Path:
 def print_node_install_status(
     node_dir: Path, version: str, args: argparse.Namespace
 ) -> None:
-    """Emit instructions for activating the pinned Node.js installation."""
+    """Emit instructions for activating the pinned Node.js installation.
+
+    Inputs: `node_dir`, `version`, `args`. Output: None.
+    """
     bin_dir = node_dir / "bin"
     payload = {
         "node_version": version,
@@ -467,7 +557,11 @@ def print_node_install_status(
 
 
 def wrapped_binary(tool_dir: Path, command_name: str) -> Path:
-    """Return the bin path for the wrapped frontend command."""
+    """Return the bin path for the wrapped frontend command.
+
+    Inputs: `tool_dir`, `command_name`. Output: `Path`. Raises on invalid or unavailable
+    state.
+    """
     suffix = ".cmd" if os.name == "nt" else ""
     binary = tool_dir / "node_modules" / ".bin" / f"{command_name}{suffix}"
     if not binary.exists():
@@ -480,7 +574,11 @@ def wrapped_binary(tool_dir: Path, command_name: str) -> Path:
 def print_bootstrap_status(
     tool_dir: Path, manifest: dict[str, object], as_json: bool
 ) -> None:
-    """Emit the resolved tooling status after bootstrap."""
+    """Emit the resolved tooling status after bootstrap.
+
+    Inputs: `tool_dir`, `manifest`, `as_json`. Output: None. Raises on invalid or
+    unavailable state.
+    """
     dependencies = manifest.get("dependencies", {})
     if not isinstance(dependencies, dict):
         raise RuntimeError("Frontend tooling manifest dependencies must be a mapping.")
@@ -503,7 +601,10 @@ def print_bootstrap_status(
 def run_wrapped_command(
     tool_dir: Path, command_name: str, forwarded_args: list[str]
 ) -> int:
-    """Run the wrapped frontend command from the cache-backed tooling dir."""
+    """The wrapped frontend command from the cache-backed tooling dir.
+
+    Inputs: `tool_dir`, `command_name`, `forwarded_args`. Output: `int`.
+    """
     binary = wrapped_binary(tool_dir, command_name)
     command = [str(binary), *forwarded_args]
     env = os.environ.copy()
@@ -513,7 +614,10 @@ def run_wrapped_command(
 
 
 def main() -> int:
-    """CLI entrypoint."""
+    """Execute the command entrypoint.
+
+    Inputs: none. Output: `int`.
+    """
     args = parse_args()
     manifest = load_manifest()
     if args.command == "install-node":
