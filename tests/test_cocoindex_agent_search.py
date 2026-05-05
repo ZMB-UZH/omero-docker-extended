@@ -1615,9 +1615,11 @@ def test_daemon_session_reaps_started_daemon_when_handshake_fails(
         mock.Mock(side_effect=RuntimeError("handshake failed")),
     )
 
-    with pytest.raises(RuntimeError, match="handshake failed"):
-        with cocoindex_agent_search.daemon_session(context):
-            pass
+    with (
+        pytest.raises(RuntimeError, match="handshake failed"),
+        cocoindex_agent_search.daemon_session(context),
+    ):
+        pass
 
     proc.terminate.assert_called_once_with()
     proc.wait.assert_called_once_with(

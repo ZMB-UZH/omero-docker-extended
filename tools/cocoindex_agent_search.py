@@ -2613,37 +2613,7 @@ def run_mcp_stdio_smoke(
 
     Inputs: `context`, `include_search`. Output: `dict[str, object]`.
     """
-    search_request = {
-        "jsonrpc": MCP_JSONRPC_VERSION,
-        "id": 3,
-        "method": "tools/call",
-        "params": {
-            "name": MCP_SEARCH_TOOL_NAME,
-            "arguments": {"query": "MCP smoke search", "limit": 1},
-        },
-    }
-    messages = [
-        {
-            "jsonrpc": MCP_JSONRPC_VERSION,
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": MCP_PROTOCOL_VERSIONS[-1],
-                "capabilities": {},
-                "clientInfo": {
-                    "name": "cocoindex-agent-search-smoke",
-                    "version": "1",
-                },
-            },
-        },
-        {
-            "jsonrpc": MCP_JSONRPC_VERSION,
-            "method": "notifications/initialized",
-            "params": {},
-        },
-        {"jsonrpc": MCP_JSONRPC_VERSION, "id": 2, "method": "tools/list", "params": {}},
-        *((search_request,) if include_search else ()),
-    ]
+    messages = mcp_stdio_smoke_messages(include_search=include_search)
     completed = run_command_with_input(
         [sys.executable, str(Path(__file__).resolve()), "mcp"],
         cwd=context.repo_root,
@@ -2667,47 +2637,127 @@ def run_mcp_stdio_smoke(
             )
         )
     responses = parse_mcp_response_lines(completed.stdout)
-    initialize = responses.get(1, {})
-    tools_list = responses.get(2, {})
-    initialize_result = initialize.get("result", {})
-    tools_result = tools_list.get("result", {})
-    if not isinstance(initialize_result, dict):
-        raise RuntimeError(f"MCP initialize did not return a result: {initialize}")
-    if not isinstance(tools_result, dict):
-        raise RuntimeError(f"MCP tools/list did not return a result: {tools_list}")
-    server_info = initialize_result.get("serverInfo", {})
-    if not isinstance(server_info, dict):
-        raise RuntimeError(f"MCP initialize omitted serverInfo: {initialize}")
-    if server_info.get("name") != MCP_SERVER_NAME:
-        raise RuntimeError(f"MCP initialize returned the wrong server: {server_info}")
-    if server_info.get("version") != PACKAGE_VERSION:
-        raise RuntimeError(f"MCP initialize returned the wrong version: {server_info}")
-    tools = sorted(
-        tool["name"]
-        for tool in tools_result.get("tools", [])
-        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
-    )
+    result = parse_mcp_stdio_probe_result(responses)
+    if include_search:
+        result["search_tool_content_items"] = mcp_stdio_search_content_count(responses)
+    return result
+
+
+def mcp_stdio_smoke_messages(*, include_search: bool) -> list[dict[str, Any]]:
+    """Return the raw JSON-RPC messages for stdio MCP smoke.
+
+    Inputs: `include_search`. Output: `list[dict[str, Any]]`.
+    """
+    messages: list[dict[str, Any]] = [
+        {
+            "jsonrpc": MCP_JSONRPC_VERSION,
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSIONS[-1],
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "cocoindex-agent-search-smoke",
+                    "version": "1",
+                },
+            },
+        },
+        {
+            "jsonrpc": MCP_JSONRPC_VERSION,
+            "method": "notifications/initialized",
+            "params": {},
+        },
+        {"jsonrpc": MCP_JSONRPC_VERSION, "id": 2, "method": "tools/list", "params": {}},
+    ]
+    if include_search:
+        messages.append(
+            {
+                "jsonrpc": MCP_JSONRPC_VERSION,
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": MCP_SEARCH_TOOL_NAME,
+                    "arguments": {"query": "MCP smoke search", "limit": 1},
+                },
+            }
+        )
+    return messages
+
+
+def mcp_response_result(
+    responses: dict[int, dict[str, Any]], response_id: int, label: str
+) -> dict[str, Any]:
+    """Return a required JSON-RPC result object by response id.
+
+    Inputs: `responses`, `response_id`, `label`. Output: `dict[str, Any]`. Raises:
+    RuntimeError when the result is missing or not an object.
+    """
+    response = responses.get(response_id, {})
+    result = response.get("result", {})
+    if not isinstance(result, dict):
+        raise RuntimeError(f"MCP {label} did not return a result: {response}")
+    return result
+
+
+def parse_mcp_stdio_probe_result(
+    responses: dict[int, dict[str, Any]],
+) -> dict[str, object]:
+    """Return validated initialize/tools results from an MCP stdio probe.
+
+    Inputs: `responses`. Output: `dict[str, object]`.
+    """
+    initialize_result = mcp_response_result(responses, 1, "initialize")
+    tools_result = mcp_response_result(responses, 2, "tools/list")
+    server_info = mcp_server_info(initialize_result, responses.get(1, {}))
+    tools = mcp_tool_names(tools_result)
     if MCP_SEARCH_TOOL_NAME not in tools:
         raise RuntimeError(f"MCP tools/list did not include search: {tools}")
-    result = {
+    return {
         "server_name": server_info.get("name"),
         "server_version": server_info.get("version"),
         "tools": tools,
     }
-    if include_search:
-        search_response = responses.get(3, {})
-        search_result = search_response.get("result", {})
-        if not isinstance(search_result, dict):
-            raise RuntimeError(
-                f"MCP search smoke did not return a result: {search_response}"
-            )
-        if search_result.get("isError") is not False:
-            raise RuntimeError(f"MCP search smoke failed: {search_result}")
-        content = search_result.get("content", [])
-        result["search_tool_content_items"] = (
-            len(content) if isinstance(content, list) else 0
-        )
-    return result
+
+
+def mcp_server_info(
+    initialize_result: dict[str, Any], initialize_response: dict[str, Any]
+) -> dict[str, Any]:
+    """Return validated MCP server info.
+
+    Inputs: `initialize_result`, `initialize_response`. Output: `dict[str, Any]`.
+    """
+    server_info = initialize_result.get("serverInfo", {})
+    if not isinstance(server_info, dict):
+        raise RuntimeError(f"MCP initialize omitted serverInfo: {initialize_response}")
+    if server_info.get("name") != MCP_SERVER_NAME:
+        raise RuntimeError(f"MCP initialize returned the wrong server: {server_info}")
+    if server_info.get("version") != PACKAGE_VERSION:
+        raise RuntimeError(f"MCP initialize returned the wrong version: {server_info}")
+    return server_info
+
+
+def mcp_tool_names(tools_result: dict[str, Any]) -> list[str]:
+    """Return sorted MCP tool names from a tools/list result.
+
+    Inputs: `tools_result`. Output: `list[str]`.
+    """
+    return sorted(
+        tool["name"]
+        for tool in tools_result.get("tools", [])
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    )
+
+
+def mcp_stdio_search_content_count(responses: dict[int, dict[str, Any]]) -> int:
+    """Return content item count from the MCP smoke search response.
+
+    Inputs: `responses`. Output: `int`.
+    """
+    search_result = mcp_response_result(responses, 3, "search smoke")
+    if search_result.get("isError") is not False:
+        raise RuntimeError(f"MCP search smoke failed: {search_result}")
+    content = search_result.get("content", [])
+    return len(content) if isinstance(content, list) else 0
 
 
 def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
