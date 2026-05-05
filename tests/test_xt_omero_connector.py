@@ -1829,7 +1829,7 @@ def test_connector_settings_load_skips_settings_directory_symlink(
     except (OSError, NotImplementedError):
         pytest.skip("directory symlink creation is unavailable on this platform")
     logs = []
-    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
 
     loaded = module._load_connector_settings(
         settings_dir / module.AUTOSAVE_SETTINGS_FILE_NAME
@@ -1860,7 +1860,7 @@ def test_connector_settings_load_logs_malformed_values_without_crashing(
         encoding="utf-8",
     )
     logs = []
-    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
 
     loaded = module._load_connector_settings(settings_path)
 
@@ -1954,7 +1954,7 @@ def test_autosave_write_failure_logs_and_keeps_dialog_usable(tmp_path, monkeypat
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     logs = []
-    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
 
     assert module.OMEROBrowserDialog._write_autosave_settings(dialog) is False
 
