@@ -109,6 +109,49 @@ def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
     )
 
 
+def test_latest_github_api_version_uses_authenticated_request(monkeypatch) -> None:
+    """Verify latest GitHub API version request uses the caller's token.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in GitHub
+    API-version authentication.
+    """
+    requested: dict[str, Any] = {}
+
+    def fake_fetch_json(
+        url: str,
+        *,
+        headers: dict[str, str],
+        data: bytes | None = None,
+        method: str | None = None,
+        service: str,
+        timeout_seconds: int = scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    ) -> Any:
+        """Simulate fetch JSON so the surrounding test controls that dependency.
+
+        Inputs: `url` (str) URL, `headers` (dict[str, str]), `data` (bytes | None)
+        payload, `method` (str | None), `service` (str), `timeout_seconds` (int).
+        Output: `Any`.
+        """
+        requested.update(
+            {
+                "url": url,
+                "headers": headers,
+                "data": data,
+                "method": method,
+                "service": service,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return ["2022-11-28", "2026-03-10"]
+
+    monkeypatch.setattr(scanner_inventory, "fetch_json", fake_fetch_json)
+
+    assert scanner_inventory.latest_github_api_version("token") == "2026-03-10"
+    assert requested["url"] == "https://api.github.com/versions"
+    assert requested["headers"]["Authorization"] == "Bearer token"
+    assert requested["service"] == "GitHub versions"
+
+
 def test_summarize_github_code_scanning_paginates_and_counts_tools(
     monkeypatch,
 ) -> None:
@@ -120,7 +163,7 @@ def test_summarize_github_code_scanning_paginates_and_counts_tools(
     monkeypatch.setattr(
         scanner_inventory,
         "latest_github_api_version",
-        lambda timeout_seconds=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS: (
+        lambda token, timeout_seconds=scanner_inventory.DEFAULT_REQUEST_TIMEOUT_SECONDS: (
             "2026-03-10"
         ),
     )

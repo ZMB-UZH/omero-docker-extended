@@ -252,17 +252,19 @@ def fetch_json(
 
 
 def latest_github_api_version(
+    token: str,
     timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> str:
     """Return the latest github API version.
 
-    Inputs: `timeout_seconds` (int). Output: `str`. Raises: SystemExit when validation or the
-    called operation fails.
+    Inputs: `token` (str) GitHub token, `timeout_seconds` (int). Output: `str`.
+    Raises: SystemExit when validation or the called operation fails.
     """
     versions = fetch_json(
         "https://api.github.com/versions",
         headers={
             "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
             "User-Agent": USER_AGENT,
         },
         service="GitHub versions",
@@ -285,7 +287,10 @@ def summarize_github_code_scanning(args: argparse.Namespace) -> dict[str, Any]:
     repository = f"{owner}/{repo}"
     token = read_token(args.token_env, "GitHub")
     timeout_seconds = getattr(args, "request_timeout", DEFAULT_REQUEST_TIMEOUT_SECONDS)
-    api_version = latest_github_api_version(timeout_seconds=timeout_seconds)
+    api_version = latest_github_api_version(
+        token,
+        timeout_seconds=timeout_seconds,
+    )
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
