@@ -1,7 +1,7 @@
 #
 # <CustomTools>
 #  <Menu>
-#   <Item name="OMERO Connector" icon="Python3" tooltip="Load images from OMERO server">
+#   <Item name="OMERO Connector" icon="Python3" tooltip="Interact with OMERO">
 #    <Command>Python3XT::XTOmeroConnector(%i)</Command>
 #   </Item>
 #  </Menu>
@@ -141,8 +141,12 @@ DEFAULT_REFRESH_RETRY_ATTEMPTS = 3
 DEFAULT_REFRESH_RETRY_DELAY_SECONDS = 2.0
 HEALTH_PING_INTERVAL_ENV = "OMERO_IMARIS_HEALTH_PING_INTERVAL_SECONDS"
 HEALTH_PING_TIMEOUT_ENV = "OMERO_IMARIS_HEALTH_PING_TIMEOUT_SECONDS"
+HEALTH_PING_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HEALTH_PING_RETRY_ATTEMPTS"
+HEALTH_PING_RETRY_DELAY_ENV = "OMERO_IMARIS_HEALTH_PING_RETRY_DELAY_SECONDS"
 DEFAULT_HEALTH_PING_INTERVAL_SECONDS = 30
 DEFAULT_HEALTH_PING_TIMEOUT_SECONDS = 10
+DEFAULT_HEALTH_PING_RETRY_ATTEMPTS = 3
+DEFAULT_HEALTH_PING_RETRY_DELAY_SECONDS = 1.0
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 NATIVE_BRIDGE_RUNNER_TIMEOUT = 600
@@ -163,9 +167,16 @@ ACTION_BUTTON_PAD = 2
 STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
 CONNECTION_LABEL_WIDTH = len("Username:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
-CONNECTOR_PANEL_ICON_BG = "#5f6f85"
-CONNECTOR_PANEL_ICON_ACTIVE_BG = "#4f5f73"
-CONNECTOR_PANEL_ICON_FG = "white"
+CONNECTOR_HELP_ICON_BG = "#b9e4ff"
+CONNECTOR_HELP_ICON_ACTIVE_BG = "#9ed7f6"
+CONNECTOR_HELP_ICON_FG = "#174a63"
+CONNECTOR_INFO_ICON_BG = "#d8dee6"
+CONNECTOR_INFO_ICON_ACTIVE_BG = "#c6ced8"
+CONNECTOR_INFO_ICON_FG = "#2f3a45"
+CONNECTOR_PANEL_ICON_SIZE = 36
+CONNECTOR_PANEL_ICON_FRAME_HEIGHT = 42
+CONNECTOR_PANEL_ICON_FONT = ("Segoe UI", 13, "bold")
+AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
 FOLDER_PATH_SELECT_BG = "#718096"
 FOLDER_PATH_SELECT_ACTIVE_BG = "#60738a"
 FOLDER_PATH_PLACEHOLDER = "Type or select local path..."
@@ -907,6 +918,32 @@ def _health_ping_timeout_seconds():
         DEFAULT_HEALTH_PING_TIMEOUT_SECONDS,
         2,
         120,
+    )
+
+
+def _health_ping_retry_attempts():
+    """Return health ping retry attempts before declaring the connection lost.
+
+    Inputs: none. Output: `_bounded_env_int` result.
+    """
+    return _bounded_env_int(
+        HEALTH_PING_RETRY_ATTEMPTS_ENV,
+        DEFAULT_HEALTH_PING_RETRY_ATTEMPTS,
+        1,
+        10,
+    )
+
+
+def _health_ping_retry_delay_seconds():
+    """Return delay between failed health ping attempts.
+
+    Inputs: none. Output: `_bounded_env_float` result.
+    """
+    return _bounded_env_float(
+        HEALTH_PING_RETRY_DELAY_ENV,
+        DEFAULT_HEALTH_PING_RETRY_DELAY_SECONDS,
+        0.0,
+        30.0,
     )
 
 
@@ -2288,7 +2325,7 @@ class _RoundedButton:
     def _sync_cursor(self):
         """Synchronize the cursor for `_RoundedButton`.
 
-        Inputs: no caller arguments. Output: performs the documented action and returns None.
+        Inputs: none. Output: None.
         """
         cursor = "hand2" if self._is_enabled() else "arrow"
         self._canvas.config(cursor=cursor)
@@ -2488,7 +2525,7 @@ class _CircularIconButton(_RoundedButton):
             shadow = _shade_color(self._bg, -0.35)
 
         surface_offset = 2 if pressed else 0
-        diameter = max(12, min(width, height) - 6)
+        diameter = max(12, min(width, height) - 4)
         left = (width - diameter) / 2
         top = (height - diameter) / 2 + surface_offset
         right = left + diameter
@@ -2508,17 +2545,6 @@ class _CircularIconButton(_RoundedButton):
             bottom,
             fill=fill,
             outline=_shade_color(fill, -0.24),
-            width=1,
-        )
-        self._canvas.create_arc(
-            left + 4,
-            top + 4,
-            right - 4,
-            bottom - 4,
-            start=40,
-            extent=100,
-            style=_tk_constant("ARC", "arc"),
-            outline=_shade_color(fill, 0.34),
             width=1,
         )
         self._canvas.create_text(
@@ -5395,7 +5421,7 @@ class OMEROBrowserDialog:
             pady=5,
         )
         self.converter_frame.grid_remove()
-        conn_frame.grid_columnconfigure(7, weight=1)
+        conn_frame.grid_columnconfigure(8, weight=1)
 
         self.folder_path_var = tk.StringVar(value=default_folder_path)
         self._folder_path_placeholder_visible = False
@@ -5447,54 +5473,66 @@ class OMEROBrowserDialog:
         )
         self.select_folder_btn.grid(row=2, column=5, padx=(10, 12), pady=5, sticky=tk.W)
         self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
-        self.autosave_settings_check = tk.Checkbutton(
+        self.autosave_settings_frame = tk.Frame(
             conn_frame,
+            width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
+            height=38,
+        )
+        self.autosave_settings_frame.grid(
+            row=2,
+            column=7,
+            sticky=tk.W,
+            padx=(14, 0),
+            pady=5,
+        )
+        self.autosave_settings_frame.grid_propagate(False)
+        self.autosave_settings_check = tk.Checkbutton(
+            self.autosave_settings_frame,
             text="Autosave settings",
             variable=self.autosave_settings_var,
             command=self._on_autosave_settings_changed,
             state=_tk_constant("DISABLED", "disabled"),
             disabledforeground="#7a828a",
         )
-        self.autosave_settings_check.grid(
-            row=2,
-            column=6,
-            sticky=tk.W,
-            padx=(14, 0),
-            pady=5,
+        self.autosave_settings_check.pack(side=tk.RIGHT)
+        panel_icon_frame = tk.Frame(
+            conn_frame,
+            width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
+            height=CONNECTOR_PANEL_ICON_FRAME_HEIGHT,
         )
-        panel_icon_frame = tk.Frame(conn_frame)
         panel_icon_frame.grid(
             row=0,
-            column=8,
+            column=7,
             rowspan=2,
             sticky=tk.NE,
-            padx=(12, 0),
+            padx=(14, 0),
             pady=(0, 2),
         )
+        panel_icon_frame.grid_propagate(False)
         self.help_btn = _CircularIconButton(
             panel_icon_frame,
             text="?",
-            bg=CONNECTOR_PANEL_ICON_BG,
-            fg=CONNECTOR_PANEL_ICON_FG,
-            activebackground=CONNECTOR_PANEL_ICON_ACTIVE_BG,
-            activeforeground=CONNECTOR_PANEL_ICON_FG,
-            font=("Arial", 12, "bold"),
-            width=32,
-            height=32,
+            bg=CONNECTOR_HELP_ICON_BG,
+            fg=CONNECTOR_HELP_ICON_FG,
+            activebackground=CONNECTOR_HELP_ICON_ACTIVE_BG,
+            activeforeground=CONNECTOR_HELP_ICON_FG,
+            font=CONNECTOR_PANEL_ICON_FONT,
+            width=CONNECTOR_PANEL_ICON_SIZE,
+            height=CONNECTOR_PANEL_ICON_SIZE,
         )
-        self.help_btn.pack(side=tk.LEFT, padx=(0, 6))
         self.info_btn = _CircularIconButton(
             panel_icon_frame,
             text="i",
-            bg=CONNECTOR_PANEL_ICON_BG,
-            fg=CONNECTOR_PANEL_ICON_FG,
-            activebackground=CONNECTOR_PANEL_ICON_ACTIVE_BG,
-            activeforeground=CONNECTOR_PANEL_ICON_FG,
-            font=("Arial", 12, "bold"),
-            width=32,
-            height=32,
+            bg=CONNECTOR_INFO_ICON_BG,
+            fg=CONNECTOR_INFO_ICON_FG,
+            activebackground=CONNECTOR_INFO_ICON_ACTIVE_BG,
+            activeforeground=CONNECTOR_INFO_ICON_FG,
+            font=CONNECTOR_PANEL_ICON_FONT,
+            width=CONNECTOR_PANEL_ICON_SIZE,
+            height=CONNECTOR_PANEL_ICON_SIZE,
         )
-        self.info_btn.pack(side=tk.LEFT)
+        self.info_btn.pack(side=tk.RIGHT)
+        self.help_btn.pack(side=tk.RIGHT, padx=(0, 6))
         self._show_folder_path_placeholder()
 
         # Browser
@@ -5653,6 +5691,14 @@ class OMEROBrowserDialog:
             return menu
         return self.converter_menu["menu"]
 
+    def _select_converter(self, value):
+        """Set the selected converter and refresh dependent action state.
+
+        Inputs: `value`. Output: None.
+        """
+        self.converter_var.set(value)
+        self._set_load_button_for_converter()
+
     def _set_converter_options(self, options):
         """Set the converter options for `OMEROBrowserDialog`.
 
@@ -5673,7 +5719,7 @@ class OMEROBrowserDialog:
                 label=option,
                 font=CONVERTER_MENU_FONT,
                 hidemargin=True,
-                command=lambda value=option: self.converter_var.set(value),
+                command=partial(self._select_converter, option),
             )
         self.converter_var.set(options[0])
         self._show_converter_frame()
@@ -6376,10 +6422,15 @@ class OMEROBrowserDialog:
             return
         self._connect()
 
-    def _disconnect(self):
+    def _disconnect(
+        self,
+        status_text="Disconnected",
+        status_color=STATUS_NEUTRAL_BG,
+        clear_password=True,
+    ):
         """The current OMERO.web session and reset browser state.
 
-        Inputs: no caller arguments. Output: performs the documented action and returns None.
+        Inputs: optional status text/color and password-clear flag. Output: None.
         """
         self._cancel_health_ping()
         if self.client is not None:
@@ -6408,7 +6459,8 @@ class OMEROBrowserDialog:
         self.plist.delete(0, _tk_constant("END", "end"))
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
-        self.pass_entry.delete(0, _tk_constant("END", "end"))
+        if clear_password:
+            self.pass_entry.delete(0, _tk_constant("END", "end"))
         self._set_converter_options([])
         self._set_connect_button(
             "Connect",
@@ -6417,7 +6469,7 @@ class OMEROBrowserDialog:
             active_bg="#2f85c7",
         )
         self._set_autosave_settings_control_state(False)
-        self._set_status("Disconnected")
+        self._set_status(status_text, status_color)
         self._set_connection_indicator("disconnected")
 
     def _detect_converter_options_after_connection(self):
@@ -6425,6 +6477,7 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: `options`.
         """
+        self._reset_native_bridge_probe_for_converter_detection()
         self._start_native_bridge_probe()
         if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
             _xt_debug("Native bridge probe timed out during converter detection")
@@ -6655,10 +6708,20 @@ class OMEROBrowserDialog:
         Inputs: `generation`. Output: None.
         """
         error = None
-        try:
-            self.client.ping(timeout=_health_ping_timeout_seconds())
-        except Exception as exc:
-            error = exc
+        client = self.client
+        attempts = _health_ping_retry_attempts()
+        retry_delay = _health_ping_retry_delay_seconds()
+        for attempt in range(attempts):
+            if generation != self._health_ping_generation:
+                return
+            try:
+                client.ping(timeout=_health_ping_timeout_seconds())
+                error = None
+                break
+            except Exception as exc:
+                error = exc
+                if attempt + 1 < attempts and retry_delay > 0:
+                    time.sleep(retry_delay)
         self._invoke_on_ui_thread(
             lambda: self._finish_health_ping(generation, error),
             wait=False,
@@ -6679,10 +6742,27 @@ class OMEROBrowserDialog:
             if self._indicator_state != "busy":
                 self._set_connection_indicator("connected")
         else:
-            _xt_debug(f"Read-only OMERO health check failed: {error}")
-            if self._indicator_state != "busy":
-                self._set_connection_indicator("error")
+            self._handle_health_ping_failure(error)
+            return
         self._schedule_health_ping()
+
+    def _handle_health_ping_failure(self, error):
+        """Report a verified lost OMERO connection and return to connect-ready UI.
+
+        Inputs: `error`. Output: None.
+        """
+        _xt_debug(
+            f"Read-only OMERO health check failed after retries: {type(error).__name__}"
+        )
+        self._disconnect(
+            status_text="Connection lost - Ready to connect",
+            status_color="#f8d7da",
+            clear_password=False,
+        )
+        messagebox.showerror(
+            "Connection Lost",
+            "The OMERO connection was lost. Please reconnect to continue.",
+        )
 
     def _show_error(self, title, message):
         """Show the error for `OMEROBrowserDialog`.
@@ -6951,12 +7031,24 @@ class OMEROBrowserDialog:
             self._native_bridge_probe_done.clear()
             self._native_bridge_probe_started = False
             self._native_bridge_probe_in_progress = False
-            self._native_bridge_available = _looks_like_imaris_application(self.imaris)
+            self._native_bridge_available = _looks_like_imaris_application(
+                getattr(self, "imaris", None)
+            )
             self._native_bridge_python_executable = None
             self._native_bridge_probe_error = ""
             self._native_bridge_last_verified_at = (
                 time.time() if self._native_bridge_available else 0.0
             )
+
+    def _reset_native_bridge_probe_for_converter_detection(self):
+        """Reset stale native-bridge detection without interrupting an active probe.
+
+        Inputs: none. Output: None.
+        """
+        with self._native_bridge_probe_lock:
+            if getattr(self, "_native_bridge_probe_in_progress", False):
+                return
+        self._reset_native_bridge_probe()
 
     def _run_native_bridge_probe_now(self, timeout=NATIVE_BRIDGE_REVALIDATION_TIMEOUT):
         """Or restart a bounded native-bridge probe and wait for its result.

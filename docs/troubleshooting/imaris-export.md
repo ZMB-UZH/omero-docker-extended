@@ -193,7 +193,9 @@ Operational rule:
   final IMS can be opened through the current Imaris session. Older deployed
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
-  `Missing image id` response.
+  `Missing image id` response. Each new connection resets the native bridge
+  probe before converter detection so a stale failed probe cannot hide the
+  converter selector after reconnecting.
 - the local path field is the source of truth for both loading images into
   Imaris and exporting local folders to OMERO. The `Select` button opens the
   native Tk directory chooser, replaces the typed value only when the operator
@@ -202,6 +204,11 @@ Operational rule:
   absolute local paths and are write-checked when `Load images into Imaris` is
   clicked; folder export still rejects filesystem roots, malformed paths, and
   missing directories before starting uploads.
+- while connected, the XT connector runs silent periodic read-only OMERO.web
+  health checks. A transient failure is retried before the UI is changed; if
+  all retries fail, the connector reports that the connection was lost, clears
+  OMERO browser state, disables OMERO actions, and returns to the connect-ready
+  state.
 - `Autosave settings` is pre-read before the standalone XT dialog renders and
   remains disabled until the OMERO login succeeds. After a verified connection,
   the connector writes `.imaris_omero_connector/settings.env` under the
