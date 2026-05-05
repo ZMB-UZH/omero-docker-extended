@@ -6,6 +6,7 @@ import builtins
 import json
 import ntpath
 import os
+import stat
 import subprocess
 import sys
 import types
@@ -1745,6 +1746,26 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
     assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
     assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
     assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == r"C:\Exports\A folder"
+
+
+def test_connector_settings_writer_tightens_private_file_modes(tmp_path):
+    """Verify connector settings are owner-only after atomic writes.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on settings permission regressions.
+    """
+    if os.name == "nt":
+        pytest.skip("POSIX mode bits are not reliable on Windows")
+
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir(mode=0o777)
+
+    module._atomic_write_connector_settings({}, settings_path)
+
+    directory_mode = stat.S_IMODE(settings_path.parent.stat().st_mode)
+    file_mode = stat.S_IMODE(settings_path.stat().st_mode)
+    assert directory_mode == module.PRIVATE_DIRECTORY_MODE
+    assert file_mode == module.PRIVATE_FILE_MODE
 
 
 def test_connector_settings_writer_rejects_settings_symlink(tmp_path):
