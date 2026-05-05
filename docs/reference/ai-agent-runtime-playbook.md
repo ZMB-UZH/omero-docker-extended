@@ -96,8 +96,10 @@ Examples:
 - Do not use `su - <service-user>` for OMERO CLI diagnostics. The login shell
   drops the container's OMERO temp environment and can trigger plugin-loading
   errors such as `Could not find lockable tmp dir`.
-- Use the service account with explicit `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and
-  `OMERO_TEMPDIR`, matching the startup scripts' `runuser -- env ...` pattern.
+- Use the service account with explicit `HOME`, `USER`, `LOGNAME`, `LNAME`,
+  `USERNAME`, `TMPDIR`, `OMERO_TMPDIR`, `OMERO_TEMPDIR`, `OMERO_USERDIR`, and
+  `OMERO_SESSIONDIR`, matching the startup scripts' `runuser -p -m ...`
+  handoff.
 - For in-container pytest with `-W error`, unset deprecated `OMERO_TEMPDIR`
   and run from a checkout or mounted test tree that includes repo-level helpers.
 - For in-container Django view probes, set

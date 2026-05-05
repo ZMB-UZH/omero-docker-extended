@@ -457,12 +457,12 @@ RUN set -euo pipefail; \
         "            \"\$f\" \"\$@\"" \
         "        else" \
         "            # STRICT ENV: Preserve the PATH and OMERO_TMPDIR environment variables" \
-        "            runuser -p -u omero-web -- \"\$f\" \"\$@\"" \
+        "            env USER=omero-web LOGNAME=omero-web LNAME=omero-web USERNAME=omero-web HOME=/opt/omero/web runuser -p -u omero-web -- \"\$f\" \"\$@\"" \
         "        fi" \
         "    fi" \
         "done" \
         "printf 'Startup scripts complete. Launching as omero-web: %s\n' \"\$*\"" \
-        "exec runuser -p -m -u omero-web -- \"\$@\"" \
+        "exec env USER=omero-web LOGNAME=omero-web LNAME=omero-web USERNAME=omero-web HOME=/opt/omero/web runuser -p -m -u omero-web -- \"\$@\"" \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 

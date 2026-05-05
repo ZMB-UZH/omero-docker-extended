@@ -140,6 +140,13 @@ Managed-repository shared-prefix bridge:
   - derives the stable shared managed-repository path prefixes that appear
     before `%user%` and before any volatile date/time token,
   - requires `CONFIG_omero_managed_dir` to be an absolute path under `${OMERO_DIR}`,
+  - prepares `${OMERO_DIR}`, `${OMERO_DIR}/FullText`, and the configured
+    `CONFIG_omero_managed_dir` leaf so they are readable, writable, and
+    traversable by `OMERO_CLI_USER` before `omero admin start --foreground`
+    runs,
+  - repairs only those startup-critical leaf directories when a fresh host bind
+    mount created them as root; it does not recursively chown repository
+    payloads from inside the container,
   - refuses startup if an unexpected image-local `ManagedRepository` already exists
     under `/opt/omero/server`,
   - builds its normalization plan from deterministic configured seeds
@@ -516,17 +523,22 @@ When debugging permission faults, check in this order:
 2. Identify the intended runtime user for the owning service.
 3. Check whether the path is host bind-mounted or image-internal.
 4. Check whether ownership should be normalized by the installer or repaired by a startup script.
-5. For `OMERO_TMP_PATH`, inspect subtree ownership separately:
+5. For OMERO.server startup failures, inspect `${OMERO_DIR}`,
+   `${OMERO_DIR}/FullText`, and `CONFIG_omero_managed_dir` as the configured
+   `OMERO_CLI_USER`. OMERO marks the repository read-only when it cannot create
+   temp files under both `omero.data.dir` and `omero.managed.dir`; if that
+   happens, the server then refuses to create or read the full-text index.
+6. For `OMERO_TMP_PATH`, inspect subtree ownership separately:
    - root,
    - `omero-server`,
    - `omero-web`,
    - plugin temp subtrees such as `omeroweb-import`,
    - any stale `omero_<user>` lock namespaces.
-6. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
-7. For managed-repository import failures, inspect
+7. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
+8. For managed-repository import failures, inspect
    `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status` before assuming the latest
    startup actually normalized the shared prefix.
-8. Re-check logs through the Admin Tools/Loki path after repair, not only raw container logs.
+9. Re-check logs through the Admin Tools/Loki path after repair, not only raw container logs.
 
 ## 8. Related Documents
 

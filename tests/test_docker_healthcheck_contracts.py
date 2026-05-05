@@ -153,10 +153,18 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn("OMERO_TMPDIR is required", helper_text)
         self.assertIn("OMERODIR is required", helper_text)
         self.assertIn('OMERO_PASSWORD="${ROOTPASS}"', helper_text)
-        self.assertIn('OMERO_PASSWORD="${OMERO_PASSWORD}"', helper_text)
-        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env', helper_text)
-        self.assertIn('TMPDIR="${OMERO_TMPDIR}"', helper_text)
-        self.assertIn('-s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}"', helper_text)
+        self.assertIn("export OMERO_PASSWORD", helper_text)
+        self.assertIn('runuser -p -m -u "${OMERO_CLI_USER}" --', helper_text)
+        self.assertIn('export TMPDIR="${OMERO_TMPDIR}"', helper_text)
+        self.assertIn('export OMERO_USERDIR="${OMERO_TMPDIR}/userdir"', helper_text)
+        self.assertIn(
+            'export OMERO_SESSIONDIR="${OMERO_USERDIR}/sessions"', helper_text
+        )
+        self.assertIn('export USER="${OMERO_CLI_USER}"', helper_text)
+        self.assertIn('export LOGNAME="${OMERO_CLI_USER}"', helper_text)
+        self.assertIn('-C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}"', helper_text)
+        self.assertNotIn('runuser -u "${OMERO_CLI_USER}" -- env', helper_text)
+        self.assertNotIn('OMERO_PASSWORD="${OMERO_PASSWORD}"', helper_text)
         self.assertNotIn("-p 4064", helper_text)
         self.assertNotIn("HOME=/tmp", self.compose_text)
         self.assertNotIn("HOME=/tmp", helper_text)
@@ -205,6 +213,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertEqual("USER omero-server", self._last_user(dockerfile_text))
         self.assertIn("skipping root startup bootstrap", dockerfile_text)
         self.assertIn("runuser -p -m -u omero-server", dockerfile_text)
+        self.assertIn("USER=omero-server LOGNAME=omero-server", dockerfile_text)
         self.assertIn("admin start --foreground", dockerfile_text)
         self.assertIn('exec "${omero_bin}" admin diagnostics', dockerfile_text)
 
@@ -217,6 +226,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertEqual("USER omero-web", self._last_user(dockerfile_text))
         self.assertIn("skipping root startup bootstrap", dockerfile_text)
         self.assertIn("runuser -p -m -u omero-web", dockerfile_text)
+        self.assertIn("USER=omero-web LOGNAME=omero-web", dockerfile_text)
         self.assertIn('exec \\"\\$@\\"', dockerfile_text)
 
     def test_root_required_helper_services_are_explicit_compose_handoffs(

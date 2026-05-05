@@ -335,8 +335,12 @@ accessible for server namespace creation.
 startup jobs, installation group bootstrap, and the `omeroserver` healthcheck.
 For manual in-container OMERO CLI diagnostics, do not use `su - omero-server`.
 That login shell resets the OMERO temp environment before plugin discovery.
-Use the same service-account handoff pattern as startup: `runuser -- env` with
-explicit `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and `OMERO_TEMPDIR`.
+Use the same service-account handoff pattern as startup: export the configured
+service account identity (`USER`, `LOGNAME`, `LNAME`, `USERNAME`), `HOME`,
+`TMPDIR`, `OMERO_TMPDIR`, `OMERO_TEMPDIR`, `OMERO_USERDIR`, and
+`OMERO_SESSIONDIR`, then call `runuser -p -m -u "${OMERO_CLI_USER}" -- ...`.
+Pass OMERO passwords through environment variables such as `OMERO_PASSWORD`,
+not CLI password arguments.
 
 The bootstrap script also derives the OMERO internal lock-file temp path from the
 OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and
@@ -357,6 +361,13 @@ The tracked runtime contract is `/OMERO/ManagedRepository`, not the relative
 string `ManagedRepository`. Relative values are unsafe because OMERO can resolve
 them against the server install tree and create an image-local second
 repository.
+
+The `omeroserver` container derives `omero.data.dir` from `OMERO_DIR` and
+`omero.managed.dir` from `CONFIG_omero_managed_dir`. During bootstrap it prepares
+`${OMERO_DIR}`, `${OMERO_DIR}/FullText`, and the configured managed-repository
+leaf for the configured `OMERO_CLI_USER`. That repair is leaf-only and exists to
+make fresh bind mounts and upgrades converge without recursively changing
+repository payload ownership.
 
 OMERO expands supported terms automatically when written with surrounding `%`
 characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).

@@ -113,7 +113,9 @@ work if the managed-repository contract drifts.
 - requires `CONFIG_omero_managed_dir` to be absolute,
 - requires it to remain under `${OMERO_DIR}`,
 - rejects `${OMERO_DIR}` itself as the managed repository root,
-- creates the expected root when missing,
+- prepares `${OMERO_DIR}`, `${OMERO_DIR}/FullText`, and the expected managed
+  repository root for the configured OMERO service user without recursively
+  changing repository payload ownership,
 - refuses startup if any image-local `ManagedRepository` exists under
   `/opt/omero/server`,
 - verifies at runtime that persisted `omero.managed.dir` still matches the

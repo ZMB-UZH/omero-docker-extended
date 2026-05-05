@@ -283,17 +283,69 @@ find_unexpected_server_managed_repository_dirs() {
     done < <(find "${server_root}" -type d \( -name "${expected_basename}" -o -name 'ManagedRepository' \) -print 2>/dev/null | sort -u)
 }
 
+# Ensure service user directory. Inputs: shell arguments and environment. Output: command status and side effects.
+ensure_service_user_directory() {
+    local path="${1:?BUG: ensure_service_user_directory requires a path}"
+    local label="${2:?BUG: ensure_service_user_directory requires a label}"
+    local owner_uid=""
+    local owner_gid=""
+
+    # Test path access as the long-running OMERO service user. Inputs: shell arguments and environment. Output: command status.
+    service_user_has_access() {
+        local test_flag="${1:?BUG: service_user_has_access requires a test flag}"
+        if [[ "$(id -u)" -eq 0 ]]; then
+            runuser -u "${OMERO_CLI_USER}" -- test "${test_flag}" "${path}"
+            return $?
+        fi
+        test "${test_flag}" "${path}"
+    }
+
+    if [[ "${path}" != /* ]]; then
+        echo "ERROR: ${label} must be an absolute path, got: ${path}" >&2
+        exit 1
+    fi
+
+    if [[ -e "${path}" && ! -d "${path}" ]]; then
+        echo "ERROR: ${label} exists but is not a directory: ${path}" >&2
+        exit 1
+    fi
+
+    mkdir -p "${path}" || {
+        echo "ERROR: Failed to create ${label}: ${path}" >&2
+        exit 1
+    }
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        owner_uid="$(id -u "${OMERO_CLI_USER}")"
+        owner_gid="$(id -g "${OMERO_CLI_USER}")"
+        if ! service_user_has_access -r \
+            || ! service_user_has_access -w \
+            || ! service_user_has_access -x; then
+            chown "${owner_uid}:${owner_gid}" "${path}" || {
+                echo "ERROR: Failed to assign ${label} to ${OMERO_CLI_USER}: ${path}" >&2
+                exit 1
+            }
+            chmod u+rwx "${path}" 2>/dev/null || true
+        fi
+    fi
+
+    if ! service_user_has_access -r \
+        || ! service_user_has_access -w \
+        || ! service_user_has_access -x; then
+        echo "ERROR: ${label} is not readable, writable, and traversable by ${OMERO_CLI_USER}: ${path}" >&2
+        ls -ld "${path}" >&2 || true
+        exit 1
+    fi
+
+    log "${label} service-user writable: ${path}"
+}
+
 # Validate managed repository configuration. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_managed_repository_configuration() {
     local expected_root=""
     local -a unexpected_roots=()
 
     expected_root="$(expected_managed_repository_root)" || exit 1
-
-    mkdir -p "${expected_root}" || {
-        echo "ERROR: Failed to create managed repository root: ${expected_root}" >&2
-        exit 1
-    }
 
     mapfile -t unexpected_roots < <(find_unexpected_server_managed_repository_dirs)
     if [[ "${#unexpected_roots[@]}" -gt 0 ]]; then
@@ -304,6 +356,24 @@ validate_managed_repository_configuration() {
         } >&2
         exit 1
     fi
+}
+
+# Ensure server data runtime directories. Inputs: shell arguments and environment. Output: command status and side effects.
+ensure_server_data_runtime_directories() {
+    local data_root=""
+
+    data_root="$(normalize_dir_path "${OMERO_DIR}")" || {
+        echo "ERROR: OMERO_DIR must be a non-empty absolute path, got: '${OMERO_DIR}'" >&2
+        exit 1
+    }
+    if [[ "${data_root}" != /* ]]; then
+        echo "ERROR: OMERO_DIR must be an absolute path, got: '${OMERO_DIR}'" >&2
+        exit 1
+    fi
+
+    ensure_service_user_directory "${data_root}" "OMERO data"
+    ensure_service_user_directory "${data_root}/FullText" "OMERO full text index"
+    ensure_service_user_directory "$(expected_managed_repository_root)" "OMERO managed repository"
 }
 
 # Verify managed repository runtime safety. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -343,13 +413,8 @@ verify_managed_repository_runtime_safety() {
     return 0
 }
 
-# Execute OMERO. Inputs: shell arguments and environment. Output: command status and side effects.
-run_omero() {
-    if [[ "$(id -u)" -ne 0 ]]; then
-        "${OMERO_BIN}" "$@"
-        return
-    fi
-
+# Execute a command as the OMERO CLI user. Inputs: shell arguments and environment. Output: command status and side effects.
+run_as_omero_cli_user() {
     if ! id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
         echo "FATAL: user '${OMERO_CLI_USER}' not found; cannot run OMERO CLI safely." >&2
         exit 1
@@ -361,23 +426,81 @@ run_omero() {
     local cli_tmpdir=""
     cli_tmpdir="$(resolve_omero_cli_tmpdir)" || exit 1
 
-    local -a env_args=(
-        HOME="${cli_home}"
-        TMPDIR="${cli_tmpdir}"
-        OMERO_TMPDIR="${cli_tmpdir}"
-        OMERO_TEMPDIR="${cli_tmpdir}"
-    )
+    local had_home=0
+    local had_tmpdir=0
+    local had_omero_tmpdir=0
+    local had_omero_tempdir=0
+    local had_omero_userdir=0
+    local had_omero_sessiondir=0
+    local had_user=0
+    local had_logname=0
+    local had_lname=0
+    local had_username=0
+    local old_home=""
+    local old_tmpdir=""
+    local old_omero_tmpdir=""
+    local old_omero_tempdir=""
+    local old_omero_userdir=""
+    local old_omero_sessiondir=""
+    local old_user=""
+    local old_logname=""
+    local old_lname=""
+    local old_username=""
+    local rc=0
 
-    if [[ -n "${ICE_CONFIG:-}" ]]; then
-        env_args+=(
-            ICE_CONFIG="${ICE_CONFIG}"
-        )
+    if [[ -n "${HOME+x}" ]]; then had_home=1; old_home="${HOME}"; fi
+    if [[ -n "${TMPDIR+x}" ]]; then had_tmpdir=1; old_tmpdir="${TMPDIR}"; fi
+    if [[ -n "${OMERO_TMPDIR+x}" ]]; then had_omero_tmpdir=1; old_omero_tmpdir="${OMERO_TMPDIR}"; fi
+    if [[ -n "${OMERO_TEMPDIR+x}" ]]; then had_omero_tempdir=1; old_omero_tempdir="${OMERO_TEMPDIR}"; fi
+    if [[ -n "${OMERO_USERDIR+x}" ]]; then had_omero_userdir=1; old_omero_userdir="${OMERO_USERDIR}"; fi
+    if [[ -n "${OMERO_SESSIONDIR+x}" ]]; then had_omero_sessiondir=1; old_omero_sessiondir="${OMERO_SESSIONDIR}"; fi
+    if [[ -n "${USER+x}" ]]; then had_user=1; old_user="${USER}"; fi
+    if [[ -n "${LOGNAME+x}" ]]; then had_logname=1; old_logname="${LOGNAME}"; fi
+    if [[ -n "${LNAME+x}" ]]; then had_lname=1; old_lname="${LNAME}"; fi
+    if [[ -n "${USERNAME+x}" ]]; then had_username=1; old_username="${USERNAME}"; fi
+
+    export HOME="${cli_home}"
+    export TMPDIR="${cli_tmpdir}"
+    export OMERO_TMPDIR="${cli_tmpdir}"
+    export OMERO_TEMPDIR="${cli_tmpdir}"
+    export OMERO_USERDIR="${cli_tmpdir}/userdir"
+    export OMERO_SESSIONDIR="${OMERO_USERDIR}/sessions"
+    export USER="${OMERO_CLI_USER}"
+    export LOGNAME="${OMERO_CLI_USER}"
+    export LNAME="${OMERO_CLI_USER}"
+    export USERNAME="${OMERO_CLI_USER}"
+
+    # Preserve sensitive values through the process environment instead of
+    # argv. The command line remains inspectable during long startup waits.
+    if [[ -n "${OMERO_PASSWORD+x}" ]]; then export OMERO_PASSWORD; fi
+    if [[ -n "${ROOTPASS+x}" ]]; then export ROOTPASS; fi
+    if [[ -n "${OMERO_JOB_SERVICE_PASS+x}" ]]; then export OMERO_JOB_SERVICE_PASS; fi
+    if [[ -n "${OMERO_BIN+x}" ]]; then export OMERO_BIN; fi
+    if [[ -n "${ICE_CONFIG+x}" ]]; then export ICE_CONFIG; fi
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        runuser -p -m -u "${OMERO_CLI_USER}" -- "$@" || rc=$?
+    else
+        "$@" || rc=$?
     fi
 
-    # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
-    runuser -u "${OMERO_CLI_USER}" -- env \
-        "${env_args[@]}" \
-        "${OMERO_BIN}" "$@"
+    if [[ "${had_home}" -eq 1 ]]; then export HOME="${old_home}"; else unset HOME || true; fi
+    if [[ "${had_tmpdir}" -eq 1 ]]; then export TMPDIR="${old_tmpdir}"; else unset TMPDIR || true; fi
+    if [[ "${had_omero_tmpdir}" -eq 1 ]]; then export OMERO_TMPDIR="${old_omero_tmpdir}"; else unset OMERO_TMPDIR || true; fi
+    if [[ "${had_omero_tempdir}" -eq 1 ]]; then export OMERO_TEMPDIR="${old_omero_tempdir}"; else unset OMERO_TEMPDIR || true; fi
+    if [[ "${had_omero_userdir}" -eq 1 ]]; then export OMERO_USERDIR="${old_omero_userdir}"; else unset OMERO_USERDIR || true; fi
+    if [[ "${had_omero_sessiondir}" -eq 1 ]]; then export OMERO_SESSIONDIR="${old_omero_sessiondir}"; else unset OMERO_SESSIONDIR || true; fi
+    if [[ "${had_user}" -eq 1 ]]; then export USER="${old_user}"; else unset USER || true; fi
+    if [[ "${had_logname}" -eq 1 ]]; then export LOGNAME="${old_logname}"; else unset LOGNAME || true; fi
+    if [[ "${had_lname}" -eq 1 ]]; then export LNAME="${old_lname}"; else unset LNAME || true; fi
+    if [[ "${had_username}" -eq 1 ]]; then export USERNAME="${old_username}"; else unset USERNAME || true; fi
+
+    return "${rc}"
+}
+
+# Execute OMERO. Inputs: shell arguments and environment. Output: command status and side effects.
+run_omero() {
+    run_as_omero_cli_user "${OMERO_BIN}" "$@"
 }
 
 # Write cli keepalive config. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -1199,10 +1322,6 @@ check_writable_dir() {
         return
     fi
 
-    if chown -R "$(id -u):$(id -g)" "${path}" 2>/dev/null; then
-        chmod -R u+rwX "${path}" 2>/dev/null || true
-    fi
-
     if ! touch "${path}/.permission_test" 2>/dev/null; then
         echo "ERROR: ${label} is not writable: ${path}" >&2
         exit 1
@@ -1327,8 +1446,8 @@ schedule_job_service_bootstrap() {
             local deadline=$(( $(date +%s) + wait_seconds ))
 
             while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-                if run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
-                    && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                if OMERO_PASSWORD="${root_pass}" run_omero -C -s "${host}" -p "${port}" login -u root >/dev/null 2>&1 \
+                    && OMERO_PASSWORD="${root_pass}" run_omero user list -s "${host}" -p "${port}" -u root >/dev/null 2>&1; then
                     return 0
                 fi
                 sleep "${poll_interval}"
@@ -1353,13 +1472,6 @@ schedule_job_service_bootstrap() {
             cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
 
             helper_cmd=(
-                env
-                HOME="${cli_home}"
-                TMPDIR="${cli_tmpdir}"
-                OMERO_TMPDIR="${cli_tmpdir}"
-                OMERO_TEMPDIR="${cli_tmpdir}"
-                ROOTPASS="${root_pass}"
-                OMERO_JOB_SERVICE_PASS="${job_pass}"
                 "${venv_py}"
                 "${JOB_SERVICE_GROUP_SYNC_HELPER}"
                 --host "${host}"
@@ -1371,9 +1483,27 @@ schedule_job_service_bootstrap() {
             )
 
             if [[ "$(id -u)" -eq 0 ]]; then
-                runuser -u "${OMERO_CLI_USER}" -- "${helper_cmd[@]}"
+                HOME="${cli_home}" \
+                    TMPDIR="${cli_tmpdir}" \
+                    OMERO_TMPDIR="${cli_tmpdir}" \
+                    OMERO_TEMPDIR="${cli_tmpdir}" \
+                    OMERO_USERDIR="${cli_tmpdir}/userdir" \
+                    OMERO_SESSIONDIR="${cli_tmpdir}/userdir/sessions" \
+                    USER="${OMERO_CLI_USER}" \
+                    LOGNAME="${OMERO_CLI_USER}" \
+                    LNAME="${OMERO_CLI_USER}" \
+                    USERNAME="${OMERO_CLI_USER}" \
+                    ROOTPASS="${root_pass}" \
+                    OMERO_JOB_SERVICE_PASS="${job_pass}" \
+                    runuser -p -m -u "${OMERO_CLI_USER}" -- "${helper_cmd[@]}"
             else
-                "${helper_cmd[@]}"
+                HOME="${cli_home}" \
+                    TMPDIR="${cli_tmpdir}" \
+                    OMERO_TMPDIR="${cli_tmpdir}" \
+                    OMERO_TEMPDIR="${cli_tmpdir}" \
+                    ROOTPASS="${root_pass}" \
+                    OMERO_JOB_SERVICE_PASS="${job_pass}" \
+                    "${helper_cmd[@]}"
             fi
         }
 
@@ -1463,7 +1593,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if OMERO_PASSWORD="${root_pass}" run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>&1; then
                 login_ok=1
                 break
             fi
@@ -1477,7 +1607,7 @@ schedule_ldap_group_bootstrap() {
 
         for attempt in $(seq 1 "${retry_limit}"); do
             set +e
-            add_output="$(run_omero group add "${ldap_group_setting}" --type=private -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" 2>&1)"
+            add_output="$(OMERO_PASSWORD="${root_pass}" run_omero group add "${ldap_group_setting}" --type=private -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root 2>&1)"
             add_exit_code=$?
             set -e
 
@@ -1533,12 +1663,7 @@ run_repo_root_sync_helper() {
 
     cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
 
-    runuser -u "${OMERO_CLI_USER}" -- env \
-        HOME="${cli_home}" \
-        TMPDIR="${cli_tmpdir}" \
-        OMERO_TMPDIR="${cli_tmpdir}" \
-        OMERO_TEMPDIR="${cli_tmpdir}" \
-        "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" "$@"
+    run_as_omero_cli_user "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" "$@"
 }
 
 # Build repo root sync plan. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -1562,8 +1687,8 @@ lookup_repo_root_prefix() {
     local repo_dir_path="${4:?BUG: lookup_repo_root_prefix requires a repo path}"
     local managed_repo_root="${5:?BUG: lookup_repo_root_prefix requires a managed root}"
 
-    run_repo_root_sync_helper "${python_bin}" "${cli_home}" lookup \
-        --root-pass "${root_pass}" \
+    ROOTPASS="${root_pass}" run_repo_root_sync_helper "${python_bin}" "${cli_home}" lookup \
+        --root-password-env ROOTPASS \
         --host "${OMERO_CLI_HOST}" \
         --port "${OMERO_CLI_PORT}" \
         --repo-dir-path "${repo_dir_path}" \
@@ -1630,7 +1755,7 @@ run_repo_root_bootstrap_once() {
     local last_success_epoch=0
 
     for attempt in $(seq 1 "${retry_limit}"); do
-        if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
+        if OMERO_PASSWORD="${root_pass}" run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>&1; then
             login_ok=1
             break
         fi
@@ -1883,14 +2008,8 @@ wait_for_dropbox_user_dir_sync_api() {
     cli_tmpdir="$(resolve_omero_cli_tmpdir)" || return 1
     while [[ "$(date +%s)" -lt "${deadline}" ]]; do
         if dropbox_ice_admin_ready \
-            && runuser -u "${OMERO_CLI_USER}" -- env \
-                HOME="${cli_home}" \
-                TMPDIR="${cli_tmpdir}" \
-                OMERO_TMPDIR="${cli_tmpdir}" \
-                OMERO_TEMPDIR="${cli_tmpdir}" \
-                OMERO_PASSWORD="${dropbox_bind_value}" \
-                "${OMERO_BIN}" login -q -C -t 60 \
-                    -s "${host}" -p "${port}" -u "${username}" >/dev/null 2>&1; then
+            && OMERO_PASSWORD="${dropbox_bind_value}" run_omero login -q -C -t 60 \
+                -s "${host}" -p "${port}" -u "${username}" >/dev/null 2>&1; then
             return 0
         fi
         sleep "${poll_interval}"
@@ -2252,7 +2371,7 @@ schedule_binary_repository_cleanse() {
         local deadline=$(( $(date +%s) + startup_wait ))
         local login_ok=0
         while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-            if run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if OMERO_PASSWORD="${root_pass}" run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>&1; then
                 login_ok=1
                 break
             fi
@@ -2273,9 +2392,9 @@ schedule_binary_repository_cleanse() {
         local rc=0
         start_epoch="$(date +%s)"
 
-        run_omero_with_keepalive \
+        OMERO_PASSWORD="${root_pass}" run_omero_with_keepalive \
             "${keepalive_seconds}" \
-            admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" "${data_dir}" || rc=$?
+            admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root "${data_dir}" || rc=$?
 
         local elapsed=$(( $(date +%s) - start_epoch ))
         if [[ "${rc}" -eq 0 ]]; then
@@ -2385,7 +2504,7 @@ schedule_script_registration() {
 
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root -w "${root_pass}" >/dev/null 2>&1; do
+        until OMERO_PASSWORD="${root_pass}" run_omero -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>&1; do
             sleep 2
         done
 
@@ -2393,6 +2512,7 @@ schedule_script_registration() {
         local script_sync_py="${SERVER_VAR_DIR}/sync_official_scripts.py"
         cat << 'EOF' > "${script_sync_py}"
 import os
+import subprocess
 import sys
 from omero.gateway import BlitzGateway
 
@@ -2453,33 +2573,53 @@ def sync_scripts(conn, script_dir):
 
                 # Upload the correct version
                 print(f"[{file}] uploading as official script: {desired_path}")
-                cmd = (
-                    f"omero script upload --official --sudo root "
-                    f"'{filepath}' "
-                    f"-s '{os.environ['OMERO_CLI_HOST']}' -p '{os.environ['OMERO_CLI_PORT']}' "
-                    f"-u root -w '{sys.argv[1]}'"
-                )
-                rc = os.system(cmd)
+                env = {**os.environ, "OMERO_PASSWORD": root_pass}
+                cmd = [
+                    os.environ.get("OMERO_BIN", "omero"),
+                    "script",
+                    "upload",
+                    "--official",
+                    "--sudo",
+                    "root",
+                    filepath,
+                    "-s",
+                    os.environ["OMERO_CLI_HOST"],
+                    "-p",
+                    os.environ["OMERO_CLI_PORT"],
+                    "-u",
+                    "root",
+                ]
+                rc = subprocess.run(cmd, env=env, check=False).returncode
                 if rc != 0:
                     print(f"  WARN: upload returned exit code {rc}")
             elif len(existing) == 0:
                 print(f"[{file}] not registered; uploading as official script: {desired_path}")
-                cmd = (
-                    f"omero script upload --official --sudo root "
-                    f"'{filepath}' "
-                    f"-s '{os.environ['OMERO_CLI_HOST']}' -p '{os.environ['OMERO_CLI_PORT']}' "
-                    f"-u root -w '{sys.argv[1]}'"
-                )
-                rc = os.system(cmd)
+                env = {**os.environ, "OMERO_PASSWORD": root_pass}
+                cmd = [
+                    os.environ.get("OMERO_BIN", "omero"),
+                    "script",
+                    "upload",
+                    "--official",
+                    "--sudo",
+                    "root",
+                    filepath,
+                    "-s",
+                    os.environ["OMERO_CLI_HOST"],
+                    "-p",
+                    os.environ["OMERO_CLI_PORT"],
+                    "-u",
+                    "root",
+                ]
+                rc = subprocess.run(cmd, env=env, check=False).returncode
                 if rc != 0:
                     print(f"  WARN: upload returned exit code {rc}")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         sys.exit(1)
 
-    root_pass = sys.argv[1]
-    script_dir = sys.argv[2]
+    root_pass = os.environ["ROOTPASS"]
+    script_dir = sys.argv[1]
     omero_host = os.environ["OMERO_CLI_HOST"]
     omero_port = int(os.environ["OMERO_CLI_PORT"])
 
@@ -2502,12 +2642,8 @@ EOF
         cli_tmpdir="$(resolve_omero_cli_tmpdir)" || exit 1
 
         # Run the idempotent sync script (output goes to the log file via the subshell redirect)
-        runuser -u "${OMERO_CLI_USER}" -- env \
-            HOME="${cli_home}" \
-            TMPDIR="${cli_tmpdir}" \
-            OMERO_TMPDIR="${cli_tmpdir}" \
-            OMERO_TEMPDIR="${cli_tmpdir}" \
-            "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
+        ROOTPASS="${root_pass}" OMERO_BIN="${OMERO_BIN}" \
+            run_as_omero_cli_user "${venv_py}" "${script_sync_py}" "${scripts_dir}" 2>&1 || true
 
         rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
@@ -2662,7 +2798,6 @@ main() {
     fi
     trap 'release_lockdir "${main_lockdir}" ""' EXIT
 
-    check_writable_dir "${OMERO_DIR}" "OMERO data"
     check_writable_dir "${CERTS_DIR}" "OMERO certificates"
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
@@ -2677,7 +2812,7 @@ main() {
     log "Reset OMERO config to defaults (clean slate)"
 
     validate_managed_repository_configuration
-    check_writable_dir "$(expected_managed_repository_root)" "OMERO managed repository"
+    ensure_server_data_runtime_directories
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
     validate_job_service_bootstrap_configuration

@@ -23,8 +23,10 @@ Use this skill for live runtime debugging, service-health checks, and container-
 - Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`.
 - Do not use `su - <service-user>` for OMERO CLI checks. It drops the OMERO
   temp environment and can cause plugin-loading errors before the command runs.
-- Pass `HOME`, `TMPDIR`, `OMERO_TMPDIR`, and `OMERO_TEMPDIR` explicitly when
-  switching to the service account, matching `startup/10-server-bootstrap.sh`.
+- Pass `HOME`, `USER`, `LOGNAME`, `LNAME`, `USERNAME`, `TMPDIR`,
+  `OMERO_TMPDIR`, `OMERO_TEMPDIR`, `OMERO_USERDIR`, and `OMERO_SESSIONDIR`
+  explicitly when switching to the service account, matching
+  `startup/10-server-bootstrap.sh`.
 - For in-container pytest with `-W error`, unset deprecated `OMERO_TEMPDIR`
   and run from a checkout or mounted test tree that includes repo-level helpers.
 - For in-container Django view probes, set
@@ -60,7 +62,11 @@ SH
 ```
 
 ```bash
-docker exec <container> runuser -u <service-user> -- env HOME=<home> TMPDIR=<tmp> OMERO_TMPDIR=<tmp> OMERO_TEMPDIR=<tmp> <command>
+docker exec <container> env HOME=<home> USER=<service-user> \
+  LOGNAME=<service-user> LNAME=<service-user> USERNAME=<service-user> \
+  TMPDIR=<tmp> OMERO_TMPDIR=<tmp> OMERO_TEMPDIR=<tmp> \
+  OMERO_USERDIR=<tmp>/userdir OMERO_SESSIONDIR=<tmp>/userdir/sessions \
+  runuser -p -m -u <service-user> -- <command>
 ```
 
 ## Verification targets

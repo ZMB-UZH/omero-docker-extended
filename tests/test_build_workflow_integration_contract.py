@@ -174,7 +174,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"', script_text
         )
         self.assertIn('OMERO_CLI_HOME="$(resolve_cli_home)"', script_text)
-        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env', script_text)
+        self.assertIn('runuser -p -m -u "${OMERO_CLI_USER}" --', script_text)
+        self.assertIn('OMERO_USERDIR="${OMERO_TMPDIR_VALUE}/userdir"', script_text)
+        self.assertIn(
+            'OMERO_SESSIONDIR="${OMERO_TMPDIR_VALUE}/userdir/sessions"', script_text
+        )
+        self.assertIn('USER="${OMERO_CLI_USER}"', script_text)
+        self.assertIn('LOGNAME="${OMERO_CLI_USER}"', script_text)
         self.assertIn('OMERO_PASSWORD="${ROOTPASS}"', script_text)
         self.assertNotIn('OMERO_TMPDIR_VALUE="/tmp"', script_text)
         self.assertNotIn('HOME="/tmp"', script_text)
@@ -429,8 +435,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "wait_for_dropbox_user_dir_sync_api \\",
             script_text,
         )
-        self.assertIn('OMERO_PASSWORD="${dropbox_bind_value}"', script_text)
-        self.assertIn('"${OMERO_BIN}" login -q -C -t 60', script_text)
+        self.assertIn(
+            'OMERO_PASSWORD="${dropbox_bind_value}" run_omero login -q -C -t 60',
+            script_text,
+        )
         self.assertIn("schedule_dropbox_user_dir_sync", script_text)
         self.assertNotIn("${!password_env-}", script_text)
         self.assertNotIn("OMERO_DROPBOX_USER_DIR_SYNC_ENABLED:-0", script_text)
@@ -644,11 +652,68 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START", script_text)
         self.assertIn("run_omero_with_keepalive", script_text)
         self.assertIn(
-            'admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root -w "${root_pass}" "${data_dir}"',
+            'OMERO_PASSWORD="${root_pass}" run_omero_with_keepalive',
+            script_text,
+        )
+        self.assertIn(
+            'admin cleanse -q -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" -u root "${data_dir}"',
             script_text,
         )
         self.assertIn("proc_start_ticks", script_text)
         self.assertIn("Removed stale repository lock file", script_text)
+
+    def test_startup_and_installation_do_not_put_root_passwords_in_argv(
+        self,
+    ) -> None:
+        """Verify startup and installation keep root passwords out of argv.
+
+        Inputs: repository fixtures. Output: fails on regressions that expose root passwords in process arguments.
+        """
+        startup_text = (
+            self.repo_root / "startup" / "10-server-bootstrap.sh"
+        ).read_text(encoding="utf-8")
+        installation_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        repo_helper_text = (
+            self.repo_root / "startup" / "repo_root_sync_helper.py"
+        ).read_text(encoding="utf-8")
+
+        forbidden_startup_snippets = (
+            '-w "${root_pass}"',
+            "root_pass = sys.argv[1]",
+            "os.system(cmd)",
+            '--root-pass "${root_pass}"',
+        )
+        for snippet in forbidden_startup_snippets:
+            self.assertNotIn(snippet, startup_text)
+
+        self.assertIn('OMERO_PASSWORD="${root_pass}" run_omero', startup_text)
+        self.assertIn('runuser -p -m -u "${OMERO_CLI_USER}" -- "$@"', startup_text)
+        self.assertIn('export OMERO_USERDIR="${cli_tmpdir}/userdir"', startup_text)
+        self.assertIn(
+            'export OMERO_SESSIONDIR="${OMERO_USERDIR}/sessions"', startup_text
+        )
+        self.assertIn('export USER="${OMERO_CLI_USER}"', startup_text)
+        self.assertIn('export LOGNAME="${OMERO_CLI_USER}"', startup_text)
+        self.assertIn("--root-password-env ROOTPASS", startup_text)
+        self.assertIn('"OMERO_PASSWORD": root_pass', startup_text)
+        self.assertNotIn('runuser -u "${OMERO_CLI_USER}" -- env', startup_text)
+        self.assertNotIn('-e ROOTPASS="${ROOTPASS}"', installation_text)
+        self.assertNotIn('-e OMERO_JOB_SERVICE_PASS="${job_pass}"', installation_text)
+        self.assertIn(
+            'ROOTPASS="${ROOTPASS}" compose_with_installation_env', installation_text
+        )
+        self.assertIn("-e ROOTPASS \\", installation_text)
+        self.assertIn(
+            'OMERO_JOB_SERVICE_PASS="${job_pass}" compose_with_installation_env',
+            installation_text,
+        )
+        self.assertIn('runuser -p -m -u "${OMERO_CLI_USER}" --', installation_text)
+        self.assertIn("--root-password-env", repo_helper_text)
+        self.assertNotIn('add_argument("--root-pass"', repo_helper_text)
+        self.assertNotIn("args.root_pass or", repo_helper_text)
+        self.assertNotIn("args.root_pass,", repo_helper_text)
 
     def test_installation_script_preserves_server_temp_namespace_ownership(
         self,

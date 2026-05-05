@@ -87,20 +87,26 @@ def _new_job_experimenter(job_user: str):
     return experimenter
 
 
-def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
+def lookup_job_experimenter(query, job_user: str):
+    """Return the job experimenter, or None when it does not exist.
+
+    Inputs: `query`, `job_user` (str). Output: experimenter or None.
+    """
+    return query.findByString("Experimenter", "omeName", job_user)
+
+
+def ensure_job_user(admin, query, job_user: str, job_pass: str, retries: int):
     """Ensure the job user.
 
-    Inputs: `admin`, `job_user` (str), `job_pass` (str), `retries` (int). Output:
-    `lookupExperimenter` result. Raises: RuntimeError for the exercised failure path.
+    Inputs: `admin`, `query`, `job_user` (str), `job_pass` (str), `retries` (int).
+    Output: experimenter result. Raises: RuntimeError for the exercised failure path.
     """
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
-            return admin.lookupExperimenter(job_user)
-        except omero.ApiUsageException:
-            pass
-
-        try:
+            existing = lookup_job_experimenter(query, job_user)
+            if existing is not None:
+                return existing
             default_group = admin.lookupGroup("user")
             admin.createExperimenterWithPassword(
                 _new_job_experimenter(job_user),
@@ -108,14 +114,25 @@ def ensure_job_user(admin, job_user: str, job_pass: str, retries: int):
                 default_group,
                 [],
             )
-            return admin.lookupExperimenter(job_user)
-        except omero.ValidationException:
-            return admin.lookupExperimenter(job_user)
+            created = lookup_job_experimenter(query, job_user)
+            if created is not None:
+                return created
+            last_error = RuntimeError(
+                f"created {job_user!r} but could not read it back"
+            )
+        except omero.ValidationException as exc:
+            last_error = exc
+            try:
+                existing = lookup_job_experimenter(query, job_user)
+                if existing is not None:
+                    return existing
+            except Exception as lookup_exc:
+                last_error = lookup_exc
         except Exception as exc:
             last_error = exc
-            if attempt >= retries:
-                break
-            time.sleep(min(2 * attempt, 10))
+        if attempt >= retries:
+            break
+        time.sleep(min(2 * attempt, 10))
 
     raise RuntimeError(f"failed to ensure OMERO user {job_user!r}") from last_error
 
@@ -144,7 +161,14 @@ def sync_memberships(args: argparse.Namespace) -> int:
 
     try:
         admin = conn.getAdminService()
-        job_exp = ensure_job_user(admin, args.job_user, job_pass, args.user_retries)
+        query = conn.getQueryService()
+        job_exp = ensure_job_user(
+            admin,
+            query,
+            args.job_user,
+            job_pass,
+            args.user_retries,
+        )
         current_group_ids = {
             int(str(group_id)) for group_id in admin.getMemberOfGroupIds(job_exp)
         }

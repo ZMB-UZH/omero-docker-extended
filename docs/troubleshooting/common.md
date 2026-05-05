@@ -17,6 +17,39 @@ Focus on:
 - missing environment variables,
 - startup script failures.
 
+### OMERO.server logs mention `FullText` or a read-only repository
+
+Symptoms:
+
+- `required directory /OMERO/FullText cannot be read`
+- `repository is read-only`
+- processor or tables services fail to start after an otherwise clean install
+
+Cause:
+
+- OMERO marks the binary repository read-only when the service account cannot
+  create temporary files under both `omero.data.dir` and `omero.managed.dir`.
+  On a fresh bind mount or a host ownership drift, that can happen before
+  OMERO creates `${OMERO_DIR}/FullText`.
+
+Checks:
+
+```bash
+docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env exec omeroserver sh -lc '
+id "$OMERO_CLI_USER"
+test -r "$OMERO_DIR" && test -w "$OMERO_DIR" && test -x "$OMERO_DIR"
+test -r "$OMERO_DIR/FullText" && test -w "$OMERO_DIR/FullText" && test -x "$OMERO_DIR/FullText"
+test -r "$CONFIG_omero_managed_dir" && test -w "$CONFIG_omero_managed_dir" && test -x "$CONFIG_omero_managed_dir"
+'
+```
+
+Fix:
+
+- Recreate the `omeroserver` container from current code. Bootstrap prepares
+  `${OMERO_DIR}`, `${OMERO_DIR}/FullText`, and `CONFIG_omero_managed_dir` as
+  leaf directories for `OMERO_CLI_USER` without recursively changing managed
+  repository payload ownership.
+
 ## 2. OMERO.web plugin routes unavailable
 
 Checks:
@@ -581,8 +614,10 @@ for root in $candidate_roots "$OMERO_WEB_ROOT"/venv*; do
   done
 done
 [ -n "$python_bin" ] || { echo "OMERO.web Python not found" >&2; exit 1; }
-runuser -u "$runtime_user" -- env HOME="$runtime_home" OMERO_TMPDIR="$OMERO_TMPDIR" TMPDIR="$TMPDIR" "$python_bin" \
-  -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+env HOME="$runtime_home" USER="$runtime_user" LOGNAME="$runtime_user" \
+  LNAME="$runtime_user" USERNAME="$runtime_user" OMERO_TMPDIR="$OMERO_TMPDIR" \
+  TMPDIR="$TMPDIR" runuser -p -m -u "$runtime_user" -- "$python_bin" \
+    -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 SH
 ```
 

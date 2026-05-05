@@ -149,6 +149,33 @@ class FakeAdmin:
         self.added_groups.append((experimenter, list(groups)))
 
 
+class FakeQuery:
+    """Test double for fake query service."""
+
+    def __init__(self, admin: FakeAdmin):
+        """Create `FakeQuery` with `admin`.
+
+        Inputs: `admin`. Output: None.
+        """
+        self.admin = admin
+        self.find_calls = 0
+
+    def findByString(self, klass: str, field: str, value: str):
+        """Return an experimenter by string lookup for `FakeQuery`.
+
+        Inputs: `klass` (str), `field` (str), `value` (str). Output: experimenter
+        or None.
+        """
+        self.find_calls += 1
+        assert klass == "Experimenter"
+        assert field == "omeName"
+        if not self.admin.existing_user and not self.admin.created_users:
+            return None
+        experimenter = FakeExperimenterI(42, False)
+        experimenter.omeName = FakeRValue(value)
+        return experimenter
+
+
 class FakeConnection:
     """Test double for fake connection."""
 
@@ -158,6 +185,7 @@ class FakeConnection:
         Inputs: `admin`, `connect_result`. Output: None.
         """
         self.admin = admin
+        self.query = FakeQuery(admin)
         self.connect_result = connect_result
         self.closed = False
         self.init_args = None
@@ -185,6 +213,13 @@ class FakeConnection:
         Inputs: none. Output: `self.admin`.
         """
         return self.admin
+
+    def getQueryService(self):
+        """Return the fake query service value used by this test double.
+
+        Inputs: none. Output: `FakeQuery`.
+        """
+        return self.query
 
     def close(self):
         """Close `FakeConnection`'s fake resource handle.
@@ -356,6 +391,7 @@ def test_sync_memberships_creates_missing_job_user(helper_module, monkeypatch):
 
     assert admin.created_users[0][0] == "job-service"
     assert admin.created_users[0][1] == "job-secret"
+    assert admin.lookup_calls == 0
 
 
 def test_sync_memberships_skips_batch_call_when_memberships_are_current(
@@ -403,10 +439,18 @@ def test_ensure_job_user_handles_create_race(helper_module):
         create_exception=FakeValidationException("already exists"),
     )
 
-    experimenter = module.ensure_job_user(admin, "job-service", "secret", retries=1)
+    query = FakeQuery(admin)
+    experimenter = module.ensure_job_user(
+        admin,
+        query,
+        "job-service",
+        "secret",
+        retries=1,
+    )
 
     assert experimenter.omeName.val == "job-service"
-    assert admin.lookup_calls == 2
+    assert admin.lookup_calls == 0
+    assert query.find_calls == 2
 
 
 def test_ensure_job_user_retries_and_reports_last_failure(helper_module, monkeypatch):
@@ -425,7 +469,13 @@ def test_ensure_job_user_retries_and_reports_last_failure(helper_module, monkeyp
     monkeypatch.setattr(module.time, "sleep", sleeps.append)
 
     with pytest.raises(RuntimeError, match="failed to ensure OMERO user"):
-        module.ensure_job_user(admin, "job-service", "secret", retries=2)
+        module.ensure_job_user(
+            admin,
+            FakeQuery(admin),
+            "job-service",
+            "secret",
+            retries=2,
+        )
 
     assert sleeps == [2]
 
@@ -446,9 +496,42 @@ def test_ensure_job_user_does_not_retry_keyboard_interrupt(helper_module, monkey
     monkeypatch.setattr(module.time, "sleep", sleeps.append)
 
     with pytest.raises(KeyboardInterrupt):
-        module.ensure_job_user(admin, "job-service", "secret", retries=2)
+        module.ensure_job_user(
+            admin,
+            FakeQuery(admin),
+            "job-service",
+            "secret",
+            retries=2,
+        )
 
     assert sleeps == []
+
+
+def test_ensure_job_user_uses_query_lookup_for_expected_missing_user(helper_module):
+    """Verify expected missing job-user checks do not call noisy admin lookup.
+
+    Inputs: pytest provides `helper_module`. Output: fails on regressions in
+    ensure job user uses query lookup for expected missing user.
+    """
+    module = helper_module
+    admin = FakeAdmin(
+        groups=[],
+        member_group_ids=[],
+        existing_user=False,
+    )
+    query = FakeQuery(admin)
+
+    experimenter = module.ensure_job_user(
+        admin,
+        query,
+        "job-service",
+        "secret",
+        retries=1,
+    )
+
+    assert experimenter.omeName.val == "job-service"
+    assert admin.lookup_calls == 0
+    assert query.find_calls == 2
 
 
 def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):
