@@ -53,15 +53,58 @@ class _DeferredTkImport:
         Inputs: `module_name`. Output: None.
         """
         self._module_name = module_name
+        self._module = None
+
+    def __setattr__(self, attribute, value):
+        """Set attributes on the loaded module when available.
+
+        Inputs: `attribute`, `value`. Output: None.
+        """
+        if attribute.startswith("_"):
+            object.__setattr__(self, attribute, value)
+            return
+        loaded_module = object.__getattribute__(self, "_module")
+        if loaded_module is None:
+            object.__setattr__(self, attribute, value)
+            return
+        setattr(loaded_module, attribute, value)
+
+    def __delattr__(self, attribute):
+        """Delete attributes from the loaded module when available.
+
+        Inputs: `attribute`. Output: None.
+        """
+        loaded_module = object.__getattribute__(self, "_module")
+        if loaded_module is not None and hasattr(loaded_module, attribute):
+            delattr(loaded_module, attribute)
+            return
+        object.__delattr__(self, attribute)
 
     def __getattr__(self, attribute):
         """Reject use before Tk has been imported deliberately.
 
         Inputs: `attribute`. Output: none. Raises: AttributeError.
         """
+        loaded_module = object.__getattribute__(self, "_module")
+        if loaded_module is not None:
+            return getattr(loaded_module, attribute)
         raise AttributeError(
             f"{self._module_name} is not loaded; call _ensure_tk_loaded() first."
         )
+
+    def is_loaded(self):
+        """Return whether the backing Tk module has been imported.
+
+        Inputs: no caller arguments. Output: bool.
+        """
+        return object.__getattribute__(self, "_module") is not None
+
+    def load(self, loaded_module):
+        """Store the imported backing module.
+
+        Inputs: `loaded_module`. Output: None.
+        """
+        object.__setattr__(self, "_module", loaded_module)
 
 
 tk: Any = _DeferredTkImport("tkinter")
@@ -1537,8 +1580,7 @@ def _ensure_tk_loaded():
 
     Inputs: no caller arguments. Output: None. Raises: RuntimeError if Tk is unavailable.
     """
-    global filedialog, messagebox, tk
-    if not isinstance(tk, _DeferredTkImport):
+    if tk.is_loaded():
         return
     try:
         import tkinter as loaded_tk
@@ -1548,9 +1590,9 @@ def _ensure_tk_loaded():
         raise RuntimeError(
             "Tkinter is required to open the OMERO Connector interface."
         ) from exc
-    tk = loaded_tk
-    filedialog = loaded_filedialog
-    messagebox = loaded_messagebox
+    tk.load(loaded_tk)
+    filedialog.load(loaded_filedialog)
+    messagebox.load(loaded_messagebox)
 
 
 def _tk_constant(name, fallback):
@@ -2797,6 +2839,8 @@ def _read_windows_version_via_rtl_get_version():
         import ctypes
 
         class _OSVERSIONINFOEXW(ctypes.Structure):
+            """Windows OS version structure used by `RtlGetVersion`."""
+
             _fields_ = [
                 ("dwOSVersionInfoSize", ctypes.c_ulong),
                 ("dwMajorVersion", ctypes.c_ulong),
@@ -2816,8 +2860,7 @@ def _read_windows_version_via_rtl_get_version():
         rtl_get_version = getattr(ntdll, "RtlGetVersion", None)
         if not callable(rtl_get_version):
             return None
-        version_info = _OSVERSIONINFOEXW()
-        version_info.dwOSVersionInfoSize = ctypes.sizeof(_OSVERSIONINFOEXW)
+        version_info = _OSVERSIONINFOEXW(ctypes.sizeof(_OSVERSIONINFOEXW))
         status = int(rtl_get_version(ctypes.byref(version_info)))
         if status != 0:
             return None
