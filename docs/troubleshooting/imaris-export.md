@@ -162,6 +162,11 @@ Root cause:
 
 Operational rule:
 
+- the standalone connector requires Windows 10 or newer and checks this before
+  setting the console title, collecting XT diagnostics, or opening Tk. If the
+  running Windows version cannot be verified as Windows 10 or newer, startup
+  stops and writes the reason to the command-line/log surface instead of
+  opening the GUI.
 - the standalone connector first tries to open the exported file through the live
   Imaris XT handle so the existing session is reused,
 - native Imaris bridge compatibility is probed in the background as the dialog
@@ -189,6 +194,11 @@ Operational rule:
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
   `Missing image id` response.
+- folder import uses the main dialog's typed path field as the source of truth.
+  The `Select` button opens the native Tk directory chooser and replaces the
+  typed value only when the operator confirms a folder; cancelling preserves the
+  typed value. Imports reject filesystem roots, malformed paths, and missing
+  directories before starting uploads.
 - `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
   available. This mode downloads the original archived file and hands it to the
   running Imaris application through `FileOpen`, allowing Imaris to handle

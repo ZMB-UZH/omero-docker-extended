@@ -31,7 +31,6 @@ import sys
 import tempfile
 import threading
 import time
-import tkinter as tk
 import traceback
 import uuid
 import urllib.error
@@ -40,10 +39,34 @@ import urllib.request
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
-from tkinter import filedialog, messagebox
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class _DeferredTkImport:
+    """Placeholder for Tk modules until the platform gate has passed."""
+
+    def __init__(self, module_name):
+        """Create `_DeferredTkImport` for `module_name`.
+
+        Inputs: `module_name`. Output: None.
+        """
+        self._module_name = module_name
+
+    def __getattr__(self, attribute):
+        """Reject use before Tk has been imported deliberately.
+
+        Inputs: `attribute`. Output: none. Raises: AttributeError.
+        """
+        raise AttributeError(
+            f"{self._module_name} is not loaded; call _ensure_tk_loaded() first."
+        )
+
+
+tk: Any = _DeferredTkImport("tkinter")
+filedialog: Any = _DeferredTkImport("tkinter.filedialog")
+messagebox: Any = _DeferredTkImport("tkinter.messagebox")
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -87,9 +110,13 @@ NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 OMERO_CONNECTOR_WINDOW_WIDTH = 1000
-OMERO_CONNECTOR_WINDOW_HEIGHT = 700
+OMERO_CONNECTOR_WINDOW_HEIGHT = 760
+MINIMUM_WINDOWS_MAJOR = 10
+MINIMUM_WINDOWS_MINOR = 0
 CONVERTER_MENU_FONT = ("Arial", 10)
 STATUS_NEUTRAL_BG = "#dfe5eb"
+FOLDER_PATH_SELECT_BG = "#64748b"
+FOLDER_PATH_SELECT_ACTIVE_BG = "#526173"
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -122,6 +149,25 @@ class _XtRuntimeState:
     """Data container for XT runtime state."""
 
     log_path: Optional[str] = None
+
+
+@dataclass
+class _WindowsVersion:
+    """Detected Windows kernel version details."""
+
+    major: int
+    minor: int
+    build: int
+    source: str
+
+
+@dataclass
+class _WindowsPlatformStatus:
+    """Startup platform support result for the standalone XT connector."""
+
+    supported: bool
+    message: str
+    version: Optional[_WindowsVersion] = None
 
 
 _XT_RUNTIME_STATE = _XtRuntimeState()
@@ -868,6 +914,17 @@ def _is_filesystem_root(folder_path):
     return False
 
 
+def _safe_is_directory(path_value):
+    """Return whether a path value is an existing directory without raising.
+
+    Inputs: `path_value`. Output: bool.
+    """
+    try:
+        return bool(path_value) and os.path.isdir(path_value)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def _stringvar_value(variable):
     """Return the stringvar value.
 
@@ -1473,6 +1530,27 @@ def _is_supported_imaris_install_path(path_value):
     """
     major = _infer_imaris_major_version_from_path(path_value)
     return major is not None and major >= 11
+
+
+def _ensure_tk_loaded():
+    """Import Tk modules only after startup platform checks have passed.
+
+    Inputs: no caller arguments. Output: None. Raises: RuntimeError if Tk is unavailable.
+    """
+    global filedialog, messagebox, tk
+    if not isinstance(tk, _DeferredTkImport):
+        return
+    try:
+        import tkinter as loaded_tk
+        from tkinter import filedialog as loaded_filedialog
+        from tkinter import messagebox as loaded_messagebox
+    except Exception as exc:
+        raise RuntimeError(
+            "Tkinter is required to open the OMERO Connector interface."
+        ) from exc
+    tk = loaded_tk
+    filedialog = loaded_filedialog
+    messagebox = loaded_messagebox
 
 
 def _tk_constant(name, fallback):
@@ -2706,6 +2784,103 @@ def _set_process_window_title(title):
         return bool(set_console_title(str(title)))
     except Exception:
         return False
+
+
+def _read_windows_version_via_rtl_get_version():
+    """Read the running Windows kernel version through `RtlGetVersion`.
+
+    Inputs: no caller arguments. Output: `_WindowsVersion` or None.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        class _OSVERSIONINFOEXW(ctypes.Structure):
+            _fields_ = [
+                ("dwOSVersionInfoSize", ctypes.c_ulong),
+                ("dwMajorVersion", ctypes.c_ulong),
+                ("dwMinorVersion", ctypes.c_ulong),
+                ("dwBuildNumber", ctypes.c_ulong),
+                ("dwPlatformId", ctypes.c_ulong),
+                ("szCSDVersion", ctypes.c_wchar * 128),
+                ("wServicePackMajor", ctypes.c_ushort),
+                ("wServicePackMinor", ctypes.c_ushort),
+                ("wSuiteMask", ctypes.c_ushort),
+                ("wProductType", ctypes.c_ubyte),
+                ("wReserved", ctypes.c_ubyte),
+            ]
+
+        windll = getattr(ctypes, "windll", None)
+        ntdll = getattr(windll, "ntdll", None)
+        rtl_get_version = getattr(ntdll, "RtlGetVersion", None)
+        if not callable(rtl_get_version):
+            return None
+        version_info = _OSVERSIONINFOEXW()
+        version_info.dwOSVersionInfoSize = ctypes.sizeof(_OSVERSIONINFOEXW)
+        status = int(rtl_get_version(ctypes.byref(version_info)))
+        if status != 0:
+            return None
+        return _WindowsVersion(
+            major=int(version_info.dwMajorVersion),
+            minor=int(version_info.dwMinorVersion),
+            build=int(version_info.dwBuildNumber),
+            source="RtlGetVersion",
+        )
+    except Exception:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=True
+        )
+        return None
+
+
+def _windows_platform_status():
+    """Return the startup platform support status for the XT connector.
+
+    Inputs: no caller arguments. Output: `_WindowsPlatformStatus`.
+    """
+    minimum = f"{MINIMUM_WINDOWS_MAJOR}.{MINIMUM_WINDOWS_MINOR}"
+    if os.name != "nt":
+        return _WindowsPlatformStatus(
+            supported=False,
+            message=(
+                "OMERO Connector requires Windows 10 or later. "
+                "Detected a non-Windows platform."
+            ),
+        )
+
+    version = _read_windows_version_via_rtl_get_version()
+    if version is None:
+        return _WindowsPlatformStatus(
+            supported=False,
+            message=(
+                "OMERO Connector requires Windows 10 or later, but the "
+                "running Windows version could not be determined reliably."
+            ),
+        )
+
+    detected_version = f"{version.major}.{version.minor}.{version.build}"
+    if (version.major, version.minor) >= (
+        MINIMUM_WINDOWS_MAJOR,
+        MINIMUM_WINDOWS_MINOR,
+    ):
+        return _WindowsPlatformStatus(
+            supported=True,
+            message=(
+                f"Detected supported Windows {detected_version} "
+                f"via {version.source}; minimum is {minimum}."
+            ),
+            version=version,
+        )
+    return _WindowsPlatformStatus(
+        supported=False,
+        message=(
+            "OMERO Connector requires Windows 10 or later. "
+            f"Detected Windows {detected_version} via {version.source}; "
+            f"minimum is {minimum}."
+        ),
+        version=version,
+    )
 
 
 def _extract_content_disposition_filename(content_disposition):
@@ -4457,6 +4632,7 @@ class OMEROBrowserDialog:
         # Get export directory
         self.export_dir = self._get_export_dir()
 
+        _ensure_tk_loaded()
         self.root = tk.Tk()
         self._ui_thread_id = threading.get_ident()
         self.root.title("OMERO Connector")
@@ -4604,6 +4780,35 @@ class OMEROBrowserDialog:
         )
         self.converter_frame.grid_remove()
         conn_frame.grid_columnconfigure(7, weight=1)
+
+        self.folder_path_var = tk.StringVar(value="")
+        folder_path_frame = tk.Frame(self.root)
+        folder_path_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+        self.folder_path_entry = tk.Entry(
+            folder_path_frame,
+            textvariable=self.folder_path_var,
+            font=("Arial", 10),
+        )
+        self.folder_path_entry.pack(
+            side=tk.LEFT,
+            fill=tk.X,
+            expand=True,
+            padx=(0, 8),
+            ipady=4,
+        )
+        self.select_folder_btn = _RoundedButton(
+            folder_path_frame,
+            text="Select",
+            command=self._select_import_folder,
+            bg=FOLDER_PATH_SELECT_BG,
+            fg="white",
+            activebackground=FOLDER_PATH_SELECT_ACTIVE_BG,
+            activeforeground="white",
+            font=("Arial", 10, "bold"),
+            width=96,
+            height=38,
+        )
+        self.select_folder_btn.pack(side=tk.LEFT)
 
         # Browser
         browser = tk.Frame(self.root)
@@ -4791,6 +4996,36 @@ class OMEROBrowserDialog:
             else _tk_constant("NORMAL", "normal")
         )
 
+    def _current_import_folder_path(self):
+        """Return the import folder path currently typed in the selector row.
+
+        Inputs: no caller arguments. Output: `str`.
+        """
+        return _stringvar_value(getattr(self, "folder_path_var", None))
+
+    def _select_import_folder(self):
+        """Open the native folder selector and store the selected path.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        dialog_title = "Select folder to import into OMERO"
+        current_path = self._current_import_folder_path()
+        if _safe_is_directory(current_path):
+            selected_folder = filedialog.askdirectory(
+                parent=self.root,
+                mustexist=True,
+                title=dialog_title,
+                initialdir=current_path,
+            )
+        else:
+            selected_folder = filedialog.askdirectory(
+                parent=self.root,
+                mustexist=True,
+                title=dialog_title,
+            )
+        if selected_folder:
+            self.folder_path_var.set(str(selected_folder))
+
     def _import_into_omero(self):
         """Import the into OMERO for `OMEROBrowserDialog`.
 
@@ -4809,12 +5044,19 @@ class OMEROBrowserDialog:
             )
             return
 
-        selected_folder = filedialog.askdirectory(
-            parent=self.root,
-            mustexist=True,
-            title="Select folder to import into OMERO",
-        )
-        if not selected_folder:
+        selected_folder = self._current_import_folder_path()
+        if not selected_folder.strip():
+            messagebox.showwarning(
+                "No Folder Selected",
+                "Please select or enter a folder path first.",
+            )
+            return
+
+        if _coerce_path(selected_folder) is None:
+            messagebox.showerror(
+                "Invalid Folder",
+                "Please select or enter an existing folder.",
+            )
             return
 
         folder_name = _folder_display_name(selected_folder)
@@ -4822,6 +5064,13 @@ class OMEROBrowserDialog:
             messagebox.showerror(
                 "Invalid Folder",
                 "Please select a regular folder, not a filesystem root.",
+            )
+            return
+
+        if not _safe_is_directory(selected_folder):
+            messagebox.showerror(
+                "Invalid Folder",
+                "Please select or enter an existing folder.",
             )
             return
 
@@ -7257,11 +7506,20 @@ def XTOmeroConnector(aImarisId):
 
     Inputs: `aImarisId`. Output: None.
     """
-    _set_process_window_title("OMERO Connector")
+    platform_status = _windows_platform_status()
     log_path = _xt_log_path()
     _XT_RUNTIME_STATE.log_path = log_path
+    if not platform_status.supported:
+        block_message = "XTOmeroConnector startup blocked: " + platform_status.message
+        _xt_write_log(log_path, block_message)
+        print(block_message)
+        return
+
+    _set_process_window_title("OMERO Connector")
     try:
         _xt_write_log(log_path, "=== XTOmeroConnector starting ===")
+        _xt_write_log(log_path, platform_status.message)
+        _ensure_tk_loaded()
         _xt_write_log(log_path, f"Python: {sys.version}")
         _log_imaris_xt_diagnostics()
 

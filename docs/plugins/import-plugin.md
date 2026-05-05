@@ -19,10 +19,13 @@ Related docs:
   `dataset_name_override`. That path imports the selected folder into OMERO
   root as one Dataset named by the override instead of distributing files by
   upload-path heuristics.
-- The XT OMERO connector's folder-import flow uses the standard Tk directory
-  chooser (`tkinter.filedialog.askdirectory`) plus ordinary HTTPS requests. It
-  does not depend on Explorer automation, PowerShell, COM-only pickers, or
-  newer Windows shell APIs.
+- The XT OMERO connector requires Windows 10 or newer before opening its GUI.
+  Startup blocks with a command-line/log message when the Windows version cannot
+  be verified as supported. Its folder-import flow provides a typed path field
+  plus a `Select` button that opens the standard Tk native directory chooser
+  (`tkinter.filedialog.askdirectory`) with `mustexist=true`, then uses ordinary
+  HTTPS requests. It does not depend on Explorer automation, PowerShell,
+  COM-only pickers, or a Windows 11-only shell API.
 - OMERO CLI-based import with configurable batching and concurrency.
 - OMERO CLI import and import preflight checks run with `--depth 15` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).

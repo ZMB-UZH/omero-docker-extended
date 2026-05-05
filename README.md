@@ -225,6 +225,8 @@ OMERO image export to Imaris (.ims) format.
 - OMERO CLI-based script launch from the `omeroweb` container
 - Job-service account support for background execution
 - ImarisConvertBioformats integration (compiled from source in server image)
+- Standalone XT connector requires Windows 10 or newer on the Imaris
+  workstation and includes a typed folder path selector for OMERO folder import
 - Container package inspection helper: `helper_scripts_debian/docker_image_analysis.sh`
 
 ### Shared Library (`omero_plugin_common`)

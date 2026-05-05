@@ -321,6 +321,24 @@ def test_xt_script_annotations_stay_python37_runtime_safe():
     assert unsupported == []
 
 
+def test_xt_script_defers_tk_import_until_after_platform_gate():
+    """Verify Tk is imported only after the platform gate can run.
+
+    Inputs: repository fixtures. Output: fails on startup ordering regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    deferred_import_marker = "def _ensure_tk_loaded():"
+    entrypoint_marker = "def XTOmeroConnector(aImarisId):"
+    platform_gate_marker = "platform_status = _windows_platform_status()"
+    tk_load_marker = "_ensure_tk_loaded()"
+
+    assert "import tkinter" not in source[: source.index(deferred_import_marker)]
+    entrypoint_source = source[source.index(entrypoint_marker) :]
+    assert entrypoint_source.index(platform_gate_marker) < entrypoint_source.index(
+        tk_load_marker
+    )
+
+
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
     """Verify create request with cookies relies on cookie jar for get.
 
@@ -1272,6 +1290,95 @@ def test_is_filesystem_root_detects_windows_and_posix_roots():
     assert module._is_filesystem_root(r"\\server\share\folder") is False
 
 
+def test_select_import_folder_replaces_typed_path_after_native_selection(
+    tmp_path, monkeypatch
+):
+    """Verify native folder selection replaces a manually typed path.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selector regressions.
+    """
+    module = _load_xt_module()
+    typed_folder = tmp_path / "typed"
+    typed_folder.mkdir()
+    selected_folder = tmp_path / "selected"
+    selected_folder.mkdir()
+    calls = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar(str(typed_folder))
+
+    def _fake_askdirectory(**kwargs):
+        """Return a selected directory and record dialog options.
+
+        Inputs: `**kwargs`. Output: `str`.
+        """
+        calls.append(kwargs)
+        return str(selected_folder)
+
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        _fake_askdirectory,
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._select_import_folder(dialog)
+
+    assert dialog.folder_path_var.get() == str(selected_folder)
+    assert calls == [
+        {
+            "parent": dialog.root,
+            "mustexist": True,
+            "title": "Select folder to import into OMERO",
+            "initialdir": str(typed_folder),
+        }
+    ]
+
+
+def test_select_import_folder_cancel_preserves_typed_path(tmp_path, monkeypatch):
+    """Verify cancelling native folder selection preserves the typed path.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selector regressions.
+    """
+    module = _load_xt_module()
+    typed_folder = tmp_path / "typed"
+    typed_folder.mkdir()
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar(str(typed_folder))
+
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: "",
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._select_import_folder(dialog)
+
+    assert dialog.folder_path_var.get() == str(typed_folder)
+
+
+def test_browser_dialog_places_folder_selector_between_connection_and_lists():
+    """Verify folder selector UI is placed between connection and list panels.
+
+    Inputs: repository fixtures. Output: fails on UI layout regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    connection_marker = "conn_frame.grid_columnconfigure(7, weight=1)"
+    selector_marker = 'self.folder_path_var = tk.StringVar(value="")'
+    browser_marker = "# Browser\n        browser = tk.Frame(self.root)"
+
+    assert source.index(connection_marker) < source.index(selector_marker)
+    assert source.index(selector_marker) < source.index(browser_marker)
+    assert "bg=FOLDER_PATH_SELECT_BG" in source
+    assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
+    assert "width=96" in source
+    assert "height=38" in source
+
+
 def test_import_into_omero_starts_folder_worker_after_confirmation(
     tmp_path, monkeypatch
 ):
@@ -1294,6 +1401,7 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
     dialog._folder_import_available = True
     dialog._folder_import_reason = ""
     dialog.root = object()
+    dialog.folder_path_var = _FakeVar(str(selected_folder))
     dialog._import_folder_worker = lambda *_args: None
     dialog._set_actions_busy_for_import = busy_states.append
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
@@ -1301,7 +1409,9 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: str(selected_folder),
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("import action must use the selector row path")
+        ),
         raising=False,
     )
     monkeypatch.setattr(
@@ -1360,6 +1470,7 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
     dialog._folder_import_available = True
     dialog._folder_import_reason = ""
     dialog.root = object()
+    dialog.folder_path_var = _FakeVar(r"C:\\")
     dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
@@ -1368,12 +1479,6 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
     )
 
     errors = []
-    monkeypatch.setattr(
-        module.filedialog,
-        "askdirectory",
-        lambda **_kwargs: r"C:\\",
-        raising=False,
-    )
     monkeypatch.setattr(
         module.messagebox,
         "showerror",
@@ -1387,6 +1492,91 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
         (
             "Invalid Folder",
             "Please select a regular folder, not a filesystem root.",
+        )
+    ]
+
+
+def test_import_into_omero_requires_existing_selector_path(monkeypatch):
+    """Verify import rejects missing selector paths before worker startup.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on import validation regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._import_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog._folder_import_available = True
+    dialog._folder_import_reason = ""
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar(r"C:\missing-folder")
+    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+        _ for _ in ()
+    ).throw(AssertionError("busy state must not change"))
+    dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("status must not change")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._import_into_omero(dialog)
+
+    assert errors == [
+        (
+            "Invalid Folder",
+            "Please select or enter an existing folder.",
+        )
+    ]
+
+
+def test_import_into_omero_rejects_malformed_selector_path(monkeypatch):
+    """Verify malformed typed selector paths do not crash the import action.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on import validation regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._import_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog._folder_import_available = True
+    dialog._folder_import_reason = ""
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar("C:\\bad\x00path")
+    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+        _ for _ in ()
+    ).throw(AssertionError("busy state must not change"))
+    dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("status must not change")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.os.path,
+        "isdir",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("embedded null byte")
+        ),
+    )
+
+    module.OMEROBrowserDialog._import_into_omero(dialog)
+
+    assert errors == [
+        (
+            "Invalid Folder",
+            "Please select or enter an existing folder.",
         )
     ]
 
@@ -3796,6 +3986,142 @@ def test_set_process_window_title_uses_windows_api_without_shell(monkeypatch):
     assert _FakeKernel32.calls == ["OMERO Connector"]
 
 
+def test_windows_platform_status_supports_windows_10_and_11(monkeypatch):
+    """Verify the startup platform gate accepts Windows 10 and Windows 11.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on platform gate regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+
+    monkeypatch.setattr(
+        module,
+        "_read_windows_version_via_rtl_get_version",
+        lambda: module._WindowsVersion(10, 0, 19045, "RtlGetVersion"),
+    )
+    windows_10_status = module._windows_platform_status()
+
+    monkeypatch.setattr(
+        module,
+        "_read_windows_version_via_rtl_get_version",
+        lambda: module._WindowsVersion(10, 0, 22631, "RtlGetVersion"),
+    )
+    windows_11_status = module._windows_platform_status()
+
+    assert windows_10_status.supported is True
+    assert windows_10_status.version.build == 19045
+    assert "supported Windows 10.0.19045" in windows_10_status.message
+    assert windows_11_status.supported is True
+    assert windows_11_status.version.build == 22631
+    assert "supported Windows 10.0.22631" in windows_11_status.message
+
+
+def test_windows_platform_status_rejects_older_or_unreliable_platforms(
+    monkeypatch,
+):
+    """Verify the startup platform gate rejects older or unverifiable systems.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on platform gate regressions.
+    """
+    module = _load_xt_module()
+
+    monkeypatch.setattr(module.os, "name", "posix", raising=False)
+    non_windows_status = module._windows_platform_status()
+
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_read_windows_version_via_rtl_get_version",
+        lambda: module._WindowsVersion(6, 3, 9600, "RtlGetVersion"),
+    )
+    windows_81_status = module._windows_platform_status()
+
+    monkeypatch.setattr(
+        module,
+        "_read_windows_version_via_rtl_get_version",
+        lambda: None,
+    )
+    unknown_status = module._windows_platform_status()
+
+    assert non_windows_status.supported is False
+    assert "non-Windows" in non_windows_status.message
+    assert windows_81_status.supported is False
+    assert "Detected Windows 6.3.9600" in windows_81_status.message
+    assert unknown_status.supported is False
+    assert "could not be determined reliably" in unknown_status.message
+
+
+def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
+    monkeypatch,
+    capsys,
+):
+    """Verify unsupported platforms block before any GUI or Imaris startup work.
+
+    Inputs: pytest provides `monkeypatch`, `capsys`. Output: fails on startup ordering regressions.
+    """
+    module = _load_xt_module()
+    log_calls = []
+    unsupported = module._WindowsPlatformStatus(
+        supported=False,
+        message=(
+            "OMERO Connector requires Windows 10 or later. "
+            "Detected Windows 6.3.9600 via RtlGetVersion; minimum is 10.0."
+        ),
+    )
+
+    monkeypatch.setattr(module, "_windows_platform_status", lambda: unsupported)
+    monkeypatch.setattr(
+        module,
+        "_xt_log_path",
+        lambda: r"C:\Temp\XTOmeroConnector_20260505.log",
+    )
+    monkeypatch.setattr(
+        module,
+        "_xt_write_log",
+        lambda log_path, message: log_calls.append((log_path, message)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_set_process_window_title",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("window title must not be set before platform gate")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_log_imaris_xt_diagnostics",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("diagnostics must not run before platform gate")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_ensure_tk_loaded",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Tk must not load before platform gate")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "OMEROBrowserDialog",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("GUI must not open before platform gate")
+        ),
+    )
+
+    module.XTOmeroConnector(None)
+
+    captured = capsys.readouterr()
+    assert "startup blocked" in captured.out
+    assert "Windows 10 or later" in captured.out
+    assert log_calls == [
+        (
+            r"C:\Temp\XTOmeroConnector_20260505.log",
+            "XTOmeroConnector startup blocked: " + unsupported.message,
+        )
+    ]
+
+
 def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
     """Verify is IMS file accepts only existing regular hdf5 files.
 
@@ -3945,8 +4271,8 @@ def test_browser_dialog_sets_initial_window_as_minimum_size():
     module.OMEROBrowserDialog._configure_initial_window_constraints(dialog)
 
     assert dialog.root.updated is True
-    assert dialog.root.geometry_value == "1010x720"
-    assert dialog.root.minimum_size == (1010, 720)
+    assert dialog.root.geometry_value == "1010x760"
+    assert dialog.root.minimum_size == (1010, 760)
     assert dialog.root.resizable_value == (True, True)
 
 
