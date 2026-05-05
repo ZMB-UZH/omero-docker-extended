@@ -126,6 +126,7 @@ class _FakeListbox:
         self.seen = []
         self.activated = []
         self.anchors = []
+        self.focused = False
 
     def delete(self, start, end=None):
         """Delete the delete for `_FakeListbox`.
@@ -203,6 +204,31 @@ class _FakeListbox:
         """
         self.seen.append(int(index))
 
+    def focus_set(self):
+        """Record focus assignment.
+
+        Inputs: none. Output: None.
+        """
+        self.focused = True
+
+
+class _FakeEntry:
+    """Test double for fake entry."""
+
+    def __init__(self):
+        """Create `_FakeEntry` with its default state.
+
+        Inputs: constructor receives no public arguments. Output: initializes fake state.
+        """
+        self.configs = []
+
+    def config(self, **kwargs):
+        """Apply widget configuration.
+
+        Inputs: `**kwargs`. Output: None.
+        """
+        self.configs.append(kwargs)
+
 
 class _FakeButton:
     """Test double for fake button."""
@@ -257,6 +283,7 @@ def _make_refresh_dialog(module):
     """
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._connected = True
+    dialog.client = object()
     dialog._refresh_generation = 1
     dialog._refresh_in_progress = True
     dialog._pid = "project-1"
@@ -270,6 +297,9 @@ def _make_refresh_dialog(module):
     dialog.refresh_btn = _FakeButton()
     dialog.load_btn = _FakeButton()
     dialog.converter_var = _FakeVar("OMERO")
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
     dialog.status_updates = []
     dialog.errors = []
     dialog._set_status = lambda text, color="#ecf0f1": dialog.status_updates.append(
@@ -501,10 +531,10 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
     assert "OMERO IMS export capability unavailable: HTTP 400" in messages
 
 
-def test_client_detects_folder_import_capability_from_start_endpoint():
-    """Verify client detects folder import capability from start endpoint.
+def test_client_detects_folder_export_capability_from_start_endpoint():
+    """Verify client detects folder export capability from start endpoint.
 
-    Inputs: repository fixtures. Output: fails on regressions in client detects folder import capability from start endpoint.
+    Inputs: repository fixtures. Output: fails on regressions in client detects folder export capability from start endpoint.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -526,7 +556,7 @@ def test_client_detects_folder_import_capability_from_start_endpoint():
 
     client.opener = _FakeOpener()
 
-    assert client.get_folder_import_capability() == {"available": True, "reason": ""}
+    assert client.get_folder_export_capability() == {"available": True, "reason": ""}
     assert opened_urls == [
         (
             f"{client.base_url}/omeroweb_import/start/",
@@ -536,10 +566,10 @@ def test_client_detects_folder_import_capability_from_start_endpoint():
     ]
 
 
-def test_client_marks_root_folder_import_capability_as_unavailable():
-    """Verify client marks root folder import capability as unavailable.
+def test_client_marks_root_folder_export_capability_as_unavailable():
+    """Verify client marks root folder export capability as unavailable.
 
-    Inputs: repository fixtures. Output: fails on regressions in client marks root folder import capability as unavailable.
+    Inputs: repository fixtures. Output: fails on regressions in client marks root folder export capability as unavailable.
     """
     module = _load_xt_module()
     module.urllib.error.HTTPError = _FakeHTTPError
@@ -565,16 +595,16 @@ def test_client_marks_root_folder_import_capability_as_unavailable():
 
     client.opener = _FakeOpener()
 
-    capability = client.get_folder_import_capability()
+    capability = client.get_folder_export_capability()
 
     assert capability["available"] is False
     assert "root user" in capability["reason"].lower()
 
 
-def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_urls():
-    """Check client start folder import job posts dataset override and normalizes URLs parsing against the documented contract.
+def test_client_start_folder_export_job_posts_dataset_override_and_normalizes_urls():
+    """Check client start folder export job posts dataset override and normalizes URLs parsing against the documented contract.
 
-    Inputs: repository fixtures. Output: fails on regressions in client start folder import job posts dataset override and normalizes URLs.
+    Inputs: repository fixtures. Output: fails on regressions in client start folder export job posts dataset override and normalizes URLs.
     """
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
@@ -607,7 +637,7 @@ def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_ur
 
     client.opener = _FakeOpener()
 
-    payload = client.start_folder_import_job(
+    payload = client.start_folder_export_job(
         "Dataset Root",
         [
             {"relative_path": "sub/file-a.tif", "size": 5},
@@ -630,20 +660,20 @@ def test_client_start_folder_import_job_posts_dataset_override_and_normalizes_ur
     )
 
 
-def test_folder_import_error_message_does_not_echo_html():
-    """Confirm folder import error message does not echo html exposes the expected failure.
+def test_folder_export_error_message_does_not_echo_html():
+    """Confirm folder export error message does not echo html exposes the expected failure.
 
-    Inputs: repository fixtures. Output: fails on regressions when folder import error message does not echo html stops reporting the expected error.
+    Inputs: repository fixtures. Output: fails on regressions when folder export error message does not echo html stops reporting the expected error.
     """
     module = _load_xt_module()
 
     message = module.OMEROWebClient._payload_error_message(
         None,
         "<html><body>Traceback</body></html>",
-        "Failed to start OMERO folder import.",
+        "Failed to start OMERO folder export.",
     )
 
-    assert message == "Failed to start OMERO folder import."
+    assert message == "Failed to start OMERO folder export."
 
 
 def test_client_download_original_file_uses_archived_files_endpoint_and_safe_name(
@@ -1290,7 +1320,49 @@ def test_is_filesystem_root_detects_windows_and_posix_roots():
     assert module._is_filesystem_root(r"\\server\share\folder") is False
 
 
-def test_select_import_folder_replaces_typed_path_after_native_selection(
+def test_structural_folder_path_validation_accepts_absolute_paths(tmp_path):
+    """Verify structural folder path validation accepts absolute safe paths.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on path validation regressions.
+    """
+    module = _load_xt_module()
+
+    assert module._is_structurally_valid_folder_path(r"C:\exports") is True
+    assert module._is_structurally_valid_folder_path(r"C:/exports") is True
+    assert module._is_structurally_valid_folder_path(r"\\server\share\folder") is True
+    assert module._is_structurally_valid_folder_path(r"\\?\C:\long\exports") is True
+    assert module._is_structurally_valid_folder_path(tmp_path) is True
+
+
+def test_structural_folder_path_validation_rejects_malformed_windows_paths():
+    """Verify structural folder path validation rejects unsafe typed Windows paths.
+
+    Inputs: repository fixtures. Output: fails on path validation regressions.
+    """
+    module = _load_xt_module()
+
+    rejected_paths = [
+        "",
+        "   ",
+        r"C:exports",
+        r"\exports",
+        r"C:\bad<name",
+        r"C:\exports\CON",
+        r"C:\exports\child ",
+        r"C:\exports\child.",
+        r"C:\exports\..\child",
+        r"C:\bad" + "\x00" + "path",
+        r"\\.\GLOBALROOT\Device\HarddiskVolumeShadowCopy1",
+        r"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1",
+    ]
+
+    assert all(
+        module._is_structurally_valid_folder_path(path_value) is False
+        for path_value in rejected_paths
+    )
+
+
+def test_select_local_folder_replaces_typed_path_after_native_selection(
     tmp_path, monkeypatch
 ):
     """Verify native folder selection replaces a manually typed path.
@@ -1323,20 +1395,20 @@ def test_select_import_folder_replaces_typed_path_after_native_selection(
         raising=False,
     )
 
-    module.OMEROBrowserDialog._select_import_folder(dialog)
+    module.OMEROBrowserDialog._select_local_folder(dialog)
 
     assert dialog.folder_path_var.get() == str(selected_folder)
     assert calls == [
         {
             "parent": dialog.root,
             "mustexist": True,
-            "title": "Select folder to import into OMERO",
+            "title": "Select folder to export to OMERO",
             "initialdir": str(typed_folder),
         }
     ]
 
 
-def test_select_import_folder_cancel_preserves_typed_path(tmp_path, monkeypatch):
+def test_select_local_folder_cancel_preserves_typed_path(tmp_path, monkeypatch):
     """Verify cancelling native folder selection preserves the typed path.
 
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selector regressions.
@@ -1356,35 +1428,302 @@ def test_select_import_folder_cancel_preserves_typed_path(tmp_path, monkeypatch)
         raising=False,
     )
 
-    module.OMEROBrowserDialog._select_import_folder(dialog)
+    module.OMEROBrowserDialog._select_local_folder(dialog)
 
     assert dialog.folder_path_var.get() == str(typed_folder)
 
 
-def test_browser_dialog_places_folder_selector_between_connection_and_lists():
-    """Verify folder selector UI is placed between connection and list panels.
+def test_folder_path_placeholder_is_display_only_for_export_path():
+    """Verify placeholder text is visual only and never becomes an export path.
+
+    Inputs: repository fixtures. Output: fails on placeholder contract regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.folder_path_var = _FakeVar("")
+    dialog.folder_path_entry = _FakeEntry()
+    dialog._folder_path_placeholder_visible = False
+
+    module.OMEROBrowserDialog._show_folder_path_placeholder(dialog)
+
+    assert dialog.folder_path_var.get() == module.FOLDER_PATH_PLACEHOLDER
+    assert dialog._current_local_folder_path() == ""
+    assert dialog.folder_path_entry.configs[-1] == {
+        "fg": module.FOLDER_PATH_PLACEHOLDER_FG
+    }
+
+    module.OMEROBrowserDialog._hide_folder_path_placeholder(dialog)
+
+    assert dialog.folder_path_var.get() == ""
+    assert dialog._current_local_folder_path() == ""
+    assert dialog.folder_path_entry.configs[-1] == {"fg": module.FOLDER_PATH_TEXT_FG}
+
+
+def test_select_local_folder_replaces_placeholder_with_native_selection(
+    tmp_path, monkeypatch
+):
+    """Verify native folder selection replaces display-only placeholder text.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selector regressions.
+    """
+    module = _load_xt_module()
+    selected_folder = tmp_path / "selected"
+    selected_folder.mkdir()
+    calls = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar(module.FOLDER_PATH_PLACEHOLDER)
+    dialog.folder_path_entry = _FakeEntry()
+    dialog._folder_path_placeholder_visible = True
+
+    def _fake_askdirectory(**kwargs):
+        """Return a selected directory and record dialog options.
+
+        Inputs: `**kwargs`. Output: `str`.
+        """
+        calls.append(kwargs)
+        return str(selected_folder)
+
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        _fake_askdirectory,
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._select_local_folder(dialog)
+
+    assert dialog.folder_path_var.get() == str(selected_folder)
+    assert dialog._current_local_folder_path() == str(selected_folder)
+    assert dialog._folder_path_placeholder_visible is False
+    assert dialog.folder_path_entry.configs[-1] == {"fg": module.FOLDER_PATH_TEXT_FG}
+    assert calls == [
+        {
+            "parent": dialog.root,
+            "mustexist": True,
+            "title": "Select folder to export to OMERO",
+        }
+    ]
+
+
+def test_select_folder_reports_write_error_immediately_and_disables_load(
+    tmp_path, monkeypatch
+):
+    """Verify native folder selection fails fast when Imaris cannot write there.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selector permission regressions.
+    """
+    module = _load_xt_module()
+    selected_folder = tmp_path / "selected"
+    selected_folder.mkdir()
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar("")
+    dialog.folder_path_entry = _FakeEntry()
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "empty"
+    dialog._connected = True
+    dialog.client = object()
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.load_btn = _FakeButton()
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+
+    errors = []
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: str(selected_folder),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "_folder_path_write_error",
+        lambda _path: module.LOCAL_PATH_WRITE_ERROR_MESSAGE,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._select_local_folder(dialog)
+
+    assert dialog.folder_path_var.get() == str(selected_folder)
+    assert dialog._folder_path_write_state == "unwritable"
+    assert dialog.load_btn.state == "disabled"
+    assert errors == [
+        (module.LOCAL_PATH_WRITE_ERROR_TITLE, module.LOCAL_PATH_WRITE_ERROR_MESSAGE)
+    ]
+
+
+def test_load_button_requires_connection_and_structural_folder_path():
+    """Verify Load stays gated by connection, converter, and path structure.
+
+    Inputs: repository fixtures. Output: fails on Load button gating regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.load_btn = _FakeButton()
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog._connected = False
+    dialog.client = None
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "disabled"
+
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar("")
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "disabled"
+
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_write_state = "unchecked"
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "normal"
+
+    dialog._folder_path_write_state = "unwritable"
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "disabled"
+
+
+def test_load_checks_typed_path_write_permission_before_confirmation(
+    tmp_path, monkeypatch
+):
+    """Verify typed paths are write-checked when Load is clicked.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on typed path permission regressions.
+    """
+    module = _load_xt_module()
+    missing_folder = tmp_path / "missing"
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    image = {"id": 1, "name": "single"}
+    dialog._connected = True
+    dialog.client = object()
+    dialog.images_data = [image]
+    dialog.ilist = types.SimpleNamespace(curselection=lambda: (0,))
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.folder_path_var = _FakeVar(str(missing_folder))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+    dialog.load_btn = _FakeButton()
+
+    errors = []
+    confirmations = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda title, message: confirmations.append((title, message)) or True,
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert errors == [
+        (module.LOCAL_PATH_WRITE_ERROR_TITLE, module.LOCAL_PATH_WRITE_ERROR_MESSAGE)
+    ]
+    assert confirmations == []
+    assert dialog.load_btn.state == "disabled"
+
+
+def test_folder_path_write_check_rejects_missing_directory(tmp_path):
+    """Verify the write probe rejects paths that do not name an existing folder.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on write-check regressions.
+    """
+    module = _load_xt_module()
+
+    assert (
+        module._folder_path_write_error(tmp_path / "missing")
+        == module.LOCAL_PATH_WRITE_ERROR_MESSAGE
+    )
+
+
+def test_folder_path_write_check_rejects_malformed_path_before_probe(monkeypatch):
+    """Verify malformed paths are rejected before any write probe.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on write-check regressions.
+    """
+    module = _load_xt_module()
+
+    monkeypatch.setattr(
+        module.os,
+        "open",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("malformed path must not be opened")
+        ),
+    )
+
+    assert (
+        module._folder_path_write_error(r"C:\bad<name")
+        == module.LOCAL_PATH_WRITE_ERROR_MESSAGE
+    )
+
+
+def test_browser_dialog_places_folder_selector_inside_connection_settings():
+    """Verify folder selector UI stays inside the connection settings panel.
 
     Inputs: repository fixtures. Output: fails on UI layout regressions.
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
     connection_marker = "conn_frame.grid_columnconfigure(7, weight=1)"
-    selector_marker = 'self.folder_path_var = tk.StringVar(value="")'
+    selector_marker = "folder_path_frame = tk.Frame(conn_frame)"
     browser_marker = "# Browser\n        browser = tk.Frame(self.root)"
 
     assert source.index(connection_marker) < source.index(selector_marker)
     assert source.index(selector_marker) < source.index(browser_marker)
+    assert "folder_path_frame = tk.Frame(self.root)" not in source
+    assert 'self._connection_label(conn_frame, "Path:").grid' in source
+    assert 'FOLDER_PATH_PLACEHOLDER = "Type or select path..."' in source
+    assert "column=1,\n            columnspan=5," in source
+    assert "width=52" in source
+    assert "self.save_settings_var = tk.BooleanVar(value=False)" in source
+    assert 'text="Save settings"' in source
     assert "bg=FOLDER_PATH_SELECT_BG" in source
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
     assert "height=38" in source
+    assert 'text="Export folder to OMERO"' in source
 
 
-def test_import_into_omero_starts_folder_worker_after_confirmation(
+def test_connection_setting_labels_are_centered_without_moving_entries():
+    """Verify connection labels are centered while entry grid positions stay fixed.
+
+    Inputs: repository fixtures. Output: fails on UI alignment regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    for label in ("Host", "Port", "Username", "Password", "Path"):
+        assert f'self._connection_label(conn_frame, "{label}:").grid' in source
+
+    assert 'anchor=_tk_constant("CENTER", "center")' in source
+    assert 'justify=_tk_constant("CENTER", "center")' in source
+    assert source.count('sticky=_tk_constant("NSEW", "nsew"), pady=5') >= 5
+    assert "self.host_entry.grid(row=0, column=1, pady=5, padx=5)" in source
+    assert "self.user_entry.grid(row=1, column=1, pady=5, padx=5)" in source
+
+
+def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
     tmp_path, monkeypatch
 ):
-    """Verify import into OMERO starts folder worker after confirmation.
+    """Verify export to OMERO starts folder worker after confirmation.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in import into OMERO starts folder worker after confirmation.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in export to OMERO starts folder worker after confirmation.
     """
     module = _load_xt_module()
     selected_folder = tmp_path / "selected"
@@ -1395,22 +1734,22 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
     threads = []
 
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog._import_in_progress = False
+    dialog._folder_export_in_progress = False
     dialog._connected = True
     dialog.client = object()
-    dialog._folder_import_available = True
-    dialog._folder_import_reason = ""
+    dialog._folder_export_available = True
+    dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar(str(selected_folder))
-    dialog._import_folder_worker = lambda *_args: None
-    dialog._set_actions_busy_for_import = busy_states.append
+    dialog._export_folder_worker = lambda *_args: None
+    dialog._set_actions_busy_for_export = busy_states.append
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
 
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
         lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("import action must use the selector row path")
+            AssertionError("export action must use the selector row path")
         ),
         raising=False,
     )
@@ -1444,34 +1783,34 @@ def test_import_into_omero_starts_folder_worker_after_confirmation(
 
     monkeypatch.setattr(module.threading, "Thread", _FakeThread)
 
-    module.OMEROBrowserDialog._import_into_omero(dialog)
+    module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
     assert busy_states == [True]
-    assert statuses == [("Preparing folder import into OMERO...", "#fff3cd")]
+    assert statuses == [("Preparing folder export to OMERO...", "#fff3cd")]
     assert threads == [
         {
-            "target": dialog._import_folder_worker,
+            "target": dialog._export_folder_worker,
             "args": (str(selected_folder), "selected"),
             "daemon": True,
         }
     ]
 
 
-def test_import_into_omero_rejects_filesystem_root(monkeypatch):
-    """Confirm import into OMERO rejects filesystem root is rejected at the boundary.
+def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
+    """Confirm export to OMERO rejects filesystem root at the boundary.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in import into OMERO rejects filesystem root.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in export to OMERO rejects filesystem root.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog._import_in_progress = False
+    dialog._folder_export_in_progress = False
     dialog._connected = True
     dialog.client = object()
-    dialog._folder_import_available = True
-    dialog._folder_import_reason = ""
+    dialog._folder_export_available = True
+    dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar(r"C:\\")
-    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+    dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
     dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -1486,7 +1825,7 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
         raising=False,
     )
 
-    module.OMEROBrowserDialog._import_into_omero(dialog)
+    module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
     assert errors == [
         (
@@ -1496,21 +1835,21 @@ def test_import_into_omero_rejects_filesystem_root(monkeypatch):
     ]
 
 
-def test_import_into_omero_requires_existing_selector_path(monkeypatch):
-    """Verify import rejects missing selector paths before worker startup.
+def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
+    """Verify export rejects missing selector paths before worker startup.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on import validation regressions.
+    Inputs: pytest provides `monkeypatch`. Output: fails on export validation regressions.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog._import_in_progress = False
+    dialog._folder_export_in_progress = False
     dialog._connected = True
     dialog.client = object()
-    dialog._folder_import_available = True
-    dialog._folder_import_reason = ""
+    dialog._folder_export_available = True
+    dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar(r"C:\missing-folder")
-    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+    dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
     dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -1525,7 +1864,7 @@ def test_import_into_omero_requires_existing_selector_path(monkeypatch):
         raising=False,
     )
 
-    module.OMEROBrowserDialog._import_into_omero(dialog)
+    module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
     assert errors == [
         (
@@ -1535,21 +1874,21 @@ def test_import_into_omero_requires_existing_selector_path(monkeypatch):
     ]
 
 
-def test_import_into_omero_rejects_malformed_selector_path(monkeypatch):
-    """Verify malformed typed selector paths do not crash the import action.
+def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
+    """Verify malformed typed selector paths do not crash the export action.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on import validation regressions.
+    Inputs: pytest provides `monkeypatch`. Output: fails on export validation regressions.
     """
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog._import_in_progress = False
+    dialog._folder_export_in_progress = False
     dialog._connected = True
     dialog.client = object()
-    dialog._folder_import_available = True
-    dialog._folder_import_reason = ""
+    dialog._folder_export_available = True
+    dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar("C:\\bad\x00path")
-    dialog._set_actions_busy_for_import = lambda *_args, **_kwargs: (
+    dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
     dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -1571,7 +1910,7 @@ def test_import_into_omero_rejects_malformed_selector_path(monkeypatch):
         ),
     )
 
-    module.OMEROBrowserDialog._import_into_omero(dialog)
+    module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
     assert errors == [
         (
@@ -1581,10 +1920,10 @@ def test_import_into_omero_rejects_malformed_selector_path(monkeypatch):
     ]
 
 
-def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
-    """Verify import folder worker uploads folder and reports success.
+def test_export_folder_worker_uploads_folder_and_reports_success(tmp_path):
+    """Verify export folder worker uploads folder and reports success.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in import folder worker uploads folder and reports success.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in export folder worker uploads folder and reports success.
     """
     module = _load_xt_module()
     selected_folder = tmp_path / "batch"
@@ -1616,7 +1955,7 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.client = types.SimpleNamespace(
-        start_folder_import_job=lambda folder_name, entries: (
+        start_folder_export_job=lambda folder_name, entries: (
             client_calls.append(
                 (
                     "start",
@@ -1632,9 +1971,9 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
             }
         ),
         upload_folder_chunk=lambda *args: client_calls.append(("upload",) + args) or {},
-        trigger_folder_import=lambda url: client_calls.append(("trigger", url)) or {},
-        get_folder_import_status=_next_status,
-        confirm_folder_import=lambda url: client_calls.append(("confirm", url)) or {},
+        trigger_folder_export=lambda url: client_calls.append(("trigger", url)) or {},
+        get_folder_export_status=_next_status,
+        confirm_folder_export=lambda url: client_calls.append(("confirm", url)) or {},
     )
     dialog._set_status = lambda text, color="#ecf0f1": status_updates.append(
         (text, color)
@@ -1645,11 +1984,11 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
         ui_callbacks.append(wait),
         callback(),
     )[1]
-    dialog._set_actions_busy_for_import = lambda active: client_calls.append(
+    dialog._set_actions_busy_for_export = lambda active: client_calls.append(
         ("busy", active)
     )
 
-    module.OMEROBrowserDialog._import_folder_worker(
+    module.OMEROBrowserDialog._export_folder_worker(
         dialog,
         str(selected_folder),
         "batch",
@@ -1684,11 +2023,11 @@ def test_import_folder_worker_uploads_folder_and_reports_success(tmp_path):
     assert error_messages == []
     assert info_messages == [
         (
-            "Folder Import Completed",
-            "The folder was imported into OMERO root as dataset 'batch'.",
+            "Folder Export Completed",
+            "The folder was exported to OMERO root as dataset 'batch'.",
         )
     ]
-    assert status_updates[-1] == ("Folder import completed in OMERO", "#d4edda")
+    assert status_updates[-1] == ("Folder export completed in OMERO", "#d4edda")
     assert ui_callbacks[-1] is False
 
 
@@ -1731,6 +2070,26 @@ def test_images_ctrl_click_toggles_single_selection_and_updates_anchor():
     assert result == "break"
     assert dialog.ilist.selection == {0, 2}
     assert dialog._image_selection_anchor == 2
+
+
+def test_images_panel_click_sets_focus_for_native_border_highlight():
+    """Verify Images clicks focus the listbox so Tk draws the active border.
+
+    Inputs: repository fixtures. Output: fails on Images panel focus regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.ilist = _FakeListbox(items=["a", "b"], selection=set())
+    dialog._image_selection_anchor = None
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=1, state=0)
+    )
+
+    assert result == "break"
+    assert dialog.ilist.focused is True
+    assert dialog.ilist.selection == {1}
+    assert dialog._image_selection_anchor == 1
 
 
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):
@@ -3080,6 +3439,11 @@ def test_set_converter_options_populates_menu_without_blank_entry():
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = DummyButton()
     dialog.refresh_btn = DummyButton()
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
 
     module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
 
@@ -3471,7 +3835,7 @@ def test_refresh_ignores_stale_results_without_mutating_current_view():
     assert dialog.load_btn.configs == []
 
 
-def test_load_routes_single_selection_to_single_worker(monkeypatch):
+def test_load_routes_single_selection_to_single_worker(tmp_path, monkeypatch):
     """Verify load routes single selection to single worker.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load routes single selection to single worker.
@@ -3483,6 +3847,11 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
     dialog.ilist = types.SimpleNamespace(curselection=lambda: (0,))
     dialog.converter_var = types.SimpleNamespace(get=lambda: "OMERO")
     dialog.load_btn = types.SimpleNamespace(config=lambda **_kwargs: None)
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
     dialog._load_worker = lambda *_args: None
     dialog._load_multiple_worker = lambda *_args: None
     confirmations = []
@@ -3496,6 +3865,12 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
     monkeypatch.setattr(
         module.messagebox,
         "showwarning",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
         lambda *_args, **_kwargs: None,
         raising=False,
     )
@@ -3535,7 +3910,7 @@ def test_load_routes_single_selection_to_single_worker(monkeypatch):
     ]
 
 
-def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
+def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
     """Verify load routes multi selection to multi worker.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in load routes multi selection to multi worker.
@@ -3548,6 +3923,11 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
     dialog.ilist = types.SimpleNamespace(curselection=lambda: (0, 1))
     dialog.converter_var = types.SimpleNamespace(get=lambda: "Imaris")
     dialog.load_btn = types.SimpleNamespace(config=lambda **_kwargs: None)
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
     dialog._load_worker = lambda *_args: None
     dialog._load_multiple_worker = lambda *_args: None
     confirmations = []
@@ -3561,6 +3941,12 @@ def test_load_routes_multi_selection_to_multi_worker(monkeypatch):
     monkeypatch.setattr(
         module.messagebox,
         "showwarning",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
         lambda *_args, **_kwargs: None,
         raising=False,
     )

@@ -194,11 +194,14 @@ Operational rule:
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
   `Missing image id` response.
-- folder import uses the main dialog's typed path field as the source of truth.
-  The `Select` button opens the native Tk directory chooser and replaces the
-  typed value only when the operator confirms a folder; cancelling preserves the
-  typed value. Imports reject filesystem roots, malformed paths, and missing
-  directories before starting uploads.
+- the local path field is the source of truth for both loading images into
+  Imaris and exporting local folders to OMERO. The `Select` button opens the
+  native Tk directory chooser, replaces the typed value only when the operator
+  confirms a folder, and immediately verifies that Imaris can write there.
+  Cancelling preserves the typed value. Typed paths must be structurally valid
+  absolute local paths and are write-checked when `Load images into Imaris` is
+  clicked; folder export still rejects filesystem roots, malformed paths, and
+  missing directories before starting uploads.
 - `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
   available. This mode downloads the original archived file and hands it to the
   running Imaris application through `FileOpen`, allowing Imaris to handle

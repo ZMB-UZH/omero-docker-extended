@@ -125,9 +125,9 @@ UPLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_UPLOAD_CHUNK_BYTES"
 DEFAULT_UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 MIN_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024
 MAX_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
-FOLDER_IMPORT_TIMEOUT = 3600
-FOLDER_IMPORT_POLL_INTERVAL = 2.0
-FOLDER_IMPORT_CONFIRM_PREVIEW_LIMIT = 10
+FOLDER_EXPORT_TIMEOUT = 3600
+FOLDER_EXPORT_POLL_INTERVAL = 2.0
+FOLDER_EXPORT_CONFIRM_PREVIEW_LIMIT = 10
 HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
 HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
 DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS = 3
@@ -160,6 +160,14 @@ CONVERTER_MENU_FONT = ("Arial", 10)
 STATUS_NEUTRAL_BG = "#dfe5eb"
 FOLDER_PATH_SELECT_BG = "#64748b"
 FOLDER_PATH_SELECT_ACTIVE_BG = "#526173"
+FOLDER_PATH_PLACEHOLDER = "Type or select path..."
+FOLDER_PATH_PLACEHOLDER_FG = "#9ca3af"
+FOLDER_PATH_TEXT_FG = "#111827"
+LOCAL_PATH_WRITE_ERROR_TITLE = "Path Not Writable"
+LOCAL_PATH_WRITE_ERROR_MESSAGE = (
+    "Please select or enter an existing folder that Imaris can write to."
+)
+LOCAL_PATH_WRITE_TEST_PREFIX = ".omero_connector_write_test_"
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -185,6 +193,7 @@ _WINDOWS_RESERVED_FILENAMES = {
     "LPT8",
     "LPT9",
 }
+_WINDOWS_PATH_COMPONENT_INVALID_CHARS = frozenset('<>:"|?*')
 
 
 @dataclass
@@ -966,6 +975,141 @@ def _safe_is_directory(path_value):
         return bool(path_value) and os.path.isdir(path_value)
     except (OSError, TypeError, ValueError):
         return False
+
+
+def _is_structurally_valid_folder_path(path_value):
+    """Return whether a typed folder path is structurally usable.
+
+    Inputs: `path_value`. Output: bool.
+    """
+    candidate = _coerce_path(path_value)
+    if candidate is None:
+        return False
+    try:
+        path_text = os.fspath(candidate)
+    except (TypeError, ValueError):
+        return False
+    if not path_text or path_text != path_text.strip():
+        return False
+
+    normalized_windows_path = _normalize_extended_windows_path_for_validation(path_text)
+    if normalized_windows_path is None:
+        return False
+    if _looks_like_windows_path(normalized_windows_path):
+        return _is_structurally_valid_windows_folder_path(normalized_windows_path)
+
+    if not os.path.isabs(path_text):
+        return False
+    return all(part not in {".", ".."} for part in Path(path_text).parts)
+
+
+def _normalize_extended_windows_path_for_validation(path_text):
+    """Return a normal Windows path for validation, or None for device paths.
+
+    Inputs: `path_text`. Output: path string or None.
+    """
+    upper_text = path_text.upper()
+    unc_prefix = "\\\\?\\UNC\\"
+    if upper_text.startswith(unc_prefix):
+        return "\\\\" + path_text[len(unc_prefix) :]
+    extended_prefix = "\\\\?\\"
+    if upper_text.startswith(extended_prefix):
+        without_prefix = path_text[len(extended_prefix) :]
+        if re.match(r"^[A-Za-z]:[\\/]", without_prefix):
+            return without_prefix
+        return None
+    if upper_text.startswith("\\\\.\\"):
+        return None
+    return path_text
+
+
+def _looks_like_windows_path(path_text):
+    """Return whether path text uses Windows path syntax.
+
+    Inputs: `path_text`. Output: bool.
+    """
+    drive, _tail = ntpath.splitdrive(path_text)
+    return os.name == "nt" or bool(drive) or "\\" in path_text
+
+
+def _is_valid_windows_path_component(component):
+    """Return whether one Windows path component is safe and well formed.
+
+    Inputs: `component`. Output: bool.
+    """
+    if not component or component in {".", ".."}:
+        return False
+    if component != component.rstrip(" ."):
+        return False
+    if any(
+        ord(character) < 32 or character in _WINDOWS_PATH_COMPONENT_INVALID_CHARS
+        for character in component
+    ):
+        return False
+    base_name = component.split(".", 1)[0].upper()
+    return base_name not in _WINDOWS_RESERVED_FILENAMES
+
+
+def _is_structurally_valid_windows_folder_path(path_text):
+    """Return whether path text is an absolute, structurally valid Windows path.
+
+    Inputs: `path_text`. Output: bool.
+    """
+    if not ntpath.isabs(path_text):
+        return False
+    drive, tail = ntpath.splitdrive(path_text)
+    if drive.startswith("\\\\"):
+        server_share = [part for part in drive.split("\\") if part]
+        if len(server_share) != 2 or not all(
+            _is_valid_windows_path_component(part) for part in server_share
+        ):
+            return False
+    elif not re.match(r"^[A-Za-z]:$", drive):
+        return False
+
+    components = [part for part in re.split(r"[\\/]+", tail) if part]
+    return all(_is_valid_windows_path_component(part) for part in components)
+
+
+def _folder_path_write_error(path_value):
+    """Return an error message unless `path_value` names a writable folder.
+
+    Inputs: `path_value`. Output: empty string or user-facing error text.
+    """
+    if not _is_structurally_valid_folder_path(path_value):
+        return LOCAL_PATH_WRITE_ERROR_MESSAGE
+
+    candidate = _coerce_path(path_value)
+    if candidate is None:
+        return LOCAL_PATH_WRITE_ERROR_MESSAGE
+
+    probe_path = None
+    descriptor = None
+    try:
+        if not candidate.exists() or not candidate.is_dir():
+            return LOCAL_PATH_WRITE_ERROR_MESSAGE
+
+        probe_path = candidate / f"{LOCAL_PATH_WRITE_TEST_PREFIX}{uuid.uuid4().hex}.tmp"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(os.fspath(probe_path), flags, 0o600)
+        os.close(descriptor)
+        descriptor = None
+        os.unlink(probe_path)
+        probe_path = None
+        return ""
+    except (OSError, TypeError, ValueError):
+        return LOCAL_PATH_WRITE_ERROR_MESSAGE
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if probe_path is not None:
+            try:
+                os.unlink(probe_path)
+            except OSError:
+                pass
 
 
 def _stringvar_value(variable):
@@ -3876,8 +4020,8 @@ class OMEROWebClient:
         _xt_debug(f"OMERO IMS export capability available={available}")
         return available
 
-    def get_folder_import_capability(self):
-        """Detect whether the current OMERO.web instance exposes folder import.
+    def get_folder_export_capability(self):
+        """Detect whether OMERO.web exposes the folder export workflow.
 
         Inputs: none. Output: dict.
         """
@@ -3889,7 +4033,7 @@ class OMEROWebClient:
 
         capability_url = f"{self.base_url.rstrip('/')}/omeroweb_import/start/"
         _xt_debug(
-            "Checking OMERO folder import capability endpoint="
+            "Checking OMERO folder export capability endpoint="
             f"{_safe_url_for_log(capability_url)}"
         )
         try:
@@ -3898,10 +4042,10 @@ class OMEROWebClient:
                 method="POST",
                 payload={},
                 timeout=30,
-                context="folder import capability check",
+                context="folder export capability check",
             )
         except Exception as exc:
-            _xt_debug(f"OMERO folder import capability unavailable: {exc}")
+            _xt_debug(f"OMERO folder export capability unavailable: {exc}")
             return {"available": False, "reason": str(exc)}
 
         message = self._payload_error_message(
@@ -3911,33 +4055,33 @@ class OMEROWebClient:
         )
         lowered = message.lower()
         if message == "No files provided.":
-            _xt_debug("OMERO folder import capability available=True")
+            _xt_debug("OMERO folder export capability available=True")
             return {"available": True, "reason": ""}
         if "please login as regular user" in lowered:
             _xt_debug(
-                "OMERO folder import capability unavailable: regular user required"
+                "OMERO folder export capability unavailable: regular user required"
             )
             return {
                 "available": False,
-                "reason": "Folder import is unavailable for the OMERO root user.",
+                "reason": "Folder export is unavailable for the OMERO root user.",
             }
         if isinstance(payload, dict) and payload.get("ok") is False and message:
-            _xt_debug(f"OMERO folder import capability unavailable: {message}")
+            _xt_debug(f"OMERO folder export capability unavailable: {message}")
             return {"available": False, "reason": message}
 
         _xt_debug(
-            "OMERO folder import capability unavailable: "
+            "OMERO folder export capability unavailable: "
             f"unexpected status={status_code}"
         )
         return {
             "available": False,
-            "reason": "Folder import is not available on this OMERO.web instance.",
+            "reason": "Folder export is not available on this OMERO.web instance.",
         }
 
-    def start_folder_import_job(self, dataset_name, file_entries):
-        """Start the folder import job for `OMEROWebClient`.
+    def start_folder_export_job(self, dataset_name, file_entries):
+        """Start the server-side job for the folder export workflow.
 
-        Inputs: `dataset_name`, `file_entries`. Output: start folder import job result.
+        Inputs: `dataset_name`, `file_entries`. Output: start folder export job result.
         Raises: RuntimeError when validation or the called operation fails.
         """
         if not isinstance(dataset_name, str) or not dataset_name.strip():
@@ -3960,7 +4104,7 @@ class OMEROWebClient:
 
         start_url = f"{self.base_url.rstrip('/')}/omeroweb_import/start/"
         _xt_debug(
-            "Starting OMERO folder import job via endpoint="
+            "Starting OMERO folder export job via endpoint="
             f"{_safe_url_for_log(start_url)}"
         )
         client_upload_id = uuid.uuid4().hex
@@ -3974,7 +4118,7 @@ class OMEROWebClient:
                 "compatibility_enabled": True,
             },
             timeout=60,
-            context="folder import start",
+            context="folder export start",
             retry_transient=True,
         )
         if (
@@ -3986,7 +4130,7 @@ class OMEROWebClient:
                 self._payload_error_message(
                     payload,
                     raw_text,
-                    "Failed to start OMERO folder import.",
+                    "Failed to start OMERO folder export.",
                 )
             )
 
@@ -4014,7 +4158,7 @@ class OMEROWebClient:
             raise RuntimeError("The OMERO upload URL is missing.")
         safe_relative_path = str(relative_path or "").strip()
         if not safe_relative_path:
-            raise RuntimeError("A folder import file path is missing.")
+            raise RuntimeError("A folder export file path is missing.")
         boundary, body = _multipart_form_body(
             {
                 "upload_mode": "chunked",
@@ -4035,7 +4179,7 @@ class OMEROWebClient:
             raw_data=body,
             content_type=f"multipart/form-data; boundary={boundary}",
             timeout=EXPORT_TIMEOUT + 60,
-            context="folder import chunk upload",
+            context="folder export chunk upload",
             retry_transient=True,
         )
         if (
@@ -4052,20 +4196,20 @@ class OMEROWebClient:
             )
         return payload
 
-    def trigger_folder_import(self, import_step_url):
-        """Trigger the folder import for `OMEROWebClient`.
+    def trigger_folder_export(self, import_step_url):
+        """Trigger the server-side step for the folder export workflow.
 
-        Inputs: `import_step_url`. Output: trigger folder import result. Raises:
+        Inputs: `import_step_url`. Output: trigger folder export result. Raises:
         RuntimeError when validation or the called operation fails.
         """
         if not import_step_url:
-            raise RuntimeError("The OMERO import-step URL is missing.")
+            raise RuntimeError("The OMERO folder export step URL is missing.")
         status_code, payload, raw_text = self._request_json_url(
             import_step_url,
             method="POST",
             payload={},
             timeout=60,
-            context="folder import trigger",
+            context="folder export trigger",
         )
         if (
             status_code >= 400
@@ -4076,15 +4220,15 @@ class OMEROWebClient:
                 self._payload_error_message(
                     payload,
                     raw_text,
-                    "Failed to start the OMERO import.",
+                    "Failed to start the OMERO folder export.",
                 )
             )
         return payload
 
-    def confirm_folder_import(self, confirm_url):
-        """Confirm the folder import for `OMEROWebClient`.
+    def confirm_folder_export(self, confirm_url):
+        """Confirm the folder export workflow for `OMEROWebClient`.
 
-        Inputs: `confirm_url`. Output: confirm folder import result. Raises:
+        Inputs: `confirm_url`. Output: confirm folder export result. Raises:
         RuntimeError when validation or the called operation fails.
         """
         if not confirm_url:
@@ -4094,7 +4238,7 @@ class OMEROWebClient:
             method="POST",
             payload={},
             timeout=60,
-            context="folder import confirmation",
+            context="folder export confirmation",
         )
         if (
             status_code >= 400
@@ -4105,13 +4249,13 @@ class OMEROWebClient:
                 self._payload_error_message(
                     payload,
                     raw_text,
-                    "Failed to confirm the OMERO import.",
+                    "Failed to confirm the OMERO folder export.",
                 )
             )
         return payload
 
-    def get_folder_import_status(self, status_url):
-        """Return folder import status.
+    def get_folder_export_status(self, status_url):
+        """Return folder export status.
 
         Inputs: `status_url`. Output: status value. Raises: RuntimeError when validation or the
         called operation fails.
@@ -4122,7 +4266,7 @@ class OMEROWebClient:
             status_url,
             method="GET",
             timeout=30,
-            context="folder import status poll",
+            context="folder export status poll",
         )
         if (
             status_code >= 400
@@ -4133,7 +4277,7 @@ class OMEROWebClient:
                 self._payload_error_message(
                     payload,
                     raw_text,
-                    "Failed to poll the OMERO import status.",
+                    "Failed to poll the OMERO folder export status.",
                 )
             )
         return payload
@@ -4660,9 +4804,9 @@ class OMEROBrowserDialog:
         )
         self._connected = False
         self._connection_in_progress = False
-        self._folder_import_available = False
-        self._folder_import_reason = "Connect to OMERO first."
-        self._import_in_progress = False
+        self._folder_export_available = False
+        self._folder_export_reason = "Connect to OMERO first."
+        self._folder_export_in_progress = False
         self._load_in_progress = False
         self._image_selection_anchor = None
         self._health_ping_generation = 0
@@ -4698,6 +4842,19 @@ class OMEROBrowserDialog:
         self._cancel_indicator_blink()
         self.root.destroy()
 
+    @staticmethod
+    def _connection_label(parent, text):
+        """Return a centered label for the connection settings grid.
+
+        Inputs: `parent`, `text`. Output: Tk label.
+        """
+        return tk.Label(
+            parent,
+            text=text,
+            anchor=_tk_constant("CENTER", "center"),
+            justify=_tk_constant("CENTER", "center"),
+        )
+
     def _build_ui(self):
         # Connection frame
         """Build the ui for `OMEROBrowserDialog`.
@@ -4724,12 +4881,16 @@ class OMEROBrowserDialog:
         default_user = os.environ.get("OMERO_USER") or os.environ.get("OMERO_USERNAME")
         default_user = default_user or ""
 
-        tk.Label(conn_frame, text="Host:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self._connection_label(conn_frame, "Host:").grid(
+            row=0, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
+        )
         self.host_entry = tk.Entry(conn_frame, width=25)
         self.host_entry.insert(0, default_host)
         self.host_entry.grid(row=0, column=1, pady=5, padx=5)
 
-        tk.Label(conn_frame, text="Port:").grid(row=0, column=2, sticky=tk.W, pady=5)
+        self._connection_label(conn_frame, "Port:").grid(
+            row=0, column=2, sticky=_tk_constant("NSEW", "nsew"), pady=5
+        )
         self.port_entry = tk.Entry(conn_frame, width=8)
         self.port_entry.insert(0, default_port)
         self.port_entry.grid(row=0, column=3, pady=5, padx=5)
@@ -4739,15 +4900,15 @@ class OMEROBrowserDialog:
             row=0, column=4, pady=5, padx=5
         )
 
-        tk.Label(conn_frame, text="Username:").grid(
-            row=1, column=0, sticky=tk.W, pady=5
+        self._connection_label(conn_frame, "Username:").grid(
+            row=1, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
         self.user_entry = tk.Entry(conn_frame, width=25)
         self.user_entry.insert(0, default_user)
         self.user_entry.grid(row=1, column=1, pady=5, padx=5)
 
-        tk.Label(conn_frame, text="Password:").grid(
-            row=1, column=2, sticky=tk.W, pady=5
+        self._connection_label(conn_frame, "Password:").grid(
+            row=1, column=2, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
         self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
         self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
@@ -4825,24 +4986,50 @@ class OMEROBrowserDialog:
         conn_frame.grid_columnconfigure(7, weight=1)
 
         self.folder_path_var = tk.StringVar(value="")
-        folder_path_frame = tk.Frame(self.root)
-        folder_path_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+        self._folder_path_placeholder_visible = False
+        self._folder_path_trace_suppressed = False
+        self._folder_path_write_state = "empty"
+        self._connection_label(conn_frame, "Path:").grid(
+            row=2, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
+        )
+        folder_path_frame = tk.Frame(conn_frame)
+        folder_path_frame.grid(
+            row=2,
+            column=1,
+            columnspan=5,
+            sticky=tk.W,
+            padx=5,
+            pady=5,
+        )
         self.folder_path_entry = tk.Entry(
             folder_path_frame,
             textvariable=self.folder_path_var,
             font=("Arial", 10),
+            width=52,
         )
         self.folder_path_entry.pack(
             side=tk.LEFT,
-            fill=tk.X,
-            expand=True,
             padx=(0, 8),
             ipady=4,
         )
+        self.folder_path_entry.bind(
+            "<FocusIn>",
+            lambda _event: self._hide_folder_path_placeholder(),
+        )
+        self.folder_path_entry.bind(
+            "<FocusOut>",
+            lambda _event: self._show_folder_path_placeholder(),
+        )
+        trace_add = getattr(self.folder_path_var, "trace_add", None)
+        if callable(trace_add):
+            self._folder_path_trace_id = trace_add(
+                "write",
+                lambda *_args: self._on_folder_path_changed(),
+            )
         self.select_folder_btn = _RoundedButton(
             folder_path_frame,
             text="Select",
-            command=self._select_import_folder,
+            command=self._select_local_folder,
             bg=FOLDER_PATH_SELECT_BG,
             fg="white",
             activebackground=FOLDER_PATH_SELECT_ACTIVE_BG,
@@ -4852,6 +5039,20 @@ class OMEROBrowserDialog:
             height=38,
         )
         self.select_folder_btn.pack(side=tk.LEFT)
+        self.save_settings_var = tk.BooleanVar(value=False)
+        self.save_settings_check = tk.Checkbutton(
+            conn_frame,
+            text="Save settings",
+            variable=self.save_settings_var,
+        )
+        self.save_settings_check.grid(
+            row=2,
+            column=6,
+            sticky=tk.W,
+            padx=(14, 0),
+            pady=5,
+        )
+        self._show_folder_path_placeholder()
 
         # Browser
         browser = tk.Frame(self.root)
@@ -4897,10 +5098,10 @@ class OMEROBrowserDialog:
         )
         self.load_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        self.import_btn = _RoundedButton(
+        self.export_btn = _RoundedButton(
             actions,
-            text="Import folder into OMERO",
-            command=self._import_into_omero,
+            text="Export folder to OMERO",
+            command=self._export_folder_to_omero,
             bg="#3498db",
             fg="white",
             activebackground="#2f85c7",
@@ -4910,7 +5111,7 @@ class OMEROBrowserDialog:
             width=260,
             height=52,
         )
-        self.import_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.export_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
         close_btn = _RoundedButton(
             actions,
@@ -5035,24 +5236,160 @@ class OMEROBrowserDialog:
         self._set_load_button_for_converter()
         self._set_refresh_button_state(
             _tk_constant("DISABLED", "disabled")
-            if getattr(self, "_import_in_progress", False)
+            if getattr(self, "_folder_export_in_progress", False)
             else _tk_constant("NORMAL", "normal")
         )
 
-    def _current_import_folder_path(self):
-        """Return the import folder path currently typed in the selector row.
+    def _set_folder_path_entry_fg(self, color):
+        """Set the folder path entry text color when the widget is available.
+
+        Inputs: `color`. Output: None.
+        """
+        entry = getattr(self, "folder_path_entry", None)
+        configure = getattr(entry, "config", None)
+        if callable(configure):
+            try:
+                configure(fg=color)
+            except Exception as exc:
+                _xt_debug(
+                    f"Folder path entry color update failed: {type(exc).__name__}"
+                )
+
+    def _set_folder_path_var_safely(self, value):
+        """Set the path variable without treating the write as user typing.
+
+        Inputs: `value`. Output: None.
+        """
+        variable = getattr(self, "folder_path_var", None)
+        setter = getattr(variable, "set", None)
+        if not callable(setter):
+            return
+        self._folder_path_trace_suppressed = True
+        try:
+            setter(value)
+        finally:
+            self._folder_path_trace_suppressed = False
+
+    def _on_folder_path_changed(self):
+        """Handle user edits to the folder path box.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        if getattr(self, "_folder_path_trace_suppressed", False):
+            return
+        if getattr(self, "_folder_path_placeholder_visible", False):
+            return
+        path_value = self._current_local_folder_path()
+        self._folder_path_write_state = (
+            "unchecked" if _is_structurally_valid_folder_path(path_value) else "invalid"
+        )
+        self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
+        self._set_load_button_for_converter()
+
+    def _show_folder_path_placeholder(self):
+        """Show display-only placeholder text when the path entry is empty.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        variable = getattr(self, "folder_path_var", None)
+        raw_value = _stringvar_value(variable)
+        if raw_value.strip():
+            if (
+                getattr(self, "_folder_path_placeholder_visible", False)
+                and raw_value == FOLDER_PATH_PLACEHOLDER
+            ):
+                self._set_folder_path_entry_fg(FOLDER_PATH_PLACEHOLDER_FG)
+                return
+            self._folder_path_placeholder_visible = False
+            self._folder_path_write_state = (
+                "unchecked"
+                if _is_structurally_valid_folder_path(raw_value)
+                else "invalid"
+            )
+            self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
+            self._set_load_button_for_converter()
+            return
+
+        self._set_folder_path_var_safely(FOLDER_PATH_PLACEHOLDER)
+        self._folder_path_placeholder_visible = True
+        self._folder_path_write_state = "empty"
+        self._set_folder_path_entry_fg(FOLDER_PATH_PLACEHOLDER_FG)
+        self._set_load_button_for_converter()
+
+    def _hide_folder_path_placeholder(self):
+        """Clear display-only placeholder text before user path editing.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        if getattr(self, "_folder_path_placeholder_visible", False):
+            self._set_folder_path_var_safely("")
+        self._folder_path_placeholder_visible = False
+        self._folder_path_write_state = "empty"
+        self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
+        self._set_load_button_for_converter()
+
+    def _set_folder_path_value(self, folder_path, write_state="unchecked"):
+        """Store a real folder path and mark the entry text as user data.
+
+        Inputs: `folder_path`, `write_state`. Output: None.
+        """
+        value = str(folder_path or "")
+        self._set_folder_path_var_safely(value)
+        self._folder_path_placeholder_visible = False
+        self._folder_path_write_state = (
+            write_state if _is_structurally_valid_folder_path(value) else "invalid"
+        )
+        self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
+        self._set_load_button_for_converter()
+
+    def _current_local_folder_path(self):
+        """Return the export folder path currently typed in the selector row.
 
         Inputs: no caller arguments. Output: `str`.
         """
+        if getattr(self, "_folder_path_placeholder_visible", False):
+            return ""
         return _stringvar_value(getattr(self, "folder_path_var", None))
 
-    def _select_import_folder(self):
+    def _folder_path_allows_load_button(self):
+        """Return whether path text can participate in the Load button state.
+
+        Inputs: none. Output: bool.
+        """
+        if getattr(self, "_folder_path_placeholder_visible", False):
+            return False
+        path_value = self._current_local_folder_path()
+        if not _is_structurally_valid_folder_path(path_value):
+            return False
+        return getattr(self, "_folder_path_write_state", "unchecked") != "unwritable"
+
+    def _show_folder_path_write_error(self):
+        """Show the common local-folder write error.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        messagebox.showerror(
+            LOCAL_PATH_WRITE_ERROR_TITLE,
+            LOCAL_PATH_WRITE_ERROR_MESSAGE,
+        )
+
+    def _mark_folder_path_write_state(self, path_value):
+        """Check and remember whether the path is writable.
+
+        Inputs: `path_value`. Output: bool.
+        """
+        error = _folder_path_write_error(path_value)
+        self._folder_path_write_state = "unwritable" if error else "writable"
+        self._set_load_button_for_converter()
+        return not error
+
+    def _select_local_folder(self):
         """Open the native folder selector and store the selected path.
 
         Inputs: no caller arguments. Output: None.
         """
-        dialog_title = "Select folder to import into OMERO"
-        current_path = self._current_import_folder_path()
+        dialog_title = "Select folder to export to OMERO"
+        current_path = self._current_local_folder_path()
         if _safe_is_directory(current_path):
             selected_folder = filedialog.askdirectory(
                 parent=self.root,
@@ -5067,27 +5404,34 @@ class OMEROBrowserDialog:
                 title=dialog_title,
             )
         if selected_folder:
-            self.folder_path_var.set(str(selected_folder))
+            selected_folder = str(selected_folder)
+            error = _folder_path_write_error(selected_folder)
+            self._set_folder_path_value(
+                selected_folder,
+                write_state="unwritable" if error else "writable",
+            )
+            if error:
+                self._show_folder_path_write_error()
 
-    def _import_into_omero(self):
-        """Import the into OMERO for `OMEROBrowserDialog`.
+    def _export_folder_to_omero(self):
+        """Export the selected folder to OMERO for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        if self._import_in_progress:
+        if self._folder_export_in_progress:
             return
         if not self._connected or self.client is None:
             messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
             return
-        if not self._folder_import_available:
+        if not self._folder_export_available:
             messagebox.showwarning(
-                "Import Unavailable",
-                self._folder_import_reason
-                or "Folder import is not available on this OMERO.web instance.",
+                "Export Unavailable",
+                self._folder_export_reason
+                or "Folder export is not available on this OMERO.web instance.",
             )
             return
 
-        selected_folder = self._current_import_folder_path()
+        selected_folder = self._current_local_folder_path()
         if not selected_folder.strip():
             messagebox.showwarning(
                 "No Folder Selected",
@@ -5118,25 +5462,25 @@ class OMEROBrowserDialog:
             return
 
         confirmation = (
-            "Import the selected folder into OMERO root as a dataset?\n\n"
+            "Export the selected folder to OMERO root as a dataset?\n\n"
             f"Dataset name: {folder_name}\n"
             "Target: OMERO root (no project)\n\n"
             "This uploads every file inside the selected folder."
         )
-        if not messagebox.askyesno("Confirm Folder Import", confirmation):
+        if not messagebox.askyesno("Confirm Folder Export", confirmation):
             return
 
-        self._set_actions_busy_for_import(True)
-        self._set_status("Preparing folder import into OMERO...", "#fff3cd")
+        self._set_actions_busy_for_export(True)
+        self._set_status("Preparing folder export to OMERO...", "#fff3cd")
         threading.Thread(
-            target=self._import_folder_worker,
+            target=self._export_folder_worker,
             args=(selected_folder, folder_name),
             daemon=True,
         ).start()
 
     @staticmethod
-    def _folder_import_failure_message(status_payload):
-        """Return the folder import failure message for `OMEROBrowserDialog`.
+    def _folder_export_failure_message(status_payload):
+        """Return the folder export failure message for `OMEROBrowserDialog`.
 
         Inputs: `status_payload`. Output: `str`.
         """
@@ -5155,11 +5499,11 @@ class OMEROBrowserDialog:
             ]
             if messages:
                 return messages[-1]
-        return "OMERO reported that the folder import failed."
+        return "OMERO reported that the folder export failed."
 
     @staticmethod
-    def _folder_import_progress_percent(current_value, total_value):
-        """Return the folder import progress percent for `OMEROBrowserDialog`.
+    def _folder_export_progress_percent(current_value, total_value):
+        """Return the folder export progress percent for `OMEROBrowserDialog`.
 
         Inputs: `current_value`, `total_value`. Output: bounded maximum value.
         """
@@ -5172,8 +5516,8 @@ class OMEROBrowserDialog:
             return None
         return max(0.0, min((current / total) * 100.0, 100.0))
 
-    def _folder_import_status_text(self, folder_name, status_payload):
-        """Return the folder import status text for `OMEROBrowserDialog`.
+    def _folder_export_status_text(self, folder_name, status_payload):
+        """Return the folder export status text for `OMEROBrowserDialog`.
 
         Inputs: `folder_name`, `status_payload`. Output: status value.
         """
@@ -5181,7 +5525,7 @@ class OMEROBrowserDialog:
         total_bytes = status_payload.get("total_bytes") or 0
 
         if status == "uploading":
-            percent = self._folder_import_progress_percent(
+            percent = self._folder_export_progress_percent(
                 status_payload.get("uploaded_bytes"),
                 total_bytes,
             )
@@ -5190,30 +5534,30 @@ class OMEROBrowserDialog:
             return f"Uploading folder '{folder_name}' to OMERO..."
 
         if status == "checking":
-            return "Checking folder import compatibility in OMERO..."
+            return "Checking folder export compatibility in OMERO..."
         if status == "awaiting_confirmation":
-            return "Waiting for confirmation to continue the OMERO import..."
+            return "Waiting for confirmation to continue the OMERO folder export..."
         if status == "ready":
-            return "Starting OMERO import..."
+            return "Starting OMERO folder export..."
         if status == "importing":
-            percent = self._folder_import_progress_percent(
+            percent = self._folder_export_progress_percent(
                 status_payload.get("import_progress_bytes")
                 or status_payload.get("imported_bytes"),
                 total_bytes,
             )
             if percent is not None:
-                return f"Importing folder into OMERO... {percent:.1f}%"
-            return f"Importing folder '{folder_name}' into OMERO..."
+                return f"Exporting folder to OMERO... {percent:.1f}%"
+            return f"Exporting folder '{folder_name}' to OMERO..."
         if status == "done":
-            return "Folder import completed in OMERO"
+            return "Folder export completed in OMERO"
         if status == "error":
-            return "Folder import failed"
+            return "Folder export failed"
         if status:
-            return f"Folder import status: {status}"
-        return f"Importing folder '{folder_name}' into OMERO..."
+            return f"Folder export status: {status}"
+        return f"Exporting folder '{folder_name}' to OMERO..."
 
-    def _confirm_folder_import_with_incompatible_files(self, status_payload):
-        """Confirm the folder import with incompatible files for `OMEROBrowserDialog`.
+    def _confirm_folder_export_with_incompatible_files(self, status_payload):
+        """Confirm folder export with incompatible files for `OMEROBrowserDialog`.
 
         Inputs: `status_payload`. Output: `bool`.
         """
@@ -5222,11 +5566,11 @@ class OMEROBrowserDialog:
             for path in list(status_payload.get("incompatible_files") or [])
             if str(path).strip()
         ]
-        preview = incompatible_files[:FOLDER_IMPORT_CONFIRM_PREVIEW_LIMIT]
+        preview = incompatible_files[:FOLDER_EXPORT_CONFIRM_PREVIEW_LIMIT]
         lines = [
             "OMERO reported incompatible files in the selected folder.",
             "",
-            "Continue importing the remaining compatible files?",
+            "Continue exporting the remaining compatible files?",
         ]
         if preview:
             lines.extend(["", "Incompatible files:"])
@@ -5238,67 +5582,67 @@ class OMEROBrowserDialog:
         return bool(
             self._invoke_on_ui_thread(
                 lambda: messagebox.askyesno(
-                    "Confirm Compatible OMERO Import",
+                    "Confirm Compatible OMERO Export",
                     prompt,
                 )
             )
         )
 
-    def _wait_for_folder_import_completion(
+    def _wait_for_folder_export_completion(
         self,
         folder_name,
         status_url,
         confirm_url,
     ):
-        """Wait for the for folder import completion for `OMEROBrowserDialog`.
+        """Wait for folder export completion for `OMEROBrowserDialog`.
 
         Inputs: `folder_name`, `status_url`, `confirm_url`. Output: `status_payload`.
         Raises: RuntimeError when validation or the called operation fails.
         """
-        deadline = time.time() + FOLDER_IMPORT_TIMEOUT
+        deadline = time.time() + FOLDER_EXPORT_TIMEOUT
         while time.time() < deadline:
-            status_payload = self.client.get_folder_import_status(status_url)
+            status_payload = self.client.get_folder_export_status(status_url)
             self._set_status(
-                self._folder_import_status_text(folder_name, status_payload),
+                self._folder_export_status_text(folder_name, status_payload),
                 "#fff3cd",
             )
             status = str(status_payload.get("status") or "").strip().lower()
             if status == "done":
                 return status_payload
             if status == "error":
-                raise RuntimeError(self._folder_import_failure_message(status_payload))
+                raise RuntimeError(self._folder_export_failure_message(status_payload))
             if status_payload.get("confirmation_required"):
-                if not self._confirm_folder_import_with_incompatible_files(
+                if not self._confirm_folder_export_with_incompatible_files(
                     status_payload
                 ):
                     raise RuntimeError(
-                        "Folder import was cancelled after OMERO reported incompatible files."
+                        "Folder export was cancelled after OMERO reported incompatible files."
                     )
-                self._set_status("Confirming compatible OMERO import...", "#fff3cd")
-                self.client.confirm_folder_import(confirm_url)
-            time.sleep(FOLDER_IMPORT_POLL_INTERVAL)
+                self._set_status("Confirming compatible OMERO export...", "#fff3cd")
+                self.client.confirm_folder_export(confirm_url)
+            time.sleep(FOLDER_EXPORT_POLL_INTERVAL)
 
-        raise RuntimeError("Folder import timed out while waiting for OMERO.")
+        raise RuntimeError("Folder export timed out while waiting for OMERO.")
 
-    def _import_folder_worker(self, selected_folder, folder_name):
-        """Import the folder worker for `OMEROBrowserDialog`.
+    def _export_folder_worker(self, selected_folder, folder_name):
+        """Export the folder through the OMERO.web folder export workflow.
 
         Inputs: `selected_folder`, `folder_name`. Output: None. Raises: RuntimeError
         when validation or the called operation fails.
         """
-        import_succeeded = False
+        export_succeeded = False
         try:
             self._set_status("Scanning selected folder...", "#fff3cd")
             local_entries = _collect_local_folder_entries(selected_folder)
             total_bytes = sum(int(entry.get("size") or 0) for entry in local_entries)
             _xt_debug(
-                "Folder import starting "
+                "Folder export starting "
                 f"dataset_name={folder_name!r} file_count={len(local_entries)} "
                 f"total_bytes={total_bytes}"
             )
 
             self._set_status("Creating OMERO upload job...", "#fff3cd")
-            job_payload = self.client.start_folder_import_job(
+            job_payload = self.client.start_folder_export_job(
                 folder_name, local_entries
             )
             upload_url = job_payload.get("upload_url")
@@ -5313,7 +5657,7 @@ class OMEROBrowserDialog:
                 or not confirm_url
             ):
                 raise RuntimeError(
-                    "OMERO returned an incomplete folder-import job response."
+                    "OMERO returned an incomplete folder-export job response."
                 )
 
             chunk_size = _upload_chunk_size_bytes()
@@ -5380,9 +5724,9 @@ class OMEROBrowserDialog:
                         f"Folder upload size verification failed for {relative_path}."
                     )
 
-            self._set_status("Starting OMERO import...", "#fff3cd")
-            self.client.trigger_folder_import(import_step_url)
-            final_status = self._wait_for_folder_import_completion(
+            self._set_status("Starting OMERO folder export...", "#fff3cd")
+            self.client.trigger_folder_export(import_step_url)
+            final_status = self._wait_for_folder_export_completion(
                 folder_name,
                 status_url,
                 confirm_url,
@@ -5392,13 +5736,13 @@ class OMEROBrowserDialog:
             if incompatible_files:
                 skipped_count = len(incompatible_files)
                 self._set_status(
-                    "Folder import completed with compatibility skips",
+                    "Folder export completed with compatibility skips",
                     "#fff3cd",
                 )
                 self._show_info(
-                    "Folder Import Completed",
+                    "Folder Export Completed",
                     (
-                        f"The folder was imported into OMERO root as dataset "
+                        f"The folder was exported to OMERO root as dataset "
                         f"'{folder_name}'.\n\n"
                         f"{skipped_count} incompatible "
                         f"{_pluralize(skipped_count, 'file')} "
@@ -5406,22 +5750,22 @@ class OMEROBrowserDialog:
                     ),
                 )
             else:
-                self._set_status("Folder import completed in OMERO", "#d4edda")
+                self._set_status("Folder export completed in OMERO", "#d4edda")
                 self._show_info(
-                    "Folder Import Completed",
+                    "Folder Export Completed",
                     (
-                        f"The folder was imported into OMERO root as dataset "
+                        f"The folder was exported to OMERO root as dataset "
                         f"'{folder_name}'."
                     ),
                 )
-            import_succeeded = True
+            export_succeeded = True
         except Exception as exc:
-            self._set_status("Folder import failed", "#f8d7da")
-            self._show_error("Folder Import Failed", str(exc))
-            _xt_debug(f"Folder import failed: {type(exc).__name__}: {exc}")
+            self._set_status("Folder export failed", "#f8d7da")
+            self._show_error("Folder Export Failed", str(exc))
+            _xt_debug(f"Folder export failed: {type(exc).__name__}: {exc}")
         finally:
             self._invoke_on_ui_thread(
-                partial(self._finish_import_workflow, import_succeeded),
+                partial(self._finish_export_workflow, export_succeeded),
                 wait=False,
             )
 
@@ -5500,7 +5844,7 @@ class OMEROBrowserDialog:
         self.datasets_data = []
         self.images_data = []
         self._image_selection_anchor = None
-        self._set_folder_import_capability(False, "Connect to OMERO first.")
+        self._set_folder_export_capability(False, "Connect to OMERO first.")
         self.plist.delete(0, _tk_constant("END", "end"))
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
@@ -5543,16 +5887,16 @@ class OMEROBrowserDialog:
         _xt_debug(f"Detected converter options after connection: {options}")
         return options
 
-    def _detect_folder_import_after_connection(self):
-        """Detect the folder import after connection for `OMEROBrowserDialog`.
+    def _detect_folder_export_after_connection(self):
+        """Detect folder export availability after connection.
 
         Inputs: none. Output: `capability`.
         """
         if not self.client:
             return {"available": False, "reason": "No OMERO.web client is available."}
-        capability = self.client.get_folder_import_capability()
+        capability = self.client.get_folder_export_capability()
         _xt_debug(
-            "Detected OMERO folder import capability "
+            "Detected OMERO folder export capability "
             f"available={bool(capability.get('available'))}"
         )
         return capability
@@ -5694,7 +6038,10 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        if not getattr(self, "_connected", False) or self.client is None:
+        if (
+            not getattr(self, "_connected", False)
+            or getattr(self, "client", None) is None
+        ):
             return
         if self._health_ping_after_id is not None:
             try:
@@ -6225,7 +6572,7 @@ class OMEROBrowserDialog:
             return
 
         self._set_converter_options([])
-        self._set_folder_import_capability(False, "Detecting OMERO folder import...")
+        self._set_folder_export_capability(False, "Detecting OMERO folder export...")
 
         port = _parse_port(p)
         if port is None:
@@ -6262,13 +6609,13 @@ class OMEROBrowserDialog:
                 self._load_projects()
                 self._set_status("Detecting connector capabilities...", "#fff3cd")
                 converter_options = self._detect_converter_options_after_connection()
-                folder_import_capability = self._detect_folder_import_after_connection()
+                folder_export_capability = self._detect_folder_export_after_connection()
                 self._set_converter_options(converter_options)
-                self._set_folder_import_capability(
-                    folder_import_capability.get("available"),
-                    folder_import_capability.get("reason", ""),
+                self._set_folder_export_capability(
+                    folder_export_capability.get("available"),
+                    folder_export_capability.get("reason", ""),
                 )
-                if converter_options or folder_import_capability.get("available"):
+                if converter_options or folder_export_capability.get("available"):
                     self._set_status("Connected to OMERO", "#d4edda")
                 else:
                     self._set_status(
@@ -6282,7 +6629,7 @@ class OMEROBrowserDialog:
                 self.client.session_id = None
                 self.client.session_key = None
                 self.client = None
-                self._set_folder_import_capability(False, "Connect to OMERO first.")
+                self._set_folder_export_capability(False, "Connect to OMERO first.")
                 self._set_connect_button(
                     "Connect",
                     _tk_constant("NORMAL", "normal"),
@@ -6534,6 +6881,19 @@ class OMEROBrowserDialog:
             except Exception as exc:
                 _xt_debug(f"Listbox anchor failed: {type(exc).__name__}")
 
+    @staticmethod
+    def _focus_listbox(listbox):
+        """Give a listbox keyboard focus so Tk draws its native focus border.
+
+        Inputs: `listbox`. Output: None.
+        """
+        focus_set = getattr(listbox, "focus_set", None)
+        if callable(focus_set):
+            try:
+                focus_set()
+            except Exception as exc:
+                _xt_debug(f"Listbox focus failed: {type(exc).__name__}")
+
     def _selected_image_count(self):
         """Return the number of currently selected valid images.
 
@@ -6566,6 +6926,7 @@ class OMEROBrowserDialog:
         listbox = getattr(event, "widget", None)
         if listbox is not self.ilist:
             return None
+        self._focus_listbox(listbox)
 
         size = self._listbox_size(listbox)
         if size <= 0:
@@ -6588,6 +6949,7 @@ class OMEROBrowserDialog:
         listbox = getattr(event, "widget", None)
         if listbox is not self.ilist:
             return None
+        self._focus_listbox(listbox)
 
         size = self._listbox_size(listbox)
         if size <= 0:
@@ -6672,42 +7034,42 @@ class OMEROBrowserDialog:
         if refresh_btn is not None:
             refresh_btn.config(state=state)
 
-    def _set_import_button_state(self, state):
-        """Set the import button state for `OMEROBrowserDialog`.
+    def _set_export_button_state(self, state):
+        """Set the export button state for `OMEROBrowserDialog`.
 
         Inputs: `state`. Output: None.
         """
-        import_btn = getattr(self, "import_btn", None)
-        if import_btn is not None:
-            import_btn.config(state=state)
+        export_btn = getattr(self, "export_btn", None)
+        if export_btn is not None:
+            export_btn.config(state=state)
 
-    def _update_import_button_state(self):
-        """Update the import button state for `OMEROBrowserDialog`.
+    def _update_export_button_state(self):
+        """Update the export button state for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: updates the described state and returns None.
         """
         enabled = (
             getattr(self, "_connected", False)
-            and getattr(self, "_folder_import_available", False)
+            and getattr(self, "_folder_export_available", False)
             and not getattr(self, "_connection_in_progress", False)
             and not getattr(self, "_refresh_in_progress", False)
-            and not getattr(self, "_import_in_progress", False)
+            and not getattr(self, "_folder_export_in_progress", False)
             and not getattr(self, "_load_in_progress", False)
         )
-        self._set_import_button_state(
+        self._set_export_button_state(
             _tk_constant("NORMAL", "normal")
             if enabled
             else _tk_constant("DISABLED", "disabled")
         )
 
-    def _set_folder_import_capability(self, available, reason=""):
-        """Set the folder import capability for `OMEROBrowserDialog`.
+    def _set_folder_export_capability(self, available, reason=""):
+        """Set folder export availability for `OMEROBrowserDialog`.
 
         Inputs: `available`, `reason`. Output: None.
         """
-        self._folder_import_available = bool(available)
-        self._folder_import_reason = str(reason or "").strip()
-        self._update_import_button_state()
+        self._folder_export_available = bool(available)
+        self._folder_export_reason = str(reason or "").strip()
+        self._update_export_button_state()
 
     def _set_load_button_for_converter(self):
         """Set the load button for converter for `OMEROBrowserDialog`.
@@ -6718,9 +7080,12 @@ class OMEROBrowserDialog:
         state = (
             _tk_constant("NORMAL", "normal")
             if (
-                converter_value in {"OMERO", "Imaris"}
+                getattr(self, "_connected", False)
+                and getattr(self, "client", None) is not None
+                and converter_value in {"OMERO", "Imaris"}
+                and self._folder_path_allows_load_button()
                 and not getattr(self, "_load_in_progress", False)
-                and not getattr(self, "_import_in_progress", False)
+                and not getattr(self, "_folder_export_in_progress", False)
             )
             else _tk_constant("DISABLED", "disabled")
         )
@@ -6728,12 +7093,12 @@ class OMEROBrowserDialog:
         if load_btn is not None:
             load_btn.config(state=state, text=self._load_button_text())
 
-    def _set_actions_busy_for_import(self, active):
-        """Set the actions busy for import for `OMEROBrowserDialog`.
+    def _set_actions_busy_for_export(self, active):
+        """Set the actions busy for export for `OMEROBrowserDialog`.
 
         Inputs: `active`. Output: None.
         """
-        self._import_in_progress = bool(active)
+        self._folder_export_in_progress = bool(active)
         disabled = _tk_constant("DISABLED", "disabled")
         load_btn = getattr(self, "load_btn", None)
         connect_btn = getattr(self, "connect_btn", None)
@@ -6741,7 +7106,7 @@ class OMEROBrowserDialog:
             self._set_connection_indicator("busy")
             if load_btn is not None:
                 load_btn.config(state=disabled)
-            self._set_import_button_state(disabled)
+            self._set_export_button_state(disabled)
             self._set_refresh_button_state(disabled)
             if connect_btn is not None:
                 connect_btn.config(state=disabled)
@@ -6762,7 +7127,7 @@ class OMEROBrowserDialog:
                 active_bg="#2f85c7",
             )
         self._set_load_button_for_converter()
-        self._update_import_button_state()
+        self._update_export_button_state()
         if (
             getattr(self, "_connected", False)
             and _stringvar_value(getattr(self, "converter_var", None))
@@ -6774,19 +7139,19 @@ class OMEROBrowserDialog:
         ):
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
 
-    def _clear_actions_busy_for_import(self):
-        """Clear the actions busy for import for `OMEROBrowserDialog`.
+    def _clear_actions_busy_for_export(self):
+        """Clear the actions busy for export for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        self._set_actions_busy_for_import(False)
+        self._set_actions_busy_for_export(False)
 
-    def _finish_import_workflow(self, succeeded):
-        """Restore import action state and reflect final connection indicator state.
+    def _finish_export_workflow(self, succeeded):
+        """Restore export action state and reflect final connection indicator state.
 
         Inputs: `succeeded`. Output: None.
         """
-        self._set_actions_busy_for_import(False)
+        self._set_actions_busy_for_export(False)
         if succeeded:
             self._restore_idle_connection_indicator()
         else:
@@ -6805,7 +7170,7 @@ class OMEROBrowserDialog:
             self._set_connection_indicator("busy")
             if load_btn is not None:
                 load_btn.config(state=disabled, text=self._load_button_text())
-            self._set_import_button_state(disabled)
+            self._set_export_button_state(disabled)
             self._set_refresh_button_state(disabled)
             if connect_btn is not None:
                 connect_btn.config(state=disabled)
@@ -6826,7 +7191,7 @@ class OMEROBrowserDialog:
                 active_bg="#2f85c7",
             )
         self._set_load_button_for_converter()
-        self._update_import_button_state()
+        self._update_export_button_state()
         if (
             getattr(self, "_connected", False)
             and _stringvar_value(getattr(self, "converter_var", None))
@@ -6834,7 +7199,7 @@ class OMEROBrowserDialog:
                 "OMERO",
                 "Imaris",
             }
-            and not getattr(self, "_import_in_progress", False)
+            and not getattr(self, "_folder_export_in_progress", False)
         ):
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
 
@@ -6876,7 +7241,7 @@ class OMEROBrowserDialog:
         load_btn = getattr(self, "load_btn", None)
         if load_btn is not None:
             load_btn.config(state=_tk_constant("DISABLED", "disabled"))
-        self._set_import_button_state(_tk_constant("DISABLED", "disabled"))
+        self._set_export_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
         self._set_connection_indicator("busy")
         threading.Thread(
@@ -7109,12 +7474,12 @@ class OMEROBrowserDialog:
             if getattr(self, "_connected", False)
             and _stringvar_value(getattr(self, "converter_var", None))
             in {"OMERO", "Imaris"}
-            and not getattr(self, "_import_in_progress", False)
+            and not getattr(self, "_folder_export_in_progress", False)
             and not getattr(self, "_load_in_progress", False)
             else _tk_constant("DISABLED", "disabled")
         )
         self._set_load_button_for_converter()
-        self._update_import_button_state()
+        self._update_export_button_state()
 
     @staticmethod
     def _image_cache_subdir(image_id):
@@ -7169,6 +7534,23 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: loads the described state and returns None.
         """
+        if not getattr(self, "_connected", False) or self.client is None:
+            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            return
+
+        selected_path = self._current_local_folder_path()
+        if not _is_structurally_valid_folder_path(selected_path):
+            messagebox.showwarning(
+                "No Path Selected",
+                "Please type or select a folder path first.",
+            )
+            self._set_load_button_for_converter()
+            return
+        if not self._mark_folder_path_write_state(selected_path):
+            self._show_folder_path_write_error()
+            return
+        self.export_dir = os.fspath(_coerce_path(selected_path))
+
         selected_images = self._selected_images()
         if not selected_images:
             messagebox.showwarning("No Selection", "Please select at least one image")
