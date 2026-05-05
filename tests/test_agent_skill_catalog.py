@@ -140,10 +140,12 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "ripgrep and avoiding index artifacts in the live checkout."
         ),
         skill_phrases=(
-            "pinned `cocoindex-code[full]==0.2.31`",
+            "pinned `cocoindex-code[full]==0.2.32`",
+            "mandatory",
             "MCP server or tool named `cocoindex-code`",
             "external mirror of Git-visible non-ignored files",
             "never run `ccc init` directly",
+            "stops only daemons it started itself",
             "semantic output as routing only",
             "mcp server named `cocoindex-code`",
         ),

@@ -399,18 +399,24 @@ opt-in [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
 internal AI communication only. Repository documentation, comments, docstrings,
 function descriptions, and user-facing text stay in standard prose.
 
-Broad AI Agent repo navigation can use the all-agent
-`cocoindex-code-search` skill as semantic routing before exact `rg`
-validation. Agents check for an existing MCP server or tool named
-`cocoindex-code` first. Its wrapper keeps the pinned host install under XDG data
-paths or `AGENT_COCOINDEX_HOME`, with per-repository mirrors, databases, and
-runtime directories outside the live checkout. The Codex installer repairs
-stale same-name entries instead of adding duplicates. After MCP install or
-launcher changes, agents verify the stdio handshake, raw protocol probes, tool
-listing, and a real search tool call with
-`python3 tools/cocoindex_agent_search.py mcp-smoke`. If it cold-indexes, agents
-tell the user once that the first search can take several minutes and then uses
-the external cache. The mirror asks CocoIndex Code 0.2.31 to include every
+Broad AI Agent repo navigation must use the all-agent
+`cocoindex-code-search` skill as the mandatory semantic routing gate before
+exact `rg` validation. Agents check for an existing MCP server or tool named
+`cocoindex-code` first, while using direct `rg` first only for precise string,
+symbol, scanner-count, or already-small searches. Its wrapper keeps the pinned
+host install under XDG data paths or `AGENT_COCOINDEX_HOME`, with
+per-repository mirrors, databases, and runtime directories outside the live
+checkout and no `.cocoindex_code/` there. The Codex installer writes a
+workspace-pinned host-local wrapper path
+and repairs stale same-name entries instead of adding duplicates. The wrapper
+reuses matching daemons, starts one only when needed, and stops only daemons it
+started itself so `ccc run-daemon` processes do not linger after CLI or MCP
+checks. After MCP install or launcher changes, agents verify the stdio
+handshake, raw protocol probes, and tool listing with
+`python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
+only against an existing active index. If it cold-indexes, agents tell the user
+once that the first search can take several minutes; later searches reuse the
+external cache. The mirror asks CocoIndex Code 0.2.32 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

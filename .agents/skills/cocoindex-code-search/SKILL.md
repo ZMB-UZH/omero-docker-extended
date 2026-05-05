@@ -1,19 +1,20 @@
 ---
 name: cocoindex-code-search
-description: Install and use the repo's pinned host-side CocoIndex Code workflow for semantic routing, token reduction, and optional MCP registration without writing index artifacts into the live checkout.
-origin: repo-local skill based on verified cocoindex-code 0.2.31 behavior
+description: Mandatory MCP-first workflow for the repo's pinned host-side CocoIndex Code semantic routing and token reduction without writing index artifacts into the live checkout.
+origin: repo-local skill based on verified cocoindex-code 0.2.32 behavior
 ---
 
 # CocoIndex Code Search
 
-Use this skill when repo navigation is broad enough that semantic routing can
-reduce context before exact `rg`, file reads, and tests.
+Use this skill for broad repo navigation when semantic routing can reduce
+context before exact `rg`, file reads, and tests.
 
 ## Required workflow
 
-1. Check for an already configured MCP server or tool named `cocoindex-code`
-   before reading installation instructions. If it exists, use it for broad
-   semantic routing and skip install/setup.
+1. For broad repo navigation, this skill is mandatory. Check for an already
+   configured MCP server or tool named `cocoindex-code` before reading
+   installation instructions. If it exists, use it for broad semantic routing
+   and skip install/setup.
 2. Keep `rg` as the exact search and validation tool.
 3. Use `python3 tools/cocoindex_agent_search.py mcp-install` for Codex, or
    `python3 tools/cocoindex_agent_search.py mcp-config` for other MCP clients,
@@ -46,7 +47,7 @@ reduce context before exact `rg`, file reads, and tests.
 ## Artifact rules
 
 - Never run `ccc init` directly in the live checkout.
-- Keep pinned `cocoindex-code[full]==0.2.31`; do not use a floating version.
+- Keep pinned `cocoindex-code[full]==0.2.32`; do not use a floating version.
 - The wrapper indexes an external mirror of Git-visible non-ignored files.
   Settings, runtime files, model caches, and SQLite databases stay under XDG
   paths or `AGENT_COCOINDEX_HOME`, never under the live repository.
@@ -55,17 +56,21 @@ reduce context before exact `rg`, file reads, and tests.
   digest gets a separate mirror, database directory, and daemon runtime
   directory under that one install so parallel agents on different repositories
   do not share project locks or databases.
+- The wrapper reuses a daemon that already exists for the same repository
+  runtime, starts one only when needed, and stops only daemons it started itself.
+  Do not leave wrapper-owned `ccc run-daemon` processes running after CLI or MCP
+  verification.
 - Launch commands from the target Git repository root, or set
   `AGENT_COCOINDEX_REPO` to that root for clients that cannot control their
   working directory. Do not put installation-specific paths in committed files.
 - Do not add, commit, or normalize `.cocoindex_code/` in the repository.
 - Do not index real `.env` files; only example env contracts are allowed.
-- The mirror asks CocoIndex Code 0.2.31 to include every Git-visible mirrored
+- The mirror asks CocoIndex Code 0.2.32 to include every Git-visible mirrored
   file pattern. CocoIndex indexes text-decodable content and safely skips
   undecodable binary files; do not claim semantic search inside arbitrary binary
   formats.
 - Do not add repo-specific language rewrites or file-type exclusions without a
-  tested, opt-in configuration path.
+  tested, documented configuration contract.
 - Avoid `--lang` for mixed-language or container formats such as templates,
   notebooks, Markdown with code blocks, or generated manifests unless the exact
   language filter is known to be safe for that file type.
@@ -94,9 +99,10 @@ reduce context before exact `rg`, file reads, and tests.
   cannot run local stdio MCP servers, set environment variables, and allow long
   tool timeouts.
 - Codex: run `python3 tools/cocoindex_agent_search.py mcp-install`. It registers
-  one MCP server named `cocoindex-code` with a repository-relative wrapper path,
-  repairs a stale same-name entry instead of adding duplicates, and writes
-  explicit per-server startup/tool timeouts. The MCP server must answer
+  one MCP server named `cocoindex-code` with a host-local workspace-pinned
+  wrapper path and `AGENT_COCOINDEX_REPO`, repairs a stale same-name entry
+  instead of adding duplicates, and writes explicit per-server startup/tool
+  timeouts. The MCP server must answer
   initialize and tool-list requests without installing, mirroring, launching the
   daemon, or indexing; MCP search may only query an existing active index.
   Then run `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target

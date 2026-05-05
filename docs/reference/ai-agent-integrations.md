@@ -123,14 +123,19 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 
 ## CocoIndex Code routing
 
-`.agents/skills/cocoindex-code-search/` defines the shared semantic routing
-workflow for every agent harness. Agents should first check whether an
-MCP server or tool named `cocoindex-code` is already available, and only read
-setup or installation instructions when it is absent. The wrapper installs the pinned
-`cocoindex-code[full]` package once per host account under
+`.agents/skills/cocoindex-code-search/` defines the mandatory semantic routing
+gate for broad repo navigation in every agent harness. Agents must first
+check whether an MCP server or tool named `cocoindex-code` is already available,
+and only read setup or installation instructions when it is absent. Direct `rg`
+comes first only for precise string, symbol, scanner-count, or already-small
+searches. The wrapper installs the pinned `cocoindex-code[full]` package once per
+host account under
 `AGENT_COCOINDEX_HOME` or the XDG data default, then keeps each repository
 content digest in its own external mirror, database directory, and daemon
-runtime directory outside the live checkout.
+runtime directory outside the live checkout. The wrapper reuses a matching
+daemon when one is already running, starts one only when needed, and stops only
+daemons it started itself so CLI and MCP checks do not leave stale
+`ccc run-daemon` processes behind.
 
 Agents must treat CocoIndex output as routing only. Use it to find a small
 candidate file set, then confirm exact strings, symbols, scanner findings, and
@@ -138,12 +143,12 @@ edits with `rg`, file reads, and tests in the real checkout.
 
 When CocoIndex reports a cold semantic index, agents should tell the user once
 in one short sentence that the first search can take several minutes and later
-searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.31
+searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.32
 to include every Git-visible mirrored file pattern instead of upstream's
 extension list. CocoIndex indexes text-decodable content and skips undecodable
 binary files, so agents must not claim semantic search inside arbitrary binary
 formats or add repo-specific language rewrites or file-type exclusions without a
-tested opt-in path.
+tested, documented configuration contract.
 
 Upstream CocoIndex Code documents native MCP setup as installing the full
 package and registering `ccc mcp` with the agent. This repo keeps that MCP
@@ -163,8 +168,9 @@ set `AGENT_COCOINDEX_REPO` for a workspace-scoped static configuration. Do not
 claim compatibility with clients that cannot run local stdio MCP servers, set
 environment variables, and allow long tool timeouts. Codex can use
 `python3 tools/cocoindex_agent_search.py mcp-install`, which registers or
-repairs the same server name without duplicating it, uses a repository-relative
-wrapper command, and writes explicit per-server startup/tool timeouts. The MCP
+repairs the same server name without duplicating it, writes a host-local
+workspace-pinned wrapper command plus `AGENT_COCOINDEX_REPO`, and writes
+explicit per-server startup/tool timeouts. The MCP
 server itself stays lightweight through initialize and tool-list requests. MCP
 search may only query an existing active index; cold install, mirror, daemon,
 and index work requires an explicit CLI command outside the MCP request path.

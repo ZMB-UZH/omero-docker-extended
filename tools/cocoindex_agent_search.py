@@ -25,7 +25,7 @@ from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
-PACKAGE_VERSION = "0.2.31"
+PACKAGE_VERSION = "0.2.32"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
 MCP_PYTHON_COMMAND = "python3"
@@ -64,6 +64,7 @@ DEFAULT_TIMEOUTS_SECONDS = {
     "status": 600,
     "rg": 600,
     "mcp_smoke": 600,
+    "daemon_stop": 30,
 }
 MCP_STARTUP_TIMEOUT_SECONDS = 600
 MCP_TOOL_TIMEOUT_SECONDS = DEFAULT_TIMEOUTS_SECONDS["index"]
@@ -1219,13 +1220,13 @@ def run_ccc(
     `subprocess.CompletedProcess[str]`.
     """
     ensure_ready(context, excluded_paths)
-    ensure_daemon_ready(context)
-    return checked_command(
-        [str(context.ccc_bin), *args],
-        cwd=context.mirror_repo,
-        env=ccc_supervised_env(context),
-        timeout=timeout,
-    )
+    with daemon_session(context):
+        return checked_command(
+            [str(context.ccc_bin), *args],
+            cwd=context.mirror_repo,
+            env=ccc_supervised_env(context),
+            timeout=timeout,
+        )
 
 
 def require_existing_search_artifacts(context: CocoIndexContext) -> None:
@@ -1248,20 +1249,33 @@ def require_existing_search_artifacts(context: CocoIndexContext) -> None:
 
 
 def run_ccc_existing(
-    context: CocoIndexContext, args: list[str], timeout: int | None = None
+    context: CocoIndexContext,
+    args: list[str],
+    timeout: int | None = None,
+    *,
+    manage_daemon: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Ccc only against already-created artifacts.
 
-    Inputs: `context`, `args`, `timeout`. Output: `subprocess.CompletedProcess[str]`.
+    Inputs: `context`, `args`, `timeout`, `manage_daemon`. Output:
+    `subprocess.CompletedProcess[str]`.
     """
     require_existing_search_artifacts(context)
-    ensure_daemon_ready(context)
-    return checked_command(
-        [str(context.ccc_bin), *args],
-        cwd=context.mirror_repo,
-        env=ccc_supervised_env(context),
-        timeout=timeout,
-    )
+    command_env = ccc_supervised_env(context)
+    if not manage_daemon:
+        return checked_command(
+            [str(context.ccc_bin), *args],
+            cwd=context.mirror_repo,
+            env=command_env,
+            timeout=timeout,
+        )
+    with daemon_session(context):
+        return checked_command(
+            [str(context.ccc_bin), *args],
+            cwd=context.mirror_repo,
+            env=command_env,
+            timeout=timeout,
+        )
 
 
 def target_sqlite_db(context: CocoIndexContext) -> Path:
@@ -1421,6 +1435,8 @@ def run_rg_baseline(
 def run_coco_search(
     context: CocoIndexContext,
     case: BenchmarkCase,
+    *,
+    manage_daemon: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], float, list[str]]:
     """CocoIndex semantic routing for one benchmark case.
 
@@ -1429,11 +1445,11 @@ def run_coco_search(
     when validation or the called operation fails.
     """
     start = time.perf_counter()
-    result = run_command(
-        [str(context.ccc_bin), "search", "--limit", "5", case.query],
-        cwd=context.mirror_repo,
-        env=ccc_env(context),
+    result = run_ccc_existing(
+        context,
+        ["search", "--limit", "5", case.query],
         timeout=timeout_seconds("search"),
+        manage_daemon=manage_daemon,
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
     if result.returncode != 0:
@@ -1496,13 +1512,17 @@ def benchmark_case(
     rg_bin: str,
     case: BenchmarkCase,
     exclude_args: list[str],
+    *,
+    manage_daemon: bool = True,
 ) -> BenchmarkResult:
     """All benchmark commands for one case.
 
     Inputs: `context`, `rg_bin`, `case`, `exclude_args`. Output: `BenchmarkResult`.
     """
     rg_result, rg_ms, rg_files = run_rg_baseline(context, rg_bin, case, exclude_args)
-    coco_result, coco_ms, coco_files = run_coco_search(context, case)
+    coco_result, coco_ms, coco_files = run_coco_search(
+        context, case, manage_daemon=manage_daemon
+    )
     focused_rg_result, focused_rg_ms, focused_rg_files = run_focused_rg(
         context, rg_bin, case, coco_files
     )
@@ -1588,10 +1608,17 @@ def run_benchmark(
     index_elapsed = time.perf_counter() - index_start
 
     rg_bin = resolve_required_executable("rg")
-    results = [
-        benchmark_case(context, rg_bin, case, rg_exclude_args(excluded_paths))
-        for case in cases
-    ]
+    with daemon_session(context):
+        results = [
+            benchmark_case(
+                context,
+                rg_bin,
+                case,
+                rg_exclude_args(excluded_paths),
+                manage_daemon=False,
+            )
+            for case in cases
+        ]
 
     payload = {
         "benchmark_schema": 1,
@@ -2142,6 +2169,17 @@ def start_daemon_process(context: CocoIndexContext) -> subprocess.Popen[bytes]:
         log_handle.close()
 
 
+def daemon_pid(context: CocoIndexContext) -> int | None:
+    """Return the daemon PID recorded for this runtime, if valid.
+
+    Inputs: `context`. Output: `int | None`.
+    """
+    try:
+        return int((context.runtime_dir / "daemon.pid").read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
 def wait_for_daemon_handshake(
     context: CocoIndexContext, proc: subprocess.Popen[bytes]
 ) -> None:
@@ -2187,17 +2225,81 @@ def cleanup_stale_daemon_files(context: CocoIndexContext) -> None:
             )
 
 
-def ensure_daemon_ready(context: CocoIndexContext) -> None:
-    """Ensure the daemon ready.
+def stop_owned_daemon(context: CocoIndexContext, proc: subprocess.Popen[bytes]) -> None:
+    """Stop the daemon process that this wrapper started.
 
-    Inputs: `context` (CocoIndexContext). Output: None.
+    Inputs: `context`, `proc`. Output: None.
     """
-    with FileLock(lock_path(context.artifact_root, f"daemon-{context.mirror_digest}")):
+    recorded_pid = daemon_pid(context)
+    if recorded_pid is not None and recorded_pid != proc.pid:
+        LOGGER.warning(
+            "Skipping CocoIndex daemon stop because PID changed from %s to %s.",
+            proc.pid,
+            recorded_pid,
+        )
+        reap_started_daemon_process(proc, terminate_first=True)
+        return
+    try:
+        prepend_venv_site_package_paths(context)
+        client_module = importlib.import_module("cocoindex_code.client")
+        with patched_process_env(ccc_env(context)):
+            cast(Any, client_module).stop_daemon()
         if daemon_handshake_succeeds(context):
-            return
-        cleanup_stale_daemon_files(context)
-        proc = start_daemon_process(context)
-        wait_for_daemon_handshake(context, proc)
+            raise RuntimeError("CocoIndex daemon still accepts handshakes after stop.")
+    finally:
+        reap_started_daemon_process(proc)
+
+
+def reap_started_daemon_process(
+    proc: subprocess.Popen[bytes], *, terminate_first: bool = False
+) -> None:
+    """Wait for or terminate a daemon process started by this wrapper.
+
+    Inputs: `proc`, `terminate_first`. Output: None. Raises: RuntimeError when the owned
+    process does not exit after termination.
+    """
+    if proc.poll() is not None:
+        return
+    timeout = timeout_seconds("daemon_stop")
+    if terminate_first:
+        proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("CocoIndex daemon process did not exit after kill.") from exc
+
+
+@contextmanager
+def daemon_session(context: CocoIndexContext) -> Any:
+    """Run a command with a ready daemon and clean up wrapper-owned daemons.
+
+    Inputs: `context`. Output: context manager yielding None.
+    """
+    proc: subprocess.Popen[bytes] | None = None
+    with FileLock(lock_path(context.artifact_root, f"daemon-{context.mirror_digest}")):
+        if not daemon_handshake_succeeds(context):
+            cleanup_stale_daemon_files(context)
+            proc = start_daemon_process(context)
+            try:
+                wait_for_daemon_handshake(context, proc)
+            except BaseException:
+                reap_started_daemon_process(proc, terminate_first=True)
+                raise
+        try:
+            yield
+        finally:
+            if proc is not None:
+                stop_owned_daemon(context, proc)
 
 
 def mcp_config_payload(
@@ -2254,8 +2356,11 @@ def expected_codex_mcp_server(context: CocoIndexContext) -> dict[str, object]:
     """
     return {
         "command": MCP_PYTHON_COMMAND,
-        "args": [wrapper_script_arg(pin_repo=False), "mcp"],
-        "env": {ARTIFACT_ROOT_ENV: str(context.artifact_root)},
+        "args": [wrapper_script_arg(pin_repo=True), "mcp"],
+        "env": {
+            ARTIFACT_ROOT_ENV: str(context.artifact_root),
+            REPO_ROOT_ENV: str(context.repo_root),
+        },
         "startup_timeout_sec": MCP_STARTUP_TIMEOUT_SECONDS,
         "tool_timeout_sec": MCP_TOOL_TIMEOUT_SECONDS,
     }
@@ -2292,10 +2397,11 @@ def codex_mcp_server_matches_expected(
     return (
         server.get("command") == expected["command"]
         and server.get("args") == expected["args"]
-        and "cwd" not in server
         and env.get(ARTIFACT_ROOT_ENV) == expected_env[ARTIFACT_ROOT_ENV]
+        and env.get(REPO_ROOT_ENV) == expected_env[REPO_ROOT_ENV]
         and server.get("startup_timeout_sec") == expected["startup_timeout_sec"]
         and server.get("tool_timeout_sec") == expected["tool_timeout_sec"]
+        and "cwd" not in server
     )
 
 
@@ -2484,10 +2590,12 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
             "add",
             "--env",
             f"{ARTIFACT_ROOT_ENV}={context.artifact_root}",
+            "--env",
+            f"{REPO_ROOT_ENV}={context.repo_root}",
             MCP_SERVER_NAME,
             "--",
             MCP_PYTHON_COMMAND,
-            wrapper_script_arg(pin_repo=False),
+            wrapper_script_arg(pin_repo=True),
             "mcp",
         ],
         cwd=context.repo_root,
@@ -2501,54 +2609,105 @@ def run_mcp_stdio_smoke(
     *,
     include_search: bool,
 ) -> dict[str, object]:
-    """A real MCP initialize/list_tools probe against this wrapper.
+    """A raw stdio MCP initialize/list_tools probe against this wrapper.
 
     Inputs: `context`, `include_search`. Output: `dict[str, object]`.
     """
-    prepend_venv_site_package_paths(context)
-    anyio_module = importlib.import_module("anyio")
-    mcp_module = importlib.import_module("mcp")
-    stdio_module = importlib.import_module("mcp.client.stdio")
-    client_session = cast(Any, mcp_module).ClientSession
-    server_parameters = cast(Any, mcp_module).StdioServerParameters
-    stdio_client = cast(Any, stdio_module).stdio_client
-
-    async def probe() -> dict[str, object]:
-        """Probe the probe.
-
-        Inputs: none. Output: `dict[str, object]`.
-        """
-        params = server_parameters(
-            command=sys.executable,
-            args=[str(Path(__file__).resolve()), "mcp"],
-            env={ARTIFACT_ROOT_ENV: str(context.artifact_root)},
-            cwd=str(context.repo_root),
+    search_request = {
+        "jsonrpc": MCP_JSONRPC_VERSION,
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": MCP_SEARCH_TOOL_NAME,
+            "arguments": {"query": "MCP smoke search", "limit": 1},
+        },
+    }
+    messages = [
+        {
+            "jsonrpc": MCP_JSONRPC_VERSION,
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSIONS[-1],
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "cocoindex-agent-search-smoke",
+                    "version": "1",
+                },
+            },
+        },
+        {
+            "jsonrpc": MCP_JSONRPC_VERSION,
+            "method": "notifications/initialized",
+            "params": {},
+        },
+        {"jsonrpc": MCP_JSONRPC_VERSION, "id": 2, "method": "tools/list", "params": {}},
+        *((search_request,) if include_search else ()),
+    ]
+    completed = run_command_with_input(
+        [sys.executable, str(Path(__file__).resolve()), "mcp"],
+        cwd=context.repo_root,
+        env={
+            ARTIFACT_ROOT_ENV: str(context.artifact_root),
+            REPO_ROOT_ENV: str(context.repo_root),
+        },
+        input_text="".join(json.dumps(message) + "\n" for message in messages),
+        timeout=timeout_seconds("mcp_smoke"),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "\n".join(
+                [
+                    f"MCP stdio probe failed with exit {completed.returncode}",
+                    "STDOUT:",
+                    completed.stdout,
+                    "STDERR:",
+                    completed.stderr,
+                ]
+            )
         )
-        with cast(Any, anyio_module).fail_after(timeout_seconds("mcp_smoke")):
-            async with (
-                stdio_client(params) as (read_stream, write_stream),
-                client_session(read_stream, write_stream) as session,
-            ):
-                initialized = await session.initialize()
-                tools = await session.list_tools()
-                search_result_type = None
-                if include_search:
-                    search = await session.call_tool(
-                        "search",
-                        {"query": "MCP smoke search", "limit": 1},
-                    )
-                    search_result_type = type(search).__name__
-        server_info = initialized.serverInfo
-        result = {
-            "server_name": server_info.name,
-            "server_version": server_info.version,
-            "tools": sorted(tool.name for tool in tools.tools),
-        }
-        if include_search:
-            result["search_tool_result_type"] = search_result_type
-        return result
-
-    return cast(dict[str, object], cast(Any, anyio_module).run(probe))
+    responses = parse_mcp_response_lines(completed.stdout)
+    initialize = responses.get(1, {})
+    tools_list = responses.get(2, {})
+    initialize_result = initialize.get("result", {})
+    tools_result = tools_list.get("result", {})
+    if not isinstance(initialize_result, dict):
+        raise RuntimeError(f"MCP initialize did not return a result: {initialize}")
+    if not isinstance(tools_result, dict):
+        raise RuntimeError(f"MCP tools/list did not return a result: {tools_list}")
+    server_info = initialize_result.get("serverInfo", {})
+    if not isinstance(server_info, dict):
+        raise RuntimeError(f"MCP initialize omitted serverInfo: {initialize}")
+    if server_info.get("name") != MCP_SERVER_NAME:
+        raise RuntimeError(f"MCP initialize returned the wrong server: {server_info}")
+    if server_info.get("version") != PACKAGE_VERSION:
+        raise RuntimeError(f"MCP initialize returned the wrong version: {server_info}")
+    tools = sorted(
+        tool["name"]
+        for tool in tools_result.get("tools", [])
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    )
+    if MCP_SEARCH_TOOL_NAME not in tools:
+        raise RuntimeError(f"MCP tools/list did not include search: {tools}")
+    result = {
+        "server_name": server_info.get("name"),
+        "server_version": server_info.get("version"),
+        "tools": tools,
+    }
+    if include_search:
+        search_response = responses.get(3, {})
+        search_result = search_response.get("result", {})
+        if not isinstance(search_result, dict):
+            raise RuntimeError(
+                f"MCP search smoke did not return a result: {search_response}"
+            )
+        if search_result.get("isError") is not False:
+            raise RuntimeError(f"MCP search smoke failed: {search_result}")
+        content = search_result.get("content", [])
+        result["search_tool_content_items"] = (
+            len(content) if isinstance(content, list) else 0
+        )
+    return result
 
 
 def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
@@ -2565,6 +2724,8 @@ def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
             payload = json.loads(line)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"MCP server emitted non-JSON stdout: {line!r}") from exc
+        if "error" in payload:
+            raise RuntimeError(f"MCP server returned an error response: {payload}")
         response_id = payload.get("id")
         if isinstance(response_id, int):
             responses[response_id] = payload
@@ -2599,7 +2760,10 @@ def run_mcp_jsonrpc_protocol_probe_once(
     completed = run_command_with_input(
         [sys.executable, str(Path(__file__).resolve()), "mcp"],
         cwd=context.repo_root,
-        env={ARTIFACT_ROOT_ENV: str(context.artifact_root)},
+        env={
+            ARTIFACT_ROOT_ENV: str(context.artifact_root),
+            REPO_ROOT_ENV: str(context.repo_root),
+        },
         input_text="".join(json.dumps(message) + "\n" for message in messages),
         timeout=timeout_seconds("mcp_smoke"),
     )
