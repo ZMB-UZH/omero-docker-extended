@@ -882,7 +882,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         Inputs: repository fixtures and a disposable root-owned data tree. Output: fails on
         regressions where OMERO.server would mark the repository read-only on first boot.
         """
-        nobody_uid = pwd.getpwnam("nobody").pw_uid
+        nobody_account = pwd.getpwnam("nobody")
+        nobody_uid = nobody_account.pw_uid
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "normalize_dir_path() {",
@@ -893,7 +894,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             root = Path(tmpdir)
             omero_dir = root / "OMERO"
             server_home = root / "server" / "OMERO.server"
-            os.chmod(root, 0o711)  # nosec B103
+            os.chown(root, nobody_uid, nobody_account.pw_gid)
+            os.chmod(root, 0o700)
             omero_dir.mkdir(parents=True, exist_ok=True)
             server_home.mkdir(parents=True, exist_ok=True)
             os.chown(omero_dir, 0, 0)
