@@ -13,6 +13,7 @@ ImarisXT OMERO Connector
 Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 """
 
+import contextlib
 import datetime
 import hashlib
 import http.client
@@ -1101,15 +1102,11 @@ def _folder_path_write_error(path_value):
         return LOCAL_PATH_WRITE_ERROR_MESSAGE
     finally:
         if descriptor is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(descriptor)
-            except OSError:
-                pass
         if probe_path is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(probe_path)
-            except OSError:
-                pass
 
 
 def _stringvar_value(variable):
@@ -4815,6 +4812,15 @@ class OMEROBrowserDialog:
         self._indicator_state = "disconnected"
         self._indicator_blink_on = False
         self._indicator_after_id: Optional[str] = None
+        self.folder_path_var = None
+        self.folder_path_entry = None
+        self.select_folder_btn = None
+        self.save_settings_var = None
+        self.save_settings_check = None
+        self._folder_path_placeholder_visible = False
+        self._folder_path_trace_suppressed = False
+        self._folder_path_trace_id = None
+        self._folder_path_write_state = "empty"
 
         # Get export directory
         self.export_dir = self._get_export_dir()
@@ -5363,7 +5369,8 @@ class OMEROBrowserDialog:
             return False
         return getattr(self, "_folder_path_write_state", "unchecked") != "unwritable"
 
-    def _show_folder_path_write_error(self):
+    @staticmethod
+    def _show_folder_path_write_error():
         """Show the common local-folder write error.
 
         Inputs: no caller arguments. Output: None.
