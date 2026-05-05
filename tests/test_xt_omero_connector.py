@@ -231,6 +231,13 @@ class _FakeEntry:
         """
         return self.value
 
+    def delete(self, _start, _end=None):
+        """Clear the stored entry value.
+
+        Inputs: `_start`, optional `_end`. Output: None.
+        """
+        self.value = ""
+
     def config(self, **kwargs):
         """Apply widget configuration.
 
@@ -283,6 +290,13 @@ class _FakeVar:
         Inputs: `value`. Output: None.
         """
         self.value = value
+
+
+def _noop(*_args, **_kwargs):
+    """No-op helper for tests that need an explicit callback.
+
+    Inputs: ignored. Output: None.
+    """
 
 
 def _make_refresh_dialog(module):
@@ -1605,6 +1619,31 @@ def test_load_button_requires_connection_and_structural_folder_path():
     assert dialog.load_btn.state == "disabled"
 
 
+def test_path_change_reenables_load_after_reconnect_when_converter_is_available():
+    """Verify typed path changes recompute Load state after reconnect.
+
+    Inputs: repository fixtures. Output: fails on reconnect/path state regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.load_btn = _FakeButton()
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(r"C:\valid-export")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_trace_suppressed = False
+    dialog._folder_path_write_state = "empty"
+    dialog.folder_path_entry = _FakeEntry()
+
+    module.OMEROBrowserDialog._on_folder_path_changed(dialog)
+
+    assert dialog._folder_path_write_state == "unchecked"
+    assert dialog.load_btn.state == "normal"
+
+
 def test_load_checks_typed_path_write_permission_before_confirmation(
     tmp_path, monkeypatch
 ):
@@ -2063,7 +2102,7 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     Inputs: repository fixtures. Output: fails on UI layout regressions.
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
-    connection_marker = "conn_frame.grid_columnconfigure(7, weight=1)"
+    connection_marker = "conn_frame.grid_columnconfigure(8, weight=1)"
     selector_marker = "self.folder_path_entry = tk.Entry(\n            conn_frame,"
     browser_marker = "# Browser\n        browser = tk.Frame(self.root)"
 
@@ -2099,6 +2138,7 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     )
     tk_load = source.index("_ensure_tk_loaded()", init_marker)
     assert settings_load < tk_load
+    assert 'tooltip="Interact with OMERO"' in source
 
 
 def test_connection_setting_labels_are_start_aligned_without_moving_entries():
@@ -2130,12 +2170,151 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     assert 'tk.Label(self.converter_frame, text="Converter:").pack' in source
     assert "self.converter_menu = tk.Menubutton(" in source
     assert "self.converter_menu.pack(side=tk.LEFT)" in source
+    assert "def _select_converter(self, value):" in source
+    assert "command=partial(self._select_converter, option)" in source
     assert (
         "self.converter_frame.grid(\n            row=0,\n            column=6,"
         in source
     )
     assert "rowspan=2,\n            sticky=tk.W," in source
     assert "self.converter_frame.grid_remove()" in source
+    assert (
+        "self._reset_native_bridge_probe_for_converter_detection()\n"
+        "        self._start_native_bridge_probe()" in source
+    )
+
+
+def test_converter_selection_refreshes_load_button_state():
+    """Verify converter menu selection recomputes the Load button state.
+
+    Inputs: repository fixtures. Output: fails on converter-state regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.converter_var = _FakeVar("")
+    refresh_calls = []
+
+    def _set_load_button_for_converter():
+        """Record Load button refresh.
+
+        Inputs: none. Output: None.
+        """
+        refresh_calls.append("refresh")
+
+    dialog._set_load_button_for_converter = _set_load_button_for_converter
+
+    module.OMEROBrowserDialog._select_converter(dialog, "Imaris")
+
+    assert dialog.converter_var.get() == "Imaris"
+    assert refresh_calls == ["refresh"]
+
+
+def test_converter_detection_resets_stale_native_probe_before_waiting():
+    """Verify reconnect converter detection does not reuse a stale bridge failure.
+
+    Inputs: repository fixtures. Output: fails on reconnect converter regressions.
+    """
+    module = _load_xt_module()
+
+    class _Done:
+        """Immediate done event for converter detection."""
+
+        @staticmethod
+        def wait(timeout):
+            """Record wait compatibility.
+
+            Inputs: `timeout`. Output: bool.
+            """
+            assert timeout == module.NATIVE_BRIDGE_PROBE_TIMEOUT
+            return True
+
+    class _Lock:
+        """Context manager compatible fake lock."""
+
+        def __enter__(self):
+            """Enter fake lock.
+
+            Inputs: none. Output: self.
+            """
+            return self
+
+        @staticmethod
+        def __exit__(*_args):
+            """Exit fake lock.
+
+            Inputs: ignored. Output: bool.
+            """
+            return False
+
+    class _Client:
+        """OMERO client fake with available server-side conversion."""
+
+        @staticmethod
+        def has_omero_ims_export_capability():
+            """Return conversion capability.
+
+            Inputs: none. Output: bool.
+            """
+            return True
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    calls = []
+    dialog._native_bridge_probe_done = _Done()
+    dialog._native_bridge_probe_lock = _Lock()
+    dialog._native_bridge_available = True
+    dialog._native_bridge_probe_error = ""
+    dialog.client = _Client()
+
+    def _reset_native_bridge_probe_for_converter_detection():
+        """Record stale-probe reset.
+
+        Inputs: none. Output: None.
+        """
+        calls.append("reset")
+
+    def _start_native_bridge_probe():
+        """Record native-probe start.
+
+        Inputs: none. Output: None.
+        """
+        calls.append("start")
+
+    dialog._reset_native_bridge_probe_for_converter_detection = (
+        _reset_native_bridge_probe_for_converter_detection
+    )
+    dialog._start_native_bridge_probe = _start_native_bridge_probe
+
+    options = module.OMEROBrowserDialog._detect_converter_options_after_connection(
+        dialog
+    )
+
+    assert calls == ["reset", "start"]
+    assert options == ["OMERO", "Imaris"]
+
+
+def test_converter_detection_reset_does_not_interrupt_active_native_probe():
+    """Verify converter detection does not reset an already running bridge probe.
+
+    Inputs: repository fixtures. Output: fails on native probe race regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_in_progress = True
+    reset_calls = []
+
+    def _reset_native_bridge_probe():
+        """Record unexpected reset.
+
+        Inputs: none. Output: None.
+        """
+        reset_calls.append("reset")
+
+    dialog._reset_native_bridge_probe = _reset_native_bridge_probe
+
+    module.OMEROBrowserDialog._reset_native_bridge_probe_for_converter_detection(dialog)
+
+    assert reset_calls == []
 
 
 def test_connection_settings_has_top_right_help_and_info_buttons():
@@ -2146,17 +2325,54 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
     assert "class _CircularIconButton(_RoundedButton):" in source
-    assert "panel_icon_frame = tk.Frame(conn_frame)" in source
-    assert "panel_icon_frame.grid(\n            row=0,\n            column=8," in source
+    circular_source = source[
+        source.index("class _CircularIconButton(_RoundedButton):") : source.index(
+            "def _iter_imaris_executable_candidates():"
+        )
+    ]
+    assert "create_arc(" not in circular_source
+    assert "panel_icon_frame = tk.Frame(" in source
+    assert "width=AUTOSAVE_SETTINGS_FRAME_WIDTH" in source
+    assert "height=CONNECTOR_PANEL_ICON_FRAME_HEIGHT" in source
+    assert "panel_icon_frame.grid(\n            row=0,\n            column=7," in source
     assert "rowspan=2,\n            sticky=tk.NE," in source
     assert "self.help_btn = _CircularIconButton(" in source
     assert 'text="?",' in source
-    assert "self.help_btn.pack(side=tk.LEFT, padx=(0, 6))" in source
+    assert "bg=CONNECTOR_HELP_ICON_BG" in source
+    assert "fg=CONNECTOR_HELP_ICON_FG" in source
+    assert "font=CONNECTOR_PANEL_ICON_FONT" in source
+    assert "width=CONNECTOR_PANEL_ICON_SIZE" in source
+    assert "height=CONNECTOR_PANEL_ICON_SIZE" in source
+    assert "self.help_btn.pack(side=tk.RIGHT, padx=(0, 6))" in source
     assert "self.info_btn = _CircularIconButton(" in source
     assert 'text="i",' in source
-    assert "self.info_btn.pack(side=tk.LEFT)" in source
-    assert "CONNECTOR_PANEL_ICON_BG" in source
-    assert "CONNECTOR_PANEL_ICON_ACTIVE_BG" in source
+    assert "bg=CONNECTOR_INFO_ICON_BG" in source
+    assert "fg=CONNECTOR_INFO_ICON_FG" in source
+    assert "self.info_btn.pack(side=tk.RIGHT)" in source
+
+
+def test_autosave_settings_alignment_is_fixed_to_icon_right_edge():
+    """Verify autosave stays in a fixed-width frame aligned to the info icon.
+
+    Inputs: repository fixtures. Output: fails on autosave alignment regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "AUTOSAVE_SETTINGS_FRAME_WIDTH = 168" in source
+    assert "conn_frame.grid_columnconfigure(8, weight=1)" in source
+    assert "conn_frame.grid_columnconfigure(7, weight=1)" not in source
+    assert "self.autosave_settings_frame = tk.Frame(" in source
+    assert (
+        "self.autosave_settings_frame.grid(\n            row=2,\n            column=7,"
+        in source
+    )
+    assert "self.autosave_settings_frame.grid_propagate(False)" in source
+    assert (
+        "self.autosave_settings_check = tk.Checkbutton(\n"
+        "            self.autosave_settings_frame,"
+    ) in source
+    assert "self.autosave_settings_check.pack(side=tk.RIGHT)" in source
+    assert "panel_icon_frame.grid_propagate(False)" in source
 
 
 def test_status_text_aligns_with_load_button_start():
@@ -3688,7 +3904,8 @@ def test_detect_converter_options_defaults_omero_when_server_supports_it():
     dialog._native_bridge_probe_started = True
     dialog._native_bridge_available = True
     dialog._native_bridge_probe_error = ""
-    dialog._start_native_bridge_probe = lambda: None
+    dialog._reset_native_bridge_probe = _noop
+    dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
@@ -3707,7 +3924,8 @@ def test_detect_converter_options_hides_omero_without_server_capability():
     dialog._native_bridge_probe_started = True
     dialog._native_bridge_available = True
     dialog._native_bridge_probe_error = ""
-    dialog._start_native_bridge_probe = lambda: None
+    dialog._reset_native_bridge_probe = _noop
+    dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
 
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
@@ -3726,7 +3944,8 @@ def test_detect_converter_options_hides_dropdown_when_native_open_unavailable():
     dialog._native_bridge_probe_started = True
     dialog._native_bridge_available = False
     dialog._native_bridge_probe_error = "bridge unavailable"
-    dialog._start_native_bridge_probe = lambda: None
+    dialog._reset_native_bridge_probe = _noop
+    dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(
         has_omero_ims_export_capability=lambda: (_ for _ in ()).throw(
             AssertionError("server capability must not be checked")
@@ -5207,6 +5426,375 @@ def test_browser_dialog_invoke_on_ui_thread_reraises_callback_error():
         assert str(exc) == "callback failed"
     else:
         raise AssertionError("expected RuntimeError from callback")
+
+
+def test_health_ping_schedules_periodic_check_only_when_connected(monkeypatch):
+    """Verify connected dialogs schedule silent periodic OMERO health checks.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on health timer regressions.
+    """
+    module = _load_xt_module()
+    scheduled = []
+
+    class _Root:
+        """Root fake that records scheduled callbacks."""
+
+        @staticmethod
+        def after(delay, callback):
+            """Record delayed callback registration.
+
+            Inputs: `delay`, `callback`. Output: timer id.
+            """
+            scheduled.append((delay, callback))
+            return "timer-1"
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog._connected = True
+    dialog.client = object()
+    dialog._health_ping_after_id = None
+
+    dialog._start_health_ping = _noop
+    monkeypatch.setattr(module, "_health_ping_interval_seconds", lambda: 17)
+
+    module.OMEROBrowserDialog._schedule_health_ping(dialog)
+
+    assert dialog._health_ping_after_id == "timer-1"
+    assert scheduled == [(17000, dialog._start_health_ping)]
+
+    scheduled.clear()
+    dialog._connected = False
+    dialog._health_ping_after_id = None
+    module.OMEROBrowserDialog._schedule_health_ping(dialog)
+    assert scheduled == []
+
+
+def test_health_ping_worker_retries_before_reporting_failure(monkeypatch):
+    """Verify transient health failures are retried before UI failure handling.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on health retry regressions.
+    """
+    module = _load_xt_module()
+
+    class _Client:
+        """Client fake that fails twice, then answers."""
+
+        def __init__(self):
+            """Create client fake.
+
+            Inputs: none. Output: initializes call counter.
+            """
+            self.calls = 0
+
+        def ping(self, timeout):
+            """Fail twice before succeeding.
+
+            Inputs: `timeout`. Output: bool. Raises: TimeoutError.
+            """
+            assert timeout == 4
+            self.calls += 1
+            if self.calls < 3:
+                raise TimeoutError("temporary outage")
+            return True
+
+    finishes = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.client = _Client()
+    dialog._health_ping_generation = 9
+
+    def _invoke_on_ui_thread(callback, wait=False):
+        """Run callback immediately.
+
+        Inputs: `callback`, `wait`. Output: callback result.
+        """
+        return callback()
+
+    def _finish_health_ping(generation, error):
+        """Record health ping completion.
+
+        Inputs: `generation`, `error`. Output: None.
+        """
+        finishes.append((generation, error))
+
+    dialog._invoke_on_ui_thread = _invoke_on_ui_thread
+    dialog._finish_health_ping = _finish_health_ping
+    monkeypatch.setattr(module, "_health_ping_retry_attempts", lambda: 3)
+    monkeypatch.setattr(module, "_health_ping_retry_delay_seconds", lambda: 0)
+    monkeypatch.setattr(module, "_health_ping_timeout_seconds", lambda: 4)
+
+    module.OMEROBrowserDialog._health_ping_worker(dialog, 9)
+
+    assert dialog.client.calls == 3
+    assert finishes == [(9, None)]
+
+
+def test_health_ping_worker_reports_last_error_after_retry_exhaustion(monkeypatch):
+    """Verify exhausted health retries report the final ping error.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on retry exhaustion bugs.
+    """
+    module = _load_xt_module()
+
+    class _Client:
+        """Client fake that always times out."""
+
+        def __init__(self):
+            """Create client fake.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.calls = 0
+
+        def ping(self, timeout):
+            """Raise a timeout for every health check attempt.
+
+            Inputs: `timeout`. Output: none. Raises: TimeoutError.
+            """
+            assert timeout == 4
+            self.calls += 1
+            raise TimeoutError(f"outage-{self.calls}")
+
+    finishes = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.client = _Client()
+    dialog._health_ping_generation = 9
+    dialog._invoke_on_ui_thread = lambda callback, wait=False: callback()
+    dialog._finish_health_ping = lambda generation, error: finishes.append(
+        (generation, error)
+    )
+    monkeypatch.setattr(module, "_health_ping_retry_attempts", lambda: 3)
+    monkeypatch.setattr(module, "_health_ping_retry_delay_seconds", lambda: 0)
+    monkeypatch.setattr(module, "_health_ping_timeout_seconds", lambda: 4)
+
+    module.OMEROBrowserDialog._health_ping_worker(dialog, 9)
+
+    assert dialog.client.calls == 3
+    assert len(finishes) == 1
+    assert finishes[0][0] == 9
+    assert isinstance(finishes[0][1], TimeoutError)
+    assert str(finishes[0][1]) == "outage-3"
+
+
+def test_health_ping_worker_stops_when_generation_changes(monkeypatch):
+    """Verify stale health workers do not report after disconnect cancellation.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on stale worker bugs.
+    """
+    module = _load_xt_module()
+
+    class _Client:
+        """Client fake that simulates disconnect during a ping."""
+
+        def __init__(self, dialog):
+            """Create client fake.
+
+            Inputs: `dialog`. Output: initializes state.
+            """
+            self.dialog = dialog
+            self.calls = 0
+
+        def ping(self, timeout):
+            """Invalidate the health generation and raise.
+
+            Inputs: `timeout`. Output: none. Raises: TimeoutError.
+            """
+            assert timeout == 4
+            self.calls += 1
+            self.dialog._health_ping_generation += 1
+            raise TimeoutError("stale worker")
+
+    finishes = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._health_ping_generation = 9
+    dialog.client = _Client(dialog)
+    dialog._invoke_on_ui_thread = lambda callback, wait=False: finishes.append(
+        callback()
+    )
+    monkeypatch.setattr(module, "_health_ping_retry_attempts", lambda: 3)
+    monkeypatch.setattr(module, "_health_ping_retry_delay_seconds", lambda: 0)
+    monkeypatch.setattr(module, "_health_ping_timeout_seconds", lambda: 4)
+
+    module.OMEROBrowserDialog._health_ping_worker(dialog, 9)
+
+    assert dialog.client.calls == 1
+    assert finishes == []
+
+
+def test_health_ping_failure_returns_interface_to_connect_ready(monkeypatch):
+    """Verify repeated health-check failures reset the UI to connect-ready state.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on health failure regressions.
+    """
+    module = _load_xt_module()
+    disconnect_calls = []
+    errors = []
+    logs = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+
+    def _disconnect(**kwargs):
+        """Record disconnect arguments.
+
+        Inputs: `**kwargs`. Output: None.
+        """
+        disconnect_calls.append(kwargs)
+
+    dialog._disconnect = _disconnect
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._handle_health_ping_failure(dialog, TimeoutError())
+
+    clear_password_key = "clear_" + "password"
+    assert disconnect_calls == [
+        {
+            "status_text": "Connection lost - Ready to connect",
+            "status_color": "#f8d7da",
+            clear_password_key: False,
+        }
+    ]
+    assert errors == [
+        (
+            "Connection Lost",
+            "The OMERO connection was lost. Please reconnect to continue.",
+        )
+    ]
+    assert logs == ["Read-only OMERO health check failed after retries: TimeoutError"]
+
+
+def test_disconnect_preserves_password_only_when_requested():
+    """Verify lost-connection reset can preserve typed credentials in memory only.
+
+    Inputs: repository fixtures. Output: fails on disconnect-state regressions.
+    """
+    module = _load_xt_module()
+
+    class _CookieJar:
+        """Cookie-jar fake that supports clearing."""
+
+        @staticmethod
+        def clear():
+            """Clear fake cookie jar.
+
+            Inputs: none. Output: None.
+            """
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.client = types.SimpleNamespace(
+        cookie_jar=_CookieJar(),
+        password="secret",
+        csrf_token="csrf",
+        session_id="session",
+        session_key="key",
+    )
+    dialog._connected = True
+    dialog._pid = "project"
+    dialog._did = "dataset"
+    dialog._refresh_generation = 3
+    dialog._refresh_in_progress = True
+    dialog.projects_data = [{"id": "project"}]
+    dialog.datasets_data = [{"id": "dataset"}]
+    dialog.images_data = [{"id": "image"}]
+    dialog._image_selection_anchor = 0
+    dialog.plist = _FakeListbox(["project"], selection={0})
+    dialog.dlist = _FakeListbox(["dataset"], selection={0})
+    dialog.ilist = _FakeListbox(["image"], selection={0})
+    dialog.pass_entry = _FakeEntry("typed-password")
+    calls = {
+        "cancel": 0,
+        "converters": [],
+        "connect": [],
+        "autosave": [],
+        "status": [],
+        "indicator": [],
+        "folder_export": [],
+    }
+
+    def _cancel_health_ping():
+        """Record health cancellation.
+
+        Inputs: none. Output: None.
+        """
+        calls["cancel"] += 1
+
+    def _set_folder_export_capability(available, reason=""):
+        """Record folder-export capability state.
+
+        Inputs: `available`, `reason`. Output: None.
+        """
+        calls["folder_export"].append((available, reason))
+
+    def _set_converter_options(options):
+        """Record converter options.
+
+        Inputs: `options`. Output: None.
+        """
+        calls["converters"].append(list(options))
+
+    def _set_connect_button(*args, **kwargs):
+        """Record connect button state.
+
+        Inputs: `*args`, `**kwargs`. Output: None.
+        """
+        calls["connect"].append((args, kwargs))
+
+    def _set_autosave_settings_control_state(enabled):
+        """Record autosave control state.
+
+        Inputs: `enabled`. Output: None.
+        """
+        calls["autosave"].append(enabled)
+
+    def _set_status(text, color=module.STATUS_NEUTRAL_BG):
+        """Record status text.
+
+        Inputs: `text`, `color`. Output: None.
+        """
+        calls["status"].append((text, color))
+
+    def _set_connection_indicator(state):
+        """Record connection indicator state.
+
+        Inputs: `state`. Output: None.
+        """
+        calls["indicator"].append(state)
+
+    dialog._cancel_health_ping = _cancel_health_ping
+    dialog._set_folder_export_capability = _set_folder_export_capability
+    dialog._set_converter_options = _set_converter_options
+    dialog._set_connect_button = _set_connect_button
+    dialog._set_autosave_settings_control_state = _set_autosave_settings_control_state
+    dialog._set_status = _set_status
+    dialog._set_connection_indicator = _set_connection_indicator
+
+    module.OMEROBrowserDialog._disconnect(
+        dialog,
+        status_text="Connection lost - Ready to connect",
+        status_color="#f8d7da",
+        clear_password=False,
+    )
+
+    assert dialog.client is None
+    assert dialog._connected is False
+    assert dialog.pass_entry.value == "typed-password"
+    assert dialog.projects_data == []
+    assert dialog.datasets_data == []
+    assert dialog.images_data == []
+    assert calls["cancel"] == 1
+    assert calls["converters"] == [[]]
+    assert calls["autosave"] == [False]
+    assert calls["status"] == [("Connection lost - Ready to connect", "#f8d7da")]
+    assert calls["indicator"] == ["disconnected"]
+    assert calls["folder_export"] == [(False, "Connect to OMERO first.")]
+
+    dialog.pass_entry.value = "typed-password"
+    dialog.client = None
+    module.OMEROBrowserDialog._disconnect(dialog)
+    assert dialog.pass_entry.value == ""
 
 
 def test_find_imaris_executable_prefers_env_override(monkeypatch):

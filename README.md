@@ -229,7 +229,8 @@ OMERO image export to Imaris (.ims) format.
   workstation and includes a typed folder path selector for loading images into
   Imaris and exporting local folders to OMERO; user settings autosave stores
   host, port, username, HTTPS state, path, and autosave state only, never the
-  password
+  password, and silent read-only health checks return the UI to connect-ready
+  state if the OMERO connection is lost after retries
 - Container package inspection helper: `helper_scripts_debian/docker_image_analysis.sh`
 
 ### Shared Library (`omero_plugin_common`)
