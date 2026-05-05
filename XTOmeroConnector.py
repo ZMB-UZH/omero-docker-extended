@@ -176,6 +176,8 @@ LOCAL_PATH_WRITE_ERROR_MESSAGE = (
     "Please select or enter an existing folder that Imaris can write to."
 )
 LOCAL_PATH_WRITE_TEST_PREFIX = ".omero_connector_write_test_"
+PRIVATE_DIRECTORY_MODE = stat.S_IRWXU
+PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
 AUTOSAVE_SETTINGS_DIR_NAME = ".imaris_omero_connector"
 AUTOSAVE_SETTINGS_FILE_NAME = "settings.env"
 AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
@@ -1369,9 +1371,9 @@ def _atomic_write_connector_settings(settings, settings_path=None):
             raise OSError("Connector settings directory is a symlink")
         if target_dir.exists() and not target_dir.is_dir():
             raise OSError("Connector settings directory is not a directory")
-        target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target_dir.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
         with contextlib.suppress(OSError):
-            os.chmod(os.fspath(target_dir), 0o700)
+            os.chmod(os.fspath(target_dir), PRIVATE_DIRECTORY_MODE)
 
         existing_lines = []  # type: List[str]
         if target.exists():
@@ -1386,7 +1388,7 @@ def _atomic_write_connector_settings(settings, settings_path=None):
         )
         temp_path = target_dir / f".{target.name}.{uuid.uuid4().hex}.tmp"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-        descriptor = os.open(os.fspath(temp_path), flags, 0o600)
+        descriptor = os.open(os.fspath(temp_path), flags, PRIVATE_FILE_MODE)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             descriptor = None
             handle.write(content)
@@ -1394,7 +1396,7 @@ def _atomic_write_connector_settings(settings, settings_path=None):
             os.fsync(handle.fileno())
         os.replace(os.fspath(temp_path), os.fspath(target))
         with contextlib.suppress(OSError):
-            os.chmod(os.fspath(target), 0o600)
+            os.chmod(os.fspath(target), PRIVATE_FILE_MODE)
     except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
         _log_connector_settings_event(
             f"Connector settings write failed: {type(exc).__name__}"
