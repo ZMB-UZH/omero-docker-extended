@@ -215,12 +215,20 @@ class _FakeListbox:
 class _FakeEntry:
     """Test double for fake entry."""
 
-    def __init__(self):
+    def __init__(self, value=""):
         """Create `_FakeEntry` with its default state.
 
-        Inputs: constructor receives no public arguments. Output: initializes fake state.
+        Inputs: optional `value`. Output: initializes fake state.
         """
+        self.value = value
         self.configs = []
+
+    def get(self):
+        """Return the stored entry value.
+
+        Inputs: none. Output: `self.value`.
+        """
+        return self.value
 
     def config(self, **kwargs):
         """Apply widget configuration.
@@ -1675,6 +1683,359 @@ def test_folder_path_write_check_rejects_malformed_path_before_probe(monkeypatch
     )
 
 
+def test_connector_settings_env_path_uses_connector_user_folder(tmp_path):
+    """Verify connector settings live in the user-scoped connector folder.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on user-settings path regressions.
+    """
+    module = _load_xt_module()
+
+    assert module._connector_settings_env_path(tmp_path) == (
+        tmp_path
+        / module.AUTOSAVE_SETTINGS_DIR_NAME
+        / module.AUTOSAVE_SETTINGS_FILE_NAME
+    )
+
+
+def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_path):
+    """Verify settings writes replace stale keys without preserving credentials.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on settings persistence regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                "# operator note",
+                'OMERO_CONNECTOR_HOST="old.example.org"',
+                'OMERO_CONNECTOR_PORT="4064"',
+                'OMERO_CONNECTOR_PORT="duplicate"',
+                'OMERO_CONNECTOR_PASSWORD="do-not-keep"',
+                'PASSWORD="do-not-keep-either"',
+                'OTHER_CONNECTOR_NOTE="keep-me"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sensitive_key = "OMERO_CONNECTOR_" + "PASSWORD"
+    sensitive_value = "not-persisted"
+    settings = {
+        module.CONNECTOR_SETTINGS_HOST_KEY: "omero.example.org",
+        module.CONNECTOR_SETTINGS_PORT_KEY: "443",
+        module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
+        module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
+        module.CONNECTOR_SETTINGS_PATH_KEY: r"C:\Exports\A folder",
+        module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
+        sensitive_key: sensitive_value,
+    }
+
+    module._atomic_write_connector_settings(settings, settings_path)
+
+    content = settings_path.read_text(encoding="utf-8")
+    loaded = module._load_connector_settings(settings_path)
+    assert "# operator note" in content
+    assert 'OTHER_CONNECTOR_NOTE="keep-me"' in content
+    assert content.count(module.CONNECTOR_SETTINGS_PORT_KEY + "=") == 1
+    assert "PASSWORD" not in content
+    assert "do-not-keep" not in content
+    assert sensitive_value not in content
+    assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
+    assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
+    assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == r"C:\Exports\A folder"
+
+
+def test_connector_settings_writer_rejects_settings_symlink(tmp_path):
+    """Verify connector settings writes do not follow existing symlinks.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on symlink safety regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    target_path = tmp_path / "target.env"
+    target_path.write_text("", encoding="utf-8")
+    try:
+        settings_path.symlink_to(target_path)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+
+    with pytest.raises(OSError):
+        module._atomic_write_connector_settings({}, settings_path)
+
+
+def test_connector_settings_writer_rejects_settings_directory_symlink(tmp_path):
+    """Verify settings writes do not follow a symlinked connector directory.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on directory symlink regressions.
+    """
+    module = _load_xt_module()
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    settings_dir = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME
+    try:
+        settings_dir.symlink_to(real_dir, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlink creation is unavailable on this platform")
+
+    with pytest.raises(OSError):
+        module._atomic_write_connector_settings(
+            {},
+            settings_dir / module.AUTOSAVE_SETTINGS_FILE_NAME,
+        )
+
+
+def test_connector_settings_load_skips_settings_directory_symlink(
+    tmp_path, monkeypatch
+):
+    """Verify settings reads do not follow a symlinked connector directory.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on directory symlink regressions.
+    """
+    module = _load_xt_module()
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    real_path = real_dir / module.AUTOSAVE_SETTINGS_FILE_NAME
+    real_path.write_text(
+        f'{module.CONNECTOR_SETTINGS_HOST_KEY}="omero.example.org"\n',
+        encoding="utf-8",
+    )
+    settings_dir = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME
+    try:
+        settings_dir.symlink_to(real_dir, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlink creation is unavailable on this platform")
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+
+    loaded = module._load_connector_settings(
+        settings_dir / module.AUTOSAVE_SETTINGS_FILE_NAME
+    )
+
+    assert loaded == {}
+    assert logs == ["Connector settings load skipped: settings directory is a symlink"]
+
+
+def test_connector_settings_load_logs_malformed_values_without_crashing(
+    tmp_path, monkeypatch
+):
+    """Verify malformed settings values are logged and ignored safely.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on parse-error handling regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                'OMERO_CONNECTOR_HOST="unterminated',
+                'OMERO_CONNECTOR_PORT="443"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+
+    loaded = module._load_connector_settings(settings_path)
+
+    assert loaded == {module.CONNECTOR_SETTINGS_PORT_KEY: "443"}
+    assert logs == [
+        "Connector settings parse failed: OMERO_CONNECTOR_HOST on line 1 ignored"
+    ]
+    assert "unterminated" not in logs[0]
+
+
+def test_connector_settings_snapshot_excludes_password_value(tmp_path):
+    """Verify in-memory password entry values are never in persisted settings.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on password persistence regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+
+    snapshot = module.OMEROBrowserDialog._connector_settings_snapshot(dialog)
+
+    serialized = json.dumps(snapshot, sort_keys=True)
+    assert "PASSWORD" not in serialized.upper()
+    assert "super-secret" not in serialized
+    assert snapshot == {
+        module.CONNECTOR_SETTINGS_HOST_KEY: "omero.example.org",
+        module.CONNECTOR_SETTINGS_PORT_KEY: "443",
+        module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
+        module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
+        module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path),
+        module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
+    }
+
+
+def test_autosave_toggle_updates_settings_immediately_without_password(tmp_path):
+    """Verify checkbox toggles write settings immediately after connection.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on autosave toggle regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    settings_path = module._connector_settings_env_path(tmp_path)
+    dialog._connected = True
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(False)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+
+    module.OMEROBrowserDialog._on_autosave_settings_changed(dialog)
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert module.CONNECTOR_SETTINGS_AUTOSAVE_KEY + '="false"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+
+
+def test_autosave_write_failure_logs_and_keeps_dialog_usable(tmp_path, monkeypatch):
+    """Verify settings write failures log and return without raising.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on write-error handling regressions.
+    """
+    module = _load_xt_module()
+    blocked_settings_dir = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME
+    blocked_settings_dir.write_text("not a directory", encoding="utf-8")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._settings_file_path = (
+        blocked_settings_dir / module.AUTOSAVE_SETTINGS_FILE_NAME
+    )
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", lambda message: logs.append(message))
+
+    assert module.OMEROBrowserDialog._write_autosave_settings(dialog) is False
+
+    assert dialog._autosave_settings_write_error
+    assert logs == ["Connector settings write failed: OSError"]
+    assert "super-secret" not in "".join(logs)
+
+
+def test_successful_connection_enables_autosave_and_writes_verified_settings(
+    tmp_path, monkeypatch
+):
+    """Verify successful OMERO login enables autosave and writes current settings.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on connection autosave regressions.
+    """
+    module = _load_xt_module()
+    created_clients = []
+
+    class FakeClient:
+        """Test double for a successful OMERO.web client."""
+
+        def __init__(self, host, port, username, password, scheme="http"):
+            """Create `FakeClient` and record connection arguments.
+
+            Inputs: connection fields. Output: initializes fake client state.
+            """
+            self.host = host
+            self.port = port
+            self.username = username
+            self.password = password
+            self.scheme = scheme
+            self.cookie_jar = None
+            self.csrf_token = None
+            self.session_id = None
+            self.session_key = None
+            created_clients.append(self)
+
+        @staticmethod
+        def connect():
+            """Return a successful login result.
+
+            Inputs: none. Output: bool.
+            """
+            return True
+
+    monkeypatch.setattr(module, "OMEROWebClient", FakeClient)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    settings_path = module._connector_settings_env_path(tmp_path)
+    converter_calls = []
+    export_calls = []
+    statuses = []
+    dialog._connected = False
+    dialog._connection_in_progress = False
+    dialog.client = None
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.autosave_settings_check = _FakeButton()
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.connect_btn = _FakeButton()
+    dialog.root = types.SimpleNamespace(update_idletasks=lambda: None)
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+    dialog._set_connection_indicator = lambda _state: None
+    dialog._schedule_health_ping = lambda: None
+    dialog._load_projects = lambda: None
+    dialog._detect_converter_options_after_connection = lambda: ["OMERO"]
+    dialog._detect_folder_export_after_connection = lambda: {
+        "available": True,
+        "reason": "",
+    }
+    dialog._set_converter_options = lambda options: converter_calls.append(
+        list(options)
+    )
+    dialog._set_folder_export_capability = lambda available, reason="": (
+        export_calls.append((available, reason))
+    )
+
+    module.OMEROBrowserDialog._connect(dialog)
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert created_clients[0].scheme == "https"
+    assert dialog._connected is True
+    assert dialog.autosave_settings_check.state == "normal"
+    assert converter_calls == [[], ["OMERO"]]
+    assert export_calls[-1] == (True, "")
+    assert statuses[-1] == ("Connected to OMERO", "#d4edda")
+    assert module.CONNECTOR_SETTINGS_HOST_KEY + '="omero.example.org"' in content
+    assert module.CONNECTOR_SETTINGS_PORT_KEY + '="443"' in content
+    assert module.CONNECTOR_SETTINGS_USERNAME_KEY + '="alice"' in content
+    assert module.CONNECTOR_SETTINGS_HTTPS_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_PATH_KEY + f'="{tmp_path}"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+
+
 def test_browser_dialog_places_folder_selector_inside_connection_settings():
     """Verify folder selector UI stays inside the connection settings panel.
 
@@ -1682,27 +2043,45 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
     connection_marker = "conn_frame.grid_columnconfigure(7, weight=1)"
-    selector_marker = "folder_path_frame = tk.Frame(conn_frame)"
+    selector_marker = "self.folder_path_entry = tk.Entry(\n            conn_frame,"
     browser_marker = "# Browser\n        browser = tk.Frame(self.root)"
 
     assert source.index(connection_marker) < source.index(selector_marker)
     assert source.index(selector_marker) < source.index(browser_marker)
-    assert "folder_path_frame = tk.Frame(self.root)" not in source
+    assert "folder_path_frame" not in source
     assert 'self._connection_label(conn_frame, "Path:").grid' in source
-    assert 'FOLDER_PATH_PLACEHOLDER = "Type or select path..."' in source
-    assert "column=1,\n            columnspan=5," in source
-    assert "width=52" in source
-    assert "self.save_settings_var = tk.BooleanVar(value=False)" in source
-    assert 'text="Save settings"' in source
+    assert 'FOLDER_PATH_PLACEHOLDER = "Type or select local path..."' in source
+    assert (
+        "self.folder_path_entry.grid(\n            row=2,\n            column=1,"
+        in source
+    )
+    assert "columnspan=4,\n            sticky=tk.EW," in source
+    assert "self.pass_entry.grid(\n            row=1, column=3, columnspan=2," in source
+    assert "self.connect_btn.grid(row=0, column=5," in source
+    assert "self.select_folder_btn.grid(row=2, column=5," in source
+    assert (
+        "self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)"
+        in source
+    )
+    assert 'text="Autosave settings"' in source
+    assert 'text="Save settings"' not in source
+    assert 'state=_tk_constant("DISABLED", "disabled")' in source
+    assert "command=self._on_autosave_settings_changed" in source
     assert "bg=FOLDER_PATH_SELECT_BG" in source
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
     assert "height=38" in source
     assert 'text="Export folder to OMERO"' in source
+    init_marker = source.index("def __init__(self, imaris, imaris_id=None):")
+    settings_load = source.index(
+        "self._saved_settings = _load_connector_settings", init_marker
+    )
+    tk_load = source.index("_ensure_tk_loaded()", init_marker)
+    assert settings_load < tk_load
 
 
-def test_connection_setting_labels_are_centered_without_moving_entries():
-    """Verify connection labels are centered while entry grid positions stay fixed.
+def test_connection_setting_labels_are_start_aligned_without_moving_entries():
+    """Verify connection labels start-align while entry grid positions stay fixed.
 
     Inputs: repository fixtures. Output: fails on UI alignment regressions.
     """
@@ -1711,11 +2090,98 @@ def test_connection_setting_labels_are_centered_without_moving_entries():
     for label in ("Host", "Port", "Username", "Password", "Path"):
         assert f'self._connection_label(conn_frame, "{label}:").grid' in source
 
-    assert 'anchor=_tk_constant("CENTER", "center")' in source
-    assert 'justify=_tk_constant("CENTER", "center")' in source
+    assert 'anchor=_tk_constant("W", "w")' in source
+    assert 'justify=_tk_constant("LEFT", "left")' in source
+    assert "width=CONNECTION_LABEL_WIDTH" in source
     assert source.count('sticky=_tk_constant("NSEW", "nsew"), pady=5') >= 5
     assert "self.host_entry.grid(row=0, column=1, pady=5, padx=5)" in source
     assert "self.user_entry.grid(row=1, column=1, pady=5, padx=5)" in source
+
+
+def test_converter_selector_remains_wired_in_connection_settings_panel():
+    """Verify converter dropdown remains present in the connection settings panel.
+
+    Inputs: repository fixtures. Output: fails on converter selector regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "self.converter_frame = tk.Frame(conn_frame)" in source
+    assert 'tk.Label(self.converter_frame, text="Converter:").pack' in source
+    assert "self.converter_menu = tk.Menubutton(" in source
+    assert "self.converter_menu.pack(side=tk.LEFT)" in source
+    assert (
+        "self.converter_frame.grid(\n            row=0,\n            column=6,"
+        in source
+    )
+    assert "rowspan=2,\n            sticky=tk.W," in source
+    assert "self.converter_frame.grid_remove()" in source
+
+
+def test_connection_settings_has_top_right_help_and_info_buttons():
+    """Verify connection panel keeps responsive help and info icon buttons.
+
+    Inputs: repository fixtures. Output: fails on connection panel icon regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "class _CircularIconButton(_RoundedButton):" in source
+    assert "panel_icon_frame = tk.Frame(conn_frame)" in source
+    assert "panel_icon_frame.grid(\n            row=0,\n            column=8," in source
+    assert "rowspan=2,\n            sticky=tk.NE," in source
+    assert "self.help_btn = _CircularIconButton(" in source
+    assert 'text="?",' in source
+    assert "self.help_btn.pack(side=tk.LEFT, padx=(0, 6))" in source
+    assert "self.info_btn = _CircularIconButton(" in source
+    assert 'text="i",' in source
+    assert "self.info_btn.pack(side=tk.LEFT)" in source
+    assert "CONNECTOR_PANEL_ICON_BG" in source
+    assert "CONNECTOR_PANEL_ICON_ACTIVE_BG" in source
+
+
+def test_status_text_aligns_with_load_button_start():
+    """Verify bottom status text starts at the Load button's left edge.
+
+    Inputs: repository fixtures. Output: fails on bottom status alignment regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "ACTION_ROW_HORIZONTAL_PAD = 10" in source
+    assert "ACTION_BUTTON_PAD = 2" in source
+    assert "STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD" in source
+    assert "actions.pack(fill=tk.X, padx=ACTION_ROW_HORIZONTAL_PAD" in source
+    assert (
+        "self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
+        in source
+    )
+    assert "padx=STATUS_TEXT_PAD,\n            pady=5," in source
+
+
+def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
+    """Verify action buttons stay fixed while only the row spacer expands.
+
+    Inputs: repository fixtures. Output: fails on action-row resize regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert "actions.grid_columnconfigure(2, weight=1)" in source
+    assert "self.load_btn = _RoundedButton(" in source
+    assert "width=260,\n            height=52," in source
+    assert (
+        "self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
+        in source
+    )
+    assert (
+        "self.export_btn.grid(row=0, column=1, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
+        in source
+    )
+    assert "close_btn = _RoundedButton(" in source
+    assert "width=120,\n            height=52," in source
+    assert (
+        "close_btn.grid(row=0, column=3, sticky=tk.E, padx=ACTION_BUTTON_PAD)" in source
+    )
+    assert "self.load_btn.pack(" not in source
+    assert "self.export_btn.pack(" not in source
+    assert "close_btn.pack(" not in source
 
 
 def test_export_folder_to_omero_starts_folder_worker_after_confirmation(

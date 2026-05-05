@@ -202,6 +202,13 @@ Operational rule:
   absolute local paths and are write-checked when `Load images into Imaris` is
   clicked; folder export still rejects filesystem roots, malformed paths, and
   missing directories before starting uploads.
+- `Autosave settings` is pre-read before the standalone XT dialog renders and
+  remains disabled until the OMERO login succeeds. After a verified connection,
+  the connector writes `.imaris_omero_connector/settings.env` under the
+  detected user home with only host, port, username, HTTPS state, local path,
+  and autosave state. Passwords are never written to this connector settings
+  file. Settings load, parse, create, or write failures are logged through the
+  connector diagnostic logger without aborting the dialog.
 - `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
   available. This mode downloads the original archived file and hands it to the
   running Imaris application through `FileOpen`, allowing Imaris to handle

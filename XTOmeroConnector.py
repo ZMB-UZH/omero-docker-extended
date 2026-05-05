@@ -158,10 +158,17 @@ OMERO_CONNECTOR_WINDOW_HEIGHT = 760
 MINIMUM_WINDOWS_MAJOR = 10
 MINIMUM_WINDOWS_MINOR = 0
 CONVERTER_MENU_FONT = ("Arial", 10)
+ACTION_ROW_HORIZONTAL_PAD = 10
+ACTION_BUTTON_PAD = 2
+STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
+CONNECTION_LABEL_WIDTH = len("Username:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
-FOLDER_PATH_SELECT_BG = "#64748b"
-FOLDER_PATH_SELECT_ACTIVE_BG = "#526173"
-FOLDER_PATH_PLACEHOLDER = "Type or select path..."
+CONNECTOR_PANEL_ICON_BG = "#5f6f85"
+CONNECTOR_PANEL_ICON_ACTIVE_BG = "#4f5f73"
+CONNECTOR_PANEL_ICON_FG = "white"
+FOLDER_PATH_SELECT_BG = "#718096"
+FOLDER_PATH_SELECT_ACTIVE_BG = "#60738a"
+FOLDER_PATH_PLACEHOLDER = "Type or select local path..."
 FOLDER_PATH_PLACEHOLDER_FG = "#9ca3af"
 FOLDER_PATH_TEXT_FG = "#111827"
 LOCAL_PATH_WRITE_ERROR_TITLE = "Path Not Writable"
@@ -169,6 +176,26 @@ LOCAL_PATH_WRITE_ERROR_MESSAGE = (
     "Please select or enter an existing folder that Imaris can write to."
 )
 LOCAL_PATH_WRITE_TEST_PREFIX = ".omero_connector_write_test_"
+AUTOSAVE_SETTINGS_DIR_NAME = ".imaris_omero_connector"
+AUTOSAVE_SETTINGS_FILE_NAME = "settings.env"
+AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
+AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
+    "Autosave settings could not update the OMERO connector settings file."
+)
+CONNECTOR_SETTINGS_HOST_KEY = "OMERO_CONNECTOR_HOST"
+CONNECTOR_SETTINGS_PORT_KEY = "OMERO_CONNECTOR_PORT"
+CONNECTOR_SETTINGS_USERNAME_KEY = "OMERO_CONNECTOR_USERNAME"
+CONNECTOR_SETTINGS_HTTPS_KEY = "OMERO_CONNECTOR_HTTPS"
+CONNECTOR_SETTINGS_PATH_KEY = "OMERO_CONNECTOR_PATH"
+CONNECTOR_SETTINGS_AUTOSAVE_KEY = "OMERO_CONNECTOR_AUTOSAVE_SETTINGS"
+CONNECTOR_SETTINGS_KEYS = (
+    CONNECTOR_SETTINGS_HOST_KEY,
+    CONNECTOR_SETTINGS_PORT_KEY,
+    CONNECTOR_SETTINGS_USERNAME_KEY,
+    CONNECTOR_SETTINGS_HTTPS_KEY,
+    CONNECTOR_SETTINGS_PATH_KEY,
+    CONNECTOR_SETTINGS_AUTOSAVE_KEY,
+)
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -1107,6 +1134,279 @@ def _folder_path_write_error(path_value):
         if probe_path is not None:
             with contextlib.suppress(OSError):
                 os.unlink(probe_path)
+
+
+def _connector_user_home():
+    """Return the current user's home directory for connector settings.
+
+    Inputs: none. Output: `Path`. Raises: OSError when no absolute home exists.
+    """
+    candidates = []
+    if os.name == "nt":
+        userprofile = os.environ.get("USERPROFILE", "").strip()
+        if userprofile:
+            candidates.append(userprofile)
+        home_drive = os.environ.get("HOMEDRIVE", "").strip()
+        home_path = os.environ.get("HOMEPATH", "").strip()
+        if home_drive and home_path:
+            candidates.append(home_drive + home_path)
+    with contextlib.suppress(RuntimeError, OSError):
+        candidates.append(os.fspath(Path.home()))
+
+    for candidate in candidates:
+        home_text = str(candidate or "").strip()
+        if not home_text:
+            continue
+        is_absolute = (
+            ntpath.isabs(home_text) if os.name == "nt" else os.path.isabs(home_text)
+        )
+        if is_absolute:
+            return Path(home_text)
+    raise OSError("Unable to detect an absolute user home directory")
+
+
+def _connector_settings_env_path(home_path=None):
+    """Return the connector-owned user settings env path.
+
+    Inputs: optional `home_path`. Output: `Path`.
+    """
+    home = Path(home_path) if home_path is not None else _connector_user_home()
+    return home / AUTOSAVE_SETTINGS_DIR_NAME / AUTOSAVE_SETTINGS_FILE_NAME
+
+
+def _log_connector_settings_event(message):
+    """Write a settings diagnostic without letting logging affect the UI.
+
+    Inputs: `message`. Output: None.
+    """
+    with contextlib.suppress(Exception):
+        _xt_debug(message)
+
+
+def _format_connector_settings_env_value(value):
+    """Return a quoted env value without shell interpolation.
+
+    Inputs: `value`. Output: `str`.
+    """
+    return json.dumps("" if value is None else str(value), ensure_ascii=True)
+
+
+def _parse_connector_settings_env_value(raw_value):
+    """Parse one connector settings env value without evaluating shell syntax.
+
+    Inputs: `raw_value`. Output: `str`.
+    """
+    text = str(raw_value or "").strip()
+    if not text:
+        return ""
+    if text.startswith('"'):
+        try:
+            value = json.loads(text)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Malformed quoted connector settings value") from exc
+        return str(value) if value is not None else ""
+    return text
+
+
+def _split_connector_settings_env_line(line):
+    """Split one connector settings line into key and raw value.
+
+    Inputs: `line`. Output: `(key, raw_value)` or `(None, None)`.
+    """
+    match = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$", str(line or ""))
+    if not match:
+        return None, None
+    return match.group(1), match.group(2)
+
+
+def _parse_connector_settings_env_line(line):
+    """Parse one connector settings line.
+
+    Inputs: `line`. Output: `(key, value)` or `(None, None)`.
+    """
+    key, raw_value = _split_connector_settings_env_line(line)
+    if key is None:
+        return None, None
+    return key, _parse_connector_settings_env_value(raw_value)
+
+
+def _is_sensitive_connector_settings_key(key):
+    """Return whether an env key must not be preserved in connector settings.
+
+    Inputs: `key`. Output: bool.
+    """
+    key_parts = set(re.split(r"[^A-Z0-9]+", str(key or "").upper()))
+    return bool(key_parts & {"PASSWORD", "PASS", "SECRET", "TOKEN"}) or {
+        "API",
+        "KEY",
+    }.issubset(key_parts)
+
+
+def _load_connector_settings(settings_path=None):
+    """Load connector-owned settings from the user env file.
+
+    Inputs: optional `settings_path`. Output: dict with allowlisted keys only.
+    """
+    path = (
+        Path(settings_path)
+        if settings_path is not None
+        else _connector_settings_env_path()
+    )
+    try:
+        if path.parent.is_symlink():
+            _log_connector_settings_event(
+                "Connector settings load skipped: settings directory is a symlink"
+            )
+            return {}
+        if path.is_symlink():
+            _log_connector_settings_event(
+                "Connector settings load skipped: settings file is a symlink"
+            )
+            return {}
+        if not path.is_file():
+            return {}
+        settings = {}
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                key, raw_value = _split_connector_settings_env_line(line)
+                if key not in CONNECTOR_SETTINGS_KEYS:
+                    continue
+                try:
+                    value = _parse_connector_settings_env_value(raw_value)
+                except ValueError:
+                    _log_connector_settings_event(
+                        "Connector settings parse failed: "
+                        f"{key} on line {line_number} ignored"
+                    )
+                    continue
+                if str(value or "").strip():
+                    settings[key] = value
+        return settings
+    except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        _log_connector_settings_event(
+            f"Connector settings load failed: {type(exc).__name__}"
+        )
+        return {}
+
+
+def _connector_settings_bool(value, default=False):
+    """Return a bool from connector settings text.
+
+    Inputs: `value`, `default`. Output: bool.
+    """
+    if isinstance(value, bool):
+        return value
+    text = str(value if value is not None else "").strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _connector_settings_bool_text(value):
+    """Return normalized bool text for connector settings.
+
+    Inputs: `value`. Output: `str`.
+    """
+    return "true" if bool(value) else "false"
+
+
+def _filled_connector_setting(settings, key):
+    """Return a non-empty connector setting value.
+
+    Inputs: `settings`, `key`. Output: `str`.
+    """
+    value = settings.get(key, "")
+    text = str(value or "")
+    return text if text.strip() else ""
+
+
+def _connector_settings_output_lines(existing_lines, settings):
+    """Return rewritten connector settings lines with known keys normalized.
+
+    Inputs: `existing_lines`, `settings`. Output: list of lines.
+    """
+    rendered = {
+        key: f"{key}={_format_connector_settings_env_value(settings.get(key, ''))}"
+        for key in CONNECTOR_SETTINGS_KEYS
+    }
+    seen = set()
+    output = []
+    for line in existing_lines:
+        key, _raw_value = _split_connector_settings_env_line(line)
+        if key in CONNECTOR_SETTINGS_KEYS:
+            if key not in seen:
+                output.append(rendered[key])
+                seen.add(key)
+            continue
+        if key is not None and _is_sensitive_connector_settings_key(key):
+            continue
+        output.append(str(line))
+    for key in CONNECTOR_SETTINGS_KEYS:
+        if key not in seen:
+            output.append(rendered[key])
+    return output
+
+
+def _atomic_write_connector_settings(settings, settings_path=None):
+    """Atomically write connector settings without storing credentials.
+
+    Inputs: `settings`, optional `settings_path`. Output: None. Raises: OSError.
+    """
+    descriptor = None
+    temp_path = None
+    try:
+        target = (
+            Path(settings_path)
+            if settings_path is not None
+            else _connector_settings_env_path()
+        )
+        target_dir = target.parent
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise OSError("Connector settings path is not a regular file")
+        if target_dir.is_symlink():
+            raise OSError("Connector settings directory is a symlink")
+        if target_dir.exists() and not target_dir.is_dir():
+            raise OSError("Connector settings directory is not a directory")
+        target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            os.chmod(os.fspath(target_dir), 0o700)
+
+        existing_lines = []  # type: List[str]
+        if target.exists():
+            existing_lines = target.read_text(encoding="utf-8").splitlines()
+
+        normalized = {
+            key: str(settings.get(key, "")) for key in CONNECTOR_SETTINGS_KEYS
+        }
+        content = (
+            "\n".join(_connector_settings_output_lines(existing_lines, normalized))
+            + "\n"
+        )
+        temp_path = target_dir / f".{target.name}.{uuid.uuid4().hex}.tmp"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(os.fspath(temp_path), flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            descriptor = None
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(os.fspath(temp_path), os.fspath(target))
+        with contextlib.suppress(OSError):
+            os.chmod(os.fspath(target), 0o600)
+    except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        _log_connector_settings_event(
+            f"Connector settings write failed: {type(exc).__name__}"
+        )
+        raise
+    finally:
+        if descriptor is not None:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
+        with contextlib.suppress(OSError):
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink()
 
 
 def _stringvar_value(variable):
@@ -2142,6 +2442,80 @@ class _RoundedButton:
             right - radius,
             bottom - 2,
             fill=_shade_color(fill, -0.18),
+            width=1,
+        )
+        self._canvas.create_text(
+            width / 2 + surface_offset / 2,
+            height / 2 + surface_offset / 2 - 1,
+            text=self._text,
+            fill=text_fill,
+            font=self._font,
+        )
+
+
+class _CircularIconButton(_RoundedButton):
+    """Canvas-backed circular icon button with the same interaction model."""
+
+    def _redraw(self):
+        """Redraw the circular icon button after state or size changes.
+
+        Inputs: no caller arguments. Output: performs the documented action and returns None.
+        """
+        width = max(int(self._canvas.winfo_width() or self._width), self._width)
+        height = max(int(self._canvas.winfo_height() or self._height), self._height)
+        self._canvas.delete("all")
+
+        enabled = self._is_enabled()
+        pressed = enabled and self._pressed
+        if not enabled:
+            fill = _blend_colors(self._bg, "#edf1f4", 0.72)
+            text_fill = _blend_colors(self._fg, "#6f7b84", 0.62)
+            shadow = _blend_colors(self._bg, "#d7dde2", 0.82)
+        elif pressed:
+            fill = self._active_bg
+            text_fill = self._active_fg
+            shadow = _shade_color(self._bg, -0.45)
+        elif self._hover:
+            fill = _shade_color(self._bg, 0.1)
+            text_fill = self._fg
+            shadow = _shade_color(self._bg, -0.38)
+        else:
+            fill = self._bg
+            text_fill = self._fg
+            shadow = _shade_color(self._bg, -0.35)
+
+        surface_offset = 2 if pressed else 0
+        diameter = max(12, min(width, height) - 6)
+        left = (width - diameter) / 2
+        top = (height - diameter) / 2 + surface_offset
+        right = left + diameter
+        bottom = top + diameter
+        self._canvas.create_oval(
+            left + 1,
+            top + (1 if pressed else 3),
+            right + 1,
+            bottom + (1 if pressed else 3),
+            fill=shadow,
+            outline="",
+        )
+        self._canvas.create_oval(
+            left,
+            top,
+            right,
+            bottom,
+            fill=fill,
+            outline=_shade_color(fill, -0.24),
+            width=1,
+        )
+        self._canvas.create_arc(
+            left + 4,
+            top + 4,
+            right - 4,
+            bottom - 4,
+            start=40,
+            extent=100,
+            style=_tk_constant("ARC", "arc"),
+            outline=_shade_color(fill, 0.34),
             width=1,
         )
         self._canvas.create_text(
@@ -4815,12 +5189,23 @@ class OMEROBrowserDialog:
         self.folder_path_var: Any
         self.folder_path_entry: Any
         self.select_folder_btn: Any
-        self.save_settings_var: Any
-        self.save_settings_check: Any
+        self.autosave_settings_var: Any
+        self.autosave_settings_check: Any
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_trace_id = None
         self._folder_path_write_state = "empty"
+        self._settings_file_path = None
+        self._saved_settings = {}
+        self._autosave_settings_write_error = ""
+        try:
+            self._settings_file_path = _connector_settings_env_path()
+            self._saved_settings = _load_connector_settings(self._settings_file_path)
+        except OSError as exc:
+            self._autosave_settings_write_error = str(exc)
+            _log_connector_settings_event(
+                f"Connector settings load failed: {type(exc).__name__}"
+            )
 
         # Get export directory
         self.export_dir = self._get_export_dir()
@@ -4850,15 +5235,16 @@ class OMEROBrowserDialog:
 
     @staticmethod
     def _connection_label(parent, text):
-        """Return a centered label for the connection settings grid.
+        """Return a start-aligned label for the connection settings grid.
 
         Inputs: `parent`, `text`. Output: Tk label.
         """
         return tk.Label(
             parent,
             text=text,
-            anchor=_tk_constant("CENTER", "center"),
-            justify=_tk_constant("CENTER", "center"),
+            anchor=_tk_constant("W", "w"),
+            justify=_tk_constant("LEFT", "left"),
+            width=CONNECTION_LABEL_WIDTH,
         )
 
     def _build_ui(self):
@@ -4872,20 +5258,35 @@ class OMEROBrowserDialog:
         )
         conn_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        default_host = (
+        saved_settings = getattr(self, "_saved_settings", {})
+        default_host = _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_HOST_KEY
+        ) or (
             os.environ.get("OMERO_WEB_HOST")
             or os.environ.get("OMERO_HOST")
             or os.environ.get("OMEROHOST")
             or ""
         )
-        default_port = (
+        default_port = _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_PORT_KEY
+        ) or (
             os.environ.get("OMERO_WEB_PORT")
             or os.environ.get("OMERO_WEB_PUBLIC_PORT")
             or os.environ.get("OMERO_PORT")
             or ""
         )
-        default_user = os.environ.get("OMERO_USER") or os.environ.get("OMERO_USERNAME")
-        default_user = default_user or ""
+        default_user = _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_USERNAME_KEY
+        ) or (os.environ.get("OMERO_USER") or os.environ.get("OMERO_USERNAME") or "")
+        default_https = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_HTTPS_KEY), False
+        )
+        default_folder_path = _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_PATH_KEY
+        )
+        default_autosave_settings = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_AUTOSAVE_KEY), True
+        )
 
         self._connection_label(conn_frame, "Host:").grid(
             row=0, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
@@ -4901,7 +5302,7 @@ class OMEROBrowserDialog:
         self.port_entry.insert(0, default_port)
         self.port_entry.grid(row=0, column=3, pady=5, padx=5)
 
-        self.https_var = tk.BooleanVar(value=False)
+        self.https_var = tk.BooleanVar(value=default_https)
         tk.Checkbutton(conn_frame, text="Use HTTPS", variable=self.https_var).grid(
             row=0, column=4, pady=5, padx=5
         )
@@ -4917,7 +5318,9 @@ class OMEROBrowserDialog:
             row=1, column=2, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
         self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
-        self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
+        self.pass_entry.grid(
+            row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.EW
+        )
 
         self.connect_btn = _RoundedButton(
             conn_frame,
@@ -4991,31 +5394,26 @@ class OMEROBrowserDialog:
         self.converter_frame.grid_remove()
         conn_frame.grid_columnconfigure(7, weight=1)
 
-        self.folder_path_var = tk.StringVar(value="")
+        self.folder_path_var = tk.StringVar(value=default_folder_path)
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_write_state = "empty"
         self._connection_label(conn_frame, "Path:").grid(
             row=2, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
-        folder_path_frame = tk.Frame(conn_frame)
-        folder_path_frame.grid(
-            row=2,
-            column=1,
-            columnspan=5,
-            sticky=tk.W,
-            padx=5,
-            pady=5,
-        )
         self.folder_path_entry = tk.Entry(
-            folder_path_frame,
+            conn_frame,
             textvariable=self.folder_path_var,
             font=("Arial", 10),
-            width=52,
+            width=1,
         )
-        self.folder_path_entry.pack(
-            side=tk.LEFT,
-            padx=(0, 8),
+        self.folder_path_entry.grid(
+            row=2,
+            column=1,
+            columnspan=4,
+            sticky=tk.EW,
+            padx=5,
+            pady=5,
             ipady=4,
         )
         self.folder_path_entry.bind(
@@ -5033,7 +5431,7 @@ class OMEROBrowserDialog:
                 lambda *_args: self._on_folder_path_changed(),
             )
         self.select_folder_btn = _RoundedButton(
-            folder_path_frame,
+            conn_frame,
             text="Select",
             command=self._select_local_folder,
             bg=FOLDER_PATH_SELECT_BG,
@@ -5044,20 +5442,56 @@ class OMEROBrowserDialog:
             width=96,
             height=38,
         )
-        self.select_folder_btn.pack(side=tk.LEFT)
-        self.save_settings_var = tk.BooleanVar(value=False)
-        self.save_settings_check = tk.Checkbutton(
+        self.select_folder_btn.grid(row=2, column=5, padx=(10, 12), pady=5, sticky=tk.W)
+        self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
+        self.autosave_settings_check = tk.Checkbutton(
             conn_frame,
-            text="Save settings",
-            variable=self.save_settings_var,
+            text="Autosave settings",
+            variable=self.autosave_settings_var,
+            command=self._on_autosave_settings_changed,
+            state=_tk_constant("DISABLED", "disabled"),
+            disabledforeground="#7a828a",
         )
-        self.save_settings_check.grid(
+        self.autosave_settings_check.grid(
             row=2,
             column=6,
             sticky=tk.W,
             padx=(14, 0),
             pady=5,
         )
+        panel_icon_frame = tk.Frame(conn_frame)
+        panel_icon_frame.grid(
+            row=0,
+            column=8,
+            rowspan=2,
+            sticky=tk.NE,
+            padx=(12, 0),
+            pady=(0, 2),
+        )
+        self.help_btn = _CircularIconButton(
+            panel_icon_frame,
+            text="?",
+            bg=CONNECTOR_PANEL_ICON_BG,
+            fg=CONNECTOR_PANEL_ICON_FG,
+            activebackground=CONNECTOR_PANEL_ICON_ACTIVE_BG,
+            activeforeground=CONNECTOR_PANEL_ICON_FG,
+            font=("Arial", 12, "bold"),
+            width=32,
+            height=32,
+        )
+        self.help_btn.pack(side=tk.LEFT, padx=(0, 6))
+        self.info_btn = _CircularIconButton(
+            panel_icon_frame,
+            text="i",
+            bg=CONNECTOR_PANEL_ICON_BG,
+            fg=CONNECTOR_PANEL_ICON_FG,
+            activebackground=CONNECTOR_PANEL_ICON_ACTIVE_BG,
+            activeforeground=CONNECTOR_PANEL_ICON_FG,
+            font=("Arial", 12, "bold"),
+            width=32,
+            height=32,
+        )
+        self.info_btn.pack(side=tk.LEFT)
         self._show_folder_path_placeholder()
 
         # Browser
@@ -5087,7 +5521,8 @@ class OMEROBrowserDialog:
 
         # Actions
         actions = tk.Frame(self.root)
-        actions.pack(fill=tk.X, padx=10, pady=10)
+        actions.pack(fill=tk.X, padx=ACTION_ROW_HORIZONTAL_PAD, pady=10)
+        actions.grid_columnconfigure(2, weight=1)
 
         self.load_btn = _RoundedButton(
             actions,
@@ -5102,7 +5537,7 @@ class OMEROBrowserDialog:
             width=260,
             height=52,
         )
-        self.load_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
         self.export_btn = _RoundedButton(
             actions,
@@ -5117,7 +5552,7 @@ class OMEROBrowserDialog:
             width=260,
             height=52,
         )
-        self.export_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.export_btn.grid(row=0, column=1, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
         close_btn = _RoundedButton(
             actions,
@@ -5131,7 +5566,7 @@ class OMEROBrowserDialog:
             width=120,
             height=52,
         )
-        close_btn.pack(side=tk.LEFT, padx=2)
+        close_btn.grid(row=0, column=3, sticky=tk.E, padx=ACTION_BUTTON_PAD)
 
         # Status
         status_frame = tk.Frame(self.root, bg=STATUS_NEUTRAL_BG)
@@ -5141,7 +5576,7 @@ class OMEROBrowserDialog:
             text="Ready - Please connect to OMERO",
             bg=STATUS_NEUTRAL_BG,
             anchor=tk.W,
-            padx=10,
+            padx=STATUS_TEXT_PAD,
             pady=5,
             font=("Arial", 9),
             height=2,
@@ -5348,6 +5783,114 @@ class OMEROBrowserDialog:
         self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
         self._set_load_button_for_converter()
 
+    def _entry_text(self, widget_name):
+        """Return text from one entry widget.
+
+        Inputs: `widget_name`. Output: `str`.
+        """
+        widget = getattr(self, widget_name, None)
+        getter: Any = getattr(widget, "get", None)
+        value = getter() if callable(getter) else ""
+        return str(value or "")
+
+    def _autosave_settings_enabled(self):
+        """Return whether settings autosave is currently selected.
+
+        Inputs: none. Output: bool.
+        """
+        variable = getattr(self, "autosave_settings_var", None)
+        getter: Any = getattr(variable, "get", None)
+        return bool(getter() if callable(getter) else False)
+
+    def _connector_settings_snapshot(self):
+        """Return the connector settings that may be persisted.
+
+        Inputs: none. Output: dict. Passwords are intentionally excluded.
+        """
+        https_variable = getattr(self, "https_var", None)
+        https_getter: Any = getattr(https_variable, "get", None)
+        https_value = https_getter() if callable(https_getter) else False
+        return {
+            CONNECTOR_SETTINGS_HOST_KEY: self._entry_text("host_entry").strip(),
+            CONNECTOR_SETTINGS_PORT_KEY: self._entry_text("port_entry").strip(),
+            CONNECTOR_SETTINGS_USERNAME_KEY: self._entry_text("user_entry").strip(),
+            CONNECTOR_SETTINGS_HTTPS_KEY: _connector_settings_bool_text(https_value),
+            CONNECTOR_SETTINGS_PATH_KEY: self._current_local_folder_path(),
+            CONNECTOR_SETTINGS_AUTOSAVE_KEY: _connector_settings_bool_text(
+                self._autosave_settings_enabled()
+            ),
+        }
+
+    def _write_autosave_settings(self):
+        """Write connector autosave settings to the user profile.
+
+        Inputs: none. Output: bool.
+        """
+        if getattr(self, "_settings_file_path", None) is None:
+            try:
+                self._settings_file_path = _connector_settings_env_path()
+            except OSError as exc:
+                self._autosave_settings_write_error = str(exc)
+                _log_connector_settings_event(
+                    f"Connector settings write failed: {type(exc).__name__}"
+                )
+                return False
+        try:
+            _atomic_write_connector_settings(
+                self._connector_settings_snapshot(), self._settings_file_path
+            )
+            self._saved_settings = _load_connector_settings(self._settings_file_path)
+            self._autosave_settings_write_error = ""
+            return True
+        except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+            self._autosave_settings_write_error = str(exc)
+            return False
+
+    def _show_autosave_settings_error(self):
+        """Show the generic autosave-settings write error.
+
+        Inputs: none. Output: None.
+        """
+        messagebox.showwarning(
+            AUTOSAVE_SETTINGS_ERROR_TITLE,
+            AUTOSAVE_SETTINGS_ERROR_MESSAGE,
+        )
+
+    def _set_autosave_settings_control_state(self, enabled):
+        """Enable or disable the autosave settings checkbox.
+
+        Inputs: `enabled`. Output: None.
+        """
+        check = getattr(self, "autosave_settings_check", None)
+        configure: Any = getattr(check, "config", None)
+        if callable(configure):
+            state = (
+                _tk_constant("NORMAL", "normal")
+                if enabled
+                else _tk_constant("DISABLED", "disabled")
+            )
+            configure(state=state)
+
+    def _on_autosave_settings_changed(self):
+        """Persist the autosave status immediately after a user toggle.
+
+        Inputs: none. Output: None.
+        """
+        if not getattr(self, "_connected", False):
+            self._set_autosave_settings_control_state(False)
+            return
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+
+    def _enable_autosave_after_verified_connection(self):
+        """Enable autosave controls and persist verified connection settings.
+
+        Inputs: none. Output: None.
+        """
+        self._set_autosave_settings_control_state(True)
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+
     def _current_local_folder_path(self):
         """Return the export folder path currently typed in the selector row.
 
@@ -5419,6 +5962,12 @@ class OMEROBrowserDialog:
             )
             if error:
                 self._show_folder_path_write_error()
+            elif (
+                getattr(self, "_connected", False)
+                and self._autosave_settings_enabled()
+                and not self._write_autosave_settings()
+            ):
+                self._show_autosave_settings_error()
 
     def _export_folder_to_omero(self):
         """Export the selected folder to OMERO for `OMEROBrowserDialog`.
@@ -5863,6 +6412,7 @@ class OMEROBrowserDialog:
             "#3498db",
             active_bg="#2f85c7",
         )
+        self._set_autosave_settings_control_state(False)
         self._set_status("Disconnected")
         self._set_connection_indicator("disconnected")
 
@@ -6629,6 +7179,7 @@ class OMEROBrowserDialog:
                         "Connected, but no supported connector workflow is available",
                         "#f8d7da",
                     )
+                self._enable_autosave_after_verified_connection()
             else:
                 self._connected = False
                 self.client.password = ""
@@ -6643,6 +7194,7 @@ class OMEROBrowserDialog:
                     "#3498db",
                     active_bg="#2f85c7",
                 )
+                self._set_autosave_settings_control_state(False)
                 self._set_status("Connection failed", "#f8d7da")
                 self._set_connection_indicator("error")
                 messagebox.showerror(
