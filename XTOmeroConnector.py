@@ -4812,11 +4812,11 @@ class OMEROBrowserDialog:
         self._indicator_state = "disconnected"
         self._indicator_blink_on = False
         self._indicator_after_id: Optional[str] = None
-        self.folder_path_var = None
-        self.folder_path_entry = None
-        self.select_folder_btn = None
-        self.save_settings_var = None
-        self.save_settings_check = None
+        self.folder_path_var: Any
+        self.folder_path_entry: Any
+        self.select_folder_btn: Any
+        self.save_settings_var: Any
+        self.save_settings_check: Any
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_trace_id = None
@@ -5026,7 +5026,7 @@ class OMEROBrowserDialog:
             "<FocusOut>",
             lambda _event: self._show_folder_path_placeholder(),
         )
-        trace_add = getattr(self.folder_path_var, "trace_add", None)
+        trace_add: Any = getattr(self.folder_path_var, "trace_add", None)
         if callable(trace_add):
             self._folder_path_trace_id = trace_add(
                 "write",
@@ -5252,7 +5252,7 @@ class OMEROBrowserDialog:
         Inputs: `color`. Output: None.
         """
         entry = getattr(self, "folder_path_entry", None)
-        configure = getattr(entry, "config", None)
+        configure: Any = getattr(entry, "config", None)
         if callable(configure):
             try:
                 configure(fg=color)
@@ -5267,7 +5267,7 @@ class OMEROBrowserDialog:
         Inputs: `value`. Output: None.
         """
         variable = getattr(self, "folder_path_var", None)
-        setter = getattr(variable, "set", None)
+        setter: Any = getattr(variable, "set", None)
         if not callable(setter):
             return
         self._folder_path_trace_suppressed = True
