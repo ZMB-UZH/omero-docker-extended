@@ -2524,17 +2524,18 @@ class _CircularIconButton(_RoundedButton):
             text_fill = self._fg
             shadow = _shade_color(self._bg, -0.35)
 
-        surface_offset = 2 if pressed else 0
-        diameter = max(12, min(width, height) - 4)
+        surface_offset = 1 if pressed else 0
+        shadow_shift = 1 if pressed else 2
+        diameter = max(12, min(width, height) - 8)
         left = (width - diameter) / 2
-        top = (height - diameter) / 2 + surface_offset
+        top = (height - diameter - shadow_shift) / 2 + surface_offset
         right = left + diameter
         bottom = top + diameter
         self._canvas.create_oval(
             left + 1,
-            top + (1 if pressed else 3),
+            top + shadow_shift,
             right + 1,
-            bottom + (1 if pressed else 3),
+            bottom + shadow_shift,
             fill=shadow,
             outline="",
         )
@@ -2544,8 +2545,7 @@ class _CircularIconButton(_RoundedButton):
             right,
             bottom,
             fill=fill,
-            outline=_shade_color(fill, -0.24),
-            width=1,
+            outline="",
         )
         self._canvas.create_text(
             width / 2 + surface_offset / 2,
@@ -5495,20 +5495,15 @@ class OMEROBrowserDialog:
             disabledforeground="#7a828a",
         )
         self.autosave_settings_check.pack(side=tk.RIGHT)
-        panel_icon_frame = tk.Frame(
-            conn_frame,
-            width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
-            height=CONNECTOR_PANEL_ICON_FRAME_HEIGHT,
-        )
+        panel_icon_frame = tk.Frame(conn_frame)
         panel_icon_frame.grid(
             row=0,
-            column=7,
+            column=8,
             rowspan=2,
             sticky=tk.NE,
-            padx=(14, 0),
+            padx=(12, 0),
             pady=(0, 2),
         )
-        panel_icon_frame.grid_propagate(False)
         self.help_btn = _CircularIconButton(
             panel_icon_frame,
             text="?",
@@ -5531,8 +5526,8 @@ class OMEROBrowserDialog:
             width=CONNECTOR_PANEL_ICON_SIZE,
             height=CONNECTOR_PANEL_ICON_SIZE,
         )
-        self.info_btn.pack(side=tk.RIGHT)
-        self.help_btn.pack(side=tk.RIGHT, padx=(0, 6))
+        self.help_btn.pack(side=tk.LEFT, padx=(0, 6))
+        self.info_btn.pack(side=tk.LEFT)
         self._show_folder_path_placeholder()
 
         # Browser
@@ -6490,16 +6485,28 @@ class OMEROBrowserDialog:
         if not native_available:
             _xt_debug(f"Same-session Imaris bridge unavailable: {bridge_error}")
 
+        can_attempt_imaris_handoff = (
+            native_available or self._has_imaris_handoff_target()
+        )
         options = []
         omero_available = False
-        if native_available and self.client:
+        if can_attempt_imaris_handoff and self.client:
             omero_available = self.client.has_omero_ims_export_capability()
-        if omero_available and native_available:
+        if omero_available:
             options.append("OMERO")
-        if native_available:
+        if can_attempt_imaris_handoff:
             options.append("Imaris")
         _xt_debug(f"Detected converter options after connection: {options}")
         return options
+
+    def _has_imaris_handoff_target(self):
+        """Return whether this XT session can attempt an Imaris file handoff.
+
+        Inputs: none. Output: bool.
+        """
+        return _looks_like_imaris_application(getattr(self, "imaris", None)) or (
+            _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
+        )
 
     def _detect_folder_export_after_connection(self):
         """Detect folder export availability after connection.

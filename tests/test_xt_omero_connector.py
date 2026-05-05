@@ -2182,6 +2182,7 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
         "self._reset_native_bridge_probe_for_converter_detection()\n"
         "        self._start_native_bridge_probe()" in source
     )
+    assert "def _has_imaris_handoff_target(self):" in source
 
 
 def test_converter_selection_refreshes_load_button_state():
@@ -2292,6 +2293,48 @@ def test_converter_detection_resets_stale_native_probe_before_waiting():
     assert options == ["OMERO", "Imaris"]
 
 
+def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exists():
+    """Verify a failed background probe does not hide valid converter choices.
+
+    Inputs: repository fixtures. Output: fails on converter visibility regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_done.set()
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_available = False
+    dialog._native_bridge_probe_error = "bridge unavailable"
+    dialog._reset_native_bridge_probe = _noop
+    dialog._start_native_bridge_probe = _noop
+    dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
+
+    assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
+
+
+def test_converter_detection_keeps_imaris_choice_without_server_converter():
+    """Verify local Imaris handoff remains selectable when OMERO export is absent.
+
+    Inputs: repository fixtures. Output: fails on converter visibility regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_done.set()
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_available = False
+    dialog._native_bridge_probe_error = "bridge unavailable"
+    dialog._reset_native_bridge_probe = _noop
+    dialog._start_native_bridge_probe = _noop
+    dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
+
+    assert dialog._detect_converter_options_after_connection() == ["Imaris"]
+
+
 def test_converter_detection_reset_does_not_interrupt_active_native_probe():
     """Verify converter detection does not reset an already running bridge probe.
 
@@ -2331,10 +2374,11 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
         )
     ]
     assert "create_arc(" not in circular_source
-    assert "panel_icon_frame = tk.Frame(" in source
-    assert "width=AUTOSAVE_SETTINGS_FRAME_WIDTH" in source
-    assert "height=CONNECTOR_PANEL_ICON_FRAME_HEIGHT" in source
-    assert "panel_icon_frame.grid(\n            row=0,\n            column=7," in source
+    assert "diameter = max(12, min(width, height) - 8)" in circular_source
+    assert "shadow_shift = 1 if pressed else 2" in circular_source
+    assert 'outline=""' in circular_source
+    assert "panel_icon_frame = tk.Frame(conn_frame)" in source
+    assert "panel_icon_frame.grid(\n            row=0,\n            column=8," in source
     assert "rowspan=2,\n            sticky=tk.NE," in source
     assert "self.help_btn = _CircularIconButton(" in source
     assert 'text="?",' in source
@@ -2343,16 +2387,16 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "font=CONNECTOR_PANEL_ICON_FONT" in source
     assert "width=CONNECTOR_PANEL_ICON_SIZE" in source
     assert "height=CONNECTOR_PANEL_ICON_SIZE" in source
-    assert "self.help_btn.pack(side=tk.RIGHT, padx=(0, 6))" in source
+    assert "self.help_btn.pack(side=tk.LEFT, padx=(0, 6))" in source
     assert "self.info_btn = _CircularIconButton(" in source
     assert 'text="i",' in source
     assert "bg=CONNECTOR_INFO_ICON_BG" in source
     assert "fg=CONNECTOR_INFO_ICON_FG" in source
-    assert "self.info_btn.pack(side=tk.RIGHT)" in source
+    assert "self.info_btn.pack(side=tk.LEFT)" in source
 
 
-def test_autosave_settings_alignment_is_fixed_to_icon_right_edge():
-    """Verify autosave stays in a fixed-width frame aligned to the info icon.
+def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
+    """Verify autosave stays fixed while help/info remain right aligned.
 
     Inputs: repository fixtures. Output: fails on autosave alignment regressions.
     """
@@ -2372,7 +2416,10 @@ def test_autosave_settings_alignment_is_fixed_to_icon_right_edge():
         "            self.autosave_settings_frame,"
     ) in source
     assert "self.autosave_settings_check.pack(side=tk.RIGHT)" in source
-    assert "panel_icon_frame.grid_propagate(False)" in source
+    assert "panel_icon_frame.grid_propagate(False)" not in source
+    assert source.index("self.autosave_settings_frame.grid(") < source.index(
+        "panel_icon_frame.grid("
+    )
 
 
 def test_status_text_aligns_with_load_button_start():
