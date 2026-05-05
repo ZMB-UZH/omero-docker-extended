@@ -547,7 +547,7 @@ RUN set -euo pipefail; \
         "fi" \
         "if [ \"\$(id -u)\" -eq 0 ]; then" \
         "    echo \"Starting OMERO.server as omero-server\"" \
-        "    exec runuser -p -m -u omero-server -- \"\$omero\" admin start --foreground" \
+        "    exec env USER=omero-server LOGNAME=omero-server LNAME=omero-server USERNAME=omero-server HOME=/opt/omero/server runuser -p -m -u omero-server -- \"\$omero\" admin start --foreground" \
         "fi" \
         "echo \"Starting OMERO.server as \$(id -un)\"" \
         "exec \"\$omero\" admin start --foreground" \
@@ -579,7 +579,7 @@ RUN set -euo pipefail; \
         "    if [ -f \"\$f\" ] && [ -x \"\$f\" ]; then" \
         "        printf 'Running %s %s\n' \"\$f\" \"\$*\"" \
         "        if [[ \"\$f\" == *.py ]] || [[ \"\$f\" == *60-database.sh ]]; then" \
-        "            runuser -p -m -u omero-server -- \"\$f\" \"\$@\"" \
+        "            env USER=omero-server LOGNAME=omero-server LNAME=omero-server USERNAME=omero-server HOME=/opt/omero/server runuser -p -m -u omero-server -- \"\$f\" \"\$@\"" \
         "        else" \
         "            \"\$f\" \"\$@\"" \
         "        fi" \
@@ -592,7 +592,7 @@ RUN set -euo pipefail; \
 # direct non-root image starts.
 # --------------------------------------------------------------------------
 HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
-    CMD sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; if [ "$(id -u)" -eq 0 ]; then exec runuser -p -m -u omero-server -- "${omero_bin}" admin diagnostics; fi; exec "${omero_bin}" admin diagnostics'
+    CMD sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; if [ "$(id -u)" -eq 0 ]; then exec env USER=omero-server LOGNAME=omero-server LNAME=omero-server USERNAME=omero-server HOME=/opt/omero/server runuser -p -m -u omero-server -- "${omero_bin}" admin diagnostics; fi; exec "${omero_bin}" admin diagnostics'
 
 # ---------------------------------------------------------------------------
 # Final security hardening pass (APPLY_SECURITY_HARDENING=1)

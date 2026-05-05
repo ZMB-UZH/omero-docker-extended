@@ -1190,8 +1190,8 @@ create_omero_groups_from_list() {
             set +e
             # Use docker exec explicitly with non-interactive flags and without pseudo-TTY (-T)
             # The < /dev/null redirect ensures if any prompt triggers it fails instead of hanging forever
-            add_output="$(compose_with_installation_env "${compose_file}" exec -T \
-                -e ROOTPASS="${ROOTPASS}" \
+            add_output="$(ROOTPASS="${ROOTPASS}" compose_with_installation_env "${compose_file}" exec -T \
+                -e ROOTPASS \
                 -e OMERO_CLI_HOST="${OMERO_CLI_HOST}" \
                 -e OMERO_CLI_PORT="${OMERO_CLI_PORT}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
@@ -1243,12 +1243,18 @@ chmod 0700 "${OMERO_TMPDIR_VALUE}"
 
 # Execute OMERO cli. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_cli() {
-    runuser -u "${OMERO_CLI_USER}" -- env \
-        HOME="${OMERO_CLI_HOME}" \
+    HOME="${OMERO_CLI_HOME}" \
         TMPDIR="${OMERO_TMPDIR_VALUE}" \
         OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
         OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
+        OMERO_USERDIR="${OMERO_TMPDIR_VALUE}/userdir" \
+        OMERO_SESSIONDIR="${OMERO_TMPDIR_VALUE}/userdir/sessions" \
+        USER="${OMERO_CLI_USER}" \
+        LOGNAME="${OMERO_CLI_USER}" \
+        LNAME="${OMERO_CLI_USER}" \
+        USERNAME="${OMERO_CLI_USER}" \
         OMERO_PASSWORD="${ROOTPASS}" \
+        runuser -p -m -u "${OMERO_CLI_USER}" -- \
         "${OMERO_BIN}" "$@"
 }
 
@@ -1330,9 +1336,9 @@ add_job_service_to_install_groups() {
 
     for attempt in $(seq 1 "${retry_limit}"); do
         set +e
-        output="$(compose_with_installation_env "${compose_file}" exec -T \
-            -e ROOTPASS="${ROOTPASS}" \
-            -e OMERO_JOB_SERVICE_PASS="${job_pass}" \
+        output="$(ROOTPASS="${ROOTPASS}" OMERO_JOB_SERVICE_PASS="${job_pass}" compose_with_installation_env "${compose_file}" exec -T \
+            -e ROOTPASS \
+            -e OMERO_JOB_SERVICE_PASS \
             -e JOB_USER="${job_user}" \
             -e JOB_SERVICE_HOST="${job_host}" \
             -e JOB_SERVICE_PORT="${job_port}" \
@@ -1393,13 +1399,20 @@ mkdir -p "${OMERO_TMPDIR_VALUE}"
 chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${OMERO_TMPDIR_VALUE}"
 chmod 0700 "${OMERO_TMPDIR_VALUE}"
 
-exec runuser -u "${OMERO_CLI_USER}" -- env \
-    HOME="${OMERO_CLI_HOME}" \
-    TMPDIR="${OMERO_TMPDIR_VALUE}" \
-    OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" \
-    OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" \
-    ROOTPASS="${ROOTPASS}" \
-    OMERO_JOB_SERVICE_PASS="${OMERO_JOB_SERVICE_PASS}" \
+export HOME="${OMERO_CLI_HOME}"
+export TMPDIR="${OMERO_TMPDIR_VALUE}"
+export OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}"
+export OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"
+export OMERO_USERDIR="${OMERO_TMPDIR_VALUE}/userdir"
+export OMERO_SESSIONDIR="${OMERO_TMPDIR_VALUE}/userdir/sessions"
+export USER="${OMERO_CLI_USER}"
+export LOGNAME="${OMERO_CLI_USER}"
+export LNAME="${OMERO_CLI_USER}"
+export USERNAME="${OMERO_CLI_USER}"
+export ROOTPASS
+export OMERO_JOB_SERVICE_PASS
+
+exec runuser -p -m -u "${OMERO_CLI_USER}" -- \
     "${SERVER_PYTHON}" "${JOB_SERVICE_SYNC_HELPER}" \
     --host "${JOB_SERVICE_HOST}" \
     --port "${JOB_SERVICE_PORT}" \

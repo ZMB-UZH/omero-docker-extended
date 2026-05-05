@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from typing import Iterable
@@ -411,7 +412,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "lookup",
         help="Look up a repository prefix directory in the active repository.",
     )
-    lookup_parser.add_argument("--root-pass", required=True)
+    lookup_parser.add_argument("--root-password-env", default="ROOTPASS")
     lookup_parser.add_argument("--host", required=True)
     lookup_parser.add_argument("--port", required=True, type=int)
     lookup_parser.add_argument("--repo-dir-path", required=True)
@@ -447,8 +448,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "lookup":
             if args.port <= 0:
                 parser.error("--port must be a positive integer")
+            root_pass = os.environ.get(args.root_password_env, "")
+            if not root_pass:
+                parser.error("a populated --root-password-env value is required")
             return lookup_prefix(
-                args.root_pass,
+                root_pass,
                 args.host,
                 args.port,
                 args.repo_dir_path,

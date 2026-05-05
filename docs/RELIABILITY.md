@@ -14,7 +14,9 @@ Practices and invariants that keep the platform running predictably.
   OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares a
   clean OMERO CLI runtime temp namespace under
   `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp/runtime*` before any OMERO CLI call,
-  requires `OMERO_CLI_USER` instead of embedding the service account in code,
+  sets `HOME`, `USER`, `LOGNAME`, `LNAME`, `USERNAME`, `OMERO_USERDIR`, and
+  `OMERO_SESSIONDIR` for service-user CLI execution, requires `OMERO_CLI_USER`
+  instead of embedding the service account in code,
   removes stale legacy `omero_${OMERO_CLI_USER}` lock namespaces directly under
   `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`, normalizes bootstrap lock
   directories under `OMERO.server/var` so OMERO admin commands remain writable
@@ -22,8 +24,11 @@ Practices and invariants that keep the platform running predictably.
   `${OMERO_DIR}/.omero/repository/*/.lock` before OMERO.server starts, and
   writes the env-derived import helper state file
   `OMERO.server/var/managed-zarr-runtime.env` from `${OMERO_TMP_PATH}`. It also
-  fails closed if `CONFIG_omero_managed_dir` is not an absolute path inside
-  `${OMERO_DIR}` or if a second image-local `ManagedRepository` exists under
+  prepares `${OMERO_DIR}`, `${OMERO_DIR}/FullText`, and the configured managed
+  repository leaf for the service user without recursively changing repository
+  payload ownership, and fails closed if `CONFIG_omero_managed_dir` is not an
+  absolute path inside `${OMERO_DIR}` or if a second image-local
+  `ManagedRepository` exists under
   `/opt/omero/server`. The background shared-prefix sync now plans only
   deterministic configured prefixes plus prefixes already present in the active
   managed repository, and startup `omero admin cleanse` plus the sync loop both

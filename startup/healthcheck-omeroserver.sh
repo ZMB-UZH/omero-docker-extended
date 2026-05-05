@@ -75,25 +75,22 @@ server_root="$(dirname "${OMERODIR}")"
 
 # Execute OMERO cli. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_cli() {
-    local -a env_args=(
-        HOME="${cli_home}"
-        TMPDIR="${OMERO_TMPDIR}"
-        OMERO_TMPDIR="${OMERO_TMPDIR}"
-        OMERO_TEMPDIR="${OMERO_TMPDIR}"
-    )
+    export HOME="${cli_home}"
+    export TMPDIR="${OMERO_TMPDIR}"
+    export OMERO_TMPDIR
+    export OMERO_TEMPDIR="${OMERO_TMPDIR}"
+    export OMERO_USERDIR="${OMERO_TMPDIR}/userdir"
+    export OMERO_SESSIONDIR="${OMERO_USERDIR}/sessions"
+    export USER="${OMERO_CLI_USER}"
+    export LOGNAME="${OMERO_CLI_USER}"
+    export LNAME="${OMERO_CLI_USER}"
+    export USERNAME="${OMERO_CLI_USER}"
+    if [[ -n "${OMERO_PASSWORD+x}" ]]; then export OMERO_PASSWORD; fi
 
-    if [[ -n "${OMERO_PASSWORD:-}" ]]; then
-        env_args+=(
-            OMERO_PASSWORD="${OMERO_PASSWORD}"
-        )
-    fi
-
-    runuser -u "${OMERO_CLI_USER}" -- env \
-        "${env_args[@]}" \
-        "${omero_bin}" "$@"
+    runuser -p -m -u "${OMERO_CLI_USER}" -- "${omero_bin}" "$@"
 }
 
-if ! OMERO_PASSWORD="${ROOTPASS}" run_omero_cli -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>/dev/null; then
+if ! OMERO_PASSWORD="${ROOTPASS}" run_omero_cli -C -s "${OMERO_CLI_HOST}" -p "${OMERO_CLI_PORT}" login -u root >/dev/null 2>/dev/null; then
     echo "FATAL: OMERO CLI login failed via configured service user ${OMERO_CLI_USER}" >&2
     exit 1
 fi

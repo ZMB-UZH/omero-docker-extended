@@ -78,7 +78,7 @@ flowchart TD
 
 - The worker opens an OMERO connection by either joining the user's existing session or authenticating with job-service credentials (`OMERO_IMS_USE_JOB_SERVICE_SESSION`).
 - The IMS export script (`IMS_Export.py`) is located via the OMERO script service.
-- The script is launched via `omero script launch` CLI inside the `omeroweb` container, with a writable CLI home at `/tmp/omero-cli`.
+- The script is launched via `omero script launch` CLI inside the `omeroweb` container, with CLI state isolated under the plugin-managed `omero-cli` temp namespace.
 - CLI output is parsed for structured output parameters: `Export_Path`, `Export_Name`, `File_Annotation_Id`, `Message`.
 - Task state updates are pushed via Celery's `update_state` mechanism (`connecting` → `finding_script` → `running_script`).
 
@@ -105,7 +105,7 @@ flowchart TD
 
 - Only Celery-backed exports are supported; direct synchronous script execution is not exposed to HTTP clients.
 - The user's session key is preferred over the job-service account for OMERO CLI launch, preserving data access permissions.
-- The OMERO CLI runs with isolated writable directories (`OMERO_USERDIR`, `OMERO_SESSIONDIR`, `OMERO_TMPDIR`) under `/tmp/omero-cli` to work in non-root containers.
+- The OMERO CLI runs with isolated writable directories (`OMERO_USERDIR`, `OMERO_SESSIONDIR`, `OMERO_TMPDIR`) under the plugin-managed temp root to work in non-root containers.
 - Task dispatch and status polling are separate HTTP requests; no WebSocket or SSE is used.
 
 ## Failure boundaries

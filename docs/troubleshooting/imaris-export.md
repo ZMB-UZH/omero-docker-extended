@@ -69,7 +69,8 @@ Fix:
 - [`startup/10-server-bootstrap.sh`](../../startup/10-server-bootstrap.sh)
   now prepares a clean runtime temp slot under
   `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp/runtime*`,
-- it exports `TMPDIR`, `OMERO_TMPDIR`, and `OMERO_TEMPDIR`,
+- it exports `TMPDIR`, `OMERO_TMPDIR`, `OMERO_TEMPDIR`, `OMERO_USERDIR`,
+  `OMERO_SESSIONDIR`, and the service-user identity variables,
 - it repoints the legacy OMERO temp path to that clean runtime slot before
   OMERO CLI/bootstrap work runs.
 
@@ -310,13 +311,19 @@ for candidate in "${SERVER_HOME:-}"/bin/omero /opt/omero/server/venv*/bin/omero 
   if [ -x "$candidate" ]; then omero_bin="$candidate"; break; fi
 done
 [ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
+run_omero_cli() {
+  env HOME="$runtime_home" USER="$runtime_user" LOGNAME="$runtime_user" \
+    LNAME="$runtime_user" USERNAME="$runtime_user" TMPDIR="$OMERO_TMPDIR" \
+    OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+    OMERO_USERDIR="$OMERO_TMPDIR/userdir" \
+    OMERO_SESSIONDIR="$OMERO_TMPDIR/userdir/sessions" \
+    runuser -p -m -u "$runtime_user" -- "$omero_bin" "$@"
+}
 script_id="$(
-  runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
-    "$omero_bin" script list | awk '/IMS_Export[.]py/ {print $1; exit}'
+  run_omero_cli script list | awk '/IMS_Export[.]py/ {print $1; exit}'
 )"
 : "${script_id:?IMS_Export.py is not registered}"
-runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
-  "$omero_bin" script params "$script_id"
+run_omero_cli script params "$script_id"
 SH
 docker compose exec -T omeroserver bash -s <<'SH'
 set -euo pipefail
@@ -357,13 +364,19 @@ for candidate in "${SERVER_HOME:-}"/bin/omero /opt/omero/server/venv*/bin/omero 
   if [ -x "$candidate" ]; then omero_bin="$candidate"; break; fi
 done
 [ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
+run_omero_cli() {
+  env HOME="$runtime_home" USER="$runtime_user" LOGNAME="$runtime_user" \
+    LNAME="$runtime_user" USERNAME="$runtime_user" TMPDIR="$OMERO_TMPDIR" \
+    OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
+    OMERO_USERDIR="$OMERO_TMPDIR/userdir" \
+    OMERO_SESSIONDIR="$OMERO_TMPDIR/userdir/sessions" \
+    runuser -p -m -u "$runtime_user" -- "$omero_bin" "$@"
+}
 script_id="$(
-  runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
-    "$omero_bin" script list | awk '/IMS_Export[.]py/ {print $1; exit}'
+  run_omero_cli script list | awk '/IMS_Export[.]py/ {print $1; exit}'
 )"
 : "${script_id:?IMS_Export.py is not registered}"
-runuser -u "$runtime_user" -- env HOME="$runtime_home" TMPDIR="$OMERO_TMPDIR" OMERO_TMPDIR="$OMERO_TMPDIR" OMERO_TEMPDIR="$OMERO_TMPDIR" \
-  "$omero_bin" script launch "$script_id" Image_ID="$IMAGE_ID"
+run_omero_cli script launch "$script_id" Image_ID="$IMAGE_ID"
 SH
 ```
 
@@ -399,8 +412,12 @@ done
 [ -n "$omero_bin" ] || { echo "OMERO CLI not found" >&2; exit 1; }
 cli_tmp="$(mktemp -d)"
 trap 'rm -rf "$cli_tmp"' EXIT
-runuser -u "$runtime_user" -- env HOME="$runtime_home" OMERO_USERDIR="$cli_tmp" OMERO_SESSIONDIR="$cli_tmp/sessions" OMERO_TMPDIR="$cli_tmp/tmp" TMPDIR="$cli_tmp/tmp" \
-  "$omero_bin" -s "$OMEROHOST" -p "$OMERO_PORT" -u root -w "$ROOTPASS" script launch "$SCRIPT_ID" Image_ID="$IMAGE_ID"
+env HOME="$runtime_home" USER="$runtime_user" LOGNAME="$runtime_user" \
+  LNAME="$runtime_user" USERNAME="$runtime_user" OMERO_USERDIR="$cli_tmp" \
+  OMERO_SESSIONDIR="$cli_tmp/sessions" OMERO_TMPDIR="$cli_tmp/tmp" \
+  TMPDIR="$cli_tmp/tmp" OMERO_PASSWORD="$ROOTPASS" \
+  runuser -p -m -u "$runtime_user" -- "$omero_bin" -s "$OMEROHOST" \
+    -p "$OMERO_PORT" -u root script launch "$SCRIPT_ID" Image_ID="$IMAGE_ID"
 SH
 ```
 

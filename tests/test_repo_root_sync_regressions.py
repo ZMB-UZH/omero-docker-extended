@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import pwd
 import subprocess
 import sys
 import tempfile
@@ -711,6 +713,10 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                     printf '%s\\n' FOUND\\|42\\|root\\|repo-1
                 }}
 
+                run_as_omero_cli_user() {{
+                    runuser -u "${{OMERO_CLI_USER}}" -- "$@"
+                }}
+
                 {function_text}
                 resolve_cli_home() {{
                     printf '%s\\n' "{tmpdir}"
@@ -757,8 +763,6 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                 sys.executable,
                 str(self.helper_path),
                 "lookup",
-                "--root-pass",
-                "secret",
                 "--host",
                 "omeroserver",
                 "--port",
@@ -772,6 +776,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env={**os.environ, "ROOTPASS": "secret"},
         )
 
         self.assertNotEqual(0, result.returncode)
@@ -845,6 +850,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             script = textwrap.dedent(
                 f"""\
                 set -euo pipefail
+                OMERO_CLI_USER="$(id -un)"
                 OMERO_DIR="{omero_dir}"
                 SERVER_HOME="{server_home}"
                 CONFIG_omero_managed_dir="{omero_dir}/ManagedRepository"
@@ -866,6 +872,95 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
         self.assertNotEqual(0, result.returncode)
         self.assertIn("unexpected image-local managed repository", result.stderr)
+
+    @unittest.skipUnless(os.geteuid() == 0, "requires root to verify chown repair")
+    def test_server_bootstrap_prepares_fresh_data_roots_for_service_user(
+        self,
+    ) -> None:
+        """Verify fresh OMERO data roots are writable by the service user.
+
+        Inputs: repository fixtures and a disposable root-owned data tree. Output: fails on
+        regressions where OMERO.server would mark the repository read-only on first boot.
+        """
+        nobody_uid = pwd.getpwnam("nobody").pw_uid
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "normalize_dir_path() {",
+            "validate_binary_repository_cleanse_configuration() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            omero_dir = root / "OMERO"
+            server_home = root / "server" / "OMERO.server"
+            os.chmod(root, 0o711)  # nosec B103
+            omero_dir.mkdir(parents=True, exist_ok=True)
+            server_home.mkdir(parents=True, exist_ok=True)
+            os.chown(omero_dir, 0, 0)
+            os.chmod(omero_dir, 0o700)
+
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                OMERO_CLI_USER=nobody
+                OMERO_DIR="{omero_dir}"
+                SERVER_HOME="{server_home}"
+                CONFIG_omero_managed_dir="{omero_dir}/ManagedRepository"
+                log() {{
+                    :
+                }}
+                trim_whitespace() {{
+                    printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+                }}
+                {function_text}
+                validate_managed_repository_configuration
+                ensure_server_data_runtime_directories
+                """
+            )
+
+            self._run_bash(script)
+
+            for path in (
+                omero_dir,
+                omero_dir / "FullText",
+                omero_dir / "ManagedRepository",
+            ):
+                with self.subTest(path=path):
+                    self.assertTrue(path.is_dir())
+                    self.assertEqual(nobody_uid, path.stat().st_uid)
+                    mode = path.stat().st_mode
+                    self.assertTrue(mode & 0o400, f"{path} is not owner-readable")
+                    self.assertTrue(mode & 0o200, f"{path} is not owner-writable")
+                    self.assertTrue(mode & 0o100, f"{path} is not owner-traversable")
+
+    def test_server_bootstrap_directory_repair_is_leaf_only(self) -> None:
+        """Assert repository directory repair remains shallow and explicit.
+
+        Inputs: repository fixtures. Output: detects any recursive ownership sweep over user data.
+        """
+        script_text = self._slice_function(
+            self.server_bootstrap_script,
+            "ensure_service_user_directory() {",
+            "verify_managed_repository_runtime_safety() {",
+        )
+        self.assertIn("ensure_service_user_directory()", script_text)
+        self.assertIn(
+            'ensure_service_user_directory "${data_root}/FullText"',
+            script_text,
+        )
+        self.assertIn(
+            'ensure_service_user_directory "$(expected_managed_repository_root)"',
+            script_text,
+        )
+        self.assertIn('chown "${owner_uid}:${owner_gid}" "${path}"', script_text)
+        self.assertNotIn(
+            'chown -R "${owner_uid}:${owner_gid}" "${path}"',
+            script_text,
+        )
+        self.assertNotIn(
+            'chown -R "$(id -u):$(id -g)" "${path}"',
+            self.server_bootstrap_script,
+        )
 
     @staticmethod
     def _run_bash(script: str) -> subprocess.CompletedProcess[str]:

@@ -10,7 +10,7 @@ Operating principles that guide all decisions in this repository.
 
 4. **Architectural boundaries must be explicit and verifiable.** Plugin packages depend on `omero_plugin_common`, never the reverse. Plugins do not depend on each other. Startup scripts consume only environment variables. These rules are documented in `ARCHITECTURE.md` and can be verified by inspection.
 
-5. **Configuration is environment-driven with zero hard-coded values.** All paths, credentials, endpoints, and tuning parameters come from `env/*.env` files. Error messages reference the correct env file and variable name. This makes the system deployable in any environment without code changes.
+5. **Configuration is environment-driven with zero hard-coded values.** All paths, credentials, endpoints, and tuning parameters come from `installation_paths.env`, `.env`, and `env/*.env` files derived from the tracked examples. Error messages reference the correct env file and variable name. This makes the system deployable in any environment without code changes.
 
 6. **Pin everything.** Docker images, Python packages, and external dependencies use explicit version tags. `:latest` and unpinned ranges are never used. Dependabot monitors for updates weekly.
 
