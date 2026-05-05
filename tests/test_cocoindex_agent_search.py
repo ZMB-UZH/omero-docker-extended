@@ -21,7 +21,7 @@ def test_package_pin_and_hashes_are_exact() -> None:
     Inputs: repository fixtures. Output: fails on regressions in package pin and hashes are exact.
     """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
-        "cocoindex-code[full]==0.2.31"
+        "cocoindex-code[full]==0.2.32"
     )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
 
@@ -976,12 +976,12 @@ def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None
     ]
 
 
-def test_mcp_install_uses_workspace_agnostic_codex_registration(
+def test_mcp_install_uses_workspace_pinned_codex_registration(
     tmp_path: Path,
 ) -> None:
-    """Verify MCP install uses workspace agnostic codex registration.
+    """Verify MCP install uses workspace pinned codex registration.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in MCP install uses workspace agnostic codex registration.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in MCP install uses workspace pinned codex registration.
     """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
@@ -1018,18 +1018,19 @@ def test_mcp_install_uses_workspace_agnostic_codex_registration(
     assert (
         f"{cocoindex_agent_search.ARTIFACT_ROOT_ENV}={context.artifact_root}" in command
     )
+    assert f"{cocoindex_agent_search.REPO_ROOT_ENV}={context.repo_root}" in command
     assert command[command.index("--") + 1] == "python3"
-    assert not any(
-        part.startswith(f"{cocoindex_agent_search.REPO_ROOT_ENV}=") for part in command
+    assert command[command.index("--") + 2] == str(
+        Path(cocoindex_agent_search.__file__).resolve()
     )
 
 
-def test_codex_mcp_server_matches_expected_requires_relative_args_and_timeouts(
+def test_codex_mcp_server_matches_expected_requires_pinned_args_env_and_timeouts(
     tmp_path: Path,
 ) -> None:
-    """Verify codex MCP server matches expected requires relative args and timeouts.
+    """Verify codex MCP server matches expected requires pinned args env and timeouts.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in codex MCP server matches expected requires relative args and timeouts.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in codex MCP server matches expected requires pinned args env and timeouts.
     """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
@@ -1039,7 +1040,14 @@ def test_codex_mcp_server_matches_expected_requires_relative_args_and_timeouts(
     )
     expected = cocoindex_agent_search.expected_codex_mcp_server(context)
     assert expected["command"] == "python3"
-    assert expected["args"] == ["tools/cocoindex_agent_search.py", "mcp"]
+    assert expected["args"] == [
+        str(Path(cocoindex_agent_search.__file__).resolve()),
+        "mcp",
+    ]
+    assert expected["env"] == {
+        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root),
+        cocoindex_agent_search.REPO_ROOT_ENV: str(context.repo_root),
+    }
     config = {"mcp_servers": {"cocoindex-code": expected.copy()}}
 
     assert cocoindex_agent_search.codex_mcp_server_matches_expected(config, expected)
@@ -1052,7 +1060,15 @@ def test_codex_mcp_server_matches_expected_requires_relative_args_and_timeouts(
     config["mcp_servers"]["cocoindex-code"]["tool_timeout_sec"] = expected[
         "tool_timeout_sec"
     ]
-    config["mcp_servers"]["cocoindex-code"]["cwd"] = "other-repo"
+    config["mcp_servers"]["cocoindex-code"]["env"] = {
+        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root)
+    }
+    assert not cocoindex_agent_search.codex_mcp_server_matches_expected(
+        config, expected
+    )
+
+    config["mcp_servers"]["cocoindex-code"] = expected.copy()
+    config["mcp_servers"]["cocoindex-code"]["cwd"] = "/other/repo"
     assert not cocoindex_agent_search.codex_mcp_server_matches_expected(
         config, expected
     )
@@ -1121,7 +1137,7 @@ def test_mcp_command_starts_without_preparing_cocoindex(
     )
     monkeypatch.setattr(
         cocoindex_agent_search,
-        "ensure_daemon_ready",
+        "daemon_session",
         mock.Mock(side_effect=AssertionError("startup must not launch daemon")),
     )
 
@@ -1270,6 +1286,11 @@ def test_lightweight_mcp_rejects_refresh_index(
         cocoindex_agent_search,
         "resolve_context",
         mock.Mock(return_value=context),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_active_index_context",
+        mock.Mock(side_effect=cocoindex_agent_search.IndexRequiredError()),
     )
     monkeypatch.setattr(cocoindex_agent_search, "run_search", mocked_search)
     input_stream = io.StringIO(
@@ -1426,12 +1447,12 @@ def test_lightweight_mcp_unknown_tool_does_not_echo_name() -> None:
     assert sensitive_tool_name not in response["error"]["message"]
 
 
-def test_run_ccc_uses_supervised_ready_daemon(
+def test_run_ccc_uses_supervised_daemon_session(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Verify run ccc uses supervised ready daemon.
+    """Verify run ccc uses supervised daemon session.
 
-    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in run ccc uses supervised ready daemon.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in run ccc uses supervised daemon session.
     """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
@@ -1441,16 +1462,410 @@ def test_run_ccc_uses_supervised_ready_daemon(
     )
     completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
     mocked_checked = mock.Mock(return_value=completed)
+    session_events: list[str] = []
+
+    class FakeDaemonSession:
+        """Test double for the daemon session context manager."""
+
+        def __enter__(self) -> None:
+            """Enter the fake daemon session.
+
+            Inputs: no arguments. Output: records the context-manager entry.
+            """
+            session_events.append("enter")
+
+        def __exit__(self, *_exc: object) -> None:
+            """Exit the fake daemon session.
+
+            Inputs: optional exception details. Output: records context exit.
+            """
+            session_events.append("exit")
 
     monkeypatch.setattr(cocoindex_agent_search, "ensure_ready", mock.Mock())
-    monkeypatch.setattr(cocoindex_agent_search, "ensure_daemon_ready", mock.Mock())
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_session",
+        mock.Mock(return_value=FakeDaemonSession()),
+    )
     monkeypatch.setattr(cocoindex_agent_search, "checked_command", mocked_checked)
 
     assert cocoindex_agent_search.run_ccc(context, ["status"]) == completed
+    assert session_events == ["enter", "exit"]
 
     kwargs = mocked_checked.call_args.kwargs
     assert kwargs["env"]["COCOINDEX_CODE_DAEMON_SUPERVISED"] == "1"
     assert kwargs["cwd"] == context.mirror_repo
+
+
+def test_daemon_session_stops_only_daemon_it_starts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify daemon session stops only daemon it starts.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in daemon ownership cleanup.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    proc = SimpleNamespace(pid=12345)
+    events: list[str] = []
+
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_handshake_succeeds",
+        mock.Mock(return_value=False),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "cleanup_stale_daemon_files",
+        mock.Mock(side_effect=lambda _context: events.append("cleanup")),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "start_daemon_process",
+        mock.Mock(side_effect=lambda _context: events.append("start") or proc),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "wait_for_daemon_handshake",
+        mock.Mock(side_effect=lambda _context, _proc: events.append("wait")),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "stop_owned_daemon",
+        mock.Mock(side_effect=lambda _context, _proc: events.append("stop")),
+    )
+
+    with cocoindex_agent_search.daemon_session(context):
+        events.append("body")
+
+    assert events == ["cleanup", "start", "wait", "body", "stop"]
+    cocoindex_agent_search.stop_owned_daemon.assert_called_once_with(context, proc)
+
+
+def test_daemon_session_reuses_preexisting_daemon_without_stopping_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify daemon session reuses preexisting daemon without stopping it.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in daemon reuse cleanup.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    start = mock.Mock()
+    stop = mock.Mock()
+
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_handshake_succeeds",
+        mock.Mock(return_value=True),
+    )
+    monkeypatch.setattr(cocoindex_agent_search, "start_daemon_process", start)
+    monkeypatch.setattr(cocoindex_agent_search, "stop_owned_daemon", stop)
+
+    with cocoindex_agent_search.daemon_session(context):
+        pass
+
+    start.assert_not_called()
+    stop.assert_not_called()
+
+
+def test_daemon_session_reaps_started_daemon_when_handshake_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify daemon session reaps started daemon when handshake fails.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in failed-start cleanup.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    proc = SimpleNamespace(
+        pid=12345,
+        poll=mock.Mock(return_value=None),
+        terminate=mock.Mock(),
+        wait=mock.Mock(return_value=None),
+        kill=mock.Mock(),
+    )
+
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_handshake_succeeds",
+        mock.Mock(return_value=False),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search, "cleanup_stale_daemon_files", mock.Mock()
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search, "start_daemon_process", mock.Mock(return_value=proc)
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "wait_for_daemon_handshake",
+        mock.Mock(side_effect=RuntimeError("handshake failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="handshake failed"):
+        with cocoindex_agent_search.daemon_session(context):
+            pass
+
+    proc.terminate.assert_called_once_with()
+    proc.wait.assert_called_once_with(
+        timeout=cocoindex_agent_search.timeout_seconds("daemon_stop")
+    )
+    proc.kill.assert_not_called()
+
+
+def test_reap_started_daemon_process_escalates_after_timeout() -> None:
+    """Verify reap started daemon process escalates after timeout.
+
+    Inputs: no external fixtures. Output: fails on regressions in daemon reap escalation.
+    """
+    proc = SimpleNamespace(
+        poll=mock.Mock(return_value=None),
+        terminate=mock.Mock(),
+        wait=mock.Mock(
+            side_effect=[
+                subprocess.TimeoutExpired("daemon", 1),
+                subprocess.TimeoutExpired("daemon", 1),
+                None,
+            ]
+        ),
+        kill=mock.Mock(),
+    )
+
+    cocoindex_agent_search.reap_started_daemon_process(proc)
+
+    assert proc.terminate.call_count == 1
+    proc.kill.assert_called_once_with()
+    assert proc.wait.call_count == 3
+
+
+def test_stop_owned_daemon_waits_for_started_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify stop owned daemon waits for started process.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in owned daemon reaping.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    proc = SimpleNamespace(
+        pid=12345,
+        poll=mock.Mock(return_value=None),
+        terminate=mock.Mock(),
+        wait=mock.Mock(return_value=None),
+        kill=mock.Mock(),
+    )
+    stop_daemon = mock.Mock()
+
+    monkeypatch.setattr(
+        cocoindex_agent_search, "daemon_pid", mock.Mock(return_value=12345)
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search, "prepend_venv_site_package_paths", mock.Mock()
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "importlib",
+        SimpleNamespace(
+            import_module=mock.Mock(
+                return_value=SimpleNamespace(stop_daemon=stop_daemon)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_handshake_succeeds",
+        mock.Mock(return_value=False),
+    )
+
+    cocoindex_agent_search.stop_owned_daemon(context, proc)
+
+    stop_daemon.assert_called_once_with()
+    proc.wait.assert_called_once_with(
+        timeout=cocoindex_agent_search.timeout_seconds("daemon_stop")
+    )
+    proc.terminate.assert_not_called()
+    proc.kill.assert_not_called()
+
+
+def test_run_coco_search_uses_existing_artifact_daemon_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify run coco search uses existing artifact daemon path.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in benchmark search daemon ownership.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    case = cocoindex_agent_search.BenchmarkCase(
+        name="daemon",
+        query="daemon ownership",
+        rg="daemon",
+        expected=("tools/cocoindex_agent_search.py",),
+    )
+    completed = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="File: tools/cocoindex_agent_search.py:1 hit\n",
+        stderr="",
+    )
+    mocked_run_ccc_existing = mock.Mock(return_value=completed)
+    monkeypatch.setattr(
+        cocoindex_agent_search, "run_ccc_existing", mocked_run_ccc_existing
+    )
+
+    result, _elapsed_ms, files = cocoindex_agent_search.run_coco_search(context, case)
+
+    assert result == completed
+    assert files == ["tools/cocoindex_agent_search.py"]
+    mocked_run_ccc_existing.assert_called_once_with(
+        context,
+        ["search", "--limit", "5", "daemon ownership"],
+        timeout=cocoindex_agent_search.timeout_seconds("search"),
+        manage_daemon=True,
+    )
+
+
+def test_run_benchmark_reuses_one_daemon_for_cocoindex_cases(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify run benchmark reuses one daemon for cocoindex cases.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in benchmark daemon efficiency.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    cases = [
+        cocoindex_agent_search.BenchmarkCase(
+            name="one", query="one", rg="one", expected=("one.py",)
+        ),
+        cocoindex_agent_search.BenchmarkCase(
+            name="two", query="two", rg="two", expected=("two.py",)
+        ),
+    ]
+    session_events: list[str] = []
+
+    class FakeDaemonSession:
+        """Test double for the benchmark daemon session."""
+
+        def __enter__(self) -> None:
+            """Enter the fake daemon session.
+
+            Inputs: no arguments. Output: records the context-manager entry.
+            """
+            session_events.append("enter")
+
+        def __exit__(self, *_exc: object) -> None:
+            """Exit the fake daemon session.
+
+            Inputs: optional exception details. Output: records context exit.
+            """
+            session_events.append("exit")
+
+    def fake_benchmark_case(
+        _context: cocoindex_agent_search.CocoIndexContext,
+        _rg_bin: str,
+        case: cocoindex_agent_search.BenchmarkCase,
+        _exclude_args: list[str],
+        *,
+        manage_daemon: bool,
+    ) -> cocoindex_agent_search.BenchmarkResult:
+        """Return a deterministic benchmark result.
+
+        Inputs: benchmark context and daemon management flag. Output: fixed result.
+        """
+        assert manage_daemon is False
+        return cocoindex_agent_search.BenchmarkResult(
+            case=case.name,
+            rg_ms=1.0,
+            rg_returncode=0,
+            rg_chars=10,
+            rg_line_count=1,
+            rg_unique_files=1,
+            rg_first_files=[case.expected[0]],
+            rg_expected_rank=1,
+            coco_ms=1.0,
+            coco_chars=5,
+            coco_line_count=1,
+            coco_unique_files=1,
+            coco_first_files=[case.expected[0]],
+            coco_expected_rank=1,
+            focused_rg_ms=1.0,
+            focused_rg_returncode=0,
+            focused_rg_chars=3,
+            focused_rg_line_count=1,
+            focused_rg_unique_files=1,
+            hybrid_chars=8,
+        )
+
+    context.db_dir.mkdir(parents=True)
+    cocoindex_agent_search.target_sqlite_db(context).write_bytes(b"sqlite")
+    monkeypatch.setattr(
+        cocoindex_agent_search, "require_clean_index_target", mock.Mock()
+    )
+    monkeypatch.setattr(cocoindex_agent_search, "require_disk_budget", mock.Mock())
+    monkeypatch.setattr(cocoindex_agent_search, "ensure_installed", mock.Mock())
+    monkeypatch.setattr(cocoindex_agent_search, "ensure_mirror", mock.Mock())
+    monkeypatch.setattr(
+        cocoindex_agent_search, "ensure_project_initialized", mock.Mock()
+    )
+    monkeypatch.setattr(cocoindex_agent_search, "run_index", mock.Mock())
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "resolve_required_executable",
+        mock.Mock(return_value="rg"),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "checked_git_command",
+        mock.Mock(
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="HEAD\n", stderr=""
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "daemon_session",
+        mock.Mock(return_value=FakeDaemonSession()),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "benchmark_case",
+        mock.Mock(side_effect=fake_benchmark_case),
+    )
+
+    payload = cocoindex_agent_search.run_benchmark(
+        context, cases, output_path=None, allow_dirty=True
+    )
+
+    assert session_events == ["enter", "exit"]
+    assert payload["summary"]["cases"] == 2
+    assert cocoindex_agent_search.benchmark_case.call_count == 2
 
 
 def test_run_index_preserves_excluded_paths(
@@ -1593,6 +2008,11 @@ def test_command_search_refuses_missing_index_by_default(
     )
     monkeypatch.setattr(
         cocoindex_agent_search,
+        "resolve_active_index_context",
+        mock.Mock(side_effect=cocoindex_agent_search.IndexRequiredError()),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
         "run_index",
         mock.Mock(side_effect=AssertionError("search must not index by default")),
     )
@@ -1732,186 +2152,118 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
         mirror_digest="abc",
     )
-    captured_params: dict[str, object] = {}
-
-    class FakeFailAfter:
-        """Test double for fake fail after."""
-
-        def __enter__(self) -> None:
-            """Enter `FakeFailAfter`'s context-managed fake resource.
-
-            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
-            """
-            return None
-
-        def __exit__(self, *args: object) -> bool:
-            """Exit `FakeFailAfter`'s context-managed fake resource.
-
-            Inputs: `*args`. Output: `bool`.
-            """
-            return False
-
-    class FakeServerParameters:
-        """Test double for fake server parameters."""
-
-        def __init__(
-            self,
-            *,
-            command: str,
-            args: list[str],
-            env: dict[str, str],
-            cwd: str,
-        ) -> None:
-            """Create `FakeServerParameters` with its default state.
-
-            Inputs: `command`, `args`, `env`, `cwd`. Output: None.
-            """
-            captured_params.update(
-                {"command": command, "args": args, "env": env, "cwd": cwd}
-            )
-
-    class FakeStdioClient:
-        """Test double for fake stdio client."""
-
-        def __init__(self, params: FakeServerParameters) -> None:
-            """Create `FakeStdioClient` with `params`.
-
-            Inputs: `params`. Output: None.
-            """
-            self.params = params
-
-        async def __aenter__(self) -> tuple[object, object]:
-            """Enter the async context manager.
-
-            Inputs: none. Output: `tuple[object, object]`.
-            """
-            return object(), object()
-
-        async def __aexit__(self, *args: object) -> bool:
-            """Exit the async context manager.
-
-            Inputs: `*args`. Output: `bool`.
-            """
-            return False
-
-    created_sessions: list[FakeSession] = []
-
-    class FakeSession:
-        """Test double for fake session."""
-
-        def __init__(self, read_stream: object, write_stream: object) -> None:
-            """Create `FakeSession` with `read_stream` and `write_stream`.
-
-            Inputs: `read_stream`, `write_stream`. Output: None.
-            """
-            self.streams = (read_stream, write_stream)
-            created_sessions.append(self)
-
-        async def __aenter__(self) -> "FakeSession":
-            """Enter the async context manager.
-
-            Inputs: none. Output: `'FakeSession'`.
-            """
-            self.called_tool = None
-            return self
-
-        async def __aexit__(self, *args: object) -> bool:
-            """Exit the async context manager.
-
-            Inputs: `*args`. Output: `bool`.
-            """
-            return False
-
-        async def initialize(self) -> object:
-            """Initialize the initialize for `FakeSession`.
-
-            Inputs: none. Output: `object`.
-            """
-            self.initialized = True
-            return SimpleNamespace(
-                serverInfo=SimpleNamespace(name="fake", version="1.0")
-            )
-
-        async def list_tools(self) -> object:
-            """Return list tools.
-
-            Inputs: none. Output: `object`.
-            """
-            self.listed_tools = True
-            return SimpleNamespace(
-                tools=[SimpleNamespace(name="search"), SimpleNamespace(name="index")]
-            )
-
-        async def call_tool(self, name: str, arguments: dict[str, object]) -> object:
-            """Return the call tool for `FakeSession`.
-
-            Inputs: `name` (str) name, `arguments` (dict[str, object]). Output:
-            `object`.
-            """
-            self.called_tool = (name, arguments)
-            return SimpleNamespace(content=[])
-
-    fake_anyio = mock.Mock()
-    fake_anyio.fail_after = mock.Mock(return_value=FakeFailAfter())
-    fake_anyio.run.side_effect = lambda function: __import__("asyncio").run(function())
-    fake_mcp = mock.Mock(
-        ClientSession=FakeSession,
-        StdioServerParameters=FakeServerParameters,
+    completed = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=(
+            '{"jsonrpc":"2.0","id":1,"result":'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"jsonrpc":"2.0","id":2,"result":'
+            '{"tools":[{"name":"search"},{"name":"status"}]}}\n'
+        ),
+        stderr="",
     )
-    fake_stdio = mock.Mock(stdio_client=FakeStdioClient)
-
-    def fake_import_module(name: str) -> object:
-        """Simulate import module so the surrounding test controls that dependency.
-
-        Inputs: `name` (str) name. Output: `object`.
-        """
-        return {
-            "anyio": fake_anyio,
-            "mcp": fake_mcp,
-            "mcp.client.stdio": fake_stdio,
-        }[name]
-
+    mocked_run = mock.Mock(return_value=completed)
     monkeypatch.setattr(
         cocoindex_agent_search,
-        "venv_site_package_paths",
-        mock.Mock(return_value=[tmp_path / "site-packages"]),
+        "run_command_with_input",
+        mocked_run,
+    )
+
+    assert cocoindex_agent_search.run_mcp_stdio_smoke(
+        context,
+        include_search=False,
+    ) == {
+        "server_name": "cocoindex-code",
+        "server_version": "0.2.32",
+        "tools": ["search", "status"],
+    }
+    assert mocked_run.call_args.args[0] == [
+        sys.executable,
+        str(Path(cocoindex_agent_search.__file__).resolve()),
+        "mcp",
+    ]
+    kwargs = mocked_run.call_args.kwargs
+    assert kwargs["cwd"] == context.repo_root
+    assert kwargs["env"] == {
+        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root),
+        cocoindex_agent_search.REPO_ROOT_ENV: str(context.repo_root),
+    }
+    assert '"method": "tools/list"' in kwargs["input_text"]
+    assert '"method": "tools/call"' not in kwargs["input_text"]
+
+
+def test_mcp_stdio_smoke_include_search_fails_on_tool_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify MCP stdio smoke include search fails on tool error.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in MCP stdio smoke include search failure detection.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path / "repo",
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    completed = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=(
+            '{"jsonrpc":"2.0","id":1,"result":'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
+            '{"jsonrpc":"2.0","id":3,"result":'
+            '{"content":[{"type":"text","text":"missing index"}],"isError":true}}\n'
+        ),
+        stderr="",
     )
     monkeypatch.setattr(
-        cocoindex_agent_search.importlib,
-        "import_module",
-        fake_import_module,
+        cocoindex_agent_search,
+        "run_command_with_input",
+        mock.Mock(return_value=completed),
     )
 
-    original_sys_path = list(sys.path)
-    try:
-        assert cocoindex_agent_search.run_mcp_stdio_smoke(
-            context,
-            include_search=False,
-        ) == {
-            "server_name": "fake",
-            "server_version": "1.0",
-            "tools": ["index", "search"],
-        }
-    finally:
-        sys.path[:] = original_sys_path
-    assert captured_params["command"] == sys.executable
-    assert captured_params["args"][-1] == "mcp"
-    assert captured_params["env"] == {
-        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root)
-    }
-    assert captured_params["cwd"] == str(context.repo_root)
-    assert created_sessions[0].called_tool is None
+    with pytest.raises(RuntimeError, match="MCP search smoke failed"):
+        cocoindex_agent_search.run_mcp_stdio_smoke(context, include_search=True)
+
+
+def test_mcp_stdio_smoke_include_search_records_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify MCP stdio smoke include search records success.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in MCP stdio smoke include search success handling.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path / "repo",
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    completed = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout=(
+            '{"jsonrpc":"2.0","id":1,"result":'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
+            '{"jsonrpc":"2.0","id":3,"result":'
+            '{"content":[{"type":"text","text":"File: AGENTS.md:1"}],"isError":false}}\n'
+        ),
+        stderr="",
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "run_command_with_input",
+        mock.Mock(return_value=completed),
+    )
 
     assert (
-        cocoindex_agent_search.run_mcp_stdio_smoke(
-            context,
-            include_search=True,
-        )["search_tool_result_type"]
-        == "SimpleNamespace"
-    )
-    assert created_sessions[1].called_tool == (
-        "search",
-        {"query": "MCP smoke search", "limit": 1},
+        cocoindex_agent_search.run_mcp_stdio_smoke(context, include_search=True)[
+            "search_tool_content_items"
+        ]
+        == 1
     )
 
 
@@ -1958,7 +2310,8 @@ def test_mcp_jsonrpc_protocol_probe_uses_raw_stdio(
     kwargs = mocked_run.call_args.kwargs
     assert kwargs["cwd"] == context.repo_root
     assert kwargs["env"] == {
-        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root)
+        cocoindex_agent_search.ARTIFACT_ROOT_ENV: str(context.artifact_root),
+        cocoindex_agent_search.REPO_ROOT_ENV: str(context.repo_root),
     }
     assert '"method": "initialize"' in kwargs["input_text"]
     assert '"method": "tools/list"' in kwargs["input_text"]
@@ -2074,6 +2427,7 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
         text = (repo_root / relative_path).read_text(encoding="utf-8")
         assert "cocoindex-code-search" in text, relative_path
         assert "MCP" in text and "cocoindex-code" in text, relative_path
+        assert "mandatory" in text.lower(), relative_path
         assert "semantic routing" in text, relative_path
         assert "mcp-smoke" in text, relative_path
         assert "rg" in text, relative_path
