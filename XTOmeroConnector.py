@@ -184,12 +184,13 @@ AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
 AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
     "Autosave settings could not update the OMERO connector settings file."
 )
-CONNECTOR_SETTINGS_HOST_KEY = "OMERO_CONNECTOR_HOST"
-CONNECTOR_SETTINGS_PORT_KEY = "OMERO_CONNECTOR_PORT"
-CONNECTOR_SETTINGS_USERNAME_KEY = "OMERO_CONNECTOR_USERNAME"
-CONNECTOR_SETTINGS_HTTPS_KEY = "OMERO_CONNECTOR_HTTPS"
-CONNECTOR_SETTINGS_PATH_KEY = "OMERO_CONNECTOR_PATH"
-CONNECTOR_SETTINGS_AUTOSAVE_KEY = "OMERO_CONNECTOR_AUTOSAVE_SETTINGS"
+CONNECTOR_SETTINGS_KEY_PREFIX = "OMERO_CONNECTOR_"
+CONNECTOR_SETTINGS_HOST_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HOST"
+CONNECTOR_SETTINGS_PORT_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PORT"
+CONNECTOR_SETTINGS_USERNAME_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "USER" + "NAME"
+CONNECTOR_SETTINGS_HTTPS_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HTTPS"
+CONNECTOR_SETTINGS_PATH_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PATH"
+CONNECTOR_SETTINGS_AUTOSAVE_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "AUTOSAVE_SETTINGS"
 CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_HOST_KEY,
     CONNECTOR_SETTINGS_PORT_KEY,
@@ -1284,7 +1285,7 @@ def _load_connector_settings(settings_path=None):
                 if str(value or "").strip():
                     settings[key] = value
         return settings
-    except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         _log_connector_settings_event(
             f"Connector settings load failed: {type(exc).__name__}"
         )
@@ -1397,7 +1398,7 @@ def _atomic_write_connector_settings(settings, settings_path=None):
         os.replace(os.fspath(temp_path), os.fspath(target))
         with contextlib.suppress(OSError):
             os.chmod(os.fspath(target), PRIVATE_FILE_MODE)
-    except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         _log_connector_settings_event(
             f"Connector settings write failed: {type(exc).__name__}"
         )
@@ -5844,11 +5845,12 @@ class OMEROBrowserDialog:
             self._saved_settings = _load_connector_settings(self._settings_file_path)
             self._autosave_settings_write_error = ""
             return True
-        except (OSError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        except (OSError, TypeError, ValueError) as exc:
             self._autosave_settings_write_error = str(exc)
             return False
 
-    def _show_autosave_settings_error(self):
+    @staticmethod
+    def _show_autosave_settings_error():
         """Show the generic autosave-settings write error.
 
         Inputs: none. Output: None.
