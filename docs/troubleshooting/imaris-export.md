@@ -194,8 +194,11 @@ Operational rule:
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
   `Missing image id` response. Each new connection resets the native bridge
-  probe before converter detection so a stale failed probe cannot hide the
-  converter selector after reconnecting.
+  probe before converter detection for diagnostics, but a stale failed probe
+  does not hide converter choices when the XT session still has a valid Imaris
+  handoff target. The final native-open readiness check remains at the
+  pre-download boundary so failed handoff support stops the workflow before any
+  download or server-side conversion starts.
 - the local path field is the source of truth for both loading images into
   Imaris and exporting local folders to OMERO. The `Select` button opens the
   native Tk directory chooser, replaces the typed value only when the operator
