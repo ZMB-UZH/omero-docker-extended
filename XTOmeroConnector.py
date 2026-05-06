@@ -21,6 +21,7 @@ import http.cookiejar
 import importlib
 import json
 import logging
+import math
 import ntpath
 import os
 import posixpath
@@ -40,7 +41,7 @@ import urllib.request
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -157,13 +158,17 @@ NATIVE_BRIDGE_LAUNCH_POLL_INTERVAL = 1.0
 NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
-OMERO_CONNECTOR_WINDOW_WIDTH = 1000
+OMERO_CONNECTOR_WINDOW_WIDTH = 1180
 OMERO_CONNECTOR_WINDOW_HEIGHT = 760
 MINIMUM_WINDOWS_MAJOR = 10
 MINIMUM_WINDOWS_MINOR = 0
 CONVERTER_MENU_FONT = ("Arial", 10)
+CONVERTER_DROPDOWN_WIDTH = 232
+CONVERTER_DROPDOWN_HEIGHT = 36
+CONVERTER_DROPDOWN_TEXT_PAD = 10
 ACTION_ROW_HORIZONTAL_PAD = 10
-ACTION_BUTTON_PAD = 2
+ACTION_BUTTON_PAD = 0
+ACTION_BUTTON_GAP = 4
 STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
 CONNECTION_LABEL_WIDTH = len("Username:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
@@ -177,17 +182,28 @@ CONNECTOR_PANEL_ICON_SIZE = 36
 CONNECTOR_PANEL_ICON_FRAME_HEIGHT = 42
 CONNECTOR_PANEL_ICON_FONT = ("Segoe UI", 13, "bold")
 PASSWORD_REVEAL_DURATION_MS = 30000
-PASSWORD_REVEAL_BUTTON_SIZE = 26
+PASSWORD_REVEAL_BUTTON_SIZE = 18
 PASSWORD_REVEAL_ICON_BG = "#f8fafc"
 PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
 PASSWORD_REVEAL_ICON_FG = "#425466"
+PASSWORD_REVEAL_ICON_FONT = ("Segoe UI Symbol", 9, "bold")
 AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
-CONVERTER_MENU_WIDTH = 14
+CONVERTER_SLOT_WIDTH = 448
 BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
 BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)
 BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)
 BROWSER_SPLITTER_WIDTH = 8
-BOTTOM_PROGRESS_RESERVED_HEIGHT = 8
+BOTTOM_PROGRESS_RESERVED_HEIGHT = 12
+ENABLE_NATIVE_IMARIS_BRIDGE_ENV = "IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY"
+TEXT_INPUT_WIDGET_CLASSES = {
+    "Entry",
+    "TEntry",
+    "Text",
+    "Spinbox",
+    "TSpinbox",
+    "Combobox",
+    "TCombobox",
+}
 FOLDER_PATH_SELECT_BG = "#718096"
 FOLDER_PATH_SELECT_ACTIVE_BG = "#60738a"
 FOLDER_PATH_PLACEHOLDER = "Type or select local path..."
@@ -207,13 +223,13 @@ AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
     "Autosave settings could not update the OMERO connector settings file."
 )
 CONNECTOR_INFO_TITLE = "OMERO Connector"
-CONNECTOR_INFO_VERSION = "1.0"
+CONNECTOR_INFO_VERSION = "1.0.0"
 CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"
+CONNECTOR_INFO_CONTACT = "mitridisefstratios@gmail.com"
 CONNECTOR_INFO_DISCLAIMER = (
     "This software is provided as-is, without warranty of any kind, express or "
-    "implied. Use of the connector is at the user's own risk; the authors and "
-    "contributors are not liable for data loss, service interruption, or other "
-    "damages arising from its use."
+    "implied. Use of the connector is at the user's own risk. No liability can "
+    "be assumed for data loss or any other damages arising from its use."
 )
 CONNECTOR_SETTINGS_KEY_PREFIX = "OMERO_CONNECTOR_"
 CONNECTOR_SETTINGS_HOST_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HOST"
@@ -791,8 +807,17 @@ def _sanitize_xt_log_message(message):
     return text
 
 
+def _native_imaris_bridge_enabled():
+    """Return whether IcePy-backed native Imaris bridge code is enabled.
+
+    Inputs: none. Output: bool.
+    """
+    value = os.environ.get(ENABLE_NATIVE_IMARIS_BRIDGE_ENV, "")
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _safe_url_for_log(url):
-    """Return a diagnostic URL shape without hostnames, IDs, or query values.
+    """Return a diagnostic URL shape without hostnames, IDs, or sensitive query values.
 
     Inputs: `url` URL. Output: URL string.
     """
@@ -805,14 +830,28 @@ def _safe_url_for_log(url):
     if not parsed.query:
         return path
 
-    safe_keys = []
-    for key, _value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True):
+    visible_value_keys = {"group", "username"}
+    safe_pairs: List[Tuple[str, str]] = []
+    for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True):
         safe_key = re.sub(r"[^A-Za-z0-9_.-]", "_", key)[:64] or "param"
-        if safe_key not in safe_keys:
-            safe_keys.append(safe_key)
-    if not safe_keys:
+        if any(pair_key == safe_key for pair_key, _pair_value in safe_pairs):
+            continue
+        if safe_key.lower() in visible_value_keys:
+            value = str(value or "")
+            if (
+                "://" not in value
+                and "/" not in value
+                and "\\" not in value
+                and not any(ord(char) < 32 for char in value)
+                and len(value) <= 128
+            ):
+                safe_value = re.sub(r"[^A-Za-z0-9 @._:+-]", "_", value) or "<empty>"
+                safe_pairs.append((safe_key, safe_value))
+                continue
+        safe_pairs.append((safe_key, "<redacted>"))
+    if not safe_pairs:
         return path
-    query = "&".join(f"{key}=<redacted>" for key in safe_keys)
+    query = "&".join(f"{key}={value}" for key, value in safe_pairs)
     return f"{path}?{query}"
 
 
@@ -2129,6 +2168,23 @@ def _widget_background(widget):
         return "#f0f0f0"
 
 
+def _widget_or_ancestor_is_text_input(widget):
+    """Return whether a widget or its ancestor is a text-input control.
+
+    Inputs: `widget`. Output: bool.
+    """
+    current = widget
+    while current is not None:
+        winfo_class = getattr(current, "winfo_class", None)
+        try:
+            if callable(winfo_class) and winfo_class() in TEXT_INPUT_WIDGET_CLASSES:
+                return True
+        except Exception:
+            return False
+        current = getattr(current, "master", None)
+    return False
+
+
 def _hex_to_rgb(value, fallback=(128, 128, 128)):
     """Return the hex to rgb.
 
@@ -2181,6 +2237,49 @@ def _shade_color(value, amount):
     """
     target = "#ffffff" if amount >= 0 else "#000000"
     return _blend_colors(value, target, abs(amount))
+
+
+def _circle_coverage(distance, radius):
+    """Return antialias coverage for a circle edge.
+
+    Inputs: `distance`, `radius`. Output: float in [0, 1].
+    """
+    return max(0.0, min(1.0, radius + 0.5 - distance))
+
+
+def _circle_pixel_color(distance, radius, fill, outline, background):
+    """Return one antialiased circle pixel color.
+
+    Inputs: `distance`, `radius`, `fill`, `outline`, `background`. Output: color.
+    """
+    coverage = _circle_coverage(distance, radius)
+    if coverage <= 0:
+        return background
+    edge_color = outline if distance >= radius - 1.0 else fill
+    return _blend_colors(background, edge_color, coverage)
+
+
+def _antialiased_circle_image(master, width, height, fill, outline):
+    """Return a smooth circular button background image.
+
+    Inputs: `master`, dimensions, `fill`, `outline`. Output: Tk PhotoImage.
+    """
+    width = max(1, int(width))
+    height = max(1, int(height))
+    background = _widget_background(master)
+    image = tk.PhotoImage(master=master, width=width, height=height)
+    center_x = (width - 1) / 2.0
+    center_y = (height - 1) / 2.0
+    radius = (min(width, height) - 1) / 2.0
+    rows = []
+    for y_pos in range(height):
+        row = []
+        for x_pos in range(width):
+            distance = math.hypot(x_pos - center_x, y_pos - center_y)
+            row.append(_circle_pixel_color(distance, radius, fill, outline, background))
+        rows.append("{" + " ".join(row) + "}")
+    image.put(" ".join(rows), to=(0, 0, width, height))
+    return image
 
 
 def _normalized_tk_state(state):
@@ -2640,22 +2739,6 @@ class _RoundedButton:
             outline=_shade_color(fill, -0.23),
             width=1,
         )
-        self._canvas.create_line(
-            left + radius,
-            top + 2,
-            right - radius,
-            top + 2,
-            fill=_shade_color(fill, 0.28),
-            width=1,
-        )
-        self._canvas.create_line(
-            left + radius,
-            bottom - 2,
-            right - radius,
-            bottom - 2,
-            fill=_shade_color(fill, -0.18),
-            width=1,
-        )
         self._canvas.create_text(
             width / 2 + surface_offset / 2,
             height / 2 + surface_offset / 2 - 1,
@@ -2681,44 +2764,25 @@ class _CircularIconButton(_RoundedButton):
         pressed = enabled and self._pressed
         if not enabled:
             fill = _blend_colors(self._bg, "#edf1f4", 0.72)
+            outline = _blend_colors(self._bg, "#d7dde2", 0.82)
             text_fill = _blend_colors(self._fg, "#6f7b84", 0.62)
-            shadow = _blend_colors(self._bg, "#d7dde2", 0.82)
         elif pressed:
             fill = self._active_bg
+            outline = _shade_color(self._bg, -0.28)
             text_fill = self._active_fg
-            shadow = _shade_color(self._bg, -0.45)
         elif self._hover:
             fill = _shade_color(self._bg, 0.1)
+            outline = _shade_color(fill, -0.16)
             text_fill = self._fg
-            shadow = _shade_color(self._bg, -0.38)
         else:
             fill = self._bg
+            outline = _shade_color(fill, -0.18)
             text_fill = self._fg
-            shadow = _shade_color(self._bg, -0.35)
 
         surface_offset = 1 if pressed else 0
-        shadow_shift = 1 if pressed else 2
-        diameter = max(12, min(width, height) - 8)
-        left = (width - diameter) / 2
-        top = (height - diameter - shadow_shift) / 2 + surface_offset
-        right = left + diameter
-        bottom = top + diameter
-        self._canvas.create_oval(
-            left + 1,
-            top + shadow_shift,
-            right + 1,
-            bottom + shadow_shift,
-            fill=shadow,
-            outline="",
-        )
-        self._canvas.create_oval(
-            left,
-            top,
-            right,
-            bottom,
-            fill=fill,
-            outline="",
-        )
+        image = _antialiased_circle_image(self._canvas, width, height, fill, outline)
+        self._circle_image = image
+        self._canvas.create_image(0, surface_offset, anchor=tk.NW, image=image)
         self._canvas.create_text(
             width / 2 + surface_offset / 2,
             height / 2 + surface_offset / 2 - 1,
@@ -2728,8 +2792,397 @@ class _CircularIconButton(_RoundedButton):
         )
 
 
+class _NativeButton:
+    """Fixed-size native Tk button wrapper for rectangular commands."""
+
+    def __init__(
+        self,
+        master,
+        text="",
+        command=None,
+        bg=None,
+        fg=None,
+        activebackground=None,
+        activeforeground=None,
+        font=None,
+        width=140,
+        height=42,
+        state=None,
+    ):
+        """Create a native Tk button in a fixed pixel slot.
+
+        Inputs: button options. Output: None.
+        """
+        self._width = int(width)
+        self._height = int(height)
+        self._state = state or _tk_constant("NORMAL", "normal")
+        self._frame = tk.Frame(
+            master,
+            width=self._width,
+            height=self._height,
+            bg=_widget_background(master),
+        )
+        self._frame.grid_propagate(False)
+        self._frame.pack_propagate(False)
+        options = {
+            "text": text,
+            "command": command,
+            "state": self._state,
+            "relief": _tk_constant("RAISED", "raised"),
+            "bd": 2,
+            "highlightthickness": 0,
+            "takefocus": False,
+            "padx": 8,
+            "pady": 1,
+        }
+        if bg is not None:
+            options["bg"] = bg
+        if fg is not None:
+            options["fg"] = fg
+        if activebackground is not None:
+            options["activebackground"] = activebackground
+        if activeforeground is not None:
+            options["activeforeground"] = activeforeground
+        if font is not None:
+            options["font"] = font
+        self._button = tk.Button(self._frame, **options)
+        self._button.pack(fill=tk.BOTH, expand=True)
+        self._sync_cursor()
+
+    def _sync_cursor(self):
+        """Synchronize native button cursor with enabled state.
+
+        Inputs: none. Output: None.
+        """
+        enabled = _normalized_tk_state(self._state) != _normalized_tk_state(
+            _tk_constant("DISABLED", "disabled")
+        )
+        self._button.config(cursor="hand2" if enabled else "arrow")
+
+    def _set_dimension(self, key, value):
+        """Set fixed slot dimension.
+
+        Inputs: `key`, `value`. Output: None.
+        """
+        value = int(value)
+        setattr(self, f"_{key}", value)
+        self._frame.config(**{key: value})
+
+    def config(self, cnf=None, **kwargs):
+        """Apply native button configuration.
+
+        Inputs: `cnf`, `**kwargs`. Output: None.
+        """
+        if cnf:
+            kwargs.update(cnf)
+        button_options = {}
+        for key, value in kwargs.items():
+            key = _ROUNDED_BUTTON_OPTION_ALIASES.get(str(key), str(key))
+            if key in {"width", "height"}:
+                self._set_dimension(key, value)
+            else:
+                button_options[key] = value
+                if key == "state":
+                    self._state = value
+        if button_options:
+            self._button.config(**button_options)
+        if "state" in button_options:
+            self._sync_cursor()
+
+    configure = config
+
+    def cget(self, key):
+        """Return native button or fixed slot option.
+
+        Inputs: `key`. Output: option value.
+        """
+        if key == "width":
+            return self._width
+        if key == "height":
+            return self._height
+        return self._button.cget(key)
+
+    def invoke(self):
+        """Invoke the native button.
+
+        Inputs: none. Output: button invoke result.
+        """
+        return self._button.invoke()
+
+    def grid(self, *args, **kwargs):
+        """Apply grid geometry management.
+
+        Inputs: `*args`, `**kwargs`. Output: frame grid result.
+        """
+        return self._frame.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        """Apply pack geometry management.
+
+        Inputs: `*args`, `**kwargs`. Output: frame pack result.
+        """
+        return self._frame.pack(*args, **kwargs)
+
+    def place(self, *args, **kwargs):
+        """Apply place geometry management.
+
+        Inputs: `*args`, `**kwargs`. Output: frame place result.
+        """
+        return self._frame.place(*args, **kwargs)
+
+    def grid_remove(self):
+        """Remove grid geometry management.
+
+        Inputs: none. Output: frame grid remove result.
+        """
+        return self._frame.grid_remove()
+
+    def pack_forget(self):
+        """Remove pack geometry management.
+
+        Inputs: none. Output: frame pack forget result.
+        """
+        return self._frame.pack_forget()
+
+
+class _ConverterDropdown:
+    """Fixed-pixel dropdown whose popup matches the closed selector width."""
+
+    def __init__(
+        self,
+        master,
+        variable,
+        command=None,
+        width=CONVERTER_DROPDOWN_WIDTH,
+        height=CONVERTER_DROPDOWN_HEIGHT,
+        font=CONVERTER_MENU_FONT,
+        bg="#f8f9fa",
+        fg="#2c3e50",
+        activebackground="#e9eef3",
+        activeforeground="#2c3e50",
+    ):
+        """Create the converter dropdown.
+
+        Inputs: widget options. Output: None.
+        """
+        self._variable = variable
+        self._command = command
+        self._width = int(width)
+        self._height = int(height)
+        self._font = font
+        self._bg = bg
+        self._fg = fg
+        self._active_bg = activebackground
+        self._active_fg = activeforeground
+        self._text_pad = CONVERTER_DROPDOWN_TEXT_PAD
+        self._options = []
+        self._popup = None
+        self._hover = False
+        self._open = False
+        self._border = "#aeb8c2"
+        self._active_border = "#7f95aa"
+        self._frame = tk.Frame(
+            master,
+            width=self._width,
+            height=self._height,
+            bg=self._border,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self._border,
+            highlightcolor=self._active_border,
+        )
+        self._frame.grid_propagate(False)
+        self._frame.pack_propagate(False)
+        self._surface = tk.Frame(self._frame, bg=self._bg, bd=0)
+        self._surface.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        self._label = tk.Label(
+            self._surface,
+            textvariable=self._variable,
+            bg=self._bg,
+            fg=self._fg,
+            font=self._font,
+            anchor=tk.W,
+            justify=tk.LEFT,
+            padx=self._text_pad,
+            pady=0,
+        )
+        self._label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._arrow = tk.Label(
+            self._surface,
+            text="v",
+            bg=self._bg,
+            fg=self._fg,
+            font=self._font,
+            width=2,
+            padx=0,
+            pady=0,
+        )
+        self._arrow.pack(side=tk.RIGHT, fill=tk.Y)
+        for widget in (self._frame, self._surface, self._label, self._arrow):
+            widget.bind("<Enter>", self._on_enter)
+            widget.bind("<Leave>", self._on_leave)
+            widget.bind("<Button-1>", self._toggle_popup)
+        self._apply_style()
+
+    def pack(self, *args, **kwargs):
+        """Apply pack geometry management.
+
+        Inputs: `*args`, `**kwargs`. Output: frame pack result.
+        """
+        return self._frame.pack(*args, **kwargs)
+
+    def grid(self, *args, **kwargs):
+        """Apply grid geometry management.
+
+        Inputs: `*args`, `**kwargs`. Output: frame grid result.
+        """
+        return self._frame.grid(*args, **kwargs)
+
+    def pack_forget(self):
+        """Remove pack geometry management.
+
+        Inputs: none. Output: frame pack forget result.
+        """
+        return self._frame.pack_forget()
+
+    def set_options(self, options):
+        """Replace dropdown options and close any stale popup.
+
+        Inputs: `options`. Output: None.
+        """
+        self._options = [str(option) for option in options or []]
+        if not self._options:
+            self.close_popup()
+
+    def _apply_style(self):
+        """Apply normal, hover, or open visual state.
+
+        Inputs: none. Output: None.
+        """
+        highlighted = self._open or self._hover
+        bg = self._active_bg if highlighted else self._bg
+        fg = self._active_fg if highlighted else self._fg
+        border = self._active_border if highlighted else self._border
+        self._frame.config(bg=border, highlightbackground=border)
+        self._surface.config(bg=bg)
+        for widget in (self._label, self._arrow):
+            widget.config(bg=bg, fg=fg)
+
+    def _on_enter(self, _event):
+        """Handle pointer enter.
+
+        Inputs: event. Output: None.
+        """
+        self._hover = True
+        self._apply_style()
+
+    def _on_leave(self, _event):
+        """Handle pointer leave.
+
+        Inputs: event. Output: None.
+        """
+        self._hover = False
+        self._apply_style()
+
+    def _toggle_popup(self, _event=None):
+        """Toggle the dropdown popup.
+
+        Inputs: optional event. Output: Tk break marker.
+        """
+        if self._open:
+            self.close_popup()
+        else:
+            self.open_popup()
+        return "break"
+
+    def open_popup(self):
+        """Open the fixed-width popup below the selector.
+
+        Inputs: none. Output: None.
+        """
+        if not self._options:
+            return
+        self.close_popup()
+        self._open = True
+        self._apply_style()
+        self._frame.update_idletasks()
+        width = max(self._width, _safe_widget_dimension(self._frame, "winfo_width"))
+        item_height = max(28, self._height - 4)
+        height = max(item_height, len(self._options) * item_height + 2)
+        popup = tk.Toplevel(self._frame)
+        popup.overrideredirect(True)
+        popup.configure(bg=self._border)
+        popup.geometry(
+            f"{width}x{height}+{self._frame.winfo_rootx()}+"
+            f"{self._frame.winfo_rooty() + self._frame.winfo_height()}"
+        )
+        popup.bind("<Escape>", lambda _event: self.close_popup())
+        popup.bind("<FocusOut>", lambda _event: self.close_popup())
+        container = tk.Frame(popup, bg=self._border, bd=0)
+        container.pack(fill=tk.BOTH, expand=True, padx=(2, 1), pady=1)
+        for option in self._options:
+            item = tk.Label(
+                container,
+                text=option,
+                bg=self._bg,
+                fg=self._fg,
+                font=self._font,
+                anchor=tk.W,
+                justify=tk.LEFT,
+                padx=self._text_pad,
+                pady=0,
+            )
+            item.pack(fill=tk.X, ipady=(item_height - 16) // 2)
+            item.bind(
+                "<Enter>",
+                lambda _event, widget=item: widget.config(
+                    bg=self._active_bg,
+                    fg=self._active_fg,
+                ),
+            )
+            item.bind(
+                "<Leave>",
+                lambda _event, widget=item: widget.config(bg=self._bg, fg=self._fg),
+            )
+            item.bind(
+                "<ButtonRelease-1>",
+                lambda _event, value=option: self._choose(value),
+            )
+        self._popup = popup
+        popup.lift()
+        popup.focus_force()
+
+    def close_popup(self):
+        """Close the dropdown popup and restore selector state.
+
+        Inputs: none. Output: None.
+        """
+        popup = self._popup
+        self._popup = None
+        self._open = False
+        self._apply_style()
+        if popup is None:
+            return
+        try:
+            if popup.winfo_exists():
+                popup.destroy()
+        except Exception:
+            return
+
+    def _choose(self, value):
+        """Choose a dropdown value.
+
+        Inputs: `value`. Output: command result or None.
+        """
+        self.close_popup()
+        if callable(self._command):
+            return self._command(value)
+        self._variable.set(value)
+        return None
+
+
 class _PasswordRevealButton(_RoundedButton):
-    """Canvas-backed password visibility button with a timed reveal state."""
+    """Canvas-backed password visibility indicator with a timed reveal state."""
 
     def __init__(self, *args, **kwargs):
         """Create the password reveal button.
@@ -2750,7 +3203,7 @@ class _PasswordRevealButton(_RoundedButton):
             self._redraw()
 
     def _redraw(self):
-        """Redraw the password reveal button.
+        """Redraw the password reveal indicator.
 
         Inputs: no caller arguments. Output: None.
         """
@@ -2762,83 +3215,22 @@ class _PasswordRevealButton(_RoundedButton):
         pressed = enabled and self._pressed
         visible = self._visible
         if not enabled:
-            fill = "#f1f5f9"
-            outline = "#cfd7df"
             icon = "#94a3b8"
         elif pressed:
-            fill = self._active_bg
-            outline = "#9eb7d0"
             icon = self._fg
         elif self._hover:
-            fill = _shade_color(self._bg, 0.04)
-            outline = "#adc1d5"
-            icon = self._fg
+            icon = _shade_color(self._fg, -0.12)
         else:
-            fill = self._bg
-            outline = "#c7d2de"
             icon = self._fg
 
-        pad = 2
-        radius = 6
-        self._draw_round_rect(
-            pad,
-            pad,
-            width - pad,
-            height - pad,
-            radius,
-            fill=fill,
-            outline=outline,
-            width=1,
+        self._circle_image = None
+        self._canvas.create_text(
+            width / 2,
+            height / 2 - 1,
+            text="\u25c9" if visible else "\u25cb",
+            fill=icon,
+            font=PASSWORD_REVEAL_ICON_FONT,
         )
-
-        center_x = width / 2
-        center_y = height / 2
-        eye_w = max(12, width - 10)
-        eye_h = max(7, height - 14)
-        left = center_x - eye_w / 2
-        top = center_y - eye_h / 2
-        right = center_x + eye_w / 2
-        bottom = center_y + eye_h / 2
-        self._canvas.create_arc(
-            left,
-            top,
-            right,
-            bottom,
-            start=0,
-            extent=180,
-            style=_tk_constant("ARC", "arc"),
-            outline=icon,
-            width=1,
-        )
-        self._canvas.create_arc(
-            left,
-            top,
-            right,
-            bottom,
-            start=180,
-            extent=180,
-            style=_tk_constant("ARC", "arc"),
-            outline=icon,
-            width=1,
-        )
-        self._canvas.create_oval(
-            center_x - 2,
-            center_y - 2,
-            center_x + 2,
-            center_y + 2,
-            fill=icon if visible else "",
-            outline=icon,
-            width=1,
-        )
-        if not visible:
-            self._canvas.create_line(
-                left + 1,
-                bottom + 1,
-                right - 1,
-                top - 1,
-                fill=icon,
-                width=1,
-            )
 
 
 def _iter_imaris_executable_candidates():
@@ -3360,6 +3752,8 @@ def _find_compatible_native_bridge_python(imaris_id):
 
     Inputs: `imaris_id`. Output: `python_executable` or None.
     """
+    if not _native_imaris_bridge_enabled():
+        return None
     if _coerce_imaris_id(imaris_id) is None:
         return None
     for python_executable in _iter_native_bridge_python_executables():
@@ -3448,6 +3842,8 @@ def _launch_imaris_and_find_bridge_python():
 
     Inputs: none. Output: tuple.
     """
+    if not _native_imaris_bridge_enabled():
+        return None, None
     if os.name != "nt":
         return None, None
     imaris_executable = _find_imaris_executable()
@@ -3479,6 +3875,8 @@ def _open_file_in_imaris_with_native_bridge_runner(
     Inputs: `file_path`, `imaris_id`, `preferred_python_executable`, `require_ims`.
     Output: bool.
     """
+    if not _native_imaris_bridge_enabled():
+        return False
     if os.name != "nt":
         return False
     if _coerce_imaris_id(imaris_id) is None:
@@ -3521,6 +3919,8 @@ def _open_files_in_imaris_with_native_bridge_runner(
     Inputs: `file_paths`, `imaris_id`, `preferred_python_executable`, `require_ims`.
     Output: `bool`.
     """
+    if not _native_imaris_bridge_enabled():
+        return False
     if os.name != "nt":
         return False
     if _coerce_imaris_id(imaris_id) is None:
@@ -3836,6 +4236,7 @@ def _collect_imaris_xt_diagnostics():
 
     Inputs: none. Output: dict.
     """
+    native_bridge_enabled = _native_imaris_bridge_enabled()
     exe_path = _find_imaris_executable()
     install_roots = list(_iter_imaris_install_roots())
     xt_paths = []
@@ -3865,8 +4266,17 @@ def _collect_imaris_xt_diagnostics():
             for candidate in deduped_xt_paths
         ],
         "has_add_dll_directory": callable(getattr(os, "add_dll_directory", None)),
-        "imarislib_import": _probe_module_import("ImarisLib"),
-        "icepy_import": _probe_module_import("IcePy"),
+        "native_bridge_enabled": native_bridge_enabled,
+        "imarislib_import": (
+            _probe_module_import("ImarisLib")
+            if native_bridge_enabled
+            else {"ok": False, "error": ""}
+        ),
+        "icepy_import": (
+            _probe_module_import("IcePy")
+            if native_bridge_enabled
+            else {"ok": False, "error": ""}
+        ),
     }
 
 
@@ -3892,14 +4302,15 @@ def _log_imaris_xt_diagnostics():
         _xt_debug(f"XT diagnostics install_root={install_root}")
     for entry in diagnostics["xt_candidate_paths"]:
         _xt_debug(f"XT diagnostics path={entry['path']} exists={entry['exists']}")
-    _xt_debug(
-        "XT diagnostics imports: "
-        f"has_add_dll_directory={diagnostics['has_add_dll_directory']} "
-        f"ImarisLib_ok={diagnostics['imarislib_import']['ok']} "
-        f"ImarisLib_error={diagnostics['imarislib_import']['error'] or '<none>'} "
-        f"IcePy_ok={diagnostics['icepy_import']['ok']} "
-        f"IcePy_error={diagnostics['icepy_import']['error'] or '<none>'}"
-    )
+    if diagnostics["native_bridge_enabled"]:
+        _xt_debug(
+            "XT diagnostics imports: "
+            f"has_add_dll_directory={diagnostics['has_add_dll_directory']} "
+            f"ImarisLib_ok={diagnostics['imarislib_import']['ok']} "
+            f"ImarisLib_error={diagnostics['imarislib_import']['error'] or '<none>'} "
+            f"IcePy_ok={diagnostics['icepy_import']['ok']} "
+            f"IcePy_error={diagnostics['icepy_import']['error'] or '<none>'}"
+        )
 
 
 def _coerce_imaris_id(aImarisId):
@@ -3937,6 +4348,9 @@ def _resolve_imaris_application(
     """
     if _looks_like_imaris_application(aImarisId):
         return aImarisId
+
+    if not _native_imaris_bridge_enabled():
+        return None
 
     app_id = _coerce_imaris_id(aImarisId)
     if app_id is None:
@@ -5511,6 +5925,7 @@ class OMEROBrowserDialog:
         self._health_ping_in_progress = False
         self._health_ping_after_id: Optional[str] = None
         self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+        self._browser_panel_layout_widths = None
         self._browser_sash_drag_index = None
         self._indicator_state = "disconnected"
         self._indicator_blink_on = False
@@ -5627,7 +6042,8 @@ class OMEROBrowserDialog:
             saved_settings.get(CONNECTOR_SETTINGS_AUTOSAVE_KEY), True
         )
 
-        self._connection_label(conn_frame, "Host:").grid(
+        self.host_label = self._connection_label(conn_frame, "Host:")
+        self.host_label.grid(
             row=0, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
         self.host_entry = tk.Entry(conn_frame, width=25)
@@ -5639,7 +6055,7 @@ class OMEROBrowserDialog:
         )
         self.port_entry = tk.Entry(conn_frame, width=8)
         self.port_entry.insert(0, default_port)
-        self.port_entry.grid(row=0, column=3, pady=5, padx=5)
+        self.port_entry.grid(row=0, column=3, pady=5, padx=5, sticky=tk.W)
 
         self.https_var = tk.BooleanVar(value=default_https)
         tk.Checkbutton(conn_frame, text="Use HTTPS", variable=self.https_var).grid(
@@ -5681,8 +6097,18 @@ class OMEROBrowserDialog:
             sticky=tk.EW,
             padx=(5, 2),
             pady=0,
-            ipady=5,
+            ipady=0,
         )
+        self.pass_entry.bind("<Control-c>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Control-C>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Control-x>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Control-X>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Command-c>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Command-C>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Command-x>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<Command-X>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<<Copy>>", self._block_hidden_password_clipboard)
+        self.pass_entry.bind("<<Cut>>", self._block_hidden_password_clipboard)
         self.password_reveal_btn = _PasswordRevealButton(
             self.password_frame,
             command=self._toggle_password_reveal,
@@ -5693,9 +6119,9 @@ class OMEROBrowserDialog:
             width=PASSWORD_REVEAL_BUTTON_SIZE,
             height=PASSWORD_REVEAL_BUTTON_SIZE,
         )
-        self.password_reveal_btn.grid(row=0, column=1, padx=(2, 3), pady=2)
+        self.password_reveal_btn.grid(row=0, column=1, padx=(1, 3), pady=1)
 
-        self.connect_btn = _RoundedButton(
+        self.connect_btn = _NativeButton(
             conn_frame,
             text="Connect",
             command=self._toggle_connection,
@@ -5709,42 +6135,63 @@ class OMEROBrowserDialog:
         )
         self.connect_btn.grid(row=0, column=5, rowspan=2, padx=(10, 12), pady=5)
 
+        self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
+        self.autosave_settings_frame = tk.Frame(
+            conn_frame,
+            width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
+            height=38,
+        )
+        self.autosave_settings_frame.grid(
+            row=0,
+            column=6,
+            sticky=tk.W,
+            padx=(34, 0),
+            pady=5,
+        )
+        self.autosave_settings_frame.grid_propagate(False)
+        self.autosave_settings_check = tk.Checkbutton(
+            self.autosave_settings_frame,
+            text="Autosave settings",
+            variable=self.autosave_settings_var,
+            command=self._on_autosave_settings_changed,
+            state=_tk_constant("DISABLED", "disabled"),
+            disabledforeground="#7a828a",
+        )
+        self.autosave_settings_check.pack(side=tk.LEFT)
+
         self._preferred_converter_setting = default_converter
         self.converter_var = tk.StringVar(value="")
-        self.converter_frame = tk.Frame(conn_frame)
+        self.converter_slot = tk.Frame(
+            conn_frame,
+            width=CONVERTER_SLOT_WIDTH,
+            height=38,
+        )
+        self.converter_slot.grid(
+            row=2,
+            column=7,
+            columnspan=2,
+            sticky=tk.E,
+            padx=(18, 0),
+            pady=5,
+        )
+        self.converter_slot.grid_propagate(False)
+        self.converter_slot.pack_propagate(False)
+        self.converter_frame = tk.Frame(self.converter_slot)
         tk.Label(self.converter_frame, text="Converter:").pack(
             side=tk.LEFT, padx=(0, 5)
         )
-        self.converter_menu = tk.Menubutton(
+        self.converter_dropdown = _ConverterDropdown(
             self.converter_frame,
-            textvariable=self.converter_var,
-            relief=_tk_constant("RAISED", "raised"),
-            bd=1,
+            variable=self.converter_var,
+            command=self._select_converter,
             bg="#f8f9fa",
             fg="#2c3e50",
             activebackground="#e9eef3",
             activeforeground="#2c3e50",
             font=CONVERTER_MENU_FONT,
-            width=CONVERTER_MENU_WIDTH,
-            padx=10,
-            pady=4,
-            anchor=tk.W,
-            justify=tk.LEFT,
-            indicatoron=True,
         )
-        self.converter_menu_menu = tk.Menu(
-            self.converter_menu,
-            tearoff=0,
-            font=CONVERTER_MENU_FONT,
-            bg="#f8f9fa",
-            fg="#2c3e50",
-            activebackground="#e9eef3",
-            activeforeground="#2c3e50",
-            activeborderwidth=0,
-        )
-        self.converter_menu.config(menu=self.converter_menu_menu)
-        self.converter_menu.pack(side=tk.LEFT)
-        self.refresh_btn = _RoundedButton(
+        self.converter_dropdown.pack(side=tk.LEFT)
+        self.refresh_btn = _NativeButton(
             self.converter_frame,
             text="Refresh",
             command=self._refresh_browser,
@@ -5757,21 +6204,16 @@ class OMEROBrowserDialog:
             height=36,
         )
         self.refresh_btn.pack(side=tk.LEFT, padx=(16, 0))
-        self.converter_frame.grid(
-            row=2,
-            column=8,
-            sticky=tk.E,
-            padx=(12, 12),
-            pady=5,
-        )
-        self.converter_frame.grid_remove()
-        conn_frame.grid_columnconfigure(8, weight=1)
+        self.converter_frame.pack(side=tk.LEFT)
+        self.converter_frame.pack_forget()
+        conn_frame.grid_columnconfigure(7, weight=1)
 
         self.folder_path_var = tk.StringVar(value=default_folder_path)
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_write_state = "empty"
-        self._connection_label(conn_frame, "Path:").grid(
+        self.path_label = self._connection_label(conn_frame, "Path:")
+        self.path_label.grid(
             row=2, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
         self.folder_path_entry = tk.Entry(
@@ -5803,7 +6245,7 @@ class OMEROBrowserDialog:
                 "write",
                 lambda *_args: self._on_folder_path_changed(),
             )
-        self.select_folder_btn = _RoundedButton(
+        self.select_folder_btn = _NativeButton(
             conn_frame,
             text="Select",
             command=self._select_local_folder,
@@ -5816,40 +6258,17 @@ class OMEROBrowserDialog:
             height=38,
         )
         self.select_folder_btn.grid(row=2, column=5, padx=(10, 12), pady=5, sticky=tk.W)
-        self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
-        self.autosave_settings_frame = tk.Frame(
-            conn_frame,
-            width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
-            height=38,
-        )
-        self.autosave_settings_frame.grid(
-            row=2,
-            column=7,
-            sticky=tk.W,
-            padx=(14, 0),
-            pady=5,
-        )
-        self.autosave_settings_frame.grid_propagate(False)
-        self.autosave_settings_check = tk.Checkbutton(
-            self.autosave_settings_frame,
-            text="Autosave settings",
-            variable=self.autosave_settings_var,
-            command=self._on_autosave_settings_changed,
-            state=_tk_constant("DISABLED", "disabled"),
-            disabledforeground="#7a828a",
-        )
-        self.autosave_settings_check.pack(side=tk.RIGHT)
-        panel_icon_frame = tk.Frame(conn_frame)
-        panel_icon_frame.grid(
+        self.panel_icon_frame = tk.Frame(conn_frame)
+        self.panel_icon_frame.grid(
             row=0,
             column=8,
             rowspan=2,
             sticky=tk.NE,
-            padx=(12, 12),
+            padx=(12, 0),
             pady=(0, 2),
         )
         self.help_btn = _CircularIconButton(
-            panel_icon_frame,
+            self.panel_icon_frame,
             text="?",
             bg=CONNECTOR_HELP_ICON_BG,
             fg=CONNECTOR_HELP_ICON_FG,
@@ -5860,7 +6279,7 @@ class OMEROBrowserDialog:
             height=CONNECTOR_PANEL_ICON_SIZE,
         )
         self.info_btn = _CircularIconButton(
-            panel_icon_frame,
+            self.panel_icon_frame,
             text="i",
             command=self._show_connector_info,
             bg=CONNECTOR_INFO_ICON_BG,
@@ -5873,6 +6292,7 @@ class OMEROBrowserDialog:
         )
         self.help_btn.pack(side=tk.LEFT, padx=(0, 6))
         self.info_btn.pack(side=tk.LEFT)
+        self._align_connection_panel_right_controls()
         self._show_folder_path_placeholder()
 
         # Browser
@@ -5913,9 +6333,10 @@ class OMEROBrowserDialog:
         # Actions
         actions = tk.Frame(self.root)
         actions.pack(fill=tk.X, padx=ACTION_ROW_HORIZONTAL_PAD, pady=10)
-        actions.grid_columnconfigure(2, weight=1)
+        actions.grid_columnconfigure(1, minsize=ACTION_BUTTON_GAP)
+        actions.grid_columnconfigure(3, weight=1)
 
-        self.load_btn = _RoundedButton(
+        self.load_btn = _NativeButton(
             actions,
             text="Load images into Imaris",
             command=self._load,
@@ -5930,7 +6351,7 @@ class OMEROBrowserDialog:
         )
         self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
-        self.export_btn = _RoundedButton(
+        self.export_btn = _NativeButton(
             actions,
             text="Export folder to OMERO",
             command=self._export_folder_to_omero,
@@ -5943,9 +6364,9 @@ class OMEROBrowserDialog:
             width=260,
             height=52,
         )
-        self.export_btn.grid(row=0, column=1, sticky=tk.W, padx=ACTION_BUTTON_PAD)
+        self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
-        close_btn = _RoundedButton(
+        close_btn = _NativeButton(
             actions,
             text="Close",
             command=self._on_close,
@@ -5957,13 +6378,13 @@ class OMEROBrowserDialog:
             width=120,
             height=52,
         )
-        close_btn.grid(row=0, column=3, sticky=tk.E, padx=ACTION_BUTTON_PAD)
+        close_btn.grid(row=0, column=4, sticky=tk.E, padx=ACTION_BUTTON_PAD)
 
         # Reserved for a later progress bar.
         bottom_progress_margin = tk.Frame(
             self.root,
             height=BOTTOM_PROGRESS_RESERVED_HEIGHT,
-            bg=STATUS_NEUTRAL_BG,
+            bg=_widget_background(self.root),
         )
         bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)
         bottom_progress_margin.pack_propagate(False)
@@ -5992,6 +6413,20 @@ class OMEROBrowserDialog:
         )
         self.connection_indicator.pack(side=tk.RIGHT, padx=(4, 10), pady=2)
         self._draw_connection_indicator("disconnected")
+        self.root.bind("<Button-1>", self._clear_text_focus_on_non_input_click, add="+")
+
+    def _clear_text_focus_on_non_input_click(self, event):
+        """Clear blinking text cursors when clicking outside text inputs.
+
+        Inputs: Tk button event. Output: None.
+        """
+        event_widget = getattr(event, "widget", None)
+        if _widget_or_ancestor_is_text_input(event_widget):
+            return
+        focus_get = getattr(self.root, "focus_get", None)
+        focused_widget = focus_get() if callable(focus_get) else None
+        if _widget_or_ancestor_is_text_input(focused_widget):
+            self.root.focus_set()
 
     @staticmethod
     def _build_scrolled_listbox(parent, selectmode=None):
@@ -6001,8 +6436,6 @@ class OMEROBrowserDialog:
         """
         y_scroll = tk.Scrollbar(parent, orient=_tk_constant("VERTICAL", "vertical"))
         x_scroll = tk.Scrollbar(parent, orient=_tk_constant("HORIZONTAL", "horizontal"))
-        y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        x_scroll.pack(side=tk.BOTTOM, fill=tk.X)
         listbox = tk.Listbox(
             parent,
             yscrollcommand=y_scroll.set,
@@ -6012,7 +6445,11 @@ class OMEROBrowserDialog:
         )
         if selectmode is not None:
             listbox.config(selectmode=selectmode)
-        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+        listbox.grid(row=0, column=0, sticky=tk.NSEW)
+        y_scroll.grid(row=0, column=1, sticky=tk.NS)
+        x_scroll.grid(row=1, column=0, sticky=tk.EW)
         y_scroll.config(command=listbox.yview)
         x_scroll.config(command=listbox.xview)
         return listbox
@@ -6070,6 +6507,10 @@ class OMEROBrowserDialog:
         if widths[-1] < 1:
             widths[-1] = 1
             widths[1] = max(1, available_width - widths[0] - widths[2])
+        layout_widths = tuple(widths)
+        if getattr(self, "_browser_panel_layout_widths", None) == layout_widths:
+            return
+        self._browser_panel_layout_widths = layout_widths
         for column, width in zip((0, 2, 4), widths):
             browser.grid_columnconfigure(column, minsize=width, weight=0)
         for column in (1, 3):
@@ -6139,6 +6580,7 @@ class OMEROBrowserDialog:
         _call_if_available(root, "minsize", width, height)
         if self._window_is_smaller_than(root, width, height):
             root.geometry(f"{width}x{height}")
+            _call_if_available(root, "update_idletasks")
 
     @staticmethod
     def _current_window_minimum_size(root):
@@ -6172,19 +6614,6 @@ class OMEROBrowserDialog:
             or _safe_widget_dimension(root, "winfo_height") < height
         )
 
-    def _get_converter_menu(self):
-        """Return converter menu.
-
-        Inputs: none. Output: get converter menu result.
-        """
-        dialog_menu = getattr(self, "converter_menu_menu", None)
-        if dialog_menu is not None:
-            return dialog_menu
-        menu = getattr(self.converter_menu, "menu", None)
-        if menu is not None:
-            return menu
-        return self.converter_menu["menu"]
-
     def _select_converter(self, value):
         """Set the selected converter and refresh dependent action state.
 
@@ -6206,8 +6635,9 @@ class OMEROBrowserDialog:
         Inputs: `options`. Output: None.
         """
         options = list(options or [])
-        menu = self._get_converter_menu()
-        menu.delete(0, _tk_constant("END", "end"))
+        dropdown = getattr(self, "converter_dropdown", None)
+        if dropdown is not None:
+            dropdown.set_options(options)
         if not options:
             self.converter_var.set("")
             self._hide_converter_frame()
@@ -6215,13 +6645,6 @@ class OMEROBrowserDialog:
             self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
             return
 
-        for option in options:
-            menu.add_command(
-                label=option,
-                font=CONVERTER_MENU_FONT,
-                hidemargin=True,
-                command=partial(self._select_converter, option),
-            )
         preferred = str(getattr(self, "_preferred_converter_setting", "") or "")
         if preferred not in options:
             preferred = _filled_connector_setting(
@@ -6454,6 +6877,15 @@ class OMEROBrowserDialog:
             setter(visible)
         if not visible:
             self._cancel_password_reveal_timer()
+
+    def _block_hidden_password_clipboard(self, _event=None):
+        """Prevent copy/cut while hidden without blocking selection or paste.
+
+        Inputs: optional Tk event. Output: Tk break marker or None.
+        """
+        if not getattr(self, "_password_revealed", False):
+            return "break"
+        return None
 
     def _hide_password_reveal(self):
         """Hide the password entry text after the reveal timeout.
@@ -6751,7 +7183,7 @@ class OMEROBrowserDialog:
             "Export the selected folder to OMERO root path as a dataset?\n\n"
             f"Dataset name: {folder_name}\n"
             "\n"
-            "This uploads every file inside the selected folder."
+            "This will upload every file inside the selected folder."
         )
         if not messagebox.askyesno("Confirm folder export", confirmation):
             return
@@ -7060,22 +7492,44 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        if hasattr(self.converter_frame, "grid_remove"):
-            self.converter_frame.grid_remove()
-            return
         self.converter_frame.pack_forget()
+
+    def _align_connection_panel_right_controls(self):
+        """Align the right-side connection controls to the left label gap.
+
+        Inputs: none. Output: None.
+        """
+        root = getattr(self, "root", None)
+        if root is not None:
+            _call_if_available(root, "update_idletasks")
+        converter_slot = getattr(self, "converter_slot", None)
+        converter_frame = getattr(self, "converter_frame", None)
+        converter_width = max(
+            CONVERTER_SLOT_WIDTH,
+            _safe_widget_dimension(converter_frame, "winfo_reqwidth"),
+            _safe_widget_dimension(converter_slot, "winfo_reqwidth"),
+            _safe_widget_dimension(converter_slot, "winfo_width"),
+        )
+        if converter_slot is not None:
+            converter_slot.config(width=converter_width)
+            converter_slot.grid_configure(padx=(18, 0))
+        panel_icon_frame = getattr(self, "panel_icon_frame", None)
+        if panel_icon_frame is not None:
+            panel_icon_frame.grid_configure(padx=(12, 0))
 
     def _show_converter_frame(self):
         """Show the converter frame for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        if hasattr(self.converter_frame, "grid"):
-            self.converter_frame.grid()
-            self._enforce_window_minimum_for_current_layout()
+        self._align_connection_panel_right_controls()
+        pack = getattr(self.converter_frame, "pack", None)
+        if callable(pack):
+            pack(side=tk.RIGHT)
             return
-        self.converter_frame.pack(side=tk.LEFT, padx=(0, 8))
-        self._enforce_window_minimum_for_current_layout()
+        grid = getattr(self.converter_frame, "grid", None)
+        if callable(grid):
+            grid()
 
     def _set_connect_button(self, text, state, bg, active_bg=None):
         """Set the connect button for `OMEROBrowserDialog`.
@@ -7159,18 +7613,25 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: `options`.
         """
-        self._reset_native_bridge_probe_for_converter_detection()
-        self._start_native_bridge_probe()
-        if not self._native_bridge_probe_done.wait(timeout=NATIVE_BRIDGE_PROBE_TIMEOUT):
-            _xt_debug("Native bridge probe timed out during converter detection")
-            native_available = False
-            bridge_error = "probe timed out"
+        if _native_imaris_bridge_enabled():
+            self._reset_native_bridge_probe_for_converter_detection()
+            self._start_native_bridge_probe()
+            if not self._native_bridge_probe_done.wait(
+                timeout=NATIVE_BRIDGE_PROBE_TIMEOUT
+            ):
+                _xt_debug("Native bridge probe timed out during converter detection")
+                native_available = False
+                bridge_error = "probe timed out"
+            else:
+                with self._native_bridge_probe_lock:
+                    native_available = self._native_bridge_available
+                    bridge_error = self._native_bridge_probe_error
+            if not native_available:
+                _xt_debug(f"Same-session Imaris bridge unavailable: {bridge_error}")
         else:
-            with self._native_bridge_probe_lock:
-                native_available = self._native_bridge_available
-                bridge_error = self._native_bridge_probe_error
-        if not native_available:
-            _xt_debug(f"Same-session Imaris bridge unavailable: {bridge_error}")
+            native_available = _looks_like_imaris_application(
+                getattr(self, "imaris", None)
+            )
 
         can_attempt_imaris_handoff = (
             native_available or self._has_imaris_handoff_target()
@@ -7191,7 +7652,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: bool.
         """
-        return _looks_like_imaris_application(getattr(self, "imaris", None)) or (
+        if _looks_like_imaris_application(getattr(self, "imaris", None)):
+            return True
+        return _native_imaris_bridge_enabled() and (
             _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
         )
 
@@ -7251,20 +7714,14 @@ class OMEROBrowserDialog:
         if canvas is None:
             return
         palette = {
-            "connected": ("#1f9d55", "#7ee2a8", "#0f5f34"),
-            "busy": (
-                ("#2f80ed", "#93c5fd", "#1d4ed8")
-                if self._indicator_blink_on
-                else ("#93c5fd", "#dbeafe", "#2f80ed")
-            ),
-            "error": ("#d64545", "#ff9b9b", "#8f1d1d"),
-            "disconnected": ("#8a949e", "#d5dadd", "#5e666e"),
+            "connected": "#1f9d55",
+            "busy": "#2f80ed" if self._indicator_blink_on else "#93c5fd",
+            "error": "#d64545",
+            "disconnected": "#8a949e",
         }
-        fill, highlight, shadow = palette.get(state, palette["disconnected"])
+        fill = palette.get(state, palette["disconnected"])
         canvas.delete("all")
-        canvas.create_oval(7, 5, 29, 27, fill=shadow, outline="")
         canvas.create_oval(5, 3, 27, 25, fill=fill, outline="#ffffff", width=1)
-        canvas.create_oval(9, 6, 16, 13, fill=highlight, outline="")
 
     def _set_connection_indicator(self, state):
         """Set the connection indicator for `OMEROBrowserDialog`.
@@ -7485,18 +7942,9 @@ class OMEROBrowserDialog:
 
         frame = tk.Frame(info_window, padx=18, pady=16, bg="#f8fafc")
         frame.grid(row=0, column=0, sticky=tk.NSEW)
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_columnconfigure(1, weight=0)
-
-        title_label = tk.Label(
-            frame,
-            text=CONNECTOR_INFO_TITLE,
-            font=("Arial", 11, "bold"),
-            bg="#f8fafc",
-            fg="#1f2937",
-            anchor=tk.W,
-        )
-        title_label.grid(row=0, column=0, columnspan=2, sticky=tk.EW)
+        frame.grid_columnconfigure(0, weight=0)
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_columnconfigure(2, weight=0)
 
         disclaimer = tk.Label(
             frame,
@@ -7509,30 +7957,37 @@ class OMEROBrowserDialog:
             wraplength=390,
         )
         disclaimer.grid(
-            row=1,
+            row=0,
             column=0,
-            columnspan=2,
+            columnspan=3,
             sticky=tk.EW,
-            pady=(10, 14),
+            pady=(0, 14),
         )
 
-        metadata_font = ("Arial", 9)
-        tk.Label(
-            frame,
-            text=f"Author: {CONNECTOR_INFO_AUTHOR}",
-            font=metadata_font,
-            bg="#f8fafc",
-            fg="#1f2937",
-            anchor=tk.W,
-        ).grid(row=2, column=0, sticky=tk.W, pady=(0, 3))
-        tk.Label(
-            frame,
-            text=f"Version: {CONNECTOR_INFO_VERSION}",
-            font=metadata_font,
-            bg="#f8fafc",
-            fg="#1f2937",
-            anchor=tk.W,
-        ).grid(row=3, column=0, sticky=tk.W)
+        metadata_label_font = ("Arial", 9, "bold")
+        metadata_value_font = ("Arial", 9)
+        metadata_rows = (
+            ("Author(s):", CONNECTOR_INFO_AUTHOR),
+            ("Contact:", CONNECTOR_INFO_CONTACT),
+            ("Version:", CONNECTOR_INFO_VERSION),
+        )
+        for row_index, (label_text, value_text) in enumerate(metadata_rows, start=1):
+            tk.Label(
+                frame,
+                text=label_text,
+                font=metadata_label_font,
+                bg="#f8fafc",
+                fg="#1f2937",
+                anchor=tk.W,
+            ).grid(row=row_index, column=0, sticky=tk.W)
+            tk.Label(
+                frame,
+                text=value_text,
+                font=metadata_value_font,
+                bg="#f8fafc",
+                fg="#1f2937",
+                anchor=tk.W,
+            ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0))
 
         close_button = tk.Button(
             frame,
@@ -7542,7 +7997,7 @@ class OMEROBrowserDialog:
             width=10,
             default=_tk_constant("ACTIVE", "active"),
         )
-        close_button.grid(row=2, column=1, rowspan=2, sticky=tk.SE, padx=(18, 0))
+        close_button.grid(row=3, column=2, sticky=tk.SE, padx=(18, 0))
 
         info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
         info_window.update_idletasks()
@@ -7657,8 +8112,13 @@ class OMEROBrowserDialog:
         Inputs: `downloaded_file`, `require_ims`. Output: `bool`.
         """
         self._set_status("Opening file in Imaris...", "#fff3cd")
+        native_bridge_enabled = _native_imaris_bridge_enabled()
 
-        if self.imaris is None and self._get_native_bridge_python_executable():
+        if (
+            native_bridge_enabled
+            and self.imaris is None
+            and self._get_native_bridge_python_executable()
+        ):
             _xt_debug(
                 "Opening file in the current Imaris session via compatible native bridge runner"
             )
@@ -7667,7 +8127,7 @@ class OMEROBrowserDialog:
                 require_ims=require_ims,
             )
 
-        if self.imaris is None:
+        if native_bridge_enabled and self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle is not available in this Python; "
                 "attempting UI-thread acquisition"
@@ -7681,7 +8141,7 @@ class OMEROBrowserDialog:
             except Exception as exc:
                 _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
 
-        if self.imaris is None:
+        if native_bridge_enabled and self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle remains unavailable in this Python; "
                 "continuing with native bridge runner if available"
@@ -7693,6 +8153,9 @@ class OMEROBrowserDialog:
 
         if open_file_in_imaris(downloaded_file, self.imaris, require_ims=require_ims):
             return True
+
+        if not native_bridge_enabled:
+            return False
 
         _xt_debug(
             "Direct Imaris handle path did not open the file; "
@@ -7729,8 +8192,13 @@ class OMEROBrowserDialog:
             )
 
         self._set_status("Opening selected files in Imaris...", "#fff3cd")
+        native_bridge_enabled = _native_imaris_bridge_enabled()
 
-        if self.imaris is None and self._get_native_bridge_python_executable():
+        if (
+            native_bridge_enabled
+            and self.imaris is None
+            and self._get_native_bridge_python_executable()
+        ):
             _xt_debug(
                 "Opening selected files in the current Imaris session via "
                 "compatible native bridge runner"
@@ -7740,7 +8208,7 @@ class OMEROBrowserDialog:
                 require_ims=require_ims,
             )
 
-        if self.imaris is None:
+        if native_bridge_enabled and self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle is not available in this Python; "
                 "attempting UI-thread acquisition for batch open"
@@ -7756,6 +8224,9 @@ class OMEROBrowserDialog:
 
         if open_files_in_imaris(downloaded_files, self.imaris, require_ims=require_ims):
             return True
+
+        if not native_bridge_enabled:
+            return False
 
         _xt_debug(
             "Direct Imaris handle path did not complete the batch open; "
@@ -7783,6 +8254,21 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
+        if not _native_imaris_bridge_enabled():
+            with self._native_bridge_probe_lock:
+                self._native_bridge_probe_in_progress = False
+                self._native_bridge_probe_started = True
+                self._native_bridge_available = _looks_like_imaris_application(
+                    getattr(self, "imaris", None)
+                )
+                self._native_bridge_python_executable = None
+                self._native_bridge_probe_error = ""
+                self._native_bridge_last_verified_at = (
+                    time.time() if self._native_bridge_available else 0.0
+                )
+                self._native_bridge_probe_done.set()
+            return
+
         with self._native_bridge_probe_lock:
             if self._native_bridge_probe_in_progress:
                 return
@@ -7836,6 +8322,9 @@ class OMEROBrowserDialog:
 
         Inputs: `timeout` timeout seconds. Output: `wait` result.
         """
+        if not _native_imaris_bridge_enabled():
+            self._start_native_bridge_probe()
+            return True
         self._reset_native_bridge_probe()
         self._start_native_bridge_probe()
         return self._native_bridge_probe_done.wait(timeout=max(0.0, float(timeout)))
@@ -7845,6 +8334,20 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
+        if not _native_imaris_bridge_enabled():
+            with self._native_bridge_probe_lock:
+                self._native_bridge_python_executable = None
+                self._native_bridge_available = _looks_like_imaris_application(
+                    getattr(self, "imaris", None)
+                )
+                self._native_bridge_probe_error = ""
+                self._native_bridge_last_verified_at = (
+                    time.time() if self._native_bridge_available else 0.0
+                )
+                self._native_bridge_probe_in_progress = False
+                self._native_bridge_probe_done.set()
+            return
+
         bridge_python = None
         bridge_error = ""
         verified_at = 0.0
@@ -7886,6 +8389,13 @@ class OMEROBrowserDialog:
                 self._native_bridge_probe_error = ""
                 self._native_bridge_last_verified_at = time.time()
             return True
+
+        if not _native_imaris_bridge_enabled():
+            with self._native_bridge_probe_lock:
+                self._native_bridge_available = False
+                self._native_bridge_probe_error = ""
+                self._native_bridge_last_verified_at = 0.0
+            return False
 
         if _coerce_imaris_id(self.imaris_id) is None:
             bridge_error = "No numeric Imaris application id was provided."
@@ -7936,6 +8446,9 @@ class OMEROBrowserDialog:
         """
         if _looks_like_imaris_application(self.imaris):
             return True
+
+        if not _native_imaris_bridge_enabled():
+            return False
 
         self._set_status("Checking Imaris same-session open support...", "#fff3cd")
         with self._native_bridge_probe_lock:
@@ -8676,7 +9189,6 @@ class OMEROBrowserDialog:
         dataset_id = self._current_selected_dataset_id()
         self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
-        self._set_connection_indicator("busy")
         threading.Thread(
             target=self._refresh_worker,
             args=(project_id, dataset_id, generation),
@@ -8750,10 +9262,6 @@ class OMEROBrowserDialog:
                     _xt_debug(
                         "Refresh attempt "
                         f"{attempt}/{attempts} failed; attempting re-authentication: {exc}"
-                    )
-                    self._set_status(
-                        f"Refresh failed; reconnecting ({attempt + 1}/{attempts})...",
-                        "#fff3cd",
                     )
                     try:
                         if self.client is not None:
@@ -8859,7 +9367,7 @@ class OMEROBrowserDialog:
             self._clear_listbox_selection(self.dlist)
             self._refresh_load_button_text()
             if requested_dataset_id is None:
-                self._set_status("Datasets refreshed", "#d4edda")
+                self._set_status("Refresh completed", "#d4edda")
             else:
                 self._set_status(
                     "Selected dataset is no longer available; datasets refreshed",

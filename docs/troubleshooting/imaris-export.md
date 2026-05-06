@@ -12,7 +12,7 @@ repository. Use it before attempting speculative code changes.
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
-| Export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch; no live Imaris handle was provided back to the standalone connector | Check the XT log for Python version and `ImarisLib` / `IcePy` import failures |
+| Export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch; no live Imaris handle was provided back to the standalone connector | Confirm whether the connector received a live XT handle; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy-backed bridge |
 
 ## Failure History Captured Here
 
@@ -169,12 +169,18 @@ Operational rule:
   opening the GUI.
 - the standalone connector first tries to open the exported file through the live
   Imaris XT handle so the existing session is reused,
-- native Imaris bridge compatibility is probed in the background as the dialog
-  opens, and the connector must not start server-side conversion unless the
-  final IMS can be opened through a native Imaris bridge path,
-- stale native bridge probe results are revalidated before expensive
-  server-side exports or original-file downloads, so a lost Imaris session
-  handle fails before transferring large files,
+- IcePy-backed native bridge probing is disabled by default. When
+  `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is unset or false, startup does not
+  import `ImarisLib` or `IcePy`, does not log missing IcePy diagnostics, and
+  relies only on a live XT handle supplied by the current Imaris session,
+- when `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is explicitly set to `1`, `true`,
+  `yes`, or `on`, native Imaris bridge compatibility is probed in the background
+  as the dialog opens, and the connector must not start server-side conversion
+  unless the final IMS can be opened through a native Imaris bridge path,
+- when the optional IcePy bridge is enabled, stale native bridge probe results
+  are revalidated before expensive server-side exports or original-file
+  downloads, so a lost Imaris session handle fails before transferring large
+  files,
 - the standalone connector must not launch a second Imaris session, call
   `Imaris.exe` directly, or use the Windows file association as a fallback,
 - if no live XT handle is available, fail explicitly and fix the local Imaris XT
@@ -182,23 +188,24 @@ Operational rule:
 - do not install extra Python packages on the Imaris workstation for this
   connector. It must remain a single-file, standard-library script and use only
   the Imaris XT bridge files that are already shipped with Imaris,
-- if the configured Python cannot load Imaris' native `IcePy`, the connector may
-  use the Windows Python launcher to find another already-installed Python that
-  can load the same native Imaris bridge and call `FileOpen` on the live Imaris
-  application id. This is still same-session native opening; it is not a file
-  association or `Imaris.exe` launch.
+- if the optional IcePy bridge is enabled and the configured Python cannot load
+  Imaris' native `IcePy`, the connector may use the Windows Python launcher to
+  find another already-installed Python that can load the same native Imaris
+  bridge and call `FileOpen` on the live Imaris application id. This is still
+  same-session native opening; it is not a file association or `Imaris.exe`
+  launch.
 - after a successful OMERO.web login, the connector probes converter
   capabilities before enabling load actions. `OMERO` is shown first only when
   the current server exposes the Imaris connector IMS export endpoint and the
   final IMS can be opened through the current Imaris session. Older deployed
   connector endpoints that predate the explicit capabilities JSON response are
   treated as OMERO-capable only when the endpoint returns the legacy
-  `Missing image id` response. Each new connection resets the native bridge
-  probe before converter detection for diagnostics, but a stale failed probe
-  does not hide converter choices when the XT session still has a valid Imaris
-  handoff target. The final native-open readiness check remains at the
-  pre-download boundary so failed handoff support stops the workflow before any
-  download or server-side conversion starts.
+  `Missing image id` response. When the optional IcePy bridge is enabled, each
+  new connection resets the native bridge probe before converter detection for
+  diagnostics, but a stale failed probe does not hide converter choices when the
+  XT session still has a valid Imaris handoff target. The final native-open
+  readiness check remains at the pre-download boundary so failed handoff support
+  stops the workflow before any download or server-side conversion starts.
 - the local path field is the source of truth for loading images into Imaris
   and for the first folder-export chooser location hint only. The path-row
   `Select` button opens the native Tk directory chooser, replaces the typed
