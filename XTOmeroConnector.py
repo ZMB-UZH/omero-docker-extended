@@ -8587,9 +8587,7 @@ class OMEROBrowserDialog:
         """
         if _looks_like_imaris_application(getattr(self, "imaris", None)):
             return True
-        return _native_imaris_bridge_enabled() and (
-            _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
-        )
+        return _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
 
     def _detect_folder_export_after_connection(self, client=None):
         """Detect folder export availability after connection.
@@ -9421,6 +9419,13 @@ class OMEROBrowserDialog:
             return True
 
         if not _native_imaris_bridge_enabled():
+            if _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None:
+                _xt_debug(
+                    "Proceeding with Imaris handoff because a numeric XT application "
+                    "id is available; final file open will retry direct handle "
+                    "acquisition on the UI thread"
+                )
+                return True
             return False
 
         with self._native_bridge_probe_lock:

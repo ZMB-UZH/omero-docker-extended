@@ -219,9 +219,11 @@ Operational rule:
   `Missing image id` response. When the optional IcePy bridge is enabled, each
   new connection resets the native bridge probe before converter detection for
   diagnostics, but a stale failed probe does not hide converter choices when the
-  XT session still has a valid Imaris handoff target. The final native-open
-  readiness check remains at the pre-download boundary so failed handoff support
-  stops the workflow before any download or server-side conversion starts.
+  XT session still has a valid Imaris handoff target. When the optional IcePy
+  bridge is disabled, the pre-download readiness check blocks only when there is
+  no live Imaris handle and no numeric XT application id. If a numeric id
+  exists, the final UI-thread handoff is the authoritative open validation and
+  retries direct handle acquisition after the file is ready.
 - the local path field is the source of truth for loading images into Imaris
   and for the first folder-export chooser location hint only. The path-row
   `Select` button opens the native Tk directory chooser, replaces the typed
