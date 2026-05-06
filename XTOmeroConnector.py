@@ -186,7 +186,6 @@ PASSWORD_REVEAL_BUTTON_SIZE = 18
 PASSWORD_REVEAL_ICON_BG = "#f8fafc"
 PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
 PASSWORD_REVEAL_ICON_FG = "#425466"
-PASSWORD_REVEAL_ICON_FONT = ("Segoe UI Symbol", 9, "bold")
 AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
 CONVERTER_SLOT_WIDTH = 448
 BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
@@ -2847,159 +2846,6 @@ class _CircularIconButton(_RoundedButton):
         )
 
 
-class _NativeButton:
-    """Fixed-size native Tk button wrapper for rectangular commands."""
-
-    def __init__(
-        self,
-        master,
-        text="",
-        command=None,
-        bg=None,
-        fg=None,
-        activebackground=None,
-        activeforeground=None,
-        font=None,
-        width=140,
-        height=42,
-        state=None,
-    ):
-        """Create a native Tk button in a fixed pixel slot.
-
-        Inputs: button options. Output: None.
-        """
-        self._width = int(width)
-        self._height = int(height)
-        self._state = state or _tk_constant("NORMAL", "normal")
-        self._frame = tk.Frame(
-            master,
-            width=self._width,
-            height=self._height,
-            bg=_resolve_tk_color(master, _widget_background(master)),
-        )
-        self._frame.grid_propagate(False)
-        self._frame.pack_propagate(False)
-        options = {
-            "text": text,
-            "command": command,
-            "state": self._state,
-            "relief": _tk_constant("RAISED", "raised"),
-            "bd": 2,
-            "highlightthickness": 0,
-            "takefocus": False,
-            "padx": 8,
-            "pady": 1,
-        }
-        if bg is not None:
-            options["bg"] = bg
-        if fg is not None:
-            options["fg"] = fg
-        if activebackground is not None:
-            options["activebackground"] = activebackground
-        if activeforeground is not None:
-            options["activeforeground"] = activeforeground
-        if font is not None:
-            options["font"] = font
-        self._button = tk.Button(self._frame, **options)
-        self._button.pack(fill=tk.BOTH, expand=True)
-        self._sync_cursor()
-
-    def _sync_cursor(self):
-        """Synchronize native button cursor with enabled state.
-
-        Inputs: none. Output: None.
-        """
-        enabled = _normalized_tk_state(self._state) != _normalized_tk_state(
-            _tk_constant("DISABLED", "disabled")
-        )
-        self._button.config(cursor="hand2" if enabled else "arrow")
-
-    def _set_dimension(self, key, value):
-        """Set fixed slot dimension.
-
-        Inputs: `key`, `value`. Output: None.
-        """
-        value = int(value)
-        setattr(self, f"_{key}", value)
-        self._frame.config(**{key: value})
-
-    def config(self, cnf=None, **kwargs):
-        """Apply native button configuration.
-
-        Inputs: `cnf`, `**kwargs`. Output: None.
-        """
-        if cnf:
-            kwargs.update(cnf)
-        button_options = {}
-        for key, value in kwargs.items():
-            key = _ROUNDED_BUTTON_OPTION_ALIASES.get(str(key), str(key))
-            if key in {"width", "height"}:
-                self._set_dimension(key, value)
-            else:
-                button_options[key] = value
-                if key == "state":
-                    self._state = value
-        if button_options:
-            self._button.config(**button_options)
-        if "state" in button_options:
-            self._sync_cursor()
-
-    configure = config
-
-    def cget(self, key):
-        """Return native button or fixed slot option.
-
-        Inputs: `key`. Output: option value.
-        """
-        if key == "width":
-            return self._width
-        if key == "height":
-            return self._height
-        return self._button.cget(key)
-
-    def invoke(self):
-        """Invoke the native button.
-
-        Inputs: none. Output: button invoke result.
-        """
-        return self._button.invoke()
-
-    def grid(self, *args, **kwargs):
-        """Apply grid geometry management.
-
-        Inputs: `*args`, `**kwargs`. Output: frame grid result.
-        """
-        return self._frame.grid(*args, **kwargs)
-
-    def pack(self, *args, **kwargs):
-        """Apply pack geometry management.
-
-        Inputs: `*args`, `**kwargs`. Output: frame pack result.
-        """
-        return self._frame.pack(*args, **kwargs)
-
-    def place(self, *args, **kwargs):
-        """Apply place geometry management.
-
-        Inputs: `*args`, `**kwargs`. Output: frame place result.
-        """
-        return self._frame.place(*args, **kwargs)
-
-    def grid_remove(self):
-        """Remove grid geometry management.
-
-        Inputs: none. Output: frame grid remove result.
-        """
-        return self._frame.grid_remove()
-
-    def pack_forget(self):
-        """Remove pack geometry management.
-
-        Inputs: none. Output: frame pack forget result.
-        """
-        return self._frame.pack_forget()
-
-
 class _ConverterDropdown:
     """Fixed-pixel dropdown whose popup matches the closed selector width."""
 
@@ -3279,13 +3125,63 @@ class _PasswordRevealButton(_RoundedButton):
             icon = self._fg
 
         self._circle_image = None
-        self._canvas.create_text(
-            width / 2,
-            height / 2 - 1,
-            text="\u25c9" if visible else "\u25cb",
+        center_x = width / 2
+        center_y = height / 2
+        left = max(3.0, center_x - 6.2)
+        right = min(width - 3.0, center_x + 6.2)
+        top = center_y - 4.0
+        bottom = center_y + 4.0
+        self._canvas.create_line(
+            left,
+            center_y,
+            center_x - 3.4,
+            top,
+            center_x,
+            top + 0.5,
+            center_x + 3.4,
+            top,
+            right,
+            center_y,
+            smooth=True,
             fill=icon,
-            font=PASSWORD_REVEAL_ICON_FONT,
+            width=1.3,
+            capstyle=tk.ROUND,
         )
+        self._canvas.create_line(
+            left,
+            center_y,
+            center_x - 3.4,
+            bottom,
+            center_x,
+            bottom - 0.5,
+            center_x + 3.4,
+            bottom,
+            right,
+            center_y,
+            smooth=True,
+            fill=icon,
+            width=1.3,
+            capstyle=tk.ROUND,
+        )
+        radius = 2.0 if visible else 1.45
+        self._canvas.create_oval(
+            center_x - radius,
+            center_y - radius,
+            center_x + radius,
+            center_y + radius,
+            fill=icon,
+            outline=icon,
+        )
+        if not visible:
+            self._canvas.create_line(
+                right - 1.0,
+                top - 1.0,
+                left + 1.0,
+                bottom + 1.0,
+                fill=icon,
+                width=1.5,
+                capstyle=tk.ROUND,
+            )
 
 
 def _iter_imaris_executable_candidates():
@@ -6178,7 +6074,7 @@ class OMEROBrowserDialog:
         )
         self.password_reveal_btn.grid(row=0, column=1, padx=(1, 3), pady=1)
 
-        self.connect_btn = _NativeButton(
+        self.connect_btn = _RoundedButton(
             conn_frame,
             text="Connect",
             command=self._toggle_connection,
@@ -6248,7 +6144,7 @@ class OMEROBrowserDialog:
             font=CONVERTER_MENU_FONT,
         )
         self.converter_dropdown.pack(side=tk.LEFT)
-        self.refresh_btn = _NativeButton(
+        self.refresh_btn = _RoundedButton(
             self.converter_frame,
             text="Refresh",
             command=self._refresh_browser,
@@ -6302,7 +6198,7 @@ class OMEROBrowserDialog:
                 "write",
                 lambda *_args: self._on_folder_path_changed(),
             )
-        self.select_folder_btn = _NativeButton(
+        self.select_folder_btn = _RoundedButton(
             conn_frame,
             text="Select",
             command=self._select_local_folder,
@@ -6393,7 +6289,7 @@ class OMEROBrowserDialog:
         actions.grid_columnconfigure(1, minsize=ACTION_BUTTON_GAP)
         actions.grid_columnconfigure(3, weight=1)
 
-        self.load_btn = _NativeButton(
+        self.load_btn = _RoundedButton(
             actions,
             text="Load images into Imaris",
             command=self._load,
@@ -6408,7 +6304,7 @@ class OMEROBrowserDialog:
         )
         self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
-        self.export_btn = _NativeButton(
+        self.export_btn = _RoundedButton(
             actions,
             text="Export folder to OMERO",
             command=self._export_folder_to_omero,
@@ -6423,7 +6319,7 @@ class OMEROBrowserDialog:
         )
         self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
-        close_btn = _NativeButton(
+        close_btn = _RoundedButton(
             actions,
             text="Close",
             command=self._on_close,
@@ -6468,7 +6364,11 @@ class OMEROBrowserDialog:
             highlightthickness=0,
             bd=0,
         )
-        self.connection_indicator.pack(side=tk.RIGHT, padx=(4, 10), pady=2)
+        self.connection_indicator.pack(
+            side=tk.RIGHT,
+            padx=(STATUS_TEXT_PAD, STATUS_TEXT_PAD),
+            pady=2,
+        )
         self._draw_connection_indicator("disconnected")
         self.root.bind("<Button-1>", self._clear_text_focus_on_non_input_click, add="+")
 
@@ -7666,7 +7566,7 @@ class OMEROBrowserDialog:
         self._set_connection_indicator("disconnected")
 
     def _detect_converter_options_after_connection(self):
-        """Populate converter options only after login and native-open checks.
+        """Populate converter options from verified OMERO and Imaris capabilities.
 
         Inputs: none. Output: `options`.
         """
@@ -7695,7 +7595,7 @@ class OMEROBrowserDialog:
         )
         options = []
         omero_available = False
-        if can_attempt_imaris_handoff and self.client:
+        if self.client:
             omero_available = self.client.has_omero_ims_export_capability()
         if omero_available:
             options.append("OMERO")
@@ -7778,7 +7678,7 @@ class OMEROBrowserDialog:
         }
         fill = palette.get(state, palette["disconnected"])
         canvas.delete("all")
-        canvas.create_oval(5, 3, 27, 25, fill=fill, outline="#ffffff", width=1)
+        canvas.create_oval(6, 4, 28, 26, fill=fill, outline="#ffffff", width=1)
 
     def _set_connection_indicator(self, state):
         """Set the connection indicator for `OMEROBrowserDialog`.
@@ -8018,7 +7918,7 @@ class OMEROBrowserDialog:
             column=0,
             columnspan=3,
             sticky=tk.EW,
-            pady=(0, 14),
+            pady=0,
         )
 
         metadata_label_font = ("Arial", 9, "bold")
@@ -8036,7 +7936,7 @@ class OMEROBrowserDialog:
                 bg="#f8fafc",
                 fg="#1f2937",
                 anchor=tk.W,
-            ).grid(row=row_index, column=0, sticky=tk.W)
+            ).grid(row=row_index, column=0, sticky=tk.W, pady=0)
             tk.Label(
                 frame,
                 text=value_text,
@@ -8044,7 +7944,7 @@ class OMEROBrowserDialog:
                 bg="#f8fafc",
                 fg="#1f2937",
                 anchor=tk.W,
-            ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0))
+            ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0), pady=0)
 
         close_button = tk.Button(
             frame,
@@ -8054,7 +7954,7 @@ class OMEROBrowserDialog:
             width=10,
             default=_tk_constant("ACTIVE", "active"),
         )
-        close_button.grid(row=3, column=2, sticky=tk.SE, padx=(18, 0))
+        close_button.grid(row=4, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
 
         info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
         info_window.update_idletasks()
