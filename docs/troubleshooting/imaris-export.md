@@ -198,6 +198,12 @@ Operational rule:
   must not include `http://`, `https://`, a path, query string, username, or
   port in Host; the `Use HTTPS` checkbox and Port field are the single source of
   truth for the connection scheme and port.
+- OMERO.web login, project loading, converter capability probing, and folder
+  export capability probing run off the Tk UI thread. The main connector window
+  stays responsive while the status indicator is busy, and the final browser
+  list, converter selector, folder-export button, autosave controls, and status
+  text are updated together on the UI thread after the verified connection
+  setup completes.
 - after a successful OMERO.web login, the connector probes converter
   capabilities before enabling load actions. `OMERO` is shown first only when
   the current server exposes the Imaris connector IMS export endpoint and the
@@ -266,8 +272,10 @@ Operational rule:
   command-window messages, including startup blocks, fatal fallbacks,
   console-close prompts, and transfer progress, are mirrored to that same log
   file. When `Show log` is disabled, the command window is hidden on supported
-  Windows launches while the file log continues to be written. Logs roll at 3
-  MiB with three bounded backups.
+  Windows launches while the file log continues to be written. Accidental
+  command-window `Ctrl+C` or `Ctrl+Break` is ignored and logged while the XT
+  dialog is active, then the previous console signal handlers are restored when
+  the entrypoint exits. Logs roll at 3 MiB with three bounded backups.
 - the connection-panel info button opens a small modal dialog with the connector
   version, author, and as-is disclaimer. The dialog blocks interaction with the
   main connector window until closed.

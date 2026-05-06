@@ -855,9 +855,6 @@ def test_start_upload_accepts_dataset_name_override_for_root_dataset(
             f"/mock/{name}/{kwargs['job_id']}" if kwargs else f"/mock/{name}"
         ),
     )
-    monkeypatch.setattr(
-        index_view, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
-    )
 
     def save_job(job):
         """Save the job.

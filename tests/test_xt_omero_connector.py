@@ -317,6 +317,27 @@ def _noop(*_args, **_kwargs):
     """
 
 
+class _ImmediateThread:
+    """Thread test double that runs the target when `start` is called."""
+
+    def __init__(self, target, args=(), kwargs=None, daemon=None):
+        """Create `_ImmediateThread` with target call details.
+
+        Inputs: `target`, `args`, `kwargs`, `daemon`. Output: stores call details.
+        """
+        self.target = target
+        self.args = args
+        self.kwargs = kwargs or {}
+        self.daemon = daemon
+
+    def start(self):
+        """Run the target synchronously.
+
+        Inputs: none. Output: target return value.
+        """
+        return self.target(*self.args, **self.kwargs)
+
+
 def _make_refresh_dialog(module):
     """Create the refresh dialog.
 
@@ -2479,6 +2500,7 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     """
     module = _load_xt_module()
     created_clients = []
+    monkeypatch.setattr(module.threading, "Thread", _ImmediateThread)
 
     class FakeClient:
         """Test double for a successful OMERO.web client."""
@@ -2506,6 +2528,14 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
             Inputs: none. Output: bool.
             """
             return True
+
+        @staticmethod
+        def list_projects():
+            """Return a minimal project list.
+
+            Inputs: none. Output: project fixtures.
+            """
+            return [{"id": "project-1", "name": "Project One"}]
 
     monkeypatch.setattr(module, "OMEROWebClient", FakeClient)
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2535,9 +2565,13 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog._set_connection_indicator = lambda _state: None
     dialog._schedule_health_ping = lambda: None
-    dialog._load_projects = lambda: None
-    dialog._detect_converter_options_after_connection = lambda: ["OMERO"]
-    dialog._detect_folder_export_after_connection = lambda: {
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: callback()
+    dialog.plist = _FakeListbox()
+    dialog.dlist = _FakeListbox()
+    dialog.ilist = _FakeListbox()
+    dialog._project_list_label = lambda project: project["name"]
+    dialog._detect_converter_options_after_connection = lambda client=None: ["OMERO"]
+    dialog._detect_folder_export_after_connection = lambda client=None: {
         "available": True,
         "reason": "",
     }
@@ -2554,6 +2588,7 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert created_clients[0].scheme == "https"
     assert dialog._connected is True
     assert dialog.autosave_settings_check.state == "normal"
+    assert dialog.client is created_clients[0]
     assert converter_calls == [[], ["OMERO"]]
     assert export_calls[-1] == (True, "")
     assert statuses[-1] == ("Connected to OMERO", "#d4edda")
@@ -2569,6 +2604,76 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert getattr(created_clients[0], password_attr) == str()
     assert "PASSWORD" not in content
     assert "super-secret" not in content
+
+
+def test_connect_starts_background_worker_without_blocking_ui_thread(monkeypatch):
+    """Verify connect does not perform network setup directly on the Tk UI thread.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on synchronous-connect
+    regressions.
+    """
+    module = _load_xt_module()
+    threads = []
+
+    class RecordingThread:
+        """Thread fake that records construction without running the target."""
+
+        def __init__(self, target, args=(), kwargs=None, daemon=None):
+            """Create `RecordingThread` with call details.
+
+            Inputs: `target`, `args`, `kwargs`, `daemon`. Output: records thread.
+            """
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+            self.daemon = daemon
+            threads.append(self)
+
+        def start(self):
+            """Record that the thread would have been started.
+
+            Inputs: none. Output: None.
+            """
+            self.started = True
+
+    monkeypatch.setattr(module.threading, "Thread", RecordingThread)
+    monkeypatch.setattr(
+        module,
+        "OMEROWebClient",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("client creation must happen in the worker")
+        ),
+    )
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = False
+    dialog._connection_in_progress = False
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("typed-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.connect_btn = _FakeButton()
+    dialog.root = types.SimpleNamespace(update_idletasks=lambda: None)
+    dialog._set_converter_options = _noop
+    dialog._set_folder_export_capability = _noop
+    dialog._set_status = _noop
+    dialog._set_connection_indicator = _noop
+
+    module.OMEROBrowserDialog._connect(dialog)
+
+    assert dialog._connection_in_progress is True
+    assert len(threads) == 1
+    assert threads[0].target == dialog._connect_worker
+    assert threads[0].args == (
+        "omero.example.org",
+        443,
+        "alice",
+        "typed-secret",
+        "https",
+    )
+    assert threads[0].daemon is True
+    assert threads[0].started is True
 
 
 def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
@@ -2599,6 +2704,7 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
             return False
 
     module = _load_xt_module()
+    monkeypatch.setattr(module.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(module, "OMEROWebClient", FakeClient)
     errors = []
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -2617,6 +2723,7 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
     dialog._set_folder_export_capability = _noop
     dialog._set_status = _noop
     dialog._set_connection_indicator = _noop
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: callback()
     monkeypatch.setattr(
         module.messagebox,
         "showerror",
@@ -2634,6 +2741,43 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
             "Cannot connect to OMERO server.\nPlease check your credentials.",
         )
     ]
+
+
+def test_stale_connect_success_completion_clears_new_client_without_ui_mutation():
+    """Verify stale background connection success cannot revive a cancelled connect.
+
+    Inputs: repository fixtures. Output: fails on stale connect completion regressions.
+    """
+    module = _load_xt_module()
+    cookie_jar = types.SimpleNamespace(cleared=False)
+    cookie_jar.clear = lambda: setattr(cookie_jar, "cleared", True)
+    client = types.SimpleNamespace(
+        password="typed-secret",
+        csrf_token="csrf",
+        session_id="session",
+        session_key="session-key",
+        cookie_jar=cookie_jar,
+    )
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connection_in_progress = False
+    dialog.client = "existing"
+    dialog._connected = False
+
+    module.OMEROBrowserDialog._finish_connect_success(
+        dialog,
+        client,
+        [{"id": "project", "name": "Project"}],
+        ["OMERO"],
+        {"available": True, "reason": ""},
+    )
+
+    assert dialog.client == "existing"
+    assert dialog._connected is False
+    assert client.password == str()
+    assert client.csrf_token is None
+    assert client.session_id is None
+    assert client.session_key is None
+    assert cookie_jar.cleared is True
 
 
 def test_connect_rejects_scheme_in_host_before_client_creation(monkeypatch):
@@ -3220,7 +3364,7 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
         "            self._start_native_bridge_probe()" in source
     )
     assert (
-        "if self.client:\n            omero_available = self.client.has_omero_ims_export_capability()"
+        "if client:\n            omero_available = client.has_omero_ims_export_capability()"
         in source
     )
     assert "if can_attempt_imaris_handoff and self.client:" not in source
@@ -7609,6 +7753,111 @@ def test_configure_xt_console_visibility_uses_windows_show_window(monkeypatch):
     assert module._configure_xt_console_visibility(True) is True
     assert module._XT_RUNTIME_STATE.console_output_enabled is True
     assert _FakeUser32.calls == [(1234, 0), (1234, 5)]
+
+
+def test_xt_console_interrupt_guard_installs_and_restores_handlers(monkeypatch):
+    """Verify command-window Ctrl+C is scoped and cannot abort the connector.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on console interrupt
+    guard regressions.
+    """
+    module = _load_xt_module()
+    events = []
+    handlers = {module.signal.SIGINT: "old-int", 98: "old-break"}
+    monkeypatch.setattr(module.signal, "SIGBREAK", 98, raising=False)
+    monkeypatch.setattr(module.signal, "getsignal", lambda signum: handlers[signum])
+
+    def signal_handler(signum, handler):
+        """Record signal handler updates.
+
+        Inputs: `signum`, `handler`. Output: None.
+        """
+        events.append((signum, handler))
+        handlers[signum] = handler
+
+    monkeypatch.setattr(module.signal, "signal", signal_handler)
+
+    previous = module._install_xt_console_interrupt_guard()
+    assert previous == [(module.signal.SIGINT, "old-int"), (98, "old-break")]
+    assert handlers[module.signal.SIGINT] == module._ignore_xt_console_interrupt
+    assert handlers[98] == module._ignore_xt_console_interrupt
+
+    module._restore_xt_console_interrupt_guard(previous)
+
+    assert events[-2:] == [(98, "old-break"), (module.signal.SIGINT, "old-int")]
+    assert handlers[module.signal.SIGINT] == "old-int"
+    assert handlers[98] == "old-break"
+
+
+def test_xt_entrypoint_restores_console_interrupt_guard_after_ctrl_c(monkeypatch):
+    """Verify entrypoint cleanup runs when Ctrl+C escapes fallback handling.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on Ctrl+C cleanup regressions.
+    """
+    module = _load_xt_module()
+    events = []
+
+    class _Status:
+        """Supported Windows platform fake."""
+
+        supported = True
+        message = "supported"
+
+    class _Dialog:
+        """Dialog fake that simulates Ctrl+C escaping Tk."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Record dialog construction.
+
+            Inputs: ignored. Output: None.
+            """
+            events.append("dialog")
+
+        @staticmethod
+        def show():
+            """Simulate Ctrl+C during the blocking dialog loop.
+
+            Inputs: none. Output: raises KeyboardInterrupt.
+            """
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(module, "_windows_platform_status", lambda: _Status())
+    monkeypatch.setattr(module, "_xt_log_path", lambda: "xt.log")
+    monkeypatch.setattr(module, "_install_xt_console_interrupt_guard", lambda: "guard")
+    monkeypatch.setattr(
+        module,
+        "_restore_xt_console_interrupt_guard",
+        lambda guard: events.append(("restore", guard)),
+    )
+    monkeypatch.setattr(module, "_connector_settings_env_path", lambda: "settings.env")
+    monkeypatch.setattr(
+        module, "_prepare_connector_settings_for_current_version", _noop
+    )
+    monkeypatch.setattr(
+        module, "_load_connector_show_log_preference", lambda _path: True
+    )
+    monkeypatch.setattr(module, "_configure_xt_console_visibility", _noop)
+    monkeypatch.setattr(module, "_set_process_window_title", _noop)
+    monkeypatch.setattr(module, "_xt_write_log", lambda *_args: events.append("write"))
+    monkeypatch.setattr(
+        module,
+        "_xt_console_log",
+        lambda *_args, **_kwargs: events.append("console"),
+    )
+    monkeypatch.setattr(module, "_ensure_tk_loaded", _noop)
+    monkeypatch.setattr(module, "_log_imaris_xt_diagnostics", _noop)
+    monkeypatch.setattr(
+        module,
+        "_resolve_imaris_application",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(module, "OMEROBrowserDialog", _Dialog)
+
+    module.XTOmeroConnector(None)
+
+    assert "dialog" in events
+    assert ("restore", "guard") in events
+    assert "console" in events
 
 
 def test_xt_console_output_is_centralized_for_file_mirroring():

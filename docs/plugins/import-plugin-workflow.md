@@ -44,6 +44,12 @@ flowchart TD
 - The browser uploads files into a job-specific staged tree under `OMERO_TMP_PATH`.
 - Directory structure is preserved. The plugin does not flatten directory-backed formats.
 - Upload handling is request-safe: the heavy format planning is deferred so the final upload request does not block on a long dry-run scan.
+- Top-level/base-path files are grouped into a generated
+  `Orphaned_images_base_path_import_<suffix>` Dataset.
+- Folder paths are translated into Dataset names from the relative upload path;
+  nested folders use backslashes, such as `folderA\subfolderB`.
+- Project selection controls where the created Dataset targets are linked. It
+  does not rename base-path orphan files or folder-derived Dataset names.
 - External clients can drive the same lifecycle without the browser UI. When a
   client starts the job with `dataset_name_override` and no `project_id`, the
   import target becomes one OMERO-root Dataset named by that override.
