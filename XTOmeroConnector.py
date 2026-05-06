@@ -166,6 +166,7 @@ CONVERTER_MENU_FONT = ("Arial", 10)
 CONVERTER_DROPDOWN_WIDTH = 232
 CONVERTER_DROPDOWN_HEIGHT = 36
 CONVERTER_DROPDOWN_TEXT_PAD = 10
+CONVERTER_DROPDOWN_ARROW_WIDTH = 24
 ACTION_ROW_HORIZONTAL_PAD = 10
 ACTION_BUTTON_PAD = 0
 ACTION_BUTTON_GAP = 4
@@ -187,7 +188,7 @@ PASSWORD_REVEAL_ICON_BG = "#f8fafc"
 PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
 PASSWORD_REVEAL_ICON_FG = "#425466"
 AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
-CONVERTER_SLOT_WIDTH = 448
+CONVERTER_SLOT_WIDTH = 619
 BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
 BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)
 BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)
@@ -2367,6 +2368,24 @@ def _safe_widget_dimension(widget, method_name):
     return max(0, int(value or 0))
 
 
+def _checkbutton_text_offset(widget):
+    """Return the pixel offset from a checkbutton edge to its text.
+
+    Inputs: `widget`. Output: int.
+    """
+    try:
+        text = str(widget.cget("text") or "")
+        font_name = widget.cget("font")
+        text_width = int(widget.tk.call("font", "measure", font_name, text))
+        width = max(
+            _safe_widget_dimension(widget, "winfo_width"),
+            _safe_widget_dimension(widget, "winfo_reqwidth"),
+        )
+    except Exception:
+        return 0
+    return max(0, width - max(0, text_width))
+
+
 def _current_root_minsize(root):
     """Return the current root minimum size.
 
@@ -2888,9 +2907,7 @@ class _ConverterDropdown:
             height=self._height,
             bg=self._border,
             bd=0,
-            highlightthickness=1,
-            highlightbackground=self._border,
-            highlightcolor=self._active_border,
+            highlightthickness=0,
         )
         self._frame.grid_propagate(False)
         self._frame.pack_propagate(False)
@@ -2908,21 +2925,21 @@ class _ConverterDropdown:
             pady=0,
         )
         self._label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self._arrow = tk.Label(
+        self._arrow = tk.Canvas(
             self._surface,
-            text="v",
+            width=CONVERTER_DROPDOWN_ARROW_WIDTH,
+            height=self._height,
             bg=self._bg,
-            fg=self._fg,
-            font=self._font,
-            width=2,
-            padx=0,
-            pady=0,
+            bd=0,
+            highlightthickness=0,
+            relief=_tk_constant("FLAT", "flat"),
         )
         self._arrow.pack(side=tk.RIGHT, fill=tk.Y)
         for widget in (self._frame, self._surface, self._label, self._arrow):
             widget.bind("<Enter>", self._on_enter)
             widget.bind("<Leave>", self._on_leave)
             widget.bind("<Button-1>", self._toggle_popup)
+        self._arrow.bind("<Configure>", lambda _event: self._draw_arrow())
         self._apply_style()
 
     def pack(self, *args, **kwargs):
@@ -2946,6 +2963,40 @@ class _ConverterDropdown:
         """
         return self._frame.pack_forget()
 
+    def config(self, cnf=None, **kwargs):
+        """Apply fixed dropdown configuration.
+
+        Inputs: `cnf`, `**kwargs`. Output: None.
+        """
+        if cnf:
+            kwargs.update(cnf)
+        redraw_needed = False
+        if "width" in kwargs:
+            self._width = int(kwargs.pop("width"))
+            self._frame.config(width=self._width)
+        if "height" in kwargs:
+            self._height = int(kwargs.pop("height"))
+            self._frame.config(height=self._height)
+            self._arrow.config(height=self._height)
+            redraw_needed = True
+        if kwargs:
+            self._frame.config(**kwargs)
+        if redraw_needed:
+            self._draw_arrow()
+
+    configure = config
+
+    def cget(self, key):
+        """Return fixed dropdown configuration values.
+
+        Inputs: `key`. Output: option value.
+        """
+        if key == "width":
+            return self._width
+        if key == "height":
+            return self._height
+        return self._frame.cget(key)
+
     def set_options(self, options):
         """Replace dropdown options and close any stale popup.
 
@@ -2964,10 +3015,39 @@ class _ConverterDropdown:
         bg = self._active_bg if highlighted else self._bg
         fg = self._active_fg if highlighted else self._fg
         border = self._active_border if highlighted else self._border
-        self._frame.config(bg=border, highlightbackground=border)
+        self._frame.config(bg=border)
         self._surface.config(bg=bg)
-        for widget in (self._label, self._arrow):
+        self._arrow.config(bg=bg)
+        for widget in (self._label,):
             widget.config(bg=bg, fg=fg)
+        self._draw_arrow(fg)
+
+    def _draw_arrow(self, color=None):
+        """Draw the dropdown arrow as a clean chevron.
+
+        Inputs: optional `color`. Output: None.
+        """
+        color = color or (self._active_fg if self._open or self._hover else self._fg)
+        width = max(
+            int(self._arrow.winfo_width() or CONVERTER_DROPDOWN_ARROW_WIDTH),
+            CONVERTER_DROPDOWN_ARROW_WIDTH,
+        )
+        height = max(int(self._arrow.winfo_height() or self._height), self._height)
+        center_x = width / 2
+        center_y = height / 2
+        self._arrow.delete("all")
+        self._arrow.create_line(
+            center_x - 4,
+            center_y - 2,
+            center_x,
+            center_y + 2,
+            center_x + 4,
+            center_y - 2,
+            fill=color,
+            width=1.7,
+            capstyle=tk.ROUND,
+            joinstyle=tk.ROUND,
+        )
 
     def _on_enter(self, _event):
         """Handle pointer enter.
@@ -3020,7 +3100,7 @@ class _ConverterDropdown:
         popup.bind("<Escape>", lambda _event: self.close_popup())
         popup.bind("<FocusOut>", lambda _event: self.close_popup())
         container = tk.Frame(popup, bg=self._border, bd=0)
-        container.pack(fill=tk.BOTH, expand=True, padx=(2, 1), pady=1)
+        container.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         for option in self._options:
             item = tk.Label(
                 container,
@@ -6121,18 +6201,19 @@ class OMEROBrowserDialog:
         )
         self.converter_slot.grid(
             row=2,
-            column=7,
-            columnspan=2,
-            sticky=tk.E,
-            padx=(18, 0),
+            column=6,
+            columnspan=3,
+            sticky=tk.W,
+            padx=(34, 0),
             pady=5,
         )
         self.converter_slot.grid_propagate(False)
         self.converter_slot.pack_propagate(False)
         self.converter_frame = tk.Frame(self.converter_slot)
-        tk.Label(self.converter_frame, text="Converter:").pack(
-            side=tk.LEFT, padx=(0, 5)
-        )
+        self.converter_text_offset_spacer = tk.Frame(self.converter_frame, width=0)
+        self.converter_text_offset_spacer.pack(side=tk.LEFT, fill=tk.Y)
+        self.converter_label = tk.Label(self.converter_frame, text="Converter:")
+        self.converter_label.pack(side=tk.LEFT, padx=(0, 5))
         self.converter_dropdown = _ConverterDropdown(
             self.converter_frame,
             variable=self.converter_var,
@@ -6156,8 +6237,8 @@ class OMEROBrowserDialog:
             width=112,
             height=36,
         )
-        self.refresh_btn.pack(side=tk.LEFT, padx=(16, 0))
-        self.converter_frame.pack(side=tk.LEFT)
+        self.refresh_btn.pack(side=tk.RIGHT)
+        self.converter_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.converter_frame.pack_forget()
         conn_frame.grid_columnconfigure(7, weight=1)
 
@@ -6371,6 +6452,7 @@ class OMEROBrowserDialog:
         )
         self._draw_connection_indicator("disconnected")
         self.root.bind("<Button-1>", self._clear_text_focus_on_non_input_click, add="+")
+        self._align_path_row_control_heights()
 
     def _clear_text_focus_on_non_input_click(self, event):
         """Clear blinking text cursors when clicking outside text inputs.
@@ -7452,7 +7534,7 @@ class OMEROBrowserDialog:
         self.converter_frame.pack_forget()
 
     def _align_connection_panel_right_controls(self):
-        """Align the right-side connection controls to the left label gap.
+        """Align fixed connection-panel controls.
 
         Inputs: none. Output: None.
         """
@@ -7460,19 +7542,41 @@ class OMEROBrowserDialog:
         if root is not None:
             _call_if_available(root, "update_idletasks")
         converter_slot = getattr(self, "converter_slot", None)
-        converter_frame = getattr(self, "converter_frame", None)
-        converter_width = max(
-            CONVERTER_SLOT_WIDTH,
-            _safe_widget_dimension(converter_frame, "winfo_reqwidth"),
-            _safe_widget_dimension(converter_slot, "winfo_reqwidth"),
-            _safe_widget_dimension(converter_slot, "winfo_width"),
-        )
         if converter_slot is not None:
-            converter_slot.config(width=converter_width)
-            converter_slot.grid_configure(padx=(18, 0))
+            converter_slot.config(width=CONVERTER_SLOT_WIDTH)
+            converter_slot.grid_configure(padx=(34, 0))
+        converter_text_spacer = getattr(self, "converter_text_offset_spacer", None)
+        autosave_check = getattr(self, "autosave_settings_check", None)
+        if converter_text_spacer is not None and autosave_check is not None:
+            converter_text_spacer.config(width=_checkbutton_text_offset(autosave_check))
         panel_icon_frame = getattr(self, "panel_icon_frame", None)
         if panel_icon_frame is not None:
             panel_icon_frame.grid_configure(padx=(12, 0))
+
+    def _align_path_row_control_heights(self):
+        """Match path-row command controls to the rendered path entry height.
+
+        Inputs: none. Output: None.
+        """
+        root = getattr(self, "root", None)
+        if root is not None:
+            _call_if_available(root, "update_idletasks")
+        entry_height = _safe_widget_dimension(
+            getattr(self, "folder_path_entry", None), "winfo_height"
+        )
+        if entry_height <= 0:
+            return
+        for control in (
+            getattr(self, "select_folder_btn", None),
+            getattr(self, "refresh_btn", None),
+            getattr(self, "converter_dropdown", None),
+        ):
+            configure = getattr(control, "config", None)
+            if callable(configure):
+                configure(height=entry_height)
+        converter_slot = getattr(self, "converter_slot", None)
+        if converter_slot is not None:
+            converter_slot.config(height=entry_height)
 
     def _show_converter_frame(self):
         """Show the converter frame for `OMEROBrowserDialog`.
@@ -7480,9 +7584,10 @@ class OMEROBrowserDialog:
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         self._align_connection_panel_right_controls()
+        self._align_path_row_control_heights()
         pack = getattr(self.converter_frame, "pack", None)
         if callable(pack):
-            pack(side=tk.RIGHT)
+            pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             return
         grid = getattr(self.converter_frame, "grid", None)
         if callable(grid):
