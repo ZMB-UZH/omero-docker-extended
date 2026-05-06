@@ -237,6 +237,13 @@ Operational rule:
   and re-hides after 30 seconds. Settings load, parse, create, or write
   failures are logged through the connector diagnostic logger without aborting
   the dialog.
+- the standalone XT diagnostic log is `XTOmeroConnector.log` in the same
+  `.imaris_omero_connector` directory as `settings.env`, or in that intended
+  directory when the settings file does not exist yet. The connector does not
+  write its normal diagnostics to the operating-system temp directory. Visible
+  command-window messages, including startup blocks, fatal fallbacks,
+  console-close prompts, and transfer progress, are mirrored to that same log
+  file. Logs roll at 3 MiB with three bounded backups.
 - the connection-panel info button opens a small modal dialog with the connector
   version, author, and as-is disclaimer. The dialog blocks interaction with the
   main connector window until closed.

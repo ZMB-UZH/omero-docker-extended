@@ -218,6 +218,9 @@ PRIVATE_DIRECTORY_MODE = stat.S_IRWXU
 PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
 AUTOSAVE_SETTINGS_DIR_NAME = ".imaris_omero_connector"
 AUTOSAVE_SETTINGS_FILE_NAME = "settings.env"
+XT_LOG_FILE_NAME = "XTOmeroConnector.log"
+XT_LOG_MAX_BYTES = 3 * 1024 * 1024
+XT_LOG_BACKUP_COUNT = 3
 AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
 AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
     "Autosave settings could not update the OMERO connector settings file."
@@ -293,6 +296,9 @@ class _XtRuntimeState:
     """Data container for XT runtime state."""
 
     log_path: Optional[str] = None
+
+
+_XT_LOG_LOCK = threading.Lock()
 
 
 @dataclass
@@ -757,17 +763,20 @@ def _safe_xt_log_file(log_path):
     candidate = _coerce_path(log_path)
     if candidate is None or not candidate.is_absolute():
         return None
-    if not candidate.name.startswith("XTOmeroConnector_") or candidate.suffix != ".log":
+    if candidate.name != XT_LOG_FILE_NAME:
         return None
     try:
-        temp_root = Path(tempfile.gettempdir()).resolve(strict=True)
-        parent = candidate.parent.resolve(strict=True)
+        expected_parent = _connector_settings_env_path().parent
     except OSError:
         return None
-    if parent != temp_root:
+    if candidate.parent != expected_parent:
         return None
     try:
         if candidate.is_symlink() or (candidate.exists() and not candidate.is_file()):
+            return None
+        if candidate.parent.is_symlink() or (
+            candidate.parent.exists() and not candidate.parent.is_dir()
+        ):
             return None
     except OSError:
         return None
@@ -1682,9 +1691,30 @@ def _xt_debug(message):
     """
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {_sanitize_xt_log_message(message)}"
-    print(line)
-    if _XT_RUNTIME_STATE.log_path:
-        _xt_write_log(_XT_RUNTIME_STATE.log_path, line)
+    _xt_console_log(line)
+
+
+def _xt_console_log(message="", *, end="\n", flush=False):
+    """Write a visible console message and mirror it to the XT rolling log.
+
+    Inputs: `message`, optional `end`, optional `flush`. Output: None.
+    """
+    text = str(message)
+    try:
+        print(text, end=end, flush=flush)
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
+    try:
+        if not _XT_RUNTIME_STATE.log_path:
+            _XT_RUNTIME_STATE.log_path = _xt_log_path()
+        if _XT_RUNTIME_STATE.log_path:
+            _xt_write_log(_XT_RUNTIME_STATE.log_path, text)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
 
 
 def _parse_port(port_value):
@@ -2212,6 +2242,29 @@ def _rgb_to_hex(rgb):
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
+def _resolve_tk_color(widget, value, fallback="#f0f0f0"):
+    """Return a Tk color as a PhotoImage-compatible hex value.
+
+    Inputs: `widget`, color `value`, and fallback. Output: hex color.
+    """
+    text = str(value or "").strip()
+    if text.startswith("#") and len(text) == 7:
+        return _rgb_to_hex(_hex_to_rgb(text, _hex_to_rgb(fallback)))
+
+    winfo_rgb = getattr(widget, "winfo_rgb", None)
+    if callable(winfo_rgb):
+        try:
+            tk_color_error = tk.TclError
+        except (AttributeError, RuntimeError):
+            tk_color_error = ValueError
+        try:
+            red, green, blue = winfo_rgb(text)
+            return _rgb_to_hex((red / 257, green / 257, blue / 257))
+        except (TypeError, ValueError, RuntimeError, tk_color_error):
+            pass
+    return _rgb_to_hex(_hex_to_rgb(fallback))
+
+
 def _blend_colors(first, second, second_weight):
     """Blend the colors.
 
@@ -2266,7 +2319,9 @@ def _antialiased_circle_image(master, width, height, fill, outline):
     """
     width = max(1, int(width))
     height = max(1, int(height))
-    background = _widget_background(master)
+    background = _resolve_tk_color(master, _widget_background(master))
+    fill = _resolve_tk_color(master, fill, fallback=background)
+    outline = _resolve_tk_color(master, outline, fallback=fill)
     image = tk.PhotoImage(master=master, width=width, height=height)
     center_x = (width - 1) / 2.0
     center_y = (height - 1) / 2.0
@@ -2428,7 +2483,7 @@ class _RoundedButton:
             bd=0,
             highlightthickness=0,
             relief=_tk_constant("FLAT", "flat"),
-            bg=_widget_background(master),
+            bg=_resolve_tk_color(master, _widget_background(master)),
         )
         self._canvas.bind("<Configure>", lambda _event: self._redraw())
         self._canvas.bind("<Enter>", self._on_enter)
@@ -2820,7 +2875,7 @@ class _NativeButton:
             master,
             width=self._width,
             height=self._height,
-            bg=_widget_background(master),
+            bg=_resolve_tk_color(master, _widget_background(master)),
         )
         self._frame.grid_propagate(False)
         self._frame.pack_propagate(False)
@@ -5723,13 +5778,14 @@ class OMEROWebClient:
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
                             progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
-                            print(
+                            _xt_console_log(
                                 f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
                                 end="\r",
+                                flush=True,
                             )
 
                 if total_size:
-                    print()
+                    _xt_console_log()
 
             if not os.path.exists(local_path):
                 raise RuntimeError(
@@ -5806,13 +5862,14 @@ class OMEROWebClient:
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
                             progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
-                            print(
+                            _xt_console_log(
                                 f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
                                 end="\r",
+                                flush=True,
                             )
 
                 if total_size:
-                    print()
+                    _xt_console_log()
 
             if not os.path.exists(local_path):
                 raise RuntimeError(
@@ -6384,7 +6441,7 @@ class OMEROBrowserDialog:
         bottom_progress_margin = tk.Frame(
             self.root,
             height=BOTTOM_PROGRESS_RESERVED_HEIGHT,
-            bg=_widget_background(self.root),
+            bg=_resolve_tk_color(self.root, _widget_background(self.root)),
         )
         bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)
         bottom_progress_margin.pack_propagate(False)
@@ -9836,10 +9893,78 @@ def _xt_log_path():
     Inputs: none. Output: `str` result.
     """
     try:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    except Exception:
-        ts = "unknown"
-    return str(Path(tempfile.gettempdir()) / f"XTOmeroConnector_{ts}.log")
+        return str(_connector_settings_env_path().parent / XT_LOG_FILE_NAME)
+    except OSError:
+        return ""
+
+
+def _ensure_xt_log_directory(log_dir):
+    """Ensure the connector diagnostic log directory exists privately.
+
+    Inputs: `log_dir`. Output: bool.
+    """
+    try:
+        if log_dir.is_symlink():
+            return False
+        if log_dir.exists() and not log_dir.is_dir():
+            return False
+        log_dir.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            os.chmod(os.fspath(log_dir), PRIVATE_DIRECTORY_MODE)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _xt_log_backup_path(log_path, index):
+    """Return one rolling backup path for an XT diagnostic log.
+
+    Inputs: `log_path`, backup `index`. Output: `Path`.
+    """
+    return log_path.with_name(f"{log_path.name}.{int(index)}")
+
+
+def _safe_unlink_xt_log_path(path):
+    """Remove one XT log path only when it is a regular file or symlink.
+
+    Inputs: `path`. Output: None.
+    """
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+    except OSError as exc:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
+
+
+def _rotate_xt_log_if_needed(log_path, incoming_bytes):
+    """Rotate XT diagnostic logs before appending beyond the size limit.
+
+    Inputs: `log_path`, `incoming_bytes`. Output: None.
+    """
+    try:
+        if not log_path.exists() or not log_path.is_file():
+            return
+        if log_path.stat().st_size + max(0, int(incoming_bytes)) <= XT_LOG_MAX_BYTES:
+            return
+        oldest = _xt_log_backup_path(log_path, XT_LOG_BACKUP_COUNT)
+        _safe_unlink_xt_log_path(oldest)
+        for index in range(XT_LOG_BACKUP_COUNT - 1, 0, -1):
+            source = _xt_log_backup_path(log_path, index)
+            if source.is_symlink():
+                _safe_unlink_xt_log_path(source)
+                continue
+            if source.is_file():
+                os.replace(
+                    os.fspath(source),
+                    os.fspath(_xt_log_backup_path(log_path, index + 1)),
+                )
+        os.replace(os.fspath(log_path), os.fspath(_xt_log_backup_path(log_path, 1)))
+    except (OSError, TypeError, ValueError) as exc:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
 
 
 def _xt_write_log(log_path, msg):
@@ -9851,15 +9976,30 @@ def _xt_write_log(log_path, msg):
     if candidate is None:
         return
     safe_msg = _sanitize_xt_log_message(msg)
+    if not safe_msg.endswith("\n"):
+        safe_msg += "\n"
+    encoded_length = len(safe_msg.encode("utf-8", errors="replace"))
+    descriptor = None
     try:
-        with candidate.open("a", encoding="utf-8", errors="replace") as f:
-            f.write(safe_msg)
-            if not safe_msg.endswith("\n"):
-                f.write("\n")
-    except Exception as exc:
+        if not _ensure_xt_log_directory(candidate.parent):
+            return
+        with _XT_LOG_LOCK:
+            _rotate_xt_log_if_needed(candidate, encoded_length)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0)
+            descriptor = os.open(os.fspath(candidate), flags, PRIVATE_FILE_MODE)
+            with os.fdopen(descriptor, "a", encoding="utf-8", errors="replace") as f:
+                descriptor = None
+                f.write(safe_msg)
+            with contextlib.suppress(OSError):
+                os.chmod(os.fspath(candidate), PRIVATE_FILE_MODE)
+    except (OSError, TypeError, ValueError) as exc:
         logger.debug(
             "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
         )
+    finally:
+        if descriptor is not None:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
 
 
 def _xt_show_fatal(title, message):
@@ -9870,7 +10010,16 @@ def _xt_show_fatal(title, message):
     try:
         messagebox.showerror(title, message)
     except Exception:
-        print(title + ": " + message)
+        _xt_console_log(title + ": " + message)
+
+
+def _xt_wait_for_enter_to_close():
+    """Prompt the operator before closing a console-launched connector.
+
+    Inputs: none. Output: None.
+    """
+    _xt_console_log("Press ENTER to close...", end="", flush=True)
+    input()
 
 
 def XTOmeroConnector(aImarisId):
@@ -9883,8 +10032,7 @@ def XTOmeroConnector(aImarisId):
     _XT_RUNTIME_STATE.log_path = log_path
     if not platform_status.supported:
         block_message = "XTOmeroConnector startup blocked: " + platform_status.message
-        _xt_write_log(log_path, block_message)
-        print(block_message)
+        _xt_console_log(block_message)
         return
 
     _set_process_window_title("OMERO Connector")
@@ -9930,7 +10078,7 @@ def XTOmeroConnector(aImarisId):
         )
         # Keep console open when launched by double-click / Imaris
         try:
-            input("Press ENTER to close...")
+            _xt_wait_for_enter_to_close()
         except Exception as exc:
             logger.debug(
                 "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
@@ -9942,9 +10090,9 @@ if __name__ == "__main__":
     try:
         XTOmeroConnector(None)
     except Exception as e:
-        print("Fatal:", e)
+        _xt_console_log("Fatal: " + str(e))
         try:
-            input("Press ENTER to close...")
+            _xt_wait_for_enter_to_close()
         except Exception as exc:
             logger.debug(
                 "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
