@@ -194,6 +194,10 @@ Operational rule:
   bridge and call `FileOpen` on the live Imaris application id. This is still
   same-session native opening; it is not a file association or `Imaris.exe`
   launch.
+- the OMERO.web Host field accepts only a hostname or IP address. Operators
+  must not include `http://`, `https://`, a path, query string, username, or
+  port in Host; the `Use HTTPS` checkbox and Port field are the single source of
+  truth for the connection scheme and port.
 - after a successful OMERO.web login, the connector probes converter
   capabilities before enabling load actions. `OMERO` is shown first only when
   the current server exposes the Imaris connector IMS export endpoint and the
@@ -225,25 +229,45 @@ Operational rule:
   all retries fail, the connector reports that the connection was lost, clears
   OMERO browser state, disables OMERO actions, and returns to the connect-ready
   state.
-- `Autosave settings` is pre-read before the standalone XT dialog renders and
-  remains disabled until the OMERO login succeeds. After a verified connection,
-  the connector writes `.imaris_omero_connector/settings.env` under the
-  detected user home with only host, port, username, HTTPS state, local path,
-  selected converter, and autosave state. Converter changes are written
+- `Load images into Imaris` is enabled only after a verified OMERO connection,
+  an available converter, a structurally valid local path that is not known to
+  be unwritable, and at least one selected entry in the Images panel are all
+  present.
+- `Autosave settings`, `Show log`, and `Search function` are pre-read before
+  the standalone XT dialog renders. `Autosave settings` remains disabled until
+  the OMERO login succeeds. `Show log` defaults to enabled for new users, is
+  immediately written when toggled, and controls whether normal command-window
+  log output is shown on the next startup. `Search function` defaults to
+  disabled for new users and is persisted immediately when toggled; its runtime
+  behavior is reserved for a later connector iteration. After a verified
+  connection, the connector writes `.imaris_omero_connector/settings.env` under
+  the detected user home with only host, port, username, HTTPS state, local
+  path, selected converter, autosave state, show-log state, and search-function
+  state, plus the connector version. The version value is refreshed silently on
+  every standalone XT startup from the same version value shown by the info
+  dialog. If an existing `settings.env` has no matching current version, the
+  connector archives it as `settings.env.old` and creates a fresh settings
+  file; existing generated backups are rotated upward as `settings.env.old2`,
+  `settings.env.old3`, and continuing numeric suffixes before the current file
+  is archived. The migration operates only on the generated
+  `.imaris_omero_connector/settings.env` path and refuses symlinks or
+  non-regular settings and backup files. Converter changes are written
   immediately when autosave is enabled. Passwords are never written to this
   connector settings file, are not retained by the authenticated OMERO.web
   client after a login attempt, and the visible password field clears after a
   successful login. The password reveal button is UI-only, defaults to hidden,
-  and re-hides after 30 seconds. Settings load, parse, create, or write
-  failures are logged through the connector diagnostic logger without aborting
-  the dialog.
+  and re-hides after 30 seconds. Settings load, parse, create, migrate, or
+  write failures are logged through the connector diagnostic logger without
+  aborting the dialog.
 - the standalone XT diagnostic log is `XTOmeroConnector.log` in the same
   `.imaris_omero_connector` directory as `settings.env`, or in that intended
   directory when the settings file does not exist yet. The connector does not
   write its normal diagnostics to the operating-system temp directory. Visible
   command-window messages, including startup blocks, fatal fallbacks,
   console-close prompts, and transfer progress, are mirrored to that same log
-  file. Logs roll at 3 MiB with three bounded backups.
+  file. When `Show log` is disabled, the command window is hidden on supported
+  Windows launches while the file log continues to be written. Logs roll at 3
+  MiB with three bounded backups.
 - the connection-panel info button opens a small modal dialog with the connector
   version, author, and as-is disclaimer. The dialog blocks interaction with the
   main connector window until closed.
