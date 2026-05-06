@@ -28,6 +28,7 @@ import os
 import posixpath
 import random
 import re
+import signal
 import socket
 import stat
 import sys
@@ -1994,6 +1995,61 @@ def _xt_console_log(message="", *, end="\n", flush=False):
         logger.debug(
             "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
         )
+
+
+def _iter_console_interrupt_signals():
+    """Yield console interrupt signals that should not abort Imaris-hosted XT.
+
+    Inputs: none. Output: yielded signal numbers.
+    """
+    seen = set()
+    for name in ("SIGINT", "SIGBREAK"):
+        value = getattr(signal, name, None)
+        if value is not None and value not in seen:
+            seen.add(value)
+            yield value
+
+
+def _ignore_xt_console_interrupt(signum, _frame):
+    """Ignore accidental Ctrl+C/Ctrl+Break in the connector log console.
+
+    Inputs: signal number and frame. Output: None.
+    """
+    _xt_debug(f"Ignored connector command-window interrupt signal {signum}.")
+
+
+def _install_xt_console_interrupt_guard():
+    """Install a scoped guard that prevents console Ctrl+C from aborting XT.
+
+    Inputs: none. Output: previous handler records.
+    """
+    previous_handlers = []
+    for interrupt_signal in _iter_console_interrupt_signals():
+        try:
+            previous = signal.getsignal(interrupt_signal)
+            signal.signal(interrupt_signal, _ignore_xt_console_interrupt)
+            previous_handlers.append((interrupt_signal, previous))
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=exc,
+            )
+    return previous_handlers
+
+
+def _restore_xt_console_interrupt_guard(previous_handlers):
+    """Restore signal handlers replaced by the XT console interrupt guard.
+
+    Inputs: previous handler records. Output: None.
+    """
+    for interrupt_signal, previous in reversed(list(previous_handlers or [])):
+        try:
+            signal.signal(interrupt_signal, previous)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=exc,
+            )
 
 
 def _parse_port(port_value):
@@ -8401,6 +8457,27 @@ class OMEROBrowserDialog:
             return
         self._connect()
 
+    @staticmethod
+    def _clear_client_session_state(client):
+        """Clear retained sensitive session state from an OMERO.web client.
+
+        Inputs: `client`. Output: None.
+        """
+        if client is None:
+            return
+        cookie_jar = getattr(client, "cookie_jar", None)
+        if cookie_jar is not None:
+            with contextlib.suppress(Exception):
+                cookie_jar.clear()
+        for attr, value in (
+            ("password", ""),
+            ("csrf_token", None),
+            ("session_id", None),
+            ("session_key", None),
+        ):
+            with contextlib.suppress(Exception):
+                setattr(client, attr, value)
+
     def _disconnect(
         self,
         status_text="Disconnected",
@@ -8451,11 +8528,13 @@ class OMEROBrowserDialog:
         self._set_status(status_text, status_color)
         self._set_connection_indicator("disconnected")
 
-    def _detect_converter_options_after_connection(self):
+    def _detect_converter_options_after_connection(self, client=None):
         """Populate converter options from verified OMERO and Imaris capabilities.
 
-        Inputs: none. Output: `options`.
+        Inputs: optional OMERO.web `client`. Output: `options`.
         """
+        if client is None:
+            client = self.client
         if _native_imaris_bridge_enabled():
             self._reset_native_bridge_probe_for_converter_detection()
             self._start_native_bridge_probe()
@@ -8481,8 +8560,8 @@ class OMEROBrowserDialog:
         )
         options = []
         omero_available = False
-        if self.client:
-            omero_available = self.client.has_omero_ims_export_capability()
+        if client:
+            omero_available = client.has_omero_ims_export_capability()
         if omero_available:
             options.append("OMERO")
         if can_attempt_imaris_handoff:
@@ -8501,14 +8580,16 @@ class OMEROBrowserDialog:
             _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
         )
 
-    def _detect_folder_export_after_connection(self):
+    def _detect_folder_export_after_connection(self, client=None):
         """Detect folder export availability after connection.
 
-        Inputs: none. Output: `capability`.
+        Inputs: optional OMERO.web `client`. Output: `capability`.
         """
-        if not self.client:
+        if client is None:
+            client = self.client
+        if not client:
             return {"available": False, "reason": "No OMERO.web client is available."}
-        capability = self.client.get_folder_export_capability()
+        capability = client.get_folder_export_capability()
         _xt_debug(
             "Detected OMERO folder export capability "
             f"available={bool(capability.get('available'))}"
@@ -9358,7 +9439,7 @@ class OMEROBrowserDialog:
     def _connect(self):
         """Open the connection for `OMEROBrowserDialog`.
 
-        Inputs: no caller arguments. Output: opens the described state and returns None.
+        Inputs: no caller arguments. Output: starts a background connection setup.
         """
         h = self.host_entry.get().strip()
         p = self.port_entry.get().strip()
@@ -9397,70 +9478,144 @@ class OMEROBrowserDialog:
         self._set_connection_indicator("busy")
 
         scheme = "https" if self.https_var.get() else "http"
-        self.client = OMEROWebClient(h, port, u, pw, scheme=scheme)
+        threading.Thread(
+            target=self._connect_worker,
+            args=(h, port, u, pw, scheme),
+            daemon=True,
+        ).start()
+
+    def _connect_worker(self, host, port, username, password, scheme):
+        """Run OMERO.web login and capability detection off the Tk UI thread.
+
+        Inputs: connection parameters. Output: schedules a UI-thread completion.
+        """
+        client = None
+        try:
+            client = OMEROWebClient(host, port, username, password, scheme=scheme)
+            if not client.connect():
+                self._clear_client_session_state(client)
+                self._invoke_on_ui_thread(
+                    lambda: self._finish_connect_failure(client),
+                    wait=False,
+                )
+                return
+
+            password = ""
+            client.password = ""
+            self._invoke_on_ui_thread(
+                lambda: self._set_status(
+                    "Detecting connector capabilities...",
+                    "#fff3cd",
+                ),
+                wait=False,
+            )
+            projects = client.list_projects()
+            converter_options = self._detect_converter_options_after_connection(client)
+            folder_export_capability = self._detect_folder_export_after_connection(
+                client
+            )
+            self._invoke_on_ui_thread(
+                lambda: self._finish_connect_success(
+                    client,
+                    projects,
+                    converter_options,
+                    folder_export_capability,
+                ),
+                wait=False,
+            )
+        except Exception as exc:
+            self._clear_client_session_state(client)
+            _xt_debug(f"Connection setup failed: {type(exc).__name__}: {exc}")
+            self._invoke_on_ui_thread(
+                lambda: self._finish_connect_failure(client),
+                wait=False,
+            )
+        finally:
+            password = ""
+
+    def _finish_connect_success(
+        self,
+        client,
+        projects,
+        converter_options,
+        folder_export_capability,
+    ):
+        """Apply successful connection setup on the Tk UI thread.
+
+        Inputs: connection artifacts. Output: updates connector UI state.
+        """
+        if not getattr(self, "_connection_in_progress", False):
+            self._clear_client_session_state(client)
+            return
 
         try:
-            if self.client.connect():
-                self._connected = True
-                self._clear_password_entry()
-                self.client.password = ""
-                self._set_connect_button(
-                    "Disconnect",
-                    _tk_constant("NORMAL", "normal"),
-                    "#f39c12",
-                    active_bg="#d68910",
-                )
+            self.client = client
+            self._connected = True
+            self._clear_password_entry()
+            client.password = ""
+            self._set_connect_button(
+                "Disconnect",
+                _tk_constant("NORMAL", "normal"),
+                "#f39c12",
+                active_bg="#d68910",
+            )
+            self._set_connection_indicator("connected")
+            self._apply_loaded_projects(projects)
+            self._set_converter_options(converter_options)
+            self._set_folder_export_capability(
+                folder_export_capability.get("available"),
+                folder_export_capability.get("reason", ""),
+            )
+            if converter_options or folder_export_capability.get("available"):
                 self._set_status("Connected to OMERO", "#d4edda")
-                self._set_connection_indicator("connected")
-                self._schedule_health_ping()
-                self._load_projects()
-                self._set_status("Detecting connector capabilities...", "#fff3cd")
-                converter_options = self._detect_converter_options_after_connection()
-                folder_export_capability = self._detect_folder_export_after_connection()
-                self._set_converter_options(converter_options)
-                self._set_folder_export_capability(
-                    folder_export_capability.get("available"),
-                    folder_export_capability.get("reason", ""),
-                )
-                if converter_options or folder_export_capability.get("available"):
-                    self._set_status("Connected to OMERO", "#d4edda")
-                else:
-                    self._set_status(
-                        "Connected, but no supported connector workflow is available",
-                        "#f8d7da",
-                    )
-                self._enable_autosave_after_verified_connection()
             else:
-                self._connected = False
-                self.client.password = ""
-                self.client.csrf_token = None
-                self.client.session_id = None
-                self.client.session_key = None
-                self.client = None
-                self._set_folder_export_capability(False, "Connect to OMERO first.")
-                self._set_connect_button(
-                    "Connect",
-                    _tk_constant("NORMAL", "normal"),
-                    "#3498db",
-                    active_bg="#2f85c7",
+                self._set_status(
+                    "Connected, but no supported connector workflow is available",
+                    "#f8d7da",
                 )
-                self._set_autosave_settings_control_state(False)
-                self._set_status("Connection failed", "#f8d7da")
-                self._set_connection_indicator("error")
-                self._show_error_dialog(
-                    "Connection Failed",
-                    "Cannot connect to OMERO server.\nPlease check your credentials.",
-                )
+            self._enable_autosave_after_verified_connection()
+            self._schedule_health_ping()
         finally:
             self._connection_in_progress = False
+
+    def _finish_connect_failure(self, client=None):
+        """Restore connect-ready UI after failed background connection setup.
+
+        Inputs: optional failed `client`. Output: updates connector UI state.
+        """
+        self._clear_client_session_state(client)
+        self.client = None
+        self._connected = False
+        self._set_folder_export_capability(False, "Connect to OMERO first.")
+        self._set_connect_button(
+            "Connect",
+            _tk_constant("NORMAL", "normal"),
+            "#3498db",
+            active_bg="#2f85c7",
+        )
+        self._set_autosave_settings_control_state(False)
+        self._set_status("Connection failed", "#f8d7da")
+        self._set_connection_indicator("error")
+        self._connection_in_progress = False
+        self._show_error_dialog(
+            "Connection Failed",
+            "Cannot connect to OMERO server.\nPlease check your credentials.",
+        )
 
     def _load_projects(self):
         """Load the projects for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: loads the described state and returns None.
         """
+        self._apply_loaded_projects(self.client.list_projects())
+
+    def _apply_loaded_projects(self, projects):
+        """Populate the project browser from an already-fetched project list.
+
+        Inputs: `projects`. Output: updates browser lists.
+        """
         self.plist.delete(0, _tk_constant("END", "end"))
-        self.projects_data = self.client.list_projects()
+        self.projects_data = list(projects or [])
         self._pid = None
         self._did = None
         self.datasets_data = []
@@ -10863,6 +11018,7 @@ def XTOmeroConnector(aImarisId):
         _xt_console_log(block_message)
         return
 
+    previous_interrupt_handlers = _install_xt_console_interrupt_guard()
     settings_path = None
     try:
         settings_path = _connector_settings_env_path()
@@ -10906,6 +11062,9 @@ def XTOmeroConnector(aImarisId):
         dialog = OMEROBrowserDialog(vImaris, imaris_id=aImarisId)
         dialog.show()
 
+    except KeyboardInterrupt:
+        _xt_write_log(log_path, "Ignored command-window Ctrl+C during XT runtime.")
+        _xt_console_log("Ignored connector command-window Ctrl+C.")
     except Exception as e:
         tb = traceback.format_exc()
         _xt_write_log(log_path, tb)
@@ -10922,6 +11081,8 @@ def XTOmeroConnector(aImarisId):
                     "Suppressed non-fatal exception in XTOmeroConnector.py",
                     exc_info=exc,
                 )
+    finally:
+        _restore_xt_console_interrupt_guard(previous_interrupt_handlers)
 
 
 if __name__ == "__main__":

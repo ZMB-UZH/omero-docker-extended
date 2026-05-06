@@ -31,6 +31,12 @@ Related docs:
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
 - Long-running OMERO CLI imports use `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` with a 24-hour default so very large structured datasets are not aborted by a short plugin-side subprocess timeout.
 - Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
+- Browser uploads without an explicit Dataset override route top-level/base-path
+  files into a generated `Orphaned_images_base_path_import_<suffix>` Dataset.
+- Folder paths are translated into Dataset names from the relative upload path.
+  Nested folders use backslashes, such as `folderA\subfolderB`.
+- Project selection controls where the created Dataset targets are linked. It
+  does not rename base-path orphan files or folder-derived Dataset names.
 - Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the staged package root that OMERO groups, while ordinary folders still import file-by-file.
 - Heavy import planning for grouped formats is deferred to the background import worker after the final upload response returns, so large `.zarr` dry-run scans do not block a Gunicorn request long enough to trigger worker timeouts.
 - Request-path dataset preparation now prefers the background logical import-unit plan that OMERO/Bio-Formats already produced, so dataset creation stays aligned with grouped/package imports across formats instead of relying on raw upload-path heuristics.
@@ -246,6 +252,12 @@ The same job lifecycle can be driven by external clients such as
 When `dataset_name_override` is present and no `project_id` is supplied, the
 job imports into OMERO root as a single Dataset with the override value as its
 name.
+
+For browser uploads without `dataset_name_override`, folder-derived Dataset
+names still come from the relative upload path. Top-level/base-path files use a
+generated `Orphaned_images_base_path_import_<suffix>` Dataset, including when a
+Project is selected. Project selection only controls where those Dataset targets
+are linked.
 
 ## Code structure
 

@@ -454,6 +454,133 @@ def test_dataset_target_helpers_cover_existing_new_and_planned_units(
     ) == (None, ["Imported Folder"])
 
 
+def test_selected_project_preserves_path_derived_dataset_names(
+    monkeypatch,
+) -> None:
+    """Verify Project selection does not rename path-derived Dataset targets.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on selected-Project
+    path naming regressions.
+    """
+    monkeypatch.setattr(
+        core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
+    )
+
+    job = {
+        "project_id": 9,
+        "project_name": "Project One",
+        "orphan_dataset_name": None,
+    }
+    entries = [
+        {"relative_path": "top-level.ome.tif"},
+        {"relative_path": "folderA/sample.ome.tif"},
+        {"relative_path": "folderA/subfolderB/sample.ome.tif"},
+    ]
+    expected_targets = [
+        "UploadRoot_TEST",
+        "folderA",
+        "folderA\\subfolderB",
+    ]
+
+    assert core_functions._plan_job_dataset_targets(job, entries) == (
+        "UploadRoot_TEST",
+        expected_targets,
+    )
+    assert core_functions._plan_request_job_dataset_targets(
+        {**job, "files": entries}
+    ) == (
+        "UploadRoot_TEST",
+        expected_targets,
+    )
+    assert core_functions._plan_request_job_dataset_targets(
+        {
+            **job,
+            "files": entries,
+            "planned_import_units": [
+                {
+                    "relative_path": "top-level.ome.tif",
+                    "dataset_relative_path": "top-level.ome.tif",
+                    "covered_relative_paths": ["top-level.ome.tif"],
+                },
+                {
+                    "relative_path": "folderA/sample.ome.tif",
+                    "dataset_relative_path": "folderA/sample.ome.tif",
+                    "covered_relative_paths": ["folderA/sample.ome.tif"],
+                },
+                {
+                    "relative_path": "folderA/subfolderB/sample.ome.tif",
+                    "dataset_relative_path": "folderA/subfolderB/sample.ome.tif",
+                    "covered_relative_paths": [
+                        "folderA/subfolderB/sample.ome.tif",
+                    ],
+                },
+            ],
+        }
+    ) == (
+        "UploadRoot_TEST",
+        expected_targets,
+    )
+
+
+def test_request_path_dataset_preparation_links_path_targets_to_selected_project(
+    monkeypatch,
+) -> None:
+    """Verify request-path preparation links path-named targets to a Project.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on selected-Project
+    Dataset preparation regressions.
+    """
+
+    created_targets = []
+
+    def get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        """Record request-path Dataset creation requests.
+
+        Inputs: `conn`, `name`, `dataset_map`, `project_id`. Output: Dataset ID.
+        """
+        created_targets.append((name, project_id))
+        return dataset_map.setdefault(name, len(dataset_map) + 21)
+
+    monkeypatch.setattr(
+        core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
+    )
+    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(core_functions, "_get_or_create_dataset", get_or_create_dataset)
+
+    job = {
+        "job_id": "e" * 32,
+        "project_id": 9,
+        "project_name": "Project One",
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+        "files": [
+            {"relative_path": "top-level.ome.tif"},
+            {"relative_path": "folderA/sample.ome.tif"},
+            {"relative_path": "folderA/subfolderB/sample.ome.tif"},
+        ],
+    }
+
+    prepared_job, error = core_functions._prepare_request_job_import_datasets(
+        job["job_id"],
+        job,
+        conn=SimpleNamespace(),
+    )
+
+    assert prepared_job is job
+    assert error is None
+    assert created_targets == [
+        ("UploadRoot_TEST", 9),
+        ("folderA", 9),
+        ("folderA\\subfolderB", 9),
+    ]
+    assert job["orphan_dataset_name"] == "UploadRoot_TEST"
+    assert job["dataset_map"] == {
+        "UploadRoot_TEST": 21,
+        "folderA": 22,
+        "folderA\\subfolderB": 23,
+    }
+
+
 def test_request_path_dataset_preparation_covers_success_and_failure(
     monkeypatch,
 ) -> None:
