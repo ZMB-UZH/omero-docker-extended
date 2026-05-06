@@ -2543,6 +2543,50 @@ def test_rounded_button_redraw_omits_internal_horizontal_strokes():
     assert button._canvas.lines == []
 
 
+def test_tk_system_colors_are_resolved_before_photoimage_pixels():
+    """Verify Tk system colors are converted before PhotoImage pixel output.
+
+    Inputs: repository fixtures. Output: fails on system color regressions.
+    """
+    module = _load_xt_module()
+
+    class _Widget:
+        """Fake Tk widget that resolves a Windows system color."""
+
+        @staticmethod
+        def winfo_rgb(value):
+            """Resolve one symbolic Tk color.
+
+            Inputs: `value`. Output: 16-bit RGB tuple. Raises: ValueError.
+            """
+            if value.lower() == "systembuttonface":
+                return (0xF0F0, 0xF0F0, 0xF0F0)
+            raise ValueError(value)
+
+    assert module._resolve_tk_color(_Widget(), "SystemButtonFace") == "#f0f0f0"
+    assert (
+        module._circle_pixel_color(
+            distance=100,
+            radius=4,
+            fill="#ffffff",
+            outline="#000000",
+            background=module._resolve_tk_color(_Widget(), "SystemButtonFace"),
+        )
+        == "#f0f0f0"
+    )
+
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    circle_source = source[
+        source.index("def _antialiased_circle_image(") : source.index(
+            "def _normalized_tk_state("
+        )
+    ]
+    assert "_resolve_tk_color(master, _widget_background(master))" in circle_source
+    assert "_resolve_tk_color(master, fill, fallback=background)" in circle_source
+    assert "_resolve_tk_color(master, outline, fallback=fill)" in circle_source
+    assert "bg=_resolve_tk_color(master, _widget_background(master))" in source
+
+
 def test_browser_dialog_places_folder_selector_inside_connection_settings():
     """Verify folder selector UI stays inside the connection settings panel.
 
@@ -3022,7 +3066,7 @@ def test_status_text_aligns_with_load_button_start():
     )
     assert "padx=STATUS_TEXT_PAD,\n            pady=5," in source
     assert "BOTTOM_PROGRESS_RESERVED_HEIGHT = 12" in source
-    assert "bg=_widget_background(self.root)" in source
+    assert "bg=_resolve_tk_color(self.root, _widget_background(self.root))" in source
     assert (
         "height=BOTTOM_PROGRESS_RESERVED_HEIGHT,\n            bg=STATUS_NEUTRAL_BG"
         not in source
@@ -6481,6 +6525,7 @@ def test_windows_platform_status_rejects_older_or_unreliable_platforms(
 
 
 def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
+    tmp_path,
     monkeypatch,
     capsys,
 ):
@@ -6490,6 +6535,10 @@ def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
     """
     module = _load_xt_module()
     log_calls = []
+    monkeypatch.setenv("HOME", str(tmp_path))
+    expected_log_path = str(
+        tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME / module.XT_LOG_FILE_NAME
+    )
     unsupported = module._WindowsPlatformStatus(
         supported=False,
         message=(
@@ -6499,11 +6548,6 @@ def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
     )
 
     monkeypatch.setattr(module, "_windows_platform_status", lambda: unsupported)
-    monkeypatch.setattr(
-        module,
-        "_xt_log_path",
-        lambda: r"C:\Temp\XTOmeroConnector_20260505.log",
-    )
     monkeypatch.setattr(
         module,
         "_xt_write_log",
@@ -6545,7 +6589,7 @@ def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
     assert "Windows 10 or later" in captured.out
     assert log_calls == [
         (
-            r"C:\Temp\XTOmeroConnector_20260505.log",
+            expected_log_path,
             "XTOmeroConnector startup blocked: " + unsupported.message,
         )
     ]
@@ -6568,31 +6612,147 @@ def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
     assert module.is_ims_file(f"{ims_path}\x00suffix") is False
 
 
-def test_xt_write_log_accepts_only_connector_logs_in_temp_root(tmp_path, monkeypatch):
-    """Verify XT write log accepts only connector logs in temp root.
+def test_xt_write_log_uses_settings_directory_and_rejects_unsafe_paths(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify XT write log stays in the connector settings directory.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in XT write log accepts only connector logs in temp root.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on unsafe log path regressions.
     """
     module = _load_xt_module()
-    monkeypatch.setattr(module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     log_path = Path(module._xt_log_path())
+    settings_dir = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME
+    assert log_path == settings_dir / module.XT_LOG_FILE_NAME
+
     module._xt_write_log(str(log_path), "first line")
     assert log_path.read_text(encoding="utf-8") == "first line\n"
+    assert settings_dir.exists()
 
-    outside_path = tmp_path.parent / "XTOmeroConnector_outside.log"
+    outside_path = tmp_path / module.XT_LOG_FILE_NAME
     module._xt_write_log(str(outside_path), "outside")
     assert not outside_path.exists()
 
-    wrong_name = tmp_path / "unrelated.log"
+    wrong_name = settings_dir / "unrelated.log"
     module._xt_write_log(str(wrong_name), "wrong name")
     assert not wrong_name.exists()
 
-    symlink_path = tmp_path / "XTOmeroConnector_link.log"
+    log_path.unlink()
+    symlink_path = settings_dir / module.XT_LOG_FILE_NAME
     symlink_target = tmp_path.parent / "connector-link-target.log"
     symlink_path.symlink_to(symlink_target)
     module._xt_write_log(str(symlink_path), "through symlink")
     assert not symlink_target.exists()
+
+
+def test_xt_console_log_mirrors_command_window_output_to_settings_log(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Verify visible command-window output is mirrored to the rolling settings log.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, and `capsys`. Output: fails on console/log mirroring regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    module._XT_RUNTIME_STATE.log_path = None
+
+    module._xt_console_log("visible connector message")
+
+    captured = capsys.readouterr()
+    log_path = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME / module.XT_LOG_FILE_NAME
+    assert "visible connector message" in captured.out
+    assert module._XT_RUNTIME_STATE.log_path == str(log_path)
+    assert "visible connector message" in log_path.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(builtins, "input", lambda: "")
+    module._xt_wait_for_enter_to_close()
+    captured = capsys.readouterr()
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "Press ENTER to close..." in captured.out
+    assert "Press ENTER to close..." in log_text
+
+
+def test_xt_console_output_is_centralized_for_file_mirroring():
+    """Verify direct command-window prints stay centralized through `_xt_console_log`.
+
+    Inputs: repository source text. Output: raw print call locations that would bypass log mirroring.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    offenders = []
+
+    class _PrintVisitor(ast.NodeVisitor):
+        """Collect print calls outside the XT console/log mirror helper."""
+
+        def __init__(self):
+            """Create `_PrintVisitor`.
+
+            Inputs: none. Output: None.
+            """
+            self.function_stack = []
+
+        def visit_FunctionDef(self, node):
+            """Visit a function definition.
+
+            Inputs: `node`. Output: None.
+            """
+            self.function_stack.append(node.name)
+            self.generic_visit(node)
+            self.function_stack.pop()
+
+        def visit_Call(self, node):
+            """Visit a call expression.
+
+            Inputs: `node`. Output: None.
+            """
+            if (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "print"
+                and self.function_stack[-1:] != ["_xt_console_log"]
+            ):
+                offenders.append(node.lineno)
+            self.generic_visit(node)
+
+    _PrintVisitor().visit(tree)
+
+    assert offenders == []
+
+
+def test_xt_debug_initializes_settings_directory_log_and_rotates(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Verify XT debug writes a bounded rolling log beside settings.env.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, and `capsys`. Output: fails on rolling log regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(module, "XT_LOG_MAX_BYTES", 64)
+    monkeypatch.setattr(module, "XT_LOG_BACKUP_COUNT", 2)
+    module._XT_RUNTIME_STATE.log_path = None
+
+    module._xt_debug("a" * 20)
+    capsys.readouterr()
+    log_path = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME / module.XT_LOG_FILE_NAME
+    assert module._XT_RUNTIME_STATE.log_path == str(log_path)
+    assert log_path.exists()
+
+    module._xt_write_log(str(log_path), "b" * 50)
+    module._xt_write_log(str(log_path), "c" * 50)
+
+    current = log_path.read_text(encoding="utf-8")
+    first_backup = log_path.with_name(f"{log_path.name}.1").read_text(encoding="utf-8")
+    second_backup = log_path.with_name(f"{log_path.name}.2").read_text(encoding="utf-8")
+    assert "c" * 50 in current
+    assert "b" * 50 in first_backup
+    assert "a" * 20 in second_backup
+    assert not log_path.with_name(f"{log_path.name}.3").exists()
 
 
 def test_browser_dialog_reenable_load_button_uses_normal_state():
