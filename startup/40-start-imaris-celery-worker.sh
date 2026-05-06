@@ -9,21 +9,34 @@ if [[ "${use_celery}" != "true" ]]; then
     exit 0
 fi
 
-# Find venv dynamically - same method as Dockerfile uses
-venv_dir=""
-if [[ -d /opt/omero/web ]]; then
-    venv_dir="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' -print | sort -V | tail -n 1)"
-fi
+web_root="${OMERO_WEB_ROOT:?OMERO_WEB_ROOT is required for OMERO.web virtualenv discovery}"
 
-if [[ -z "${venv_dir}" || ! -d "${venv_dir}" ]]; then
-    # Fallback to env variable
-    venv_dir="/opt/omero/web/${OMERO_WEB_VENV:-venv}"
-fi
+# Resolve OMERO.web virtualenv directory. Inputs: environment variables. Output: stdout path.
+resolve_web_venv_dir() {
+    local configured_venv="${OMERO_WEB_VENV:-}"
+    local candidate=""
+
+    if [[ -n "${configured_venv}" ]]; then
+        if [[ "${configured_venv}" == /* ]]; then
+            candidate="${configured_venv}"
+        else
+            candidate="${web_root%/}/${configured_venv}"
+        fi
+        if [[ -d "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    fi
+
+    find "${web_root}" -maxdepth 1 -type d -name 'venv*' -print 2>/dev/null | sort -V | tail -n 1
+}
+
+venv_dir="$(resolve_web_venv_dir)"
 
 if [[ ! -d "${venv_dir}" ]]; then
     echo "ERROR: Could not find OMERO.web virtualenv" >&2
-    echo "Tried: /opt/omero/web/venv* and /opt/omero/web/${OMERO_WEB_VENV:-venv}" >&2
-    ls -la /opt/omero/web/ >&2 || true
+    echo "Tried: ${web_root}/venv* and OMERO_WEB_VENV=${OMERO_WEB_VENV:-unset}" >&2
+    ls -la "${web_root}/" >&2 || true
     exit 1
 fi
 

@@ -59,10 +59,6 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![GitHub commit activity]("),
-            badge_block.index("[![DeepSource]("),
-        )
-        self.assertLess(
-            badge_block.index("[![DeepSource]("),
             badge_block.index("[![Codecov]("),
         )
         self.assertLess(
@@ -105,6 +101,8 @@ class ReadmeBadgeGenerationTests(TestCase):
             badge_block.index("[![GitHub commit activity]("),
             badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
         )
+        self.assertNotIn("[![DeepSource](", badge_block)
+        self.assertNotIn("active+issues", badge_block)
 
     def test_generated_commit_activity_badge_uses_repo_slug_and_default_branch(
         self,
@@ -135,14 +133,8 @@ class ReadmeBadgeGenerationTests(TestCase):
             "https://github.com/example-owner/example-repo/commits/main",
             badge_block,
         )
-        self.assertIn(
-            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/?label=active+issues&show_trend=true",
-            badge_block,
-        )
-        self.assertIn(
-            "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended/",
-            badge_block,
-        )
+        self.assertNotIn("https://app.deepsource.com/", badge_block)
+        self.assertNotIn("active+issues", badge_block)
         self.assertIn(
             "https://github.com/example-owner/example-repo/actions/workflows/security-code-scanning.yml",
             badge_block,

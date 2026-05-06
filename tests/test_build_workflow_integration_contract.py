@@ -1243,6 +1243,35 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             script_text,
         )
 
+    def test_server_bootstrap_persists_ims_export_dir_for_processor_scripts(
+        self,
+    ) -> None:
+        """Verify server bootstrap persists IMS export dir for processor scripts.
+
+        Inputs: repository fixtures. Output: fails on regressions in IMS export
+        path handling for Processor subprocesses.
+        """
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
+            encoding="utf-8"
+        )
+        celery_env_text = (
+            self.repo_root / "env" / "omero-celery_example.env"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('OMERO_IMS_EXPORT_CONFIG_KEY="omero.ims.export.dir"', script_text)
+        self.assertIn("expected_ims_export_root()", script_text)
+        self.assertIn("validate_ims_export_configuration", script_text)
+        self.assertIn("configure_ims_export_runtime_paths", script_text)
+        self.assertIn(
+            'run_omero config set "${OMERO_IMS_EXPORT_CONFIG_KEY}" "${export_root}"',
+            script_text,
+        )
+        self.assertIn("OMERO_IMS_EXPORT_DIR=/OMERO/ImarisExports", env_text)
+        self.assertNotIn("OMERO_IMS_EXPORT_DIR=", celery_env_text)
+
     # ------------------------------------------------------------------
     # Coverage pipeline completeness
     # ------------------------------------------------------------------

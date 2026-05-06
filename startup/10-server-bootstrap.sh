@@ -136,6 +136,7 @@ DROPBOX_USER_DIR_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-user-dir-sync.statu
 DROPBOX_USER_DIR_SYNC_HELPER="${SCRIPT_DIR}/dropbox_user_dir_sync.py"
 DROPBOX_ICE_BOOTSTRAP_STATUS_FILE="${SERVER_VAR_DIR}/dropbox-ice-bootstrap.status"
 JOB_SERVICE_GROUP_SYNC_HELPER="${SCRIPT_DIR}/job_service_group_sync.py"
+OMERO_IMS_EXPORT_CONFIG_KEY="omero.ims.export.dir"
 # Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
@@ -358,6 +359,35 @@ validate_managed_repository_configuration() {
     fi
 }
 
+# Return expected IMS export root. Inputs: shell arguments and environment. Output: stdout path.
+expected_ims_export_root() {
+    local configured_export_dir=""
+    local normalized_export_dir=""
+
+    configured_export_dir="$(trim_whitespace "${OMERO_IMS_EXPORT_DIR:-}")"
+    if [[ -z "${configured_export_dir}" ]]; then
+        echo "ERROR: OMERO_IMS_EXPORT_DIR must be set and must not be empty." >&2
+        return 1
+    fi
+
+    normalized_export_dir="$(normalize_dir_path "${configured_export_dir}")" || {
+        echo "ERROR: OMERO_IMS_EXPORT_DIR must be a non-empty absolute path, got: '${configured_export_dir}'" >&2
+        return 1
+    }
+
+    if [[ "${normalized_export_dir}" != /* ]]; then
+        echo "ERROR: OMERO_IMS_EXPORT_DIR must be an absolute path, got: '${configured_export_dir}'" >&2
+        return 1
+    fi
+
+    printf "%s\n" "${normalized_export_dir}"
+}
+
+# Validate IMS export runtime configuration. Inputs: shell arguments and environment. Output: command status.
+validate_ims_export_configuration() {
+    expected_ims_export_root >/dev/null || exit 1
+}
+
 # Ensure server data runtime directories. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_server_data_runtime_directories() {
     local data_root=""
@@ -374,6 +404,16 @@ ensure_server_data_runtime_directories() {
     ensure_service_user_directory "${data_root}" "OMERO data"
     ensure_service_user_directory "${data_root}/FullText" "OMERO full text index"
     ensure_service_user_directory "$(expected_managed_repository_root)" "OMERO managed repository"
+}
+
+# Configure IMS export runtime paths. Inputs: shell arguments and environment. Output: command status and side effects.
+configure_ims_export_runtime_paths() {
+    local export_root=""
+
+    export_root="$(expected_ims_export_root)" || exit 1
+    ensure_service_user_directory "${export_root}" "OMERO IMS export"
+    run_omero config set "${OMERO_IMS_EXPORT_CONFIG_KEY}" "${export_root}"
+    log "Configured ${OMERO_IMS_EXPORT_CONFIG_KEY}=${export_root}"
 }
 
 # Verify managed repository runtime safety. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -2819,12 +2859,14 @@ main() {
     validate_binary_repository_cleanse_configuration
     validate_repository_lock_cleanup_configuration
     validate_rendering_cache_cleanup_configuration
+    validate_ims_export_configuration
     validate_zarr_pixel_buffer_configuration
     validate_repo_root_sync_configuration
     validate_dropbox_user_dir_sync_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
+    configure_ims_export_runtime_paths
     configure_import_runtime_paths
     ensure_certificate_sans
     cleanup_stale_repository_lock_files

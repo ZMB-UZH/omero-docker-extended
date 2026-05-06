@@ -20,6 +20,41 @@ LEGACY_CONFIG_ALIASES = {
 }
 
 
+def version_sort_key(path: Path) -> tuple[tuple[int, int | str], ...]:
+    """Return a natural sort key for versioned paths.
+
+    Inputs: `path`. Output: tuple key.
+    """
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"(\d+)", str(path))
+        if part
+    )
+
+
+def resolve_omeroweb_root() -> Path:
+    """Resolve the OMERO.web root from the environment contract.
+
+    Inputs: none. Output: `Path`. Raises: RuntimeError when the contract is
+    missing.
+    """
+    raw_root = os.environ.get("OMERO_WEB_ROOT")
+    if not raw_root or raw_root.strip() == "":
+        raise RuntimeError(
+            "OMERO_WEB_ROOT is required for OMERO.web startup path discovery"
+        )
+    return Path(raw_root)
+
+
+def resolve_venv_root(web_root: Path, configured_venv: str) -> Path:
+    """Resolve a configured OMERO.web virtualenv root.
+
+    Inputs: `web_root`, `configured_venv`. Output: `Path`.
+    """
+    venv_root = Path(configured_venv)
+    return venv_root if venv_root.is_absolute() else web_root / venv_root
+
+
 def resolve_omero_bin() -> str:
     """Resolve the OMERO bin.
 
@@ -34,11 +69,18 @@ def resolve_omero_bin() -> str:
         return from_path
 
     configured_venv = os.environ.get("OMERO_WEB_VENV")
+    web_root = resolve_omeroweb_root()
     candidates: list[Path] = []
     if configured_venv:
-        candidates.append(Path("/opt/omero/web") / configured_venv / "bin" / "omero")
+        candidates.append(
+            resolve_venv_root(web_root, configured_venv) / "bin" / "omero"
+        )
     candidates.extend(
-        sorted(Path("/opt/omero/web").glob("venv*/bin/omero"), reverse=True)
+        sorted(
+            web_root.glob("venv*/bin/omero"),
+            key=version_sort_key,
+            reverse=True,
+        )
     )
 
     for candidate in candidates:
@@ -65,11 +107,16 @@ def resolve_python_bin(omero_bin: str) -> str:
             return str(candidate)
 
     configured_venv = os.environ.get("OMERO_WEB_VENV")
+    web_root = resolve_omeroweb_root()
     candidates: list[Path] = []
     if configured_venv:
-        venv_root = Path("/opt/omero/web") / configured_venv / "bin"
+        venv_root = resolve_venv_root(web_root, configured_venv) / "bin"
         candidates.extend([venv_root / "python3", venv_root / "python"])
-    for venv_root in sorted(Path("/opt/omero/web").glob("venv*/bin"), reverse=True):
+    for venv_root in sorted(
+        web_root.glob("venv*/bin"),
+        key=version_sort_key,
+        reverse=True,
+    ):
         candidates.extend([venv_root / "python3", venv_root / "python"])
 
     for candidate in candidates:

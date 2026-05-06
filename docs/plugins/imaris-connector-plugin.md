@@ -93,6 +93,20 @@ Defined in `env/omeroserver.env`:
 | `BIOFORMATS_VERSION`   | Bio-Formats release version for `bioformats_package.jar` | `8.5.0`                |
 | `OMERO_IMS_EXPORT_DIR` | IMS export output directory                              | `/OMERO/ImarisExports` |
 
+`OMERO_IMS_EXPORT_DIR` is required at runtime. The OMERO.server export script
+reads the startup-persisted `omero.ims.export.dir` server configuration because
+OMERO Processor does not pass arbitrary Compose environment variables into
+script subprocesses. Startup validates `OMERO_IMS_EXPORT_DIR`, ensures the
+directory is service-user writable, and writes that OMERO config key before the
+server starts. Missing or invalid configuration fails fast instead of silently
+writing IMS files to a hard-coded fallback directory.
+
+The OMERO.web Celery task resolves the `omero` CLI from explicit overrides
+(`OMERO_WEB_OMERO_BIN`, then `OMERO_BIN`), then from the configured
+`OMERO_WEB_ROOT`/`OMERO_WEB_VENV` contract and the newest versioned virtualenv
+under `OMERO_WEB_ROOT`, and only then from `PATH`. This keeps updates across
+versioned OMERO.web virtualenv names installation-agnostic.
+
 Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env`):
 
 - `OMERO_WEB_JOB_SERVICE_USERNAME` / `OMERO_JOB_SERVICE_USERNAME`

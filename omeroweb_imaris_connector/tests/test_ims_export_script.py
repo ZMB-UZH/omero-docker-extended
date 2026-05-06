@@ -222,27 +222,56 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
         module._sha256_file(str(tmp_path))
 
 
-def test_export_root_and_checksum_helpers_cover_fallback_cleanup_and_altsep(
+def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
     monkeypatch, tmp_path
 ) -> None:
-    """Check export root and checksum helpers cover fallback cleanup and altsep cleanup behavior.
+    """Check export root and checksum helpers require config and cover altsep cleanup.
 
-    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in export root and checksum helpers cover fallback cleanup and altsep.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on
+    regressions in export root config handling, checksum helpers, and altsep cleanup.
     """
     module = _load_script_module()
-    printed = []
+    export_root = str(tmp_path / "exports")
 
-    monkeypatch.setattr(
-        module,
-        "get_env",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("missing env")),
-    )
-    monkeypatch.setattr("builtins.print", lambda *args, **kwargs: printed.append(args))
+    class _ConfigService:
+        """Test double for export root config service."""
 
-    assert module._get_export_root() == "/OMERO/ImarisExports"
-    assert any(
-        "Falling back to default" in " ".join(map(str, line)) for line in printed
+        def __init__(self, value):
+            """Create `_ConfigService` with `value`.
+
+            Inputs: `value`. Output: None.
+            """
+            self.value = value
+            self.calls = []
+
+        def getConfigValue(self, key):
+            """Return fake config value and record the requested key.
+
+            Inputs: `key`. Output: configured export root.
+            """
+            self.calls.append(key)
+            return self.value
+
+    config_service = _ConfigService(export_root)
+    conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(getConfigService=lambda: config_service)
+        )
     )
+    assert module._get_export_root(conn) == export_root
+    assert config_service.calls == [module._CONFIG_IMS_EXPORT_DIR]
+
+    missing_config = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(getConfigService=lambda: _ConfigService(""))
+        )
+    )
+    with pytest.raises(RuntimeError, match="not configured"):
+        module._get_export_root(missing_config)
+    with pytest.raises(RuntimeError, match="absolute path"):
+        module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, "relative")
+    with pytest.raises(RuntimeError, match="invalid characters"):
+        module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, "/bad\x00path")
 
     monkeypatch.setattr(module.os, "altsep", "\\", raising=False)
     assert (
@@ -1414,7 +1443,9 @@ def test_run_script_sets_outputs_and_attaches_exported_file(
             outputs["closed"] = True
 
     client = _Client()
-    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(
+        module, "_get_export_root", lambda current_conn: str(export_root)
+    )
     monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
     monkeypatch.setattr(
         module.scripts,
@@ -1509,7 +1540,9 @@ def test_run_script_survives_attachment_failure_and_reports_export_path(
             """
             outputs["closed"] = True
 
-    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(
+        module, "_get_export_root", lambda current_conn: str(export_root)
+    )
     monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
     monkeypatch.setattr(
         module.scripts,
@@ -1601,7 +1634,9 @@ def test_run_script_covers_missing_image_output_failure_and_top_level_errors(
         createFileAnnfromLocalFile=lambda *args, **kwargs: file_annotation,
     )
 
-    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(
+        module, "_get_export_root", lambda current_conn: str(export_root)
+    )
     monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
     monkeypatch.setattr(
         module.scripts, "client", lambda *args, **kwargs: client, raising=False
