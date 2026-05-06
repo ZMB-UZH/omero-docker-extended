@@ -2790,6 +2790,7 @@ def test_browser_panels_use_draggable_splitters_with_fraction_limits():
         in source
     )
     assert "self._browser_sash_drag_index = None" in source
+    assert "@staticmethod\n    def _current_window_minimum_size(root):" in source
     assert 'cursor="sb_h_double_arrow"' in source
     assert "p_frame.grid(row=0, column=0, sticky=tk.NSEW)" in source
     assert "d_frame.grid(row=0, column=2, sticky=tk.NSEW)" in source
