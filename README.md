@@ -227,10 +227,13 @@ OMERO image export to Imaris (.ims) format.
 - ImarisConvertBioformats integration (compiled from source in server image)
 - Standalone XT connector requires Windows 10 or newer on the Imaris
   workstation and includes a typed folder path selector for loading images into
-  Imaris and exporting local folders to OMERO; user settings autosave stores
-  host, port, username, HTTPS state, path, and autosave state only, never the
-  password, and silent read-only health checks return the UI to connect-ready
-  state if the OMERO connection is lost after retries
+  Imaris. `Export folder to OMERO` always opens the native folder chooser and
+  can use the typed path only as the first chooser location hint for that
+  session. User settings autosave stores host, port, username, HTTPS state,
+  path, selected converter, and autosave state only, never the password. The
+  password field clears after a successful login, and silent read-only health
+  checks return the UI to connect-ready state if the OMERO connection is lost
+  after retries.
 - Container package inspection helper: `helper_scripts_debian/docker_image_analysis.sh`
 
 ### Shared Library (`omero_plugin_common`)

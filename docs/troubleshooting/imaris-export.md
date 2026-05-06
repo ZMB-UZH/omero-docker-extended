@@ -199,14 +199,20 @@ Operational rule:
   handoff target. The final native-open readiness check remains at the
   pre-download boundary so failed handoff support stops the workflow before any
   download or server-side conversion starts.
-- the local path field is the source of truth for both loading images into
-  Imaris and exporting local folders to OMERO. The `Select` button opens the
-  native Tk directory chooser, replaces the typed value only when the operator
-  confirms a folder, and immediately verifies that Imaris can write there.
-  Cancelling preserves the typed value. Typed paths must be structurally valid
-  absolute local paths and are write-checked when `Load images into Imaris` is
-  clicked; folder export still rejects filesystem roots, malformed paths, and
-  missing directories before starting uploads.
+- the local path field is the source of truth for loading images into Imaris
+  and for the first folder-export chooser location hint only. The path-row
+  `Select` button opens the native Tk directory chooser, replaces the typed
+  value only when the operator confirms a folder, and immediately verifies that
+  Imaris can write there. Cancelling preserves the typed value. Typed paths
+  must be structurally valid absolute local paths and are write-checked when
+  `Load images into Imaris` is clicked.
+- `Export folder to OMERO` always opens the native Tk directory chooser before
+  showing the `Confirm folder export` prompt. On the first export attempt in a
+  connector session, a background-validated typed local path may be used as the
+  chooser's initial directory. Later export attempts use the last folder the
+  operator selected in the export chooser, even if the path field changes.
+  Folder export still rejects filesystem roots, malformed paths, and missing
+  directories before starting uploads.
 - while connected, the XT connector runs silent periodic read-only OMERO.web
   health checks. A transient failure is retried before the UI is changed; if
   all retries fail, the connector reports that the connection was lost, clears
@@ -216,9 +222,17 @@ Operational rule:
   remains disabled until the OMERO login succeeds. After a verified connection,
   the connector writes `.imaris_omero_connector/settings.env` under the
   detected user home with only host, port, username, HTTPS state, local path,
-  and autosave state. Passwords are never written to this connector settings
-  file. Settings load, parse, create, or write failures are logged through the
-  connector diagnostic logger without aborting the dialog.
+  selected converter, and autosave state. Converter changes are written
+  immediately when autosave is enabled. Passwords are never written to this
+  connector settings file, are not retained by the authenticated OMERO.web
+  client after a login attempt, and the visible password field clears after a
+  successful login. The password reveal button is UI-only, defaults to hidden,
+  and re-hides after 30 seconds. Settings load, parse, create, or write
+  failures are logged through the connector diagnostic logger without aborting
+  the dialog.
+- the connection-panel info button opens a small modal dialog with the connector
+  version, author, and as-is disclaimer. The dialog blocks interaction with the
+  main connector window until closed.
 - `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
   available. This mode downloads the original archived file and hands it to the
   running Imaris application through `FileOpen`, allowing Imaris to handle

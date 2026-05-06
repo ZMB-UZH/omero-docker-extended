@@ -176,7 +176,18 @@ CONNECTOR_INFO_ICON_FG = "#2f3a45"
 CONNECTOR_PANEL_ICON_SIZE = 36
 CONNECTOR_PANEL_ICON_FRAME_HEIGHT = 42
 CONNECTOR_PANEL_ICON_FONT = ("Segoe UI", 13, "bold")
+PASSWORD_REVEAL_DURATION_MS = 30000
+PASSWORD_REVEAL_BUTTON_SIZE = 26
+PASSWORD_REVEAL_ICON_BG = "#f8fafc"
+PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
+PASSWORD_REVEAL_ICON_FG = "#425466"
 AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
+CONVERTER_MENU_WIDTH = 14
+BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
+BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)
+BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)
+BROWSER_SPLITTER_WIDTH = 8
+BOTTOM_PROGRESS_RESERVED_HEIGHT = 8
 FOLDER_PATH_SELECT_BG = "#718096"
 FOLDER_PATH_SELECT_ACTIVE_BG = "#60738a"
 FOLDER_PATH_PLACEHOLDER = "Type or select local path..."
@@ -195,12 +206,22 @@ AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
 AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
     "Autosave settings could not update the OMERO connector settings file."
 )
+CONNECTOR_INFO_TITLE = "OMERO Connector"
+CONNECTOR_INFO_VERSION = "1.0"
+CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"
+CONNECTOR_INFO_DISCLAIMER = (
+    "This software is provided as-is, without warranty of any kind, express or "
+    "implied. Use of the connector is at the user's own risk; the authors and "
+    "contributors are not liable for data loss, service interruption, or other "
+    "damages arising from its use."
+)
 CONNECTOR_SETTINGS_KEY_PREFIX = "OMERO_CONNECTOR_"
 CONNECTOR_SETTINGS_HOST_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HOST"
 CONNECTOR_SETTINGS_PORT_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PORT"
 CONNECTOR_SETTINGS_USERNAME_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "USER" + "NAME"
 CONNECTOR_SETTINGS_HTTPS_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HTTPS"
 CONNECTOR_SETTINGS_PATH_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PATH"
+CONNECTOR_SETTINGS_CONVERTER_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "CONVERTER"
 CONNECTOR_SETTINGS_AUTOSAVE_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "AUTOSAVE_SETTINGS"
 CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_HOST_KEY,
@@ -208,6 +229,7 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_USERNAME_KEY,
     CONNECTOR_SETTINGS_HTTPS_KEY,
     CONNECTOR_SETTINGS_PATH_KEY,
+    CONNECTOR_SETTINGS_CONVERTER_KEY,
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
 )
 _XT_DLL_DIR_HANDLES: List[Any] = []
@@ -2157,6 +2179,65 @@ def _normalized_tk_state(state):
     return str(state or _tk_constant("NORMAL", "normal")).lower()
 
 
+def _normalized_browser_panel_fractions(fractions):
+    """Return valid browser-panel fractions that sum to one.
+
+    Inputs: `fractions`. Output: tuple of three floats.
+    """
+    try:
+        values = [float(value) for value in fractions]
+    except (TypeError, ValueError):
+        values = []
+    if len(values) != 3 or any(value <= 0 for value in values):
+        return tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+    total = sum(values)
+    if total <= 0:
+        return tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+    normalized = [value / total for value in values]
+    minimum = BROWSER_PANEL_MIN_FRACTION
+    maximum = BROWSER_PANEL_MAX_FRACTION
+    tolerance = 1e-9
+    if any(
+        value < minimum - tolerance or value > maximum + tolerance
+        for value in normalized
+    ):
+        return tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+    return tuple(normalized)
+
+
+def _resize_browser_panel_fractions(fractions, sash_index, sash_fraction):
+    """Return panel fractions after dragging one browser splitter.
+
+    Inputs: `fractions`, `sash_index`, `sash_fraction`. Output: tuple of floats.
+    """
+    current = list(_normalized_browser_panel_fractions(fractions))
+    minimum = BROWSER_PANEL_MIN_FRACTION
+    maximum = BROWSER_PANEL_MAX_FRACTION
+    target = max(0.0, min(1.0, float(sash_fraction)))
+
+    if sash_index == 0:
+        pair_total = current[0] + current[1]
+        lower = max(minimum, pair_total - maximum)
+        upper = min(maximum, pair_total - minimum)
+        first = max(lower, min(upper, target))
+        current[0] = first
+        current[1] = pair_total - first
+    elif sash_index == 1:
+        first = current[0]
+        pair_total = current[1] + current[2]
+        second_target = target - first
+        lower = max(minimum, pair_total - maximum)
+        upper = min(maximum, pair_total - minimum)
+        second = max(lower, min(upper, second_target))
+        current[1] = second
+        current[2] = pair_total - second
+    else:
+        raise ValueError("sash_index must be 0 or 1")
+
+    total = sum(current)
+    return tuple(value / total for value in current)
+
+
 class _RoundedButton:
     """Canvas-backed button with consistent rounded 3D states."""
 
@@ -2252,36 +2333,61 @@ class _RoundedButton:
         """
         if cnf:
             kwargs.update(cnf)
+        redraw_needed = False
+        cursor_needed = False
         for key, value in kwargs.items():
             if key in {"bg", "background"}:
-                self._bg = value
+                if value != self._bg:
+                    self._bg = value
+                    redraw_needed = True
             elif key == "activebackground":
-                self._active_bg = value
+                if value != self._active_bg:
+                    self._active_bg = value
+                    redraw_needed = True
             elif key in {"fg", "foreground"}:
-                self._fg = value
+                if value != self._fg:
+                    self._fg = value
+                    redraw_needed = True
             elif key == "activeforeground":
-                self._active_fg = value
+                if value != self._active_fg:
+                    self._active_fg = value
+                    redraw_needed = True
             elif key == "text":
-                self._text = value
+                if value != self._text:
+                    self._text = value
+                    redraw_needed = True
             elif key == "command":
                 self._command = value
             elif key == "font":
-                self._font = value
+                if value != self._font:
+                    self._font = value
+                    redraw_needed = True
             elif key == "state":
-                self._state = value
-                if not self._is_enabled():
-                    self._pressed = False
-                    self._hover = False
+                if _normalized_tk_state(value) != _normalized_tk_state(self._state):
+                    self._state = value
+                    redraw_needed = True
+                    cursor_needed = True
+                    if not self._is_enabled():
+                        self._pressed = False
+                        self._hover = False
             elif key == "width":
-                self._width = int(value)
-                self._canvas.config(width=self._width)
+                width = int(value)
+                if width != self._width:
+                    self._width = width
+                    self._canvas.config(width=self._width)
+                    redraw_needed = True
             elif key == "height":
-                self._height = int(value)
-                self._canvas.config(height=self._height)
+                height = int(value)
+                if height != self._height:
+                    self._height = height
+                    self._canvas.config(height=self._height)
+                    redraw_needed = True
             else:
                 self._canvas.config(**{key: value})
-        self._sync_cursor()
-        self._redraw()
+        if cursor_needed:
+            self._sync_cursor()
+        if redraw_needed:
+            self._redraw()
 
     configure = config
 
@@ -2554,6 +2660,111 @@ class _CircularIconButton(_RoundedButton):
             fill=text_fill,
             font=self._font,
         )
+
+
+class _PasswordRevealButton(_RoundedButton):
+    """Canvas-backed password visibility button with a timed reveal state."""
+
+    def set_visible(self, visible):
+        """Update whether the button should draw the revealed-password state.
+
+        Inputs: `visible`. Output: None.
+        """
+        visible = bool(visible)
+        if visible != getattr(self, "_visible", False):
+            self._visible = visible
+            self._redraw()
+
+    def _redraw(self):
+        """Redraw the password reveal button.
+
+        Inputs: no caller arguments. Output: None.
+        """
+        width = max(int(self._canvas.winfo_width() or self._width), self._width)
+        height = max(int(self._canvas.winfo_height() or self._height), self._height)
+        self._canvas.delete("all")
+
+        enabled = self._is_enabled()
+        pressed = enabled and self._pressed
+        visible = getattr(self, "_visible", False)
+        if not enabled:
+            fill = "#f1f5f9"
+            outline = "#cfd7df"
+            icon = "#94a3b8"
+        elif pressed:
+            fill = self._active_bg
+            outline = "#9eb7d0"
+            icon = self._fg
+        elif self._hover:
+            fill = _shade_color(self._bg, 0.04)
+            outline = "#adc1d5"
+            icon = self._fg
+        else:
+            fill = self._bg
+            outline = "#c7d2de"
+            icon = self._fg
+
+        pad = 2
+        radius = 6
+        self._draw_round_rect(
+            pad,
+            pad,
+            width - pad,
+            height - pad,
+            radius,
+            fill=fill,
+            outline=outline,
+            width=1,
+        )
+
+        center_x = width / 2
+        center_y = height / 2
+        eye_w = max(12, width - 10)
+        eye_h = max(7, height - 14)
+        left = center_x - eye_w / 2
+        top = center_y - eye_h / 2
+        right = center_x + eye_w / 2
+        bottom = center_y + eye_h / 2
+        self._canvas.create_arc(
+            left,
+            top,
+            right,
+            bottom,
+            start=0,
+            extent=180,
+            style=_tk_constant("ARC", "arc"),
+            outline=icon,
+            width=1,
+        )
+        self._canvas.create_arc(
+            left,
+            top,
+            right,
+            bottom,
+            start=180,
+            extent=180,
+            style=_tk_constant("ARC", "arc"),
+            outline=icon,
+            width=1,
+        )
+        self._canvas.create_oval(
+            center_x - 2,
+            center_y - 2,
+            center_x + 2,
+            center_y + 2,
+            fill=icon if visible else "",
+            outline=icon,
+            width=1,
+        )
+        if not visible:
+            self._canvas.create_line(
+                left + 1,
+                bottom + 1,
+                right - 1,
+                top - 1,
+                fill=icon,
+                width=1,
+            )
 
 
 def _iter_imaris_executable_candidates():
@@ -3872,6 +4083,11 @@ class OMEROWebClient:
 
         Inputs: `context`. Output: bool.
         """
+        if not self.password:
+            _xt_debug(
+                f"Re-authentication skipped during {context}: password is not retained"
+            )
+            return False
         _xt_debug(f"Attempting to re-authenticate during {context}")
         # Clear existing session
         self.session_id = None
@@ -3896,6 +4112,10 @@ class OMEROWebClient:
 
         Inputs: none. Output: bool.
         """
+        password = self.password
+        if not password:
+            _xt_debug("Login failed: password is not available for authentication")
+            return False
         try:
             # Create fresh cookie jar
             self.cookie_jar = http.cookiejar.CookieJar()
@@ -3928,7 +4148,7 @@ class OMEROWebClient:
             data = urllib.parse.urlencode(
                 {
                     "username": self.username,
-                    "password": self.password,
+                    "password": password,
                     "server": 1,
                     "csrfmiddlewaretoken": self.csrf_token,
                 }
@@ -3980,6 +4200,8 @@ class OMEROWebClient:
         except Exception as e:
             _xt_debug(f"Connection error: {e}")
             return False
+        finally:
+            self.password = ""
 
     @staticmethod
     def _api_auth_failure(raise_on_error):
@@ -5207,6 +5429,8 @@ class OMEROBrowserDialog:
         self._folder_export_available = False
         self._folder_export_reason = "Connect to OMERO first."
         self._folder_export_in_progress = False
+        self._folder_export_initial_path_hint_consumed = False
+        self._last_folder_export_selection = ""
         self._load_in_progress = False
         self._image_selection_anchor = None
         self._health_ping_generation = 0
@@ -5215,6 +5439,8 @@ class OMEROBrowserDialog:
         self._indicator_state = "disconnected"
         self._indicator_blink_on = False
         self._indicator_after_id: Optional[str] = None
+        self._password_reveal_after_id: Optional[str] = None
+        self._password_revealed = False
         self.folder_path_var: Any
         self.folder_path_entry: Any
         self.select_folder_btn: Any
@@ -5224,6 +5450,9 @@ class OMEROBrowserDialog:
         self._folder_path_trace_suppressed = False
         self._folder_path_trace_id = None
         self._folder_path_write_state = "empty"
+        self._folder_path_dir_check_generation = 0
+        self._folder_path_dir_check_value = ""
+        self._folder_path_dir_check_is_dir = False
         self._settings_file_path = None
         self._saved_settings = {}
         self._autosave_settings_write_error = ""
@@ -5258,6 +5487,7 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
+        self._cancel_password_reveal_timer()
         self._cancel_health_ping()
         self._cancel_indicator_blink()
         self.root.destroy()
@@ -5313,6 +5543,9 @@ class OMEROBrowserDialog:
         default_folder_path = _filled_connector_setting(
             saved_settings, CONNECTOR_SETTINGS_PATH_KEY
         )
+        default_converter = _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_CONVERTER_KEY
+        )
         default_autosave_settings = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_AUTOSAVE_KEY), True
         )
@@ -5346,10 +5579,44 @@ class OMEROBrowserDialog:
         self._connection_label(conn_frame, "Password:").grid(
             row=1, column=2, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
-        self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
-        self.pass_entry.grid(
+        self.password_frame = tk.Frame(
+            conn_frame,
+            bd=1,
+            relief=_tk_constant("SUNKEN", "sunken"),
+            bg="white",
+        )
+        self.password_frame.grid(
             row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.EW
         )
+        self.password_frame.grid_columnconfigure(0, weight=1)
+        self.pass_entry = tk.Entry(
+            self.password_frame,
+            show="*",
+            width=25,
+            bd=0,
+            relief=_tk_constant("FLAT", "flat"),
+            highlightthickness=0,
+            bg="white",
+        )
+        self.pass_entry.grid(
+            row=0,
+            column=0,
+            sticky=tk.EW,
+            padx=(5, 2),
+            pady=0,
+            ipady=5,
+        )
+        self.password_reveal_btn = _PasswordRevealButton(
+            self.password_frame,
+            command=self._toggle_password_reveal,
+            bg=PASSWORD_REVEAL_ICON_BG,
+            fg=PASSWORD_REVEAL_ICON_FG,
+            activebackground=PASSWORD_REVEAL_ICON_ACTIVE_BG,
+            activeforeground=PASSWORD_REVEAL_ICON_FG,
+            width=PASSWORD_REVEAL_BUTTON_SIZE,
+            height=PASSWORD_REVEAL_BUTTON_SIZE,
+        )
+        self.password_reveal_btn.grid(row=0, column=1, padx=(2, 3), pady=2)
 
         self.connect_btn = _RoundedButton(
             conn_frame,
@@ -5365,6 +5632,7 @@ class OMEROBrowserDialog:
         )
         self.connect_btn.grid(row=0, column=5, rowspan=2, padx=(10, 12), pady=5)
 
+        self._preferred_converter_setting = default_converter
         self.converter_var = tk.StringVar(value="")
         self.converter_frame = tk.Frame(conn_frame)
         tk.Label(self.converter_frame, text="Converter:").pack(
@@ -5380,7 +5648,7 @@ class OMEROBrowserDialog:
             activebackground="#e9eef3",
             activeforeground="#2c3e50",
             font=CONVERTER_MENU_FONT,
-            width=10,
+            width=CONVERTER_MENU_WIDTH,
             padx=10,
             pady=4,
             anchor=tk.W,
@@ -5413,11 +5681,10 @@ class OMEROBrowserDialog:
         )
         self.refresh_btn.pack(side=tk.LEFT, padx=(16, 0))
         self.converter_frame.grid(
-            row=0,
-            column=6,
-            rowspan=2,
-            sticky=tk.W,
-            padx=(14, 0),
+            row=2,
+            column=8,
+            sticky=tk.E,
+            padx=(12, 12),
             pady=5,
         )
         self.converter_frame.grid_remove()
@@ -5501,7 +5768,7 @@ class OMEROBrowserDialog:
             column=8,
             rowspan=2,
             sticky=tk.NE,
-            padx=(12, 0),
+            padx=(12, 12),
             pady=(0, 2),
         )
         self.help_btn = _CircularIconButton(
@@ -5518,6 +5785,7 @@ class OMEROBrowserDialog:
         self.info_btn = _CircularIconButton(
             panel_icon_frame,
             text="i",
+            command=self._show_connector_info,
             bg=CONNECTOR_INFO_ICON_BG,
             fg=CONNECTOR_INFO_ICON_FG,
             activebackground=CONNECTOR_INFO_ICON_ACTIVE_BG,
@@ -5533,27 +5801,39 @@ class OMEROBrowserDialog:
         # Browser
         browser = tk.Frame(self.root)
         browser.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.browser_frame = browser
+        self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+        self._browser_sash_drag_index = None
+        browser.grid_rowconfigure(0, weight=1)
 
         # Projects
         p_frame = tk.LabelFrame(browser, text="Projects")
-        p_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        p_frame.grid(row=0, column=0, sticky=tk.NSEW)
         self.plist = self._build_scrolled_listbox(p_frame)
         self.plist.bind("<<ListboxSelect>>", lambda e: self._sel_proj())
 
+        self.browser_sash_1 = self._build_browser_sash(browser, 0)
+        self.browser_sash_1.grid(row=0, column=1, sticky=tk.NS)
+
         # Datasets
         d_frame = tk.LabelFrame(browser, text="Datasets")
-        d_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        d_frame.grid(row=0, column=2, sticky=tk.NSEW)
         self.dlist = self._build_scrolled_listbox(d_frame)
         self.dlist.bind("<<ListboxSelect>>", lambda e: self._sel_ds())
 
+        self.browser_sash_2 = self._build_browser_sash(browser, 1)
+        self.browser_sash_2.grid(row=0, column=3, sticky=tk.NS)
+
         # Images
         i_frame = tk.LabelFrame(browser, text="Images")
-        i_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        i_frame.grid(row=0, column=4, sticky=tk.NSEW)
         self.ilist = self._build_scrolled_listbox(
             i_frame,
             selectmode=_tk_constant("EXTENDED", "extended"),
         )
         self._configure_image_selection_bindings()
+        self._apply_browser_panel_layout()
+        browser.bind("<Configure>", lambda _event: self._apply_browser_panel_layout())
 
         # Actions
         actions = tk.Frame(self.root)
@@ -5604,6 +5884,15 @@ class OMEROBrowserDialog:
         )
         close_btn.grid(row=0, column=3, sticky=tk.E, padx=ACTION_BUTTON_PAD)
 
+        # Reserved for a later progress bar.
+        bottom_progress_margin = tk.Frame(
+            self.root,
+            height=BOTTOM_PROGRESS_RESERVED_HEIGHT,
+            bg=STATUS_NEUTRAL_BG,
+        )
+        bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)
+        bottom_progress_margin.pack_propagate(False)
+
         # Status
         status_frame = tk.Frame(self.root, bg=STATUS_NEUTRAL_BG)
         status_frame.pack(fill=tk.X, side=tk.BOTTOM)
@@ -5653,25 +5942,152 @@ class OMEROBrowserDialog:
         x_scroll.config(command=listbox.xview)
         return listbox
 
+    def _build_browser_sash(self, parent, sash_index):
+        """Return a draggable browser-panel splitter.
+
+        Inputs: `parent`, `sash_index`. Output: `tk.Frame`.
+        """
+        sash = tk.Frame(
+            parent,
+            width=BROWSER_SPLITTER_WIDTH,
+            cursor="sb_h_double_arrow",
+            bd=0,
+            highlightthickness=0,
+        )
+        sash.bind(
+            "<ButtonPress-1>",
+            lambda event, index=sash_index: self._start_browser_panel_resize(
+                index, event
+            ),
+        )
+        sash.bind("<B1-Motion>", self._drag_browser_panel_resize)
+        sash.bind("<ButtonRelease-1>", self._stop_browser_panel_resize)
+        return sash
+
+    def _browser_panel_area_width(self):
+        """Return available browser width excluding splitter bars.
+
+        Inputs: none. Output: int.
+        """
+        browser = getattr(self, "browser_frame", None)
+        if browser is None:
+            return 1
+        total_width = max(1, int(browser.winfo_width() or 1))
+        return max(1, total_width - (2 * BROWSER_SPLITTER_WIDTH))
+
+    def _apply_browser_panel_layout(self):
+        """Apply stored browser-panel fractions to the grid columns.
+
+        Inputs: none. Output: None.
+        """
+        browser = getattr(self, "browser_frame", None)
+        if browser is None:
+            return
+        fractions = _normalized_browser_panel_fractions(
+            getattr(self, "_browser_panel_fractions", BROWSER_PANEL_DEFAULT_FRACTIONS)
+        )
+        self._browser_panel_fractions = fractions
+        available_width = self._browser_panel_area_width()
+        widths = [
+            max(1, int(round(available_width * fraction))) for fraction in fractions
+        ]
+        widths[-1] = max(1, available_width - widths[0] - widths[1])
+        if widths[-1] < 1:
+            widths[-1] = 1
+            widths[1] = max(1, available_width - widths[0] - widths[2])
+        for column, width in zip((0, 2, 4), widths):
+            browser.grid_columnconfigure(column, minsize=width, weight=0)
+        for column in (1, 3):
+            browser.grid_columnconfigure(
+                column,
+                minsize=BROWSER_SPLITTER_WIDTH,
+                weight=0,
+            )
+
+    def _start_browser_panel_resize(self, sash_index, _event):
+        """Remember the active browser splitter drag.
+
+        Inputs: `sash_index`, `_event`. Output: None.
+        """
+        self._browser_sash_drag_index = sash_index
+
+    def _drag_browser_panel_resize(self, event):
+        """Resize browser panels while dragging a splitter.
+
+        Inputs: `event`. Output: None.
+        """
+        sash_index = getattr(self, "_browser_sash_drag_index", None)
+        if sash_index not in {0, 1}:
+            return
+        browser = getattr(self, "browser_frame", None)
+        if browser is None:
+            return
+        browser_x = browser.winfo_rootx()
+        x_position = max(0.0, float(event.x_root - browser_x))
+        if sash_index == 0:
+            target_pixels = x_position - (BROWSER_SPLITTER_WIDTH / 2.0)
+        else:
+            target_pixels = x_position - (1.5 * BROWSER_SPLITTER_WIDTH)
+        target_fraction = target_pixels / float(self._browser_panel_area_width())
+        self._browser_panel_fractions = _resize_browser_panel_fractions(
+            getattr(self, "_browser_panel_fractions", BROWSER_PANEL_DEFAULT_FRACTIONS),
+            sash_index,
+            target_fraction,
+        )
+        self._apply_browser_panel_layout()
+
+    def _stop_browser_panel_resize(self, _event):
+        """Clear active browser splitter drag state.
+
+        Inputs: `_event`. Output: None.
+        """
+        self._browser_sash_drag_index = None
+
     def _configure_initial_window_constraints(self):
         """Configure the initial window constraints for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: configures the described state and returns None.
         """
-        self.root.update_idletasks()
+        self._enforce_window_minimum_for_current_layout()
+        self.root.resizable(True, True)
+
+    def _enforce_window_minimum_for_current_layout(self):
+        """Prevent the main window from shrinking below requested widget width.
+
+        Inputs: none. Output: None.
+        """
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        update_idletasks: Any = getattr(root, "update_idletasks", None)
+        if callable(update_idletasks):
+            update_idletasks()
+        current_min = (0, 0)
+        minsize_getter: Any = getattr(root, "minsize", None)
+        if callable(minsize_getter):
+            try:
+                current_min = tuple(minsize_getter())
+            except (TypeError, ValueError):
+                current_min = (0, 0)
         width = max(
             OMERO_CONNECTOR_WINDOW_WIDTH,
             int(self.root.winfo_width() or 0),
             int(self.root.winfo_reqwidth() or 0),
+            int(current_min[0] or 0),
         )
         height = max(
             OMERO_CONNECTOR_WINDOW_HEIGHT,
             int(self.root.winfo_height() or 0),
             int(self.root.winfo_reqheight() or 0),
+            int(current_min[1] or 0),
         )
-        self.root.geometry(f"{width}x{height}")
-        self.root.minsize(width, height)
-        self.root.resizable(True, True)
+        if callable(minsize_getter):
+            root.minsize(width, height)
+        if (
+            int(root.winfo_width() or 0) < width
+            or int(root.winfo_height() or 0) < height
+        ):
+            root.geometry(f"{width}x{height}")
 
     def _get_converter_menu(self):
         """Return converter menu.
@@ -5692,7 +6108,14 @@ class OMEROBrowserDialog:
         Inputs: `value`. Output: None.
         """
         self.converter_var.set(value)
+        self._preferred_converter_setting = str(value or "")
         self._set_load_button_for_converter()
+        if (
+            getattr(self, "_connected", False)
+            and self._autosave_settings_enabled()
+            and not self._write_autosave_settings()
+        ):
+            self._show_autosave_settings_error()
 
     def _set_converter_options(self, options):
         """Set the converter options for `OMEROBrowserDialog`.
@@ -5716,7 +6139,15 @@ class OMEROBrowserDialog:
                 hidemargin=True,
                 command=partial(self._select_converter, option),
             )
-        self.converter_var.set(options[0])
+        preferred = str(getattr(self, "_preferred_converter_setting", "") or "")
+        if preferred not in options:
+            preferred = _filled_connector_setting(
+                getattr(self, "_saved_settings", {}),
+                CONNECTOR_SETTINGS_CONVERTER_KEY,
+            )
+        selected = preferred if preferred in options else options[0]
+        self.converter_var.set(selected)
+        self._preferred_converter_setting = selected
         self._show_converter_frame()
         self._set_load_button_for_converter()
         self._set_refresh_button_state(
@@ -5768,6 +6199,7 @@ class OMEROBrowserDialog:
         self._folder_path_write_state = (
             "unchecked" if _is_structurally_valid_folder_path(path_value) else "invalid"
         )
+        self._queue_folder_path_dir_check(path_value)
         self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
         self._set_load_button_for_converter()
 
@@ -5791,6 +6223,7 @@ class OMEROBrowserDialog:
                 if _is_structurally_valid_folder_path(raw_value)
                 else "invalid"
             )
+            self._queue_folder_path_dir_check(raw_value)
             self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
             self._set_load_button_for_converter()
             return
@@ -5798,6 +6231,7 @@ class OMEROBrowserDialog:
         self._set_folder_path_var_safely(FOLDER_PATH_PLACEHOLDER)
         self._folder_path_placeholder_visible = True
         self._folder_path_write_state = "empty"
+        self._queue_folder_path_dir_check("")
         self._set_folder_path_entry_fg(FOLDER_PATH_PLACEHOLDER_FG)
         self._set_load_button_for_converter()
 
@@ -5810,6 +6244,7 @@ class OMEROBrowserDialog:
             self._set_folder_path_var_safely("")
         self._folder_path_placeholder_visible = False
         self._folder_path_write_state = "empty"
+        self._queue_folder_path_dir_check("")
         self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
         self._set_load_button_for_converter()
 
@@ -5824,6 +6259,7 @@ class OMEROBrowserDialog:
         self._folder_path_write_state = (
             write_state if _is_structurally_valid_folder_path(value) else "invalid"
         )
+        self._queue_folder_path_dir_check(value)
         self._set_folder_path_entry_fg(FOLDER_PATH_TEXT_FG)
         self._set_load_button_for_converter()
 
@@ -5860,6 +6296,9 @@ class OMEROBrowserDialog:
             CONNECTOR_SETTINGS_USERNAME_KEY: self._entry_text("user_entry").strip(),
             CONNECTOR_SETTINGS_HTTPS_KEY: _connector_settings_bool_text(https_value),
             CONNECTOR_SETTINGS_PATH_KEY: self._current_local_folder_path(),
+            CONNECTOR_SETTINGS_CONVERTER_KEY: _stringvar_value(
+                getattr(self, "converter_var", None)
+            ),
             CONNECTOR_SETTINGS_AUTOSAVE_KEY: _connector_settings_bool_text(
                 self._autosave_settings_enabled()
             ),
@@ -5900,6 +6339,77 @@ class OMEROBrowserDialog:
             AUTOSAVE_SETTINGS_ERROR_TITLE,
             AUTOSAVE_SETTINGS_ERROR_MESSAGE,
         )
+
+    def _cancel_password_reveal_timer(self):
+        """Cancel any pending password-hide callback.
+
+        Inputs: none. Output: None.
+        """
+        after_id: Optional[str] = getattr(self, "_password_reveal_after_id", None)
+        root = getattr(self, "root", None)
+        if after_id is not None and root is not None and hasattr(root, "after_cancel"):
+            try:
+                root.after_cancel(after_id)
+            except Exception as exc:
+                _xt_debug(f"Password reveal timer cancellation failed: {exc}")
+        self._password_reveal_after_id = None
+
+    def _set_password_revealed(self, visible):
+        """Set whether the password entry text is visible.
+
+        Inputs: `visible`. Output: None.
+        """
+        visible = bool(visible)
+        entry = getattr(self, "pass_entry", None)
+        configure: Any = getattr(entry, "config", None)
+        if callable(configure):
+            configure(show="" if visible else "*")
+        self._password_revealed = visible
+        button = getattr(self, "password_reveal_btn", None)
+        setter: Any = getattr(button, "set_visible", None)
+        if callable(setter):
+            setter(visible)
+        if not visible:
+            self._cancel_password_reveal_timer()
+
+    def _hide_password_reveal(self):
+        """Hide the password entry text after the reveal timeout.
+
+        Inputs: none. Output: None.
+        """
+        self._password_reveal_after_id = None
+        self._set_password_revealed(False)
+
+    def _toggle_password_reveal(self):
+        """Reveal the password entry contents for the fixed timeout.
+
+        Inputs: none. Output: None.
+        """
+        if getattr(self, "_password_revealed", False):
+            self._set_password_revealed(False)
+            return
+        if not self._entry_text("pass_entry"):
+            self._set_password_revealed(False)
+            return
+        self._set_password_revealed(True)
+        self._cancel_password_reveal_timer()
+        root = getattr(self, "root", None)
+        if root is not None and hasattr(root, "after"):
+            self._password_reveal_after_id = root.after(
+                PASSWORD_REVEAL_DURATION_MS,
+                self._hide_password_reveal,
+            )
+
+    def _clear_password_entry(self):
+        """Clear the visible password field and restore hidden mode first.
+
+        Inputs: none. Output: None.
+        """
+        self._set_password_revealed(False)
+        entry = getattr(self, "pass_entry", None)
+        delete: Any = getattr(entry, "delete", None)
+        if callable(delete):
+            delete(0, _tk_constant("END", "end"))
 
     def _set_autosave_settings_control_state(self, enabled):
         """Enable or disable the autosave settings checkbox.
@@ -5944,6 +6454,56 @@ class OMEROBrowserDialog:
         if getattr(self, "_folder_path_placeholder_visible", False):
             return ""
         return _stringvar_value(getattr(self, "folder_path_var", None))
+
+    def _queue_folder_path_dir_check(self, path_value):
+        """Start a background existence check for the typed path.
+
+        Inputs: `path_value`. Output: None.
+        """
+        path_text = str(path_value or "")
+        generation = getattr(self, "_folder_path_dir_check_generation", 0) + 1
+        self._folder_path_dir_check_generation = generation
+        if not path_text or not _is_structurally_valid_folder_path(path_text):
+            self._finish_folder_path_dir_check(generation, path_text, False)
+            return
+        root = getattr(self, "root", None)
+        if root is None or not hasattr(root, "after"):
+            self._finish_folder_path_dir_check(
+                generation,
+                path_text,
+                _safe_is_directory(path_text),
+            )
+            return
+        threading.Thread(
+            target=self._folder_path_dir_check_worker,
+            args=(generation, path_text),
+            daemon=True,
+        ).start()
+
+    def _folder_path_dir_check_worker(self, generation, path_text):
+        """Check whether the typed path is an existing directory off the UI thread.
+
+        Inputs: `generation`, `path_text`. Output: None.
+        """
+        is_directory = _safe_is_directory(path_text)
+        self._invoke_on_ui_thread(
+            lambda: self._finish_folder_path_dir_check(
+                generation,
+                path_text,
+                is_directory,
+            ),
+            wait=False,
+        )
+
+    def _finish_folder_path_dir_check(self, generation, path_text, is_directory):
+        """Record the latest typed-path directory check result.
+
+        Inputs: `generation`, `path_text`, `is_directory`. Output: None.
+        """
+        if generation != getattr(self, "_folder_path_dir_check_generation", 0):
+            return
+        self._folder_path_dir_check_value = str(path_text or "")
+        self._folder_path_dir_check_is_dir = bool(is_directory)
 
     def _folder_path_allows_load_button(self):
         """Return whether path text can participate in the Load button state.
@@ -6014,12 +6574,58 @@ class OMEROBrowserDialog:
             ):
                 self._show_autosave_settings_error()
 
+    def _folder_export_dialog_initialdir(self):
+        """Return the export-folder chooser initial directory for this session.
+
+        Inputs: none. Output: `str`.
+        """
+        last_selection = getattr(self, "_last_folder_export_selection", "")
+        if _safe_is_directory(last_selection):
+            return str(last_selection)
+        if getattr(self, "_folder_export_initial_path_hint_consumed", False):
+            return ""
+        path_value = self._current_local_folder_path()
+        if (
+            path_value
+            and path_value == getattr(self, "_folder_path_dir_check_value", "")
+            and getattr(self, "_folder_path_dir_check_is_dir", False)
+        ):
+            return path_value
+        return ""
+
+    def _select_folder_for_omero_export(self):
+        """Open the native folder chooser for folder export.
+
+        Inputs: none. Output: selected folder path or empty string.
+        """
+        dialog_options = {
+            "parent": self.root,
+            "mustexist": True,
+            "title": "Select folder to export to OMERO",
+        }
+        initialdir = self._folder_export_dialog_initialdir()
+        if initialdir:
+            dialog_options["initialdir"] = initialdir
+        self._folder_export_initial_path_hint_consumed = True
+        selected_folder = filedialog.askdirectory(**dialog_options)
+        if not selected_folder:
+            return ""
+        selected_text = str(selected_folder)
+        self._last_folder_export_selection = selected_text
+        return selected_text
+
     def _export_folder_to_omero(self):
         """Export the selected folder to OMERO for `OMEROBrowserDialog`.
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         if self._folder_export_in_progress:
+            return
+        if getattr(self, "_refresh_in_progress", False):
+            messagebox.showwarning(
+                "Refresh In Progress",
+                "Please wait for the OMERO browser refresh to finish.",
+            )
             return
         if not self._connected or self.client is None:
             messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
@@ -6032,12 +6638,8 @@ class OMEROBrowserDialog:
             )
             return
 
-        selected_folder = self._current_local_folder_path()
-        if not selected_folder.strip():
-            messagebox.showwarning(
-                "No Folder Selected",
-                "Please select or enter a folder path first.",
-            )
+        selected_folder = self._select_folder_for_omero_export()
+        if not selected_folder:
             return
 
         if _coerce_path(selected_folder) is None:
@@ -6063,12 +6665,12 @@ class OMEROBrowserDialog:
             return
 
         confirmation = (
-            "Export the selected folder to OMERO root as a dataset?\n\n"
+            "Export the selected folder to OMERO root path as a dataset?\n\n"
             f"Dataset name: {folder_name}\n"
-            "Target: OMERO root (no project)\n\n"
+            "\n"
             "This uploads every file inside the selected folder."
         )
-        if not messagebox.askyesno("Confirm Folder Export", confirmation):
+        if not messagebox.askyesno("Confirm folder export", confirmation):
             return
 
         self._set_actions_busy_for_export(True)
@@ -6343,7 +6945,7 @@ class OMEROBrowserDialog:
                 self._show_info(
                     "Folder Export Completed",
                     (
-                        f"The folder was exported to OMERO root as dataset "
+                        f"The folder was exported to OMERO root path as dataset "
                         f"'{folder_name}'.\n\n"
                         f"{skipped_count} incompatible "
                         f"{_pluralize(skipped_count, 'file')} "
@@ -6355,7 +6957,7 @@ class OMEROBrowserDialog:
                 self._show_info(
                     "Folder Export Completed",
                     (
-                        f"The folder was exported to OMERO root as dataset "
+                        f"The folder was exported to OMERO root path as dataset "
                         f"'{folder_name}'."
                     ),
                 )
@@ -6387,8 +6989,10 @@ class OMEROBrowserDialog:
         """
         if hasattr(self.converter_frame, "grid"):
             self.converter_frame.grid()
+            self._enforce_window_minimum_for_current_layout()
             return
         self.converter_frame.pack(side=tk.LEFT, padx=(0, 8))
+        self._enforce_window_minimum_for_current_layout()
 
     def _set_connect_button(self, text, state, bg, active_bg=None):
         """Set the connect button for `OMEROBrowserDialog`.
@@ -6455,7 +7059,7 @@ class OMEROBrowserDialog:
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
         if clear_password:
-            self.pass_entry.delete(0, _tk_constant("END", "end"))
+            self._clear_password_entry()
         self._set_converter_options([])
         self._set_connect_button(
             "Connect",
@@ -6784,6 +7388,93 @@ class OMEROBrowserDialog:
         Inputs: `title`, `message`. Output: None.
         """
         self.root.after(0, lambda: messagebox.showinfo(title, message))
+
+    def _show_connector_info(self):
+        """Show the modal OMERO connector information window.
+
+        Inputs: none. Output: None.
+        """
+        info_window = tk.Toplevel(self.root)
+        info_window.title(CONNECTOR_INFO_TITLE)
+        info_window.resizable(False, False)
+        info_window.transient(self.root)
+        info_window.configure(bg="#f8fafc")
+
+        frame = tk.Frame(info_window, padx=18, pady=16, bg="#f8fafc")
+        frame.grid(row=0, column=0, sticky=tk.NSEW)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=0)
+
+        title_label = tk.Label(
+            frame,
+            text=CONNECTOR_INFO_TITLE,
+            font=("Arial", 11, "bold"),
+            bg="#f8fafc",
+            fg="#1f2937",
+            anchor=tk.W,
+        )
+        title_label.grid(row=0, column=0, columnspan=2, sticky=tk.EW)
+
+        disclaimer = tk.Label(
+            frame,
+            text=CONNECTOR_INFO_DISCLAIMER,
+            font=("Arial", 9),
+            bg="#f8fafc",
+            fg="#374151",
+            anchor=tk.W,
+            justify=tk.LEFT,
+            wraplength=390,
+        )
+        disclaimer.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky=tk.EW,
+            pady=(10, 14),
+        )
+
+        metadata_font = ("Arial", 9)
+        tk.Label(
+            frame,
+            text=f"Author: {CONNECTOR_INFO_AUTHOR}",
+            font=metadata_font,
+            bg="#f8fafc",
+            fg="#1f2937",
+            anchor=tk.W,
+        ).grid(row=2, column=0, sticky=tk.W, pady=(0, 3))
+        tk.Label(
+            frame,
+            text=f"Version: {CONNECTOR_INFO_VERSION}",
+            font=metadata_font,
+            bg="#f8fafc",
+            fg="#1f2937",
+            anchor=tk.W,
+        ).grid(row=3, column=0, sticky=tk.W)
+
+        close_button = tk.Button(
+            frame,
+            text="Close",
+            command=info_window.destroy,
+            font=("Arial", 9),
+            width=10,
+            default=_tk_constant("ACTIVE", "active"),
+        )
+        close_button.grid(row=2, column=1, rowspan=2, sticky=tk.SE, padx=(18, 0))
+
+        info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
+        info_window.update_idletasks()
+        parent_x = int(self.root.winfo_rootx() or 0)
+        parent_y = int(self.root.winfo_rooty() or 0)
+        parent_w = int(self.root.winfo_width() or 0)
+        parent_h = int(self.root.winfo_height() or 0)
+        width = int(info_window.winfo_reqwidth() or 0)
+        height = int(info_window.winfo_reqheight() or 0)
+        x_pos = parent_x + max(0, (parent_w - width) // 2)
+        y_pos = parent_y + max(0, (parent_h - height) // 2)
+        info_window.geometry(f"{width}x{height}+{x_pos}+{y_pos}")
+        close_button.focus_set()
+        info_window.grab_set()
+        self.root.wait_window(info_window)
 
     def _invoke_on_ui_thread(self, callback, wait=True):
         """A callback on Tk's UI thread and optionally wait for the result.
@@ -7257,6 +7948,8 @@ class OMEROBrowserDialog:
         try:
             if self.client.connect():
                 self._connected = True
+                self._clear_password_entry()
+                self.client.password = ""
                 self._set_connect_button(
                     "Disconnect",
                     _tk_constant("NORMAL", "normal"),
@@ -7714,7 +8407,6 @@ class OMEROBrowserDialog:
             getattr(self, "_connected", False)
             and getattr(self, "_folder_export_available", False)
             and not getattr(self, "_connection_in_progress", False)
-            and not getattr(self, "_refresh_in_progress", False)
             and not getattr(self, "_folder_export_in_progress", False)
             and not getattr(self, "_load_in_progress", False)
         )
@@ -7900,10 +8592,6 @@ class OMEROBrowserDialog:
         project_id = self._current_selected_project_id()
         dataset_id = self._current_selected_dataset_id()
         self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
-        load_btn = getattr(self, "load_btn", None)
-        if load_btn is not None:
-            load_btn.config(state=_tk_constant("DISABLED", "disabled"))
-        self._set_export_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
         self._set_connection_indicator("busy")
         threading.Thread(
@@ -8198,6 +8886,12 @@ class OMEROBrowserDialog:
         """
         if not getattr(self, "_connected", False) or self.client is None:
             messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            return
+        if getattr(self, "_refresh_in_progress", False):
+            messagebox.showwarning(
+                "Refresh In Progress",
+                "Please wait for the OMERO browser refresh to finish.",
+            )
             return
 
         selected_path = self._current_local_folder_path()

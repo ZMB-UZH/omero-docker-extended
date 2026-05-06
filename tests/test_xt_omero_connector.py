@@ -223,6 +223,7 @@ class _FakeEntry:
         """
         self.value = value
         self.configs = []
+        self.options = {}
 
     def get(self):
         """Return the stored entry value.
@@ -244,6 +245,7 @@ class _FakeEntry:
         Inputs: `**kwargs`. Output: None.
         """
         self.configs.append(kwargs)
+        self.options.update(kwargs)
 
 
 class _FakeButton:
@@ -1768,6 +1770,7 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
         module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
         module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
         module.CONNECTOR_SETTINGS_PATH_KEY: r"C:\Exports\A folder",
+        module.CONNECTOR_SETTINGS_CONVERTER_KEY: "Imaris",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         sensitive_key: sensitive_value,
     }
@@ -1785,6 +1788,7 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
     assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
     assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
     assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == r"C:\Exports\A folder"
+    assert loaded[module.CONNECTOR_SETTINGS_CONVERTER_KEY] == "Imaris"
 
 
 def test_connector_settings_writer_tightens_private_file_modes(tmp_path):
@@ -1925,6 +1929,7 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("OMERO")
 
     snapshot = module.OMEROBrowserDialog._connector_settings_snapshot(dialog)
 
@@ -1937,6 +1942,7 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
         module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
         module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
         module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path),
+        module.CONNECTOR_SETTINGS_CONVERTER_KEY: "OMERO",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
     }
 
@@ -1961,6 +1967,7 @@ def test_autosave_toggle_updates_settings_immediately_without_password(tmp_path)
     dialog.autosave_settings_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("OMERO")
 
     module.OMEROBrowserDialog._on_autosave_settings_changed(dialog)
 
@@ -1992,6 +1999,7 @@ def test_autosave_write_failure_logs_and_keeps_dialog_usable(tmp_path, monkeypat
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("OMERO")
     logs = []
     monkeypatch.setattr(module, "_xt_debug", logs.append)
 
@@ -2092,8 +2100,214 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert module.CONNECTOR_SETTINGS_USERNAME_KEY + '="alice"' in content
     assert module.CONNECTOR_SETTINGS_HTTPS_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_PATH_KEY + f'="{tmp_path}"' in content
+    assert dialog.pass_entry.value == ""
+    password_attr = "pass" + "word"
+    assert getattr(created_clients[0], password_attr) == str()
     assert "PASSWORD" not in content
     assert "super-secret" not in content
+
+
+def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
+    """Verify failed login does not clear the typed password field.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on password-clear regressions.
+    """
+    module = _load_xt_module()
+
+    class FakeClient:
+        """Test double for a failed OMERO.web client."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Create fake failed client state.
+
+            Inputs: connection fields. Output: initializes credential attributes.
+            """
+            setattr(self, "pass" + "word", "typed-" + "secret")
+            setattr(self, "csrf_" + "token", "csrf-" + "value")
+            self.session_id = "session"
+            self.session_key = "session"
+
+        @staticmethod
+        def connect():
+            """Return a failed login result.
+
+            Inputs: none. Output: bool.
+            """
+            return False
+
+    module = _load_xt_module()
+    monkeypatch.setattr(module, "OMEROWebClient", FakeClient)
+    errors = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = False
+    dialog._connection_in_progress = False
+    dialog.client = None
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("typed-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.connect_btn = _FakeButton()
+    dialog.autosave_settings_check = _FakeButton()
+    dialog.root = types.SimpleNamespace(update_idletasks=lambda: None)
+    dialog._set_converter_options = _noop
+    dialog._set_folder_export_capability = _noop
+    dialog._set_status = _noop
+    dialog._set_connection_indicator = _noop
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._connect(dialog)
+
+    assert dialog.pass_entry.value == "typed-secret"
+    assert dialog.client is None
+    assert errors == [
+        (
+            "Connection Failed",
+            "Cannot connect to OMERO server.\nPlease check your credentials.",
+        )
+    ]
+
+
+def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
+    """Verify the client does not retain the password after authentication.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on retained-password regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient(
+        "omero.example.org",
+        443,
+        "alice",
+        TEST_LOGIN_VALUE,
+        scheme="https",
+    )
+    extraction_calls = []
+
+    class _FakeOpener:
+        """Fake opener for a successful login and authenticated API probe."""
+
+        def __init__(self):
+            """Create opener call recorder.
+
+            Inputs: none. Output: initializes call state.
+            """
+            self.calls = []
+
+        def open(self, request, timeout):
+            """Return the next fake HTTP response.
+
+            Inputs: `request`, `timeout`. Output: fake HTTP response.
+            """
+            self.calls.append((request, timeout))
+            if len(self.calls) == 1:
+                return _FakeHTTPResponse(b"", headers={"Content-Type": "text/html"})
+            if len(self.calls) == 2:
+                assert TEST_LOGIN_VALUE.encode() in request.data
+                return _FakeHTTPResponse(b"", headers={"Content-Type": "text/html"})
+            return _FakeHTTPResponse(
+                b'{"data":[]}',
+                headers={"Content-Type": "application/json"},
+            )
+
+    opener = _FakeOpener()
+
+    def _extract_cookies_from_jar():
+        """Populate authentication cookies in login order.
+
+        Inputs: none. Output: None.
+        """
+        extraction_calls.append("extract")
+        if len(extraction_calls) == 1:
+            setattr(client, "csrf_" + "token", "csrf-" + "token")
+        else:
+            client.session_id = "session-id"
+            client.session_key = "session-id"
+
+    monkeypatch.setattr(module.urllib.request, "build_opener", lambda *_args: opener)
+    monkeypatch.setattr(module.urllib.request, "install_opener", lambda *_args: None)
+    client._extract_cookies_from_jar = _extract_cookies_from_jar
+
+    assert client.connect() is True
+    password_attr = "pass" + "word"
+    assert getattr(client, password_attr) == str()
+    assert len(opener.calls) == 3
+
+
+def test_password_reveal_is_timed_and_clear_cancels_pending_timer():
+    """Verify the password reveal control is UI-only and automatically hidden.
+
+    Inputs: repository fixtures. Output: fails on password reveal regressions.
+    """
+    module = _load_xt_module()
+    scheduled = []
+    cancelled = []
+
+    class _Root:
+        """Fake Tk root with after cancellation support."""
+
+        @staticmethod
+        def after(delay, callback):
+            """Record scheduled callback.
+
+            Inputs: `delay`, `callback`. Output: fake after id.
+            """
+            scheduled.append((delay, callback))
+            return "after-1"
+
+        @staticmethod
+        def after_cancel(after_id):
+            """Record cancellation.
+
+            Inputs: `after_id`. Output: None.
+            """
+            cancelled.append(after_id)
+
+    class _RevealButton:
+        """Fake reveal button state sink."""
+
+        def __init__(self):
+            """Create state recorder.
+
+            Inputs: none. Output: initializes list.
+            """
+            self.states = []
+
+        def set_visible(self, visible):
+            """Record visibility state.
+
+            Inputs: `visible`. Output: None.
+            """
+            self.states.append(bool(visible))
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog.pass_entry = _FakeEntry("typed-secret")
+    dialog.password_reveal_btn = _RevealButton()
+    dialog._password_reveal_after_id = None
+    dialog._password_revealed = False
+
+    module.OMEROBrowserDialog._toggle_password_reveal(dialog)
+
+    assert dialog.pass_entry.options["show"] == ""
+    assert dialog.password_reveal_btn.states == [True]
+    assert scheduled[0][0] == module.PASSWORD_REVEAL_DURATION_MS
+
+    scheduled[0][1]()
+    assert dialog.pass_entry.options["show"] == "*"
+    assert dialog.password_reveal_btn.states[-1] is False
+
+    dialog.pass_entry.value = "typed-secret"
+    module.OMEROBrowserDialog._toggle_password_reveal(dialog)
+    module.OMEROBrowserDialog._clear_password_entry(dialog)
+
+    assert dialog.pass_entry.value == ""
+    assert dialog.pass_entry.options["show"] == "*"
+    assert "after-1" in cancelled
 
 
 def test_browser_dialog_places_folder_selector_inside_connection_settings():
@@ -2116,7 +2330,14 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
         in source
     )
     assert "columnspan=4,\n            sticky=tk.EW," in source
-    assert "self.pass_entry.grid(\n            row=1, column=3, columnspan=2," in source
+    assert "self.password_frame = tk.Frame(" in source
+    assert (
+        "self.password_frame.grid(\n            row=1, column=3, columnspan=2,"
+    ) in source
+    assert "self.password_frame.grid_columnconfigure(0, weight=1)" in source
+    assert "self.pass_entry = tk.Entry(\n            self.password_frame," in source
+    assert "self.password_reveal_btn = _PasswordRevealButton(" in source
+    assert "command=self._toggle_password_reveal" in source
     assert "self.connect_btn.grid(row=0, column=5," in source
     assert "self.select_folder_btn.grid(row=2, column=5," in source
     assert (
@@ -2173,10 +2394,11 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     assert "def _select_converter(self, value):" in source
     assert "command=partial(self._select_converter, option)" in source
     assert (
-        "self.converter_frame.grid(\n            row=0,\n            column=6,"
+        "self.converter_frame.grid(\n            row=2,\n            column=8,"
         in source
     )
-    assert "rowspan=2,\n            sticky=tk.W," in source
+    assert "sticky=tk.E,\n            padx=(12, 12)," in source
+    assert "width=CONVERTER_MENU_WIDTH" in source
     assert "self.converter_frame.grid_remove()" in source
     assert (
         "self._reset_native_bridge_probe_for_converter_detection()\n"
@@ -2193,6 +2415,7 @@ def test_converter_selection_refreshes_load_button_state():
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.converter_var = _FakeVar("")
+    dialog._connected = False
     refresh_calls = []
 
     def _set_load_button_for_converter():
@@ -2207,7 +2430,40 @@ def test_converter_selection_refreshes_load_button_state():
     module.OMEROBrowserDialog._select_converter(dialog, "Imaris")
 
     assert dialog.converter_var.get() == "Imaris"
+    assert dialog._preferred_converter_setting == "Imaris"
     assert refresh_calls == ["refresh"]
+
+
+def test_converter_selection_autosaves_immediately_after_connection(tmp_path):
+    """Verify converter dropdown changes are persisted by Autosave settings.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on converter autosave regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = True
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog._set_load_button_for_converter = _noop
+    dialog._show_autosave_settings_error = _noop
+
+    module.OMEROBrowserDialog._select_converter(dialog, "Imaris")
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
 
 
 def test_converter_detection_resets_stale_native_probe_before_waiting():
@@ -2370,7 +2626,7 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "class _CircularIconButton(_RoundedButton):" in source
     circular_source = source[
         source.index("class _CircularIconButton(_RoundedButton):") : source.index(
-            "def _iter_imaris_executable_candidates():"
+            "class _PasswordRevealButton(_RoundedButton):"
         )
     ]
     assert "create_arc(" not in circular_source
@@ -2380,6 +2636,7 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "panel_icon_frame = tk.Frame(conn_frame)" in source
     assert "panel_icon_frame.grid(\n            row=0,\n            column=8," in source
     assert "rowspan=2,\n            sticky=tk.NE," in source
+    assert "padx=(12, 12)," in source
     assert "self.help_btn = _CircularIconButton(" in source
     assert 'text="?",' in source
     assert "bg=CONNECTOR_HELP_ICON_BG" in source
@@ -2390,9 +2647,14 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "self.help_btn.pack(side=tk.LEFT, padx=(0, 6))" in source
     assert "self.info_btn = _CircularIconButton(" in source
     assert 'text="i",' in source
+    assert "command=self._show_connector_info" in source
     assert "bg=CONNECTOR_INFO_ICON_BG" in source
     assert "fg=CONNECTOR_INFO_ICON_FG" in source
     assert "self.info_btn.pack(side=tk.LEFT)" in source
+    assert 'CONNECTOR_INFO_VERSION = "1.0"' in source
+    assert 'CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"' in source
+    assert "info_window.grab_set()" in source
+    assert "self.root.wait_window(info_window)" in source
 
 
 def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
@@ -2438,6 +2700,137 @@ def test_status_text_aligns_with_load_button_start():
         in source
     )
     assert "padx=STATUS_TEXT_PAD,\n            pady=5," in source
+    assert "BOTTOM_PROGRESS_RESERVED_HEIGHT = 8" in source
+    assert "bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)" in source
+    assert "bottom_progress_margin.pack_propagate(False)" in source
+
+
+def test_browser_panels_use_draggable_splitters_with_fraction_limits():
+    """Verify browser panels use resizable splitters with bounded fractions.
+
+    Inputs: repository fixtures. Output: fails on browser splitter regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    module = _load_xt_module()
+
+    assert (
+        "BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)" in source
+    )
+    assert "BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)" in source
+    assert "BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)" in source
+    assert 'cursor="sb_h_double_arrow"' in source
+    assert "p_frame.grid(row=0, column=0, sticky=tk.NSEW)" in source
+    assert "d_frame.grid(row=0, column=2, sticky=tk.NSEW)" in source
+    assert "i_frame.grid(row=0, column=4, sticky=tk.NSEW)" in source
+    assert "p_frame.pack(side=tk.LEFT" not in source
+    assert "d_frame.pack(side=tk.LEFT" not in source
+    assert "i_frame.pack(side=tk.LEFT" not in source
+
+    assert module._normalized_browser_panel_fractions((1, 1, 1)) == pytest.approx(
+        (1 / 3, 1 / 3, 1 / 3)
+    )
+    assert module._resize_browser_panel_fractions(
+        (1 / 3, 1 / 3, 1 / 3), 0, 0.01
+    ) == pytest.approx((1 / 6, 1 / 2, 1 / 3))
+    assert module._resize_browser_panel_fractions(
+        (1 / 3, 1 / 3, 1 / 3), 1, 0.99
+    ) == pytest.approx((1 / 3, 1 / 2, 1 / 6))
+
+
+def test_browser_panel_layout_applies_stored_percentages_on_resize():
+    """Verify stored browser panel fractions drive grid column widths.
+
+    Inputs: repository fixtures. Output: fails on proportional resize regressions.
+    """
+    module = _load_xt_module()
+
+    class _Browser:
+        """Browser frame fake that records column configuration."""
+
+        def __init__(self, width):
+            """Create browser fake.
+
+            Inputs: `width`. Output: initializes record state.
+            """
+            self.width = width
+            self.columns = {}
+
+        def winfo_width(self):
+            """Return current fake width.
+
+            Inputs: none. Output: int.
+            """
+            return self.width
+
+        def grid_columnconfigure(self, column, **kwargs):
+            """Record column configuration.
+
+            Inputs: `column`, `**kwargs`. Output: None.
+            """
+            self.columns[column] = kwargs
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    browser = _Browser(916)
+    dialog.browser_frame = browser
+    dialog._browser_panel_fractions = (0.25, 0.35, 0.40)
+
+    module.OMEROBrowserDialog._apply_browser_panel_layout(dialog)
+
+    assert dialog._browser_panel_fractions == pytest.approx((0.25, 0.35, 0.40))
+    assert browser.columns[0] == {"minsize": 225, "weight": 0}
+    assert browser.columns[2] == {"minsize": 315, "weight": 0}
+    assert browser.columns[4] == {"minsize": 360, "weight": 0}
+    assert browser.columns[1] == {"minsize": module.BROWSER_SPLITTER_WIDTH, "weight": 0}
+    assert browser.columns[3] == {"minsize": module.BROWSER_SPLITTER_WIDTH, "weight": 0}
+
+
+def test_browser_panel_drag_updates_fraction_state():
+    """Verify dragging a splitter stores bounded browser panel fractions.
+
+    Inputs: repository fixtures. Output: fails on splitter drag regressions.
+    """
+    module = _load_xt_module()
+
+    class _Browser:
+        """Browser frame fake for splitter drag tests."""
+
+        @staticmethod
+        def winfo_width():
+            """Return fake browser width.
+
+            Inputs: none. Output: int.
+            """
+            return 916
+
+        @staticmethod
+        def winfo_rootx():
+            """Return fake browser root x.
+
+            Inputs: none. Output: int.
+            """
+            return 100
+
+        @staticmethod
+        def grid_columnconfigure(*_args, **_kwargs):
+            """Accept column configuration.
+
+            Inputs: ignored. Output: None.
+            """
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.browser_frame = _Browser()
+    dialog._browser_panel_fractions = (1 / 3, 1 / 3, 1 / 3)
+    dialog._browser_sash_drag_index = 0
+
+    module.OMEROBrowserDialog._drag_browser_panel_resize(
+        dialog,
+        types.SimpleNamespace(x_root=620),
+    )
+
+    assert dialog._browser_panel_fractions == pytest.approx((1 / 2, 1 / 6, 1 / 3))
+
+    module.OMEROBrowserDialog._stop_browser_panel_resize(dialog, object())
+    assert dialog._browser_sash_drag_index is None
 
 
 def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
@@ -2476,21 +2869,31 @@ def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in export to OMERO starts folder worker after confirmation.
     """
     module = _load_xt_module()
+    path_hint = tmp_path / "hint"
+    path_hint.mkdir()
     selected_folder = tmp_path / "selected"
     selected_folder.mkdir()
 
     busy_states = []
     statuses = []
     threads = []
+    dialog_calls = []
+    confirm_calls = []
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
+    dialog._refresh_in_progress = False
     dialog._connected = True
     dialog.client = object()
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
-    dialog.folder_path_var = _FakeVar(str(selected_folder))
+    dialog.folder_path_var = _FakeVar(str(path_hint))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = str(path_hint)
+    dialog._folder_path_dir_check_is_dir = True
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
     dialog._export_folder_worker = lambda *_args: None
     dialog._set_actions_busy_for_export = busy_states.append
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
@@ -2498,15 +2901,13 @@ def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("export action must use the selector row path")
-        ),
+        lambda **kwargs: dialog_calls.append(kwargs) or str(selected_folder),
         raising=False,
     )
     monkeypatch.setattr(
         module.messagebox,
         "askyesno",
-        lambda *_args, **_kwargs: True,
+        lambda title, message: confirm_calls.append((title, message)) or True,
         raising=False,
     )
 
@@ -2535,6 +2936,23 @@ def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
 
     module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
+    assert dialog_calls == [
+        {
+            "parent": dialog.root,
+            "mustexist": True,
+            "title": "Select folder to export to OMERO",
+            "initialdir": str(path_hint),
+        }
+    ]
+    assert confirm_calls == [
+        (
+            "Confirm folder export",
+            "Export the selected folder to OMERO root path as a dataset?\n\n"
+            "Dataset name: selected\n"
+            "\n"
+            "This uploads every file inside the selected folder.",
+        )
+    ]
     assert busy_states == [True]
     assert statuses == [("Preparing folder export to OMERO...", "#fff3cd")]
     assert threads == [
@@ -2554,12 +2972,18 @@ def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
+    dialog._refresh_in_progress = False
     dialog._connected = True
     dialog.client = object()
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar(r"C:\\")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = ""
+    dialog._folder_path_dir_check_is_dir = False
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
     dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
@@ -2572,6 +2996,12 @@ def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
         module.messagebox,
         "showerror",
         lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: r"C:\\",
         raising=False,
     )
 
@@ -2593,12 +3023,18 @@ def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
+    dialog._refresh_in_progress = False
     dialog._connected = True
     dialog.client = object()
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar(r"C:\missing-folder")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = ""
+    dialog._folder_path_dir_check_is_dir = False
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
     dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
@@ -2611,6 +3047,12 @@ def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
         module.messagebox,
         "showerror",
         lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: r"C:\missing-folder",
         raising=False,
     )
 
@@ -2632,12 +3074,18 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
     module = _load_xt_module()
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
+    dialog._refresh_in_progress = False
     dialog._connected = True
     dialog.client = object()
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
     dialog.folder_path_var = _FakeVar("C:\\bad\x00path")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = ""
+    dialog._folder_path_dir_check_is_dir = False
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
     dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
         _ for _ in ()
     ).throw(AssertionError("busy state must not change"))
@@ -2659,6 +3107,12 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
             ValueError("embedded null byte")
         ),
     )
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: "C:\\bad\x00path",
+        raising=False,
+    )
 
     module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
@@ -2668,6 +3122,121 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
             "Please select or enter an existing folder.",
         )
     ]
+
+
+def test_export_folder_to_omero_cancel_stops_before_confirmation(monkeypatch):
+    """Verify cancelling the export folder chooser starts no confirmation.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on chooser-cancel regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._folder_export_in_progress = False
+    dialog._refresh_in_progress = False
+    dialog._connected = True
+    dialog.client = object()
+    dialog._folder_export_available = True
+    dialog._folder_export_reason = ""
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar("")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = ""
+    dialog._folder_path_dir_check_is_dir = False
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
+    dialog._set_actions_busy_for_export = lambda *_args, **_kwargs: (
+        _ for _ in ()
+    ).throw(AssertionError("busy state must not change"))
+    dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("status must not change")
+    )
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: "",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("confirmation must not open after cancel")
+        ),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._export_folder_to_omero(dialog)
+
+    assert dialog._folder_export_initial_path_hint_consumed is True
+
+
+def test_export_folder_dialog_uses_last_selected_folder_after_first_hint(
+    tmp_path, monkeypatch
+):
+    """Verify the path row is only a first-use export chooser hint.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on export chooser regressions.
+    """
+    module = _load_xt_module()
+    path_hint = tmp_path / "hint"
+    last_selected = tmp_path / "last-selected"
+    new_selected = tmp_path / "new-selected"
+    for folder in (path_hint, last_selected, new_selected):
+        folder.mkdir()
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar(str(path_hint))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_dir_check_value = str(path_hint)
+    dialog._folder_path_dir_check_is_dir = True
+    dialog._folder_export_initial_path_hint_consumed = True
+    dialog._last_folder_export_selection = str(last_selected)
+    dialog_calls = []
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **kwargs: dialog_calls.append(kwargs) or str(new_selected),
+        raising=False,
+    )
+
+    selected = module.OMEROBrowserDialog._select_folder_for_omero_export(dialog)
+
+    assert selected == str(new_selected)
+    assert dialog._last_folder_export_selection == str(new_selected)
+    assert dialog_calls == [
+        {
+            "parent": dialog.root,
+            "mustexist": True,
+            "title": "Select folder to export to OMERO",
+            "initialdir": str(last_selected),
+        }
+    ]
+
+
+def test_folder_export_initialdir_requires_background_validated_path(tmp_path):
+    """Verify typed path hints require the background directory check.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on initialdir validation regressions.
+    """
+    module = _load_xt_module()
+    path_hint = tmp_path / "hint"
+    path_hint.mkdir()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.folder_path_var = _FakeVar(str(path_hint))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_export_initial_path_hint_consumed = False
+    dialog._last_folder_export_selection = ""
+    dialog._folder_path_dir_check_value = ""
+    dialog._folder_path_dir_check_is_dir = False
+
+    assert module.OMEROBrowserDialog._folder_export_dialog_initialdir(dialog) == ""
+
+    dialog._folder_path_dir_check_value = str(path_hint)
+    dialog._folder_path_dir_check_is_dir = True
+    assert module.OMEROBrowserDialog._folder_export_dialog_initialdir(dialog) == str(
+        path_hint
+    )
 
 
 def test_export_folder_worker_uploads_folder_and_reports_success(tmp_path):
@@ -2774,7 +3343,7 @@ def test_export_folder_worker_uploads_folder_and_reports_success(tmp_path):
     assert info_messages == [
         (
             "Folder Export Completed",
-            "The folder was exported to OMERO root as dataset 'batch'.",
+            "The folder was exported to OMERO root path as dataset 'batch'.",
         )
     ]
     assert status_updates[-1] == ("Folder export completed in OMERO", "#d4edda")
@@ -4218,6 +4787,169 @@ def test_set_converter_options_populates_menu_without_blank_entry():
     assert dialog.converter_var.value == "Imaris"
 
 
+def test_set_converter_options_restores_saved_converter_when_available():
+    """Verify saved converter selection is restored after capability detection.
+
+    Inputs: repository fixtures. Output: fails on saved converter selection regressions.
+    """
+    module = _load_xt_module()
+
+    class DummyMenu:
+        """Menu fake for saved converter restoration."""
+
+        def __init__(self):
+            """Create command recorder.
+
+            Inputs: none. Output: initializes commands.
+            """
+            self.commands = []
+
+        @staticmethod
+        def delete(_start, _end):
+            """Accept menu deletion.
+
+            Inputs: ignored. Output: None.
+            """
+
+        def add_command(self, label, command, **kwargs):
+            """Record menu command.
+
+            Inputs: `label`, `command`, `**kwargs`. Output: None.
+            """
+            self.commands.append((label, command, kwargs))
+
+    class DummyFrame:
+        """Frame fake for saved converter restoration."""
+
+        @staticmethod
+        def grid():
+            """Accept frame show.
+
+            Inputs: none. Output: None.
+            """
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.converter_menu = types.SimpleNamespace(menu=DummyMenu())
+    dialog.converter_var = _FakeVar("")
+    dialog.converter_frame = DummyFrame()
+    dialog.load_btn = _FakeButton()
+    dialog.refresh_btn = _FakeButton()
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+    dialog._preferred_converter_setting = ""
+    dialog._saved_settings = {module.CONNECTOR_SETTINGS_CONVERTER_KEY: "Imaris"}
+
+    module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
+
+    assert dialog.converter_var.get() == "Imaris"
+    assert dialog._preferred_converter_setting == "Imaris"
+
+
+def test_show_converter_frame_updates_main_window_minimum_width():
+    """Verify visible converter controls cannot be cut off by window shrink.
+
+    Inputs: repository fixtures. Output: fails on min-width regressions.
+    """
+    module = _load_xt_module()
+
+    class _Root:
+        """Fake root that exposes a larger requested width after converter show."""
+
+        def __init__(self):
+            """Create fake root state.
+
+            Inputs: none. Output: initializes geometry records.
+            """
+            self.min_size = (module.OMERO_CONNECTOR_WINDOW_WIDTH, 760)
+            self.geometry_calls = []
+
+        @staticmethod
+        def update_idletasks():
+            """Accept idle update.
+
+            Inputs: none. Output: None.
+            """
+
+        def minsize(self, *args):
+            """Get or set minsize.
+
+            Inputs: optional width and height. Output: current minsize or None.
+            """
+            if args:
+                self.min_size = tuple(args)
+                return None
+            return self.min_size
+
+        @staticmethod
+        def winfo_width():
+            """Return current width below requested width.
+
+            Inputs: none. Output: int.
+            """
+            return 1000
+
+        @staticmethod
+        def winfo_height():
+            """Return current height.
+
+            Inputs: none. Output: int.
+            """
+            return 760
+
+        @staticmethod
+        def winfo_reqwidth():
+            """Return requested width after converter controls become visible.
+
+            Inputs: none. Output: int.
+            """
+            return 1483
+
+        @staticmethod
+        def winfo_reqheight():
+            """Return requested height.
+
+            Inputs: none. Output: int.
+            """
+            return 760
+
+        def geometry(self, value):
+            """Record geometry changes.
+
+            Inputs: `value`. Output: None.
+            """
+            self.geometry_calls.append(value)
+
+    class _Frame:
+        """Fake converter frame."""
+
+        def __init__(self):
+            """Create grid recorder.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.grid_calls = 0
+
+        def grid(self):
+            """Record grid show.
+
+            Inputs: none. Output: None.
+            """
+            self.grid_calls += 1
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog.converter_frame = _Frame()
+
+    module.OMEROBrowserDialog._show_converter_frame(dialog)
+
+    assert dialog.converter_frame.grid_calls == 1
+    assert dialog.root.min_size == (1483, 760)
+    assert dialog.root.geometry_calls == ["1483x760"]
+
+
 def test_scrolled_listbox_disables_active_underline(monkeypatch):
     """Verify scrolled listbox disables active underline.
 
@@ -4586,6 +5318,59 @@ def test_refresh_ignores_stale_results_without_mutating_current_view():
     assert dialog.ilist.items == ["Old image"]
     assert dialog.refresh_btn.configs == []
     assert dialog.load_btn.configs == []
+
+
+def test_refresh_browser_does_not_repaint_action_buttons(monkeypatch):
+    """Verify Refresh does not flicker Load or Export action buttons.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on action-button flicker regressions.
+    """
+    module = _load_xt_module()
+    threads = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._refresh_in_progress = False
+    dialog._refresh_generation = 4
+    dialog._connected = True
+    dialog.client = object()
+    dialog.refresh_btn = _FakeButton()
+    dialog.load_btn = _FakeButton()
+    dialog.export_btn = _FakeButton()
+    dialog._current_selected_project_id = lambda: "project-1"
+    dialog._current_selected_dataset_id = lambda: "dataset-1"
+    dialog._set_status = _noop
+    dialog._set_connection_indicator = _noop
+
+    class _FakeThread:
+        """Fake refresh thread recorder."""
+
+        def __init__(self, target, args, daemon):
+            """Record thread construction.
+
+            Inputs: `target`, `args`, `daemon`. Output: None.
+            """
+            threads.append((target, args, daemon))
+
+        @staticmethod
+        def start():
+            """Do not run the background worker in this unit test.
+
+            Inputs: none. Output: None.
+            """
+
+    monkeypatch.setattr(module.threading, "Thread", _FakeThread)
+
+    module.OMEROBrowserDialog._refresh_browser(dialog)
+
+    assert dialog.refresh_btn.configs == [{"state": "disabled"}]
+    assert dialog.load_btn.configs == []
+    assert dialog.export_btn.configs == []
+    assert threads == [
+        (
+            dialog._refresh_worker,
+            ("project-1", "dataset-1", 5),
+            True,
+        )
+    ]
 
 
 def test_load_routes_single_selection_to_single_worker(tmp_path, monkeypatch):
