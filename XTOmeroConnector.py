@@ -232,6 +232,18 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_CONVERTER_KEY,
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
 )
+_ROUNDED_BUTTON_OPTION_ALIASES = {
+    "background": "bg",
+    "foreground": "fg",
+}
+_ROUNDED_BUTTON_REDRAW_FIELDS = {
+    "activebackground": "_active_bg",
+    "activeforeground": "_active_fg",
+    "bg": "_bg",
+    "fg": "_fg",
+    "font": "_font",
+    "text": "_text",
+}
 _XT_DLL_DIR_HANDLES: List[Any] = []
 _WINDOWS_RESERVED_FILENAMES = {
     "CON",
@@ -2179,6 +2191,42 @@ def _normalized_tk_state(state):
     return str(state or _tk_constant("NORMAL", "normal")).lower()
 
 
+def _call_if_available(target, method_name, *args):
+    """Call a target method when it exists.
+
+    Inputs: `target`, `method_name`, `*args`. Output: method result or None.
+    """
+    method = getattr(target, method_name, None)
+    if callable(method):
+        return method(*args)
+    return None
+
+
+def _safe_widget_dimension(widget, method_name):
+    """Return a non-negative integer widget dimension.
+
+    Inputs: `widget`, `method_name`. Output: int.
+    """
+    try:
+        value = _call_if_available(widget, method_name)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, int(value or 0))
+
+
+def _current_root_minsize(root):
+    """Return the current root minimum size.
+
+    Inputs: `root`. Output: tuple of width and height.
+    """
+    try:
+        values = _call_if_available(root, "minsize") or (0, 0)
+        width, height = tuple(values)[:2]
+    except (TypeError, ValueError):
+        return (0, 0)
+    return (max(0, int(width or 0)), max(0, int(height or 0)))
+
+
 def _normalized_browser_panel_fractions(fractions):
     """Return valid browser-panel fractions that sum to one.
 
@@ -2291,6 +2339,69 @@ class _RoundedButton:
         self._sync_cursor()
         self._redraw()
 
+    @staticmethod
+    def _canonical_config_key(key):
+        """Return the canonical button configuration key.
+
+        Inputs: `key`. Output: normalized key string.
+        """
+        return _ROUNDED_BUTTON_OPTION_ALIASES.get(str(key), str(key))
+
+    def _set_redraw_option(self, key, value):
+        """Set one redraw-triggering option and report whether it changed.
+
+        Inputs: `key`, `value`. Output: bool.
+        """
+        attribute = _ROUNDED_BUTTON_REDRAW_FIELDS[key]
+        if value == getattr(self, attribute):
+            return False
+        setattr(self, attribute, value)
+        return True
+
+    def _set_dimension_option(self, key, value):
+        """Set one canvas dimension option and report whether it changed.
+
+        Inputs: `key`, `value`. Output: bool.
+        """
+        value = int(value)
+        attribute = f"_{key}"
+        if value == getattr(self, attribute):
+            return False
+        setattr(self, attribute, value)
+        self._canvas.config(**{key: value})
+        return True
+
+    def _configure_option(self, key, value):
+        """Apply one button option and return redraw/cursor requirements.
+
+        Inputs: `key`, `value`. Output: tuple of bools.
+        """
+        key = self._canonical_config_key(key)
+        if key in _ROUNDED_BUTTON_REDRAW_FIELDS:
+            return self._set_redraw_option(key, value), False
+        if key == "command":
+            self._command = value
+            return False, False
+        if key == "state":
+            return self._set_state_option(value)
+        if key in {"width", "height"}:
+            return self._set_dimension_option(key, value), False
+        self._canvas.config(**{key: value})
+        return False, False
+
+    def _set_state_option(self, value):
+        """Set the state option and return redraw/cursor requirements.
+
+        Inputs: `value`. Output: tuple of bools.
+        """
+        if _normalized_tk_state(value) == _normalized_tk_state(self._state):
+            return False, False
+        self._state = value
+        if not self._is_enabled():
+            self._pressed = False
+            self._hover = False
+        return True, True
+
     def pack(self, *args, **kwargs):
         """Apply pack geometry management.
 
@@ -2336,54 +2447,9 @@ class _RoundedButton:
         redraw_needed = False
         cursor_needed = False
         for key, value in kwargs.items():
-            if key in {"bg", "background"}:
-                if value != self._bg:
-                    self._bg = value
-                    redraw_needed = True
-            elif key == "activebackground":
-                if value != self._active_bg:
-                    self._active_bg = value
-                    redraw_needed = True
-            elif key in {"fg", "foreground"}:
-                if value != self._fg:
-                    self._fg = value
-                    redraw_needed = True
-            elif key == "activeforeground":
-                if value != self._active_fg:
-                    self._active_fg = value
-                    redraw_needed = True
-            elif key == "text":
-                if value != self._text:
-                    self._text = value
-                    redraw_needed = True
-            elif key == "command":
-                self._command = value
-            elif key == "font":
-                if value != self._font:
-                    self._font = value
-                    redraw_needed = True
-            elif key == "state":
-                if _normalized_tk_state(value) != _normalized_tk_state(self._state):
-                    self._state = value
-                    redraw_needed = True
-                    cursor_needed = True
-                    if not self._is_enabled():
-                        self._pressed = False
-                        self._hover = False
-            elif key == "width":
-                width = int(value)
-                if width != self._width:
-                    self._width = width
-                    self._canvas.config(width=self._width)
-                    redraw_needed = True
-            elif key == "height":
-                height = int(value)
-                if height != self._height:
-                    self._height = height
-                    self._canvas.config(height=self._height)
-                    redraw_needed = True
-            else:
-                self._canvas.config(**{key: value})
+            option_redraw, option_cursor = self._configure_option(key, value)
+            redraw_needed = redraw_needed or option_redraw
+            cursor_needed = cursor_needed or option_cursor
         if cursor_needed:
             self._sync_cursor()
         if redraw_needed:
@@ -2665,13 +2731,21 @@ class _CircularIconButton(_RoundedButton):
 class _PasswordRevealButton(_RoundedButton):
     """Canvas-backed password visibility button with a timed reveal state."""
 
+    def __init__(self, *args, **kwargs):
+        """Create the password reveal button.
+
+        Inputs: forwarded button arguments. Output: None.
+        """
+        self._visible = False
+        super().__init__(*args, **kwargs)
+
     def set_visible(self, visible):
         """Update whether the button should draw the revealed-password state.
 
         Inputs: `visible`. Output: None.
         """
         visible = bool(visible)
-        if visible != getattr(self, "_visible", False):
+        if visible != self._visible:
             self._visible = visible
             self._redraw()
 
@@ -2686,7 +2760,7 @@ class _PasswordRevealButton(_RoundedButton):
 
         enabled = self._is_enabled()
         pressed = enabled and self._pressed
-        visible = getattr(self, "_visible", False)
+        visible = self._visible
         if not enabled:
             fill = "#f1f5f9"
             outline = "#cfd7df"
@@ -5436,6 +5510,8 @@ class OMEROBrowserDialog:
         self._health_ping_generation = 0
         self._health_ping_in_progress = False
         self._health_ping_after_id: Optional[str] = None
+        self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
+        self._browser_sash_drag_index = None
         self._indicator_state = "disconnected"
         self._indicator_blink_on = False
         self._indicator_after_id: Optional[str] = None
@@ -5456,6 +5532,7 @@ class OMEROBrowserDialog:
         self._settings_file_path = None
         self._saved_settings = {}
         self._autosave_settings_write_error = ""
+        self._preferred_converter_setting = ""
         try:
             self._settings_file_path = _connector_settings_env_path()
             self._saved_settings = _load_connector_settings(self._settings_file_path)
@@ -5802,8 +5879,6 @@ class OMEROBrowserDialog:
         browser = tk.Frame(self.root)
         browser.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.browser_frame = browser
-        self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
-        self._browser_sash_drag_index = None
         browser.grid_rowconfigure(0, weight=1)
 
         # Projects
@@ -6059,35 +6134,42 @@ class OMEROBrowserDialog:
         root = getattr(self, "root", None)
         if root is None:
             return
-        update_idletasks: Any = getattr(root, "update_idletasks", None)
-        if callable(update_idletasks):
-            update_idletasks()
-        current_min = (0, 0)
-        minsize_getter: Any = getattr(root, "minsize", None)
-        if callable(minsize_getter):
-            try:
-                current_min = tuple(minsize_getter())
-            except (TypeError, ValueError):
-                current_min = (0, 0)
+        _call_if_available(root, "update_idletasks")
+        width, height = self._current_window_minimum_size(root)
+        _call_if_available(root, "minsize", width, height)
+        if self._window_is_smaller_than(root, width, height):
+            root.geometry(f"{width}x{height}")
+
+    def _current_window_minimum_size(self, root):
+        """Return the minimum size required by the current connector layout.
+
+        Inputs: `root`. Output: tuple of width and height.
+        """
+        current_min = _current_root_minsize(root)
         width = max(
             OMERO_CONNECTOR_WINDOW_WIDTH,
-            int(self.root.winfo_width() or 0),
-            int(self.root.winfo_reqwidth() or 0),
-            int(current_min[0] or 0),
+            _safe_widget_dimension(root, "winfo_width"),
+            _safe_widget_dimension(root, "winfo_reqwidth"),
+            current_min[0],
         )
         height = max(
             OMERO_CONNECTOR_WINDOW_HEIGHT,
-            int(self.root.winfo_height() or 0),
-            int(self.root.winfo_reqheight() or 0),
-            int(current_min[1] or 0),
+            _safe_widget_dimension(root, "winfo_height"),
+            _safe_widget_dimension(root, "winfo_reqheight"),
+            current_min[1],
         )
-        if callable(minsize_getter):
-            root.minsize(width, height)
-        if (
-            int(root.winfo_width() or 0) < width
-            or int(root.winfo_height() or 0) < height
-        ):
-            root.geometry(f"{width}x{height}")
+        return width, height
+
+    @staticmethod
+    def _window_is_smaller_than(root, width, height):
+        """Return whether the current root size is below the supplied size.
+
+        Inputs: `root`, `width`, `height`. Output: bool.
+        """
+        return (
+            _safe_widget_dimension(root, "winfo_width") < width
+            or _safe_widget_dimension(root, "winfo_height") < height
+        )
 
     def _get_converter_menu(self):
         """Return converter menu.

@@ -2112,7 +2112,6 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
 
     Inputs: pytest provides `monkeypatch`. Output: fails on password-clear regressions.
     """
-    module = _load_xt_module()
 
     class FakeClient:
         """Test double for a failed OMERO.web client."""
@@ -2310,6 +2309,72 @@ def test_password_reveal_is_timed_and_clear_cancels_pending_timer():
     assert "after-1" in cancelled
 
 
+def test_rounded_button_config_updates_only_changed_state():
+    """Verify rounded button configuration avoids redundant redraws.
+
+    Inputs: repository fixtures. Output: fails on rounded button config regressions.
+    """
+    module = _load_xt_module()
+
+    class _Canvas:
+        """Canvas fake that records configuration calls."""
+
+        def __init__(self):
+            """Create the fake canvas.
+
+            Inputs: none. Output: initializes call storage.
+            """
+            self.configs = []
+
+        def config(self, **kwargs):
+            """Record a canvas config call.
+
+            Inputs: `**kwargs`. Output: None.
+            """
+            self.configs.append(kwargs)
+
+    button = object.__new__(module._RoundedButton)
+    button._canvas = _Canvas()
+    button._bg = "#ffffff"
+    button._fg = "#000000"
+    button._active_bg = "#eeeeee"
+    button._active_fg = "#111111"
+    button._font = ("Arial", 10)
+    button._text = "Load"
+    button._width = 120
+    button._height = 42
+    button._state = "normal"
+    button._pressed = True
+    button._hover = True
+    redraws = []
+    cursor_syncs = []
+    button._redraw = lambda: redraws.append("redraw")
+    button._sync_cursor = lambda: cursor_syncs.append("cursor")
+
+    module._RoundedButton.config(
+        button,
+        background="#ffffff",
+        foreground="#000000",
+        text="Load",
+    )
+    assert redraws == []
+    assert cursor_syncs == []
+
+    module._RoundedButton.config(
+        button,
+        background="#101820",
+        width=132,
+        state="disabled",
+    )
+    assert button._bg == "#101820"
+    assert button._width == 132
+    assert button._pressed is False
+    assert button._hover is False
+    assert button._canvas.configs == [{"width": 132}]
+    assert redraws == ["redraw"]
+    assert cursor_syncs == ["cursor"]
+
+
 def test_browser_dialog_places_folder_selector_inside_connection_settings():
     """Verify folder selector UI stays inside the connection settings panel.
 
@@ -2337,6 +2402,7 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     assert "self.password_frame.grid_columnconfigure(0, weight=1)" in source
     assert "self.pass_entry = tk.Entry(\n            self.password_frame," in source
     assert "self.password_reveal_btn = _PasswordRevealButton(" in source
+    assert "self._visible = False\n        super().__init__(*args, **kwargs)" in source
     assert "command=self._toggle_password_reveal" in source
     assert "self.connect_btn.grid(row=0, column=5," in source
     assert "self.select_folder_btn.grid(row=2, column=5," in source
@@ -2391,6 +2457,7 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     assert 'tk.Label(self.converter_frame, text="Converter:").pack' in source
     assert "self.converter_menu = tk.Menubutton(" in source
     assert "self.converter_menu.pack(side=tk.LEFT)" in source
+    assert 'self._preferred_converter_setting = ""' in source
     assert "def _select_converter(self, value):" in source
     assert "command=partial(self._select_converter, option)" in source
     assert (
@@ -2718,6 +2785,11 @@ def test_browser_panels_use_draggable_splitters_with_fraction_limits():
     )
     assert "BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)" in source
     assert "BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)" in source
+    assert (
+        "self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)"
+        in source
+    )
+    assert "self._browser_sash_drag_index = None" in source
     assert 'cursor="sb_h_double_arrow"' in source
     assert "p_frame.grid(row=0, column=0, sticky=tk.NSEW)" in source
     assert "d_frame.grid(row=0, column=2, sticky=tk.NSEW)" in source
