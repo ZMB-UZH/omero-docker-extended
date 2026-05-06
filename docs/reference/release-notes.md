@@ -1,5 +1,30 @@
 # Release Notes
 
+## 2026-05-06 Imaris XT Connector UI Refresh
+
+### Highlights
+
+- Added a timed password reveal control to the standalone XT connector while
+  keeping passwords out of autosave settings and clearing the visible password
+  field after successful login.
+- Restored converter selection as an autosaved setting and persisted converter
+  changes immediately when `Autosave settings` is enabled.
+- Reworked folder export so `Export folder to OMERO` always opens the native
+  folder chooser before `Confirm folder export`; the typed path is only the
+  first export chooser location hint for a session.
+- Added draggable Projects, Datasets, and Images panel splitters with bounded
+  proportional widths and removed refresh-time action-button repaint flicker.
+- Wired the connector info button to a modal version, author, and as-is
+  disclaimer dialog.
+
+### Validation Focus
+
+- Focused standalone connector unit coverage for password handling, autosaved
+  converter settings, folder-export chooser ordering, bounded panel resizing,
+  and refresh action-button state.
+- Tk/Xvfb layout verification for minimum-width behavior and visible widget
+  alignment.
+
 ## 2026-04-26 Documentation Audit Refresh
 
 This refresh audited the documentation set against the current repository code,
