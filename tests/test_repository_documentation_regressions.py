@@ -619,8 +619,12 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("confirm all GitHub workflows are green", runbook_text)
         self.assertIn("compare grouped issues plus issue occurrences", runbook_text)
         self.assertIn("If either count increased", runbook_text)
+        self.assertIn("skipped or unavailable, not zero", normalized_runbook_text)
+        self.assertIn("subscription", normalized_runbook_text)
+        self.assertIn("skipped or unavailable", normalized_runbook_text)
         self.assertIn(
-            "report the count as unavailable, not zero", normalized_runbook_text
+            "continue every other local and GitHub workflow verification step",
+            normalized_runbook_text,
         )
         self.assertIn("grouped issues from issue occurrences", normalized_runbook_text)
         self.assertIn("latest_commit_oid", normalized_runbook_text)
@@ -684,6 +688,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.assertIn("PAT", normalized_adapter_text)
             self.assertIn("GitHub workflows", normalized_adapter_text)
             self.assertIn("DeepSource", normalized_adapter_text)
+            self.assertIn("skipped or unavailable", normalized_adapter_text)
+            self.assertIn("subscription", normalized_adapter_text)
             self.assertRegex(
                 normalized_adapter_text,
                 r"(did not increase|no DeepSource count increase)",
@@ -697,8 +703,12 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn(
             "GitHub HTTPS Git operations require a PAT", normalized_agents_text
         )
-        self.assertIn("DeepSource API key", normalized_agents_text)
-        self.assertIn("needed and unavailable", normalized_agents_text)
+        self.assertIn(
+            "DeepSource counts need explicit credentials", normalized_agents_text
+        )
+        self.assertIn("subscription", normalized_agents_text)
+        self.assertIn("skipped or unavailable", normalized_agents_text)
+        self.assertIn("continue the rest", normalized_agents_text)
         self.assertIn("ask immediately and pause", normalized_agents_text)
         self.assertIn("do not retry auth failures", normalized_agents_text)
         self.assertIn(
@@ -709,7 +719,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "issue occurrences for the pushed commit", self.read_text("AGENTS.md")
         )
         self.assertIn(
-            "ask for it immediately and pause",
+            "DeepSource auth or subscription failures are non-blocking",
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
         self.assertIn(
@@ -723,9 +733,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         prevention_text = self.read_text(
             "docs/reference/ai-agent-security-prevention-playbook.md"
         )
+        normalized_prevention_text = " ".join(prevention_text.split())
         self.assertIn("confirm GitHub workflows are green", prevention_text)
         self.assertIn("compare grouped issues plus issue occurrences", prevention_text)
-        self.assertIn("against the pre-push baseline", prevention_text)
+        self.assertIn("against the pre-push baseline", normalized_prevention_text)
 
     def test_codeql_file_count_coverage_is_explained(self) -> None:
         """Verify codeql file count coverage is explained.

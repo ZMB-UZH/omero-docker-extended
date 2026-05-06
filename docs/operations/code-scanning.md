@@ -15,7 +15,11 @@ credential.
 DeepSource repo-file configuration is retired for this repository. Do not
 search for, create, restore, or edit `.deepsource.toml`. A GitHub PAT is not a
 DeepSource API credential; start scanner triage from the GitHub code-scanning
-API, GitHub Actions logs, and this runbook instead.
+API, GitHub Actions logs, and this runbook instead. DeepSource inventory may be
+unavailable because of missing credentials, subscription limits, repository
+access, or service/API availability. In that case, report DeepSource as skipped
+or unavailable, never as zero, and continue every other local and GitHub
+workflow verification step.
 
 The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a default-branch security scan creates new open code-scanning alerts.
 
@@ -132,7 +136,13 @@ denominator only as a deliberate policy change, with matching `.coveragerc`,
 - Workflow logs: GitHub Actions run logs for `security-code-scanning.yml`.
 - Local config: `.github/workflows/security-code-scanning.yml`, scanner config files it references, and committed test contracts.
 - Retired source: `.deepsource.toml`; do not look for it or recreate it.
-- DeepSource counts: only report them after a successful DeepSource API or CLI query using a DeepSource credential. A GitHub PAT is insufficient; without DeepSource auth, report the count as unavailable, not zero. Distinguish grouped issues from issue occurrences. Check `latest_commit_oid`; if it does not match the commit under review, label the count as a lagged snapshot.
+- DeepSource counts: only report them after a successful DeepSource API or CLI
+  query using a DeepSource credential. A GitHub PAT is insufficient; without
+  DeepSource auth, subscription, repository access, or API availability, report
+  the count as skipped or unavailable, not zero, and keep running the rest of
+  the workflow checks. Distinguish grouped issues from issue occurrences. Check
+  `latest_commit_oid`; if it does not match the commit under review, label the
+  count as a lagged snapshot.
 
 Useful GitHub Actions log commands:
 
@@ -174,10 +184,12 @@ python3 tools/scanner_inventory.py deepsource-issues \
 Each API request defaults to a 120-second timeout; use `--request-timeout N`
 only when a scanner API is slower than that, then report the value used.
 Never paste PATs into command arguments, remotes, repo files, or logs.
-If a GitHub PAT or DeepSource API key is required and unavailable, ask the user
-for the exact credential immediately and pause for input. Do not keep retrying
-commands that cannot authenticate; continue only independent local tasks that do
-not need that credential.
+If a GitHub PAT is required and unavailable, ask the user for the exact
+credential immediately and pause for input. Do not keep retrying GitHub
+operations that cannot authenticate. If DeepSource auth, subscription, or
+repository access is unavailable, record DeepSource as skipped or unavailable
+and continue all other local and GitHub workflow checks instead of blocking the
+verification path.
 GitHub HTTPS Git operations require a PAT or credential manager, never an
 account password. For TTY pushes, use:
 
@@ -235,7 +247,15 @@ To prevent documentation drift:
 6. Prefer the narrowest safe rewrite that removes the vulnerable pattern at the helper boundary so sibling call sites inherit the fix.
 7. Re-run targeted tests for every touched package, plus repo-wide `ruff check`, `ruff format --check`, and `python3 tools/lint_docs_structure.py` when those tools are available in the active environment.
 8. After pushing, confirm all GitHub workflows are green and refresh the live GitHub alert total. Do not assume a local fix cleared an alert until GitHub reports it.
-9. When DeepSource auth is available, query DeepSource for the pushed commit and compare grouped issues plus issue occurrences against the pre-push baseline. If either count increased, run `deepsource-issues`, fix the regression root cause, rerun targeted tests, push again, and repeat this verification.
+9. When DeepSource auth and repository access are available, query DeepSource
+   for the pushed commit and compare grouped issues plus issue occurrences
+   against the pre-push baseline. If either count increased, run
+   `deepsource-issues`, fix the regression root cause, rerun targeted tests,
+   push again, and repeat this verification. If DeepSource is skipped or
+   unavailable because of credentials, subscription, repository access, or API
+   availability, report that status and continue the remaining local and GitHub
+   workflow verification; do not treat the skipped DeepSource check as a
+   blocking failure.
 
 ### Live by-tool snapshot
 
