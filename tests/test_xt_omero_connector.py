@@ -1077,6 +1077,58 @@ def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
     assert opened == [str(ims_path)]
 
 
+def test_open_file_in_imaris_accepts_openfile_only_handles(tmp_path):
+    """Verify OpenFile-only Imaris handles remain valid for same-session opening.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on OpenFile compatibility regressions.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    opened = []
+
+    class _FakeImaris:
+        """OpenFile-only Imaris API test double."""
+
+        @staticmethod
+        def OpenFile(path, *_args):
+            """Record the open call.
+
+            Inputs: `path`, optional API args. Output: None.
+            """
+            opened.append(path)
+
+    assert module._looks_like_imaris_application(_FakeImaris()) is True
+    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+    assert opened == [str(ims_path)]
+
+
+def test_open_file_in_imaris_accepts_legacy_loadfile_handles(tmp_path):
+    """Verify legacy LoadFile-only Imaris handles remain valid after validation.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on legacy API compatibility regressions.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    opened = []
+
+    class _FakeImaris:
+        """LoadFile-only Imaris API test double."""
+
+        @staticmethod
+        def LoadFile(path, *_args):
+            """Record the open call.
+
+            Inputs: `path`, optional API args. Output: None.
+            """
+            opened.append(path)
+
+    assert module._looks_like_imaris_application(_FakeImaris()) is True
+    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+    assert opened == [str(ims_path)]
+
+
 def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypatch):
     """Confirm open file in imaris rejects unverified current file is rejected at the boundary.
 
@@ -4454,7 +4506,7 @@ def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
     assert errors == [
         (
             "Invalid Folder",
-            "Please select or enter an existing folder.",
+            "Please select an existing folder.",
         )
     ]
 
@@ -4512,7 +4564,7 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
     assert errors == [
         (
             "Invalid Folder",
-            "Please select or enter an existing folder.",
+            "Please select an existing folder.",
         )
     ]
 
@@ -5684,6 +5736,18 @@ def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkey
     assert calls == []
 
 
+def test_native_bridge_helper_source_has_no_undefined_logger_reference():
+    """Verify the generated bridge helper is self-contained.
+
+    Inputs: repository fixtures. Output: fails on helper-source regressions.
+    """
+    module = _load_xt_module()
+
+    assert "logger." not in module._NATIVE_BRIDGE_OPEN_HELPER
+    assert '"OpenFile"' in module._NATIVE_BRIDGE_OPEN_HELPER
+    assert '"LoadFile"' in module._NATIVE_BRIDGE_OPEN_HELPER
+
+
 def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
     """Verify native bridge runner requires numeric imaris ID.
 
@@ -5900,7 +5964,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
 
         Inputs: OMERO image id, target directory, fallback name. Output: local file path.
         """
-        downloads.append(("ims", image_id, Path(download_dir).name, fallback_name))
+        downloads.append(("ims", image_id, Path(download_dir), fallback_name))
         return str(local_file)
 
     def _download_original_file(image_id, download_dir, fallback_name):
@@ -5908,7 +5972,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
 
         Inputs: OMERO image id, target directory, fallback name. Output: local file path.
         """
-        downloads.append(("original", image_id, Path(download_dir).name, fallback_name))
+        downloads.append(("original", image_id, Path(download_dir), fallback_name))
         return str(local_file)
 
     monkeypatch.setattr(
@@ -5944,7 +6008,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         (
             expected_download,
             7,
-            "img_7",
+            tmp_path,
             "img_7.ims" if converter == "OMERO" else filename,
         )
     ]
@@ -5993,6 +6057,136 @@ def test_open_downloaded_file_retries_direct_handle_when_optional_bridge_disable
 
     assert dialog._open_downloaded_file_in_imaris(str(ims_path), require_ims=True)
     assert opened == [str(ims_path)]
+
+
+def test_open_downloaded_file_uses_lazy_bridge_runner_when_probe_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify final open can use a lazy bridge runner without startup probing.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on final handoff regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    attempts = []
+    direct_calls = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = module.threading.get_ident()
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_python_executable = None
+    dialog._set_status = _noop
+    monkeypatch.setattr(
+        module, "_resolve_imaris_application", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        module,
+        "open_file_in_imaris",
+        lambda *args, **_kwargs: direct_calls.append(args) or False,
+    )
+
+    def _lazy_runner(
+        file_path,
+        imaris_id,
+        preferred_python_executable=None,
+        require_ims=True,
+        allow_when_disabled=False,
+    ):
+        """Record lazy native runner handoff.
+
+        Inputs: bridge runner arguments. Output: True.
+        """
+        attempts.append(
+            (
+                file_path,
+                imaris_id,
+                preferred_python_executable,
+                require_ims,
+                allow_when_disabled,
+            )
+        )
+        return True
+
+    monkeypatch.setattr(
+        module,
+        "_open_file_in_imaris_with_native_bridge_runner",
+        _lazy_runner,
+    )
+
+    assert dialog._open_downloaded_file_in_imaris(str(ims_path), require_ims=True)
+    assert direct_calls == []
+    assert attempts == [(str(ims_path), "17", None, True, True)]
+
+
+def test_open_downloaded_files_use_lazy_bridge_runner_when_probe_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify batch final open can use lazy bridge handoff without startup probing.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on batch final handoff regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    first = tmp_path / "first.ims"
+    second = tmp_path / "second.ims"
+    first.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
+    second.write_bytes(b"\x89HDF\r\n\x1a\nsecond")
+    attempts = []
+    direct_calls = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = module.threading.get_ident()
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_python_executable = None
+    dialog._set_status = _noop
+    monkeypatch.setattr(
+        module, "_resolve_imaris_application", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        module,
+        "open_files_in_imaris",
+        lambda *args, **_kwargs: direct_calls.append(args) or False,
+    )
+
+    def _lazy_runner(
+        file_paths,
+        imaris_id,
+        preferred_python_executable=None,
+        require_ims=True,
+        allow_when_disabled=False,
+    ):
+        """Record lazy native batch runner handoff.
+
+        Inputs: bridge runner arguments. Output: True.
+        """
+        attempts.append(
+            (
+                list(file_paths),
+                imaris_id,
+                preferred_python_executable,
+                require_ims,
+                allow_when_disabled,
+            )
+        )
+        return True
+
+    monkeypatch.setattr(
+        module,
+        "_open_files_in_imaris_with_native_bridge_runner",
+        _lazy_runner,
+    )
+
+    assert dialog._open_downloaded_files_in_imaris([str(first), str(second)])
+    assert direct_calls == []
+    assert attempts == [([str(first), str(second)], "17", None, True, True)]
 
 
 def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable(
@@ -6196,7 +6390,7 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     monkeypatch.setattr(
         module,
         "_open_file_in_imaris_with_native_bridge_runner",
-        lambda file_path, imaris_id, preferred_python_executable=None, require_ims=True: (
+        lambda file_path, imaris_id, preferred_python_executable=None, require_ims=True, allow_when_disabled=False: (
             attempts.append(
                 (file_path, imaris_id, preferred_python_executable, require_ims)
             )
@@ -7294,7 +7488,7 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
         download_original_file=lambda image_id, download_dir, fallback_name: (
-            calls.append(("original", image_id, Path(download_dir).name, fallback_name))
+            calls.append(("original", image_id, Path(download_dir), fallback_name))
             or str(original_file)
         ),
         download_ims_export=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -7319,9 +7513,10 @@ def test_load_worker_imaris_converter_submits_original_with_native_fileopen(
         "Imaris",
     )
 
-    assert calls == [("original", 7, "img_7", "sample.lif")]
+    assert calls == [("original", 7, tmp_path, "sample.lif")]
     assert opened == [(str(original_file), False)]
     assert dialog.temp_files == [str(original_file)]
+    assert not (tmp_path / "img_7").exists()
     assert statuses[-1][0] == "Submitted original file to Imaris"
     assert info_messages == [
         (
@@ -7349,7 +7544,7 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
         download_ims_export=lambda image_id, download_dir, fallback_name: (
-            calls.append(("ims", image_id, Path(download_dir).name, fallback_name))
+            calls.append(("ims", image_id, Path(download_dir), fallback_name))
             or str(ims_file)
         ),
         download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -7375,9 +7570,10 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
         "OMERO",
     )
 
-    assert calls == [("ims", 8, "img_8", "img_8.ims")]
+    assert calls == [("ims", 8, tmp_path, "img_8.ims")]
     assert opened == [(str(ims_file), True)]
     assert dialog.temp_files == [str(ims_file)]
+    assert not (tmp_path / "img_8").exists()
 
 
 def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path):
@@ -7401,7 +7597,7 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
         download IMS export result.
         """
         assert not any(event[0] == "open" for event in events)
-        events.append(("download", image_id, Path(download_dir).name, fallback_name))
+        events.append(("download", image_id, Path(download_dir), fallback_name))
         return files_by_id[image_id]
 
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -7440,8 +7636,8 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     )
 
     assert events == [
-        ("download", 11, "img_11", "img_11.ims"),
-        ("download", 12, "img_12", "img_12.ims"),
+        ("download", 11, tmp_path, "img_11.ims"),
+        ("download", 12, tmp_path, "img_12.ims"),
         ("open", (str(first_ims), str(second_ims)), True),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
@@ -7473,7 +7669,7 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
         download original file result.
         """
         assert not opened
-        events.append(("download", image_id, Path(download_dir).name, fallback_name))
+        events.append(("download", image_id, Path(download_dir), fallback_name))
         return files_by_id[image_id]
 
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -7504,8 +7700,8 @@ def test_load_multiple_worker_imaris_submits_originals_after_downloads(
     )
 
     assert events == [
-        ("download", 21, "img_21", "first.lif"),
-        ("download", 22, "img_22", "second.czi"),
+        ("download", 21, tmp_path, "first.lif"),
+        ("download", 22, tmp_path, "second.czi"),
     ]
     assert opened == [([str(first_original), str(second_original)], False)]
     assert dialog.temp_files == [str(first_original), str(second_original)]
@@ -8506,6 +8702,67 @@ def test_health_ping_schedules_periodic_check_only_when_connected(monkeypatch):
     dialog._health_ping_after_id = None
     module.OMEROBrowserDialog._schedule_health_ping(dialog)
     assert scheduled == []
+
+
+def test_health_ping_start_resets_background_cursor(monkeypatch):
+    """Verify silent health checks do not leave a busy cursor on free window space.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on background cursor regressions.
+    """
+    module = _load_xt_module()
+    cursor_updates = []
+    thread_starts = []
+
+    class _Root:
+        """Root fake that records cursor updates."""
+
+        @staticmethod
+        def configure(**kwargs):
+            """Record configure calls.
+
+            Inputs: keyword options. Output: None.
+            """
+            cursor_updates.append(kwargs)
+
+        config = configure
+
+    class _Thread:
+        """Thread fake that records starts without running work."""
+
+        def __init__(self, target, args, daemon):
+            """Create thread fake.
+
+            Inputs: `target`, `args`, `daemon`. Output: None.
+            """
+            self.target = target
+            self.args = args
+            self.daemon = daemon
+
+        def start(self):
+            """Record thread start.
+
+            Inputs: none. Output: None.
+            """
+            thread_starts.append((self.target, self.args, self.daemon))
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog._connected = True
+    dialog.client = object()
+    dialog._health_ping_after_id = None
+    dialog._health_ping_in_progress = False
+    dialog._health_ping_generation = 0
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog._connection_in_progress = False
+    dialog._browser_sash_drag_index = None
+    dialog._modal_background_lock_depth = 0
+    monkeypatch.setattr(module.threading, "Thread", _Thread)
+
+    module.OMEROBrowserDialog._start_health_ping(dialog)
+
+    assert cursor_updates == [{"cursor": ""}]
+    assert thread_starts == [(dialog._health_ping_worker, (1,), True)]
 
 
 def test_health_ping_worker_retries_before_reporting_failure(monkeypatch):

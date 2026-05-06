@@ -197,9 +197,9 @@ Operational rule:
 - if the optional IcePy bridge is enabled and the configured Python cannot load
   Imaris' native `IcePy`, the connector may use the Windows Python launcher to
   find another already-installed Python that can load the same native Imaris
-  bridge and call `FileOpen` on the live Imaris application id. This is still
-  same-session native opening; it is not a file association or `Imaris.exe`
-  launch.
+  bridge and call the Imaris file-open API on the live Imaris application id.
+  This is still same-session native opening; it is not a file association or
+  `Imaris.exe` launch.
 - the OMERO.web Host field accepts only a hostname or IP address. Operators
   must not include `http://`, `https://`, a path, query string, username, or
   port in Host; the `Use HTTPS` checkbox and Port field are the single source of
@@ -222,15 +222,24 @@ Operational rule:
   XT session still has a valid Imaris handoff target. When the optional IcePy
   bridge is disabled, the pre-download readiness check blocks only when there is
   no live Imaris handle and no numeric XT application id. If a numeric id
-  exists, the final UI-thread handoff is the authoritative open validation and
-  retries direct handle acquisition after the file is ready.
+  exists, the final UI-thread handoff is the authoritative open validation:
+  after the file is ready, the connector retries direct handle acquisition and,
+  if that still fails, may lazily use a compatible already-installed Python as a
+  same-session bridge runner for that explicit final open request. Disabled
+  optional probing still means no startup IcePy diagnostics, no background
+  alternate-Python discovery, and no fresh Imaris launch.
 - the local path field is the source of truth for loading images into Imaris
-  and for the first folder-export chooser location hint only. The path-row
-  `Select` button opens the native Tk directory chooser, replaces the typed
-  value only when the operator confirms a folder, and immediately verifies that
-  Imaris can write there. Cancelling preserves the typed value. Typed paths
-  must be structurally valid absolute local paths and are write-checked when
-  `Load images into Imaris` is clicked.
+  and for the first folder-export chooser location hint only. For
+  `Load images into Imaris`, downloaded IMS files and original files are stored
+  directly in the exact selected or typed local path; the connector must not
+  create per-image random or `img_<id>` subfolders under that path. Filename
+  collision handling may add a deterministic suffix to the file name only when a
+  file with the same name already exists. The path-row `Select` button opens the
+  native Tk directory chooser, replaces the typed value only when the operator
+  confirms a folder, and immediately verifies that Imaris can write there.
+  Cancelling preserves the typed value. Typed paths must be structurally valid
+  absolute local paths and are write-checked when `Load images into Imaris` is
+  clicked.
 - `Export folder to OMERO` always opens the native Tk directory chooser before
   showing the `Confirm folder export` prompt. On the first export attempt in a
   connector session, a background-validated typed local path may be used as the
@@ -287,35 +296,36 @@ Operational rule:
 - the connection-panel info button opens a small modal dialog with the connector
   version, author, and as-is disclaimer. The dialog blocks interaction with the
   main connector window until closed.
-- `Imaris` is shown only when a same-session Imaris XT `FileOpen` path is
+- `Imaris` is shown only when a same-session Imaris XT file-open API path is
   available. This mode downloads the original archived file and hands it to the
-  running Imaris application through `FileOpen`, allowing Imaris to handle
-  raw/vendor parsing natively. It must not start `Imaris.exe`, use a Windows
-  file association, or spawn a standalone File Converter process.
+  running Imaris application through the native XT API, allowing Imaris to
+  handle raw/vendor parsing natively. It must not start `Imaris.exe`, use a
+  Windows file association, or spawn a standalone File Converter process.
 - for original/raw files, a successful native bridge result means the current
-  Imaris session reported an observable response to `FileOpen` through the
-  current-file, image-count, or dataset APIs. The connector must report that
+  Imaris session reported an observable response to the file-open API through
+  the current-file, image-count, or dataset APIs. The connector must report that
   handoff as a verified handoff, not as a fully completed native import, because
   vendor parsers may continue inside Imaris or require native Imaris UI choices
-  after `FileOpen` returns. If `FileOpen` returns without any observable Imaris
+  after the XT call returns. If the call returns without any observable Imaris
   state change, the connector must fail explicitly instead of showing a false
   success message.
 - when multiple images are selected, the connector must finish every download
   or server-side IMS export before handing the prepared files to Imaris. It then
-  opens the files through `FileOpen` and installs the resulting datasets as
-  separate Imaris image slots, so the final workspace contains the selected
-  image set instead of only the last opened file.
+  opens the files through the same-session file-open API and installs the
+  resulting datasets as separate Imaris image slots, so the final workspace
+  contains the selected image set instead of only the last opened file.
 - the standalone browser refresh action re-queries projects, datasets, and
   images without keeping stale image selections. If the selected dataset no
   longer exists, datasets remain visible for the selected project and images are
   cleared. If the selected project no longer exists, the project list remains
   visible and datasets/images are cleared.
 - connector diagnostics must not print CSRF tokens, session cookie values,
-  passwords, or local user-profile paths. The local export cache defaults to the
-  operating system temp directory and can be overridden with
-  `OMERO_IMARIS_EXPORT_DIR`. The HTTP download buffer is bounded for memory
-  safety and can be tuned with `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` without
-  changing file-format behavior.
+  passwords, or local user-profile paths. The user-selected local path is the
+  storage target for connector-initiated downloads. The lower-level download
+  helpers use `OMERO_IMARIS_EXPORT_DIR`, or an operating-system temporary
+  directory when no explicit directory is supplied by a caller outside the GUI.
+  The HTTP download buffer is bounded for memory safety and can be tuned with
+  `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` without changing file-format behavior.
 
 ## Standard Diagnostic Flow
 
