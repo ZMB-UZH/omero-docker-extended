@@ -13,6 +13,7 @@ from omero.rtypes import rint
 from .config import get_export_poll_interval, get_export_timeout
 from omero_plugin_common.env_utils import (
     ENV_FILE_OMERO_CELERY,
+    ENV_FILE_OMEROSERVER,
     get_env,
     get_float_env,
     get_int_env,
@@ -28,7 +29,7 @@ SCRIPT_NAME = get_env(
 SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
 EXPORT_ROOT = get_env(
     "OMERO_IMS_EXPORT_DIR",
-    env_file=ENV_FILE_OMERO_CELERY,
+    env_file=ENV_FILE_OMEROSERVER,
 )
 EXPORT_TIMEOUT = get_export_timeout()
 EXPORT_POLL_INTERVAL = get_export_poll_interval()

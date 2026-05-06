@@ -7,10 +7,9 @@ Retired third-party scanning integrations are intentionally not part of the
 tracked workflow set. DeepSource may be queried as external API inventory when
 a DeepSource credential is explicitly available, but it must not introduce a
 repo-file config, private credential, workflow gate, or replacement
-source-of-truth alert count. The README DeepSource badge is display-only. Its
-`token=` URL parameter is the badge-rendering URL parameter copied from the
-repository's DeepSource **Settings > Badges** page, not an API key or private
-credential.
+source-of-truth alert count. The README badge row is limited to active
+repository-native status surfaces and does not include a DeepSource
+active-issues badge.
 
 DeepSource repo-file configuration is retired for this repository. Do not
 search for, create, restore, or edit `.deepsource.toml`. A GitHub PAT is not a

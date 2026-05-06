@@ -15,7 +15,6 @@ from omero.gateway import BlitzGateway
 from omero.rtypes import rstring
 from omero_plugin_common import process_utils
 from omero_plugin_common.env_utils import (
-    ENV_FILE_OMERO_CELERY,
     ENV_FILE_OMEROSERVER,
     get_env,
 )
@@ -33,6 +32,7 @@ EXPORT_READ_CHUNK_BYTES = 1024 * 1024
 _PRIVATE_FILE_MODE = 0o600
 _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_MANAGED_DIR_ENV = "CONFIG_omero_managed_dir"
+_CONFIG_IMS_EXPORT_DIR = "omero.ims.export.dir"
 subprocess = process_utils
 
 
@@ -56,21 +56,52 @@ def _existing_regular_path(path):
         return None
 
 
-def _get_export_root():
-    """Return export root.
+def _export_root_from_value(source, value):
+    """Return export root from a trusted OMERO config value.
 
-    Inputs: none. Output: `get_env` result.
+    Inputs: `source`, `value`. Output: resolved export root string or None.
     """
     try:
-        return get_env(
-            "OMERO_IMS_EXPORT_DIR",
-            env_file=ENV_FILE_OMERO_CELERY,
+        export_root = str(value or "").strip()
+    except Exception:
+        raise RuntimeError(f"{source} is invalid.") from None
+    if not export_root:
+        return None
+    if "\x00" in export_root:
+        raise RuntimeError(f"{source} contains invalid characters.")
+    if not os.path.isabs(export_root):
+        raise RuntimeError(f"{source} must be an absolute path.")
+    try:
+        return str(Path(export_root).resolve(strict=False))
+    except OSError as exc:
+        raise RuntimeError(f"{source} could not be resolved.") from exc
+
+
+def _get_export_root(conn):
+    """Return export root from OMERO server configuration.
+
+    Inputs: `conn` OMERO gateway connection. Output: export root string. Raises:
+    RuntimeError when the startup-persisted OMERO config contract is missing.
+    """
+    try:
+        config_service = conn.c.sf.getConfigService()
+    except Exception as exc:
+        raise RuntimeError("OMERO IMS export configuration lookup failed.") from exc
+    if config_service is None:
+        raise RuntimeError("OMERO IMS export configuration service is unavailable.")
+    try:
+        configured_export_root = config_service.getConfigValue(_CONFIG_IMS_EXPORT_DIR)
+    except Exception as exc:
+        raise RuntimeError("OMERO IMS export directory lookup failed.") from exc
+    export_root = _export_root_from_value(
+        _CONFIG_IMS_EXPORT_DIR, configured_export_root
+    )
+    if export_root is None:
+        raise RuntimeError(
+            "OMERO IMS export directory is not configured. Set OMERO_IMS_EXPORT_DIR "
+            f"in env/omeroserver.env so startup can persist {_CONFIG_IMS_EXPORT_DIR}."
         )
-    except RuntimeError as e:
-        fallback = "/OMERO/ImarisExports"
-        print(f"WARNING: {e}")
-        print(f"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={fallback}")
-        return fallback
+    return export_root
 
 
 def _safe_filename(name, fallback="image"):
@@ -768,9 +799,6 @@ def run_script():
 
     Inputs: no caller arguments. Output: performs the documented action and returns None.
     """
-    export_root = _get_export_root()
-    os.makedirs(export_root, exist_ok=True)
-
     client = scripts.client(
         "IMS_Export.py",
         """Export an OMERO image to IMS format using ImarisConvertBioformats.""",
@@ -791,6 +819,8 @@ def run_script():
         image_id = params.get("Image_ID")
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup(-1)  # Enable cross-group access
+        export_root = _get_export_root(conn)
+        os.makedirs(export_root, exist_ok=True)
         success, message, export_path = run_conversion(conn, image_id, export_root)
         client.setOutput("Message", rstring(message))
 

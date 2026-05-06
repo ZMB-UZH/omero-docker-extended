@@ -112,6 +112,8 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OMERO_IMS_SCRIPT_START_RETRY_INTERVAL": "0.1",
         "OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL": "10",
         "OMERO_TMP_PATH": str(TEST_RUNTIME_ROOT / "tmp"),
+        "OMERO_WEB_ROOT": str(TEST_RUNTIME_ROOT / "web"),
+        "OMERO_WEB_VENV": "venv-3.12",
         "OMERO_JOB_SERVICE_USER": "job-service",
         "OMERO_JOB_SERVICE_PASSWORD": TEST_SERVICE_AUTH_VALUE,
     }
@@ -148,13 +150,15 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in CLI resolution output parsing and connection session key.
     """
     tasks = _import_tasks(monkeypatch)
-    cli_path = tmp_path / "omero"
+    web_root = tmp_path / "web"
+    cli_path = web_root / "venv-3.12" / "bin" / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
+    cli_path.parent.mkdir(parents=True)
     cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
-    monkeypatch.setattr(
-        tasks.os.path, "exists", lambda path: str(path) == str(cli_path)
-    )
-    monkeypatch.setattr(tasks.shutil, "which", lambda name: str(cli_path))
+    cli_path.chmod(0o755)
+    monkeypatch.setenv("OMERO_WEB_ROOT", str(web_root))
+    monkeypatch.setenv("OMERO_WEB_VENV", "venv-3.12")
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
 
     assert tasks._resolve_omero_cli() == str(cli_path)
     assert tasks._extract_cli_outputs(
@@ -186,6 +190,127 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
         )
         == "session-2"
     )
+
+
+def test_cli_resolution_uses_newest_discovered_web_venv(monkeypatch, tmp_path):
+    """Verify OMERO CLI resolution follows the newest env-rooted venv.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on
+    regressions in dynamic virtualenv discovery.
+    """
+    tasks = _import_tasks(monkeypatch)
+    web_root = tmp_path / "web"
+    older_cli = web_root / "venv-3.9" / "bin" / "omero"
+    current_cli = web_root / "venv-3.12" / "bin" / "omero"
+    for cli_path in (older_cli, current_cli):
+        cli_path.parent.mkdir(parents=True, exist_ok=True)
+        cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
+        cli_path.chmod(0o755)
+
+    monkeypatch.setenv("OMERO_WEB_ROOT", str(web_root))
+    monkeypatch.delenv("OMERO_WEB_VENV", raising=False)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+
+    assert tasks._resolve_omero_cli() == str(current_cli)
+
+
+def test_cli_resolution_covers_explicit_path_and_invalid_env_edges(
+    monkeypatch, tmp_path, caplog
+):
+    """Verify OMERO CLI resolution handles explicit and invalid env edges.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails
+    on regressions in CLI candidate handling.
+    """
+    tasks = _import_tasks(monkeypatch)
+    explicit_cli = tmp_path / "explicit" / "omero"
+    explicit_cli.parent.mkdir(parents=True)
+    explicit_cli.write_text("#!/bin/sh\n", encoding="utf-8")
+    explicit_cli.chmod(0o755)
+    monkeypatch.setenv("OMERO_WEB_OMERO_BIN", str(explicit_cli))
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+    assert tasks._resolve_omero_cli() == str(explicit_cli)
+
+    path_cli = tmp_path / "path" / "omero"
+    path_cli.parent.mkdir(parents=True)
+    path_cli.write_text("#!/bin/sh\n", encoding="utf-8")
+    path_cli.chmod(0o755)
+    monkeypatch.delenv("OMERO_WEB_OMERO_BIN", raising=False)
+    monkeypatch.delenv("OMERO_BIN", raising=False)
+    monkeypatch.delenv("OMERO_WEB_ROOT", raising=False)
+    monkeypatch.delenv("OMERO_WEB_VENV", raising=False)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: str(path_cli))
+    assert tasks._resolve_omero_cli() == str(path_cli)
+
+    real_path = tasks.Path
+
+    def path_rejecting_bad_env(value):
+        """Return a path object unless the test requests an invalid value.
+
+        Inputs: `value`. Output: `Path`. Raises: ValueError for bad sentinels.
+        """
+        if value in {"bad-root", "bad-venv"}:
+            raise ValueError("bad path")
+        return real_path(value)
+
+    monkeypatch.setattr(tasks, "Path", path_rejecting_bad_env)
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
+    monkeypatch.setenv("OMERO_WEB_ROOT", "bad-root")
+    monkeypatch.delenv("OMERO_WEB_VENV", raising=False)
+    assert tasks._iter_omero_cli_candidates() == []
+
+    monkeypatch.setenv("OMERO_WEB_ROOT", str(tmp_path / "web"))
+    monkeypatch.setenv("OMERO_WEB_VENV", "bad-venv")
+    assert tasks._iter_omero_cli_candidates() == []
+
+    class _BadWebRoot:
+        """Path test double whose glob operation fails."""
+
+        @staticmethod
+        def glob(_pattern):
+            """Raise while listing candidates.
+
+            Inputs: `_pattern`. Output: raises OSError.
+            """
+            raise OSError("cannot list")
+
+    monkeypatch.setattr(
+        tasks,
+        "Path",
+        lambda value: _BadWebRoot() if value == "bad-glob-root" else real_path(value),
+    )
+    monkeypatch.setenv("OMERO_WEB_ROOT", "bad-glob-root")
+    monkeypatch.delenv("OMERO_WEB_VENV", raising=False)
+    with caplog.at_level(logging.DEBUG):
+        assert tasks._iter_omero_cli_candidates() == []
+    assert "Unable to inspect OMERO_WEB_ROOT" in caplog.text
+
+
+def test_resolve_executable_candidate_covers_command_and_rejection_paths(
+    monkeypatch, tmp_path
+):
+    """Verify executable candidate resolution handles command and failure paths.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on
+    regressions in executable candidate resolution.
+    """
+    tasks = _import_tasks(monkeypatch)
+    cli_path = tmp_path / "bin" / "omero"
+    cli_path.parent.mkdir(parents=True)
+    cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    cli_path.chmod(0o755)
+
+    monkeypatch.setattr(tasks.shutil, "which", lambda name: str(cli_path))
+    assert tasks._resolve_executable_candidate("omero") == str(cli_path)
+    assert tasks._resolve_executable_candidate("") is None
+    assert tasks._resolve_executable_candidate(str(tmp_path / "missing")) is None
+
+    monkeypatch.setattr(
+        tasks.os.path,
+        "isfile",
+        lambda candidate: (_ for _ in ()).throw(OSError("bad stat")),
+    )
+    assert tasks._resolve_executable_candidate(str(cli_path)) is None
 
 
 def test_run_script_via_omero_cli_covers_success_and_failure_paths(
@@ -420,7 +545,10 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     """
     tasks = _import_tasks(monkeypatch)
 
-    monkeypatch.setattr(tasks.os.path, "exists", lambda path: False)
+    monkeypatch.setenv("OMERO_WEB_ROOT", str(tmp_path / "empty-web-root"))
+    monkeypatch.delenv("OMERO_WEB_VENV", raising=False)
+    monkeypatch.delenv("OMERO_WEB_OMERO_BIN", raising=False)
+    monkeypatch.delenv("OMERO_BIN", raising=False)
     monkeypatch.setattr(tasks.shutil, "which", lambda name: None)
     with pytest.raises(RuntimeError, match="OMERO CLI binary not found"):
         tasks._resolve_omero_cli()

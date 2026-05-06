@@ -6,6 +6,9 @@ set -euo pipefail
 # Resolve OMERO bin. Inputs: shell arguments and environment. Output: stdout text and command status.
 resolve_omero_bin() {
     local explicit="${OMERO_WEB_OMERO_BIN:-${OMERO_BIN:-}}"
+    local web_root="${OMERO_WEB_ROOT:-}"
+    local configured_venv="${OMERO_WEB_VENV:-}"
+    local configured_root=""
     local venv_dir=""
 
     if [[ -n "${explicit}" ]]; then
@@ -18,12 +21,25 @@ resolve_omero_bin() {
         return 0
     fi
 
-    if [[ -n "${OMERO_WEB_VENV:-}" && -x "/opt/omero/web/${OMERO_WEB_VENV}/bin/omero" ]]; then
-        printf '%s\n' "/opt/omero/web/${OMERO_WEB_VENV}/bin/omero"
+    if [[ -z "${web_root}" ]]; then
+        echo "ERROR: OMERO_WEB_ROOT is required for OMERO.web virtualenv discovery." >&2
+        return 1
+    fi
+
+    if [[ -n "${configured_venv}" ]]; then
+        if [[ "${configured_venv}" == /* ]]; then
+            configured_root="${configured_venv}"
+        else
+            configured_root="${web_root%/}/${configured_venv}"
+        fi
+    fi
+
+    if [[ -n "${configured_root}" && -x "${configured_root}/bin/omero" ]]; then
+        printf '%s\n' "${configured_root}/bin/omero"
         return 0
     fi
 
-    venv_dir="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"
+    venv_dir="$(find "${web_root}" -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"
     if [[ -n "${venv_dir}" && -x "${venv_dir}/bin/omero" ]]; then
         printf '%s\n' "${venv_dir}/bin/omero"
         return 0

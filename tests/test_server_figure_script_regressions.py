@@ -65,6 +65,7 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             self.bootstrap,
             re.compile(
                 r"configure_script_python\n"
+                r"\s*configure_ims_export_runtime_paths\n"
                 r"\s*configure_import_runtime_paths\n"
                 r"\s*ensure_certificate_sans\n"
                 r"\s*cleanup_stale_repository_lock_files\n"

@@ -37,14 +37,6 @@ COCOINDEX_BADGE_IMAGE_URL = (
     "&color=555&logo=github&logoColor=white"
 )
 COCOINDEX_BADGE_TARGET_URL = "https://github.com/cocoindex-io/cocoindex-code"
-DEEPSOURCE_BADGE_TITLE = "DeepSource"
-DEEPSOURCE_BADGE_IMAGE_URL = (
-    "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended.svg/"
-    "?label=active+issues&show_trend=true"
-)
-DEEPSOURCE_BADGE_TARGET_URL = (
-    "https://app.deepsource.com/gh/ZMB-UZH/omero-docker-extended/"
-)
 
 
 @dataclass(frozen=True)
@@ -274,10 +266,6 @@ def render_badge_block(
             "[![GitHub commit activity](https://img.shields.io/github/"
             f"commit-activity/m/{github_path})]"
             f"(https://github.com/{github_path}/commits/{branch})"
-        ),
-        (
-            f"[![{DEEPSOURCE_BADGE_TITLE}]({DEEPSOURCE_BADGE_IMAGE_URL})]"
-            f"({DEEPSOURCE_BADGE_TARGET_URL})"
         ),
         (
             f"[![Codecov](https://img.shields.io/codecov/c/github/{github_path}"

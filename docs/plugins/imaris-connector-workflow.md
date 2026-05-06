@@ -44,7 +44,7 @@ flowchart TD
         CW2 -->|No| CW4[Join user session via session key]
         CW3 --> CW5[Find script ID on OMERO.server]
         CW4 --> CW5
-        CW5 --> CW6[Resolve OMERO CLI binary path]
+        CW5 --> CW6[Resolve OMERO CLI from env-driven OMERO.web venv contract]
         CW6 --> CW7[Run: omero script launch with session key]
         CW7 --> CW8[Parse CLI output for Export_Path, Export_Name]
         CW8 --> CW9{Export path found?}

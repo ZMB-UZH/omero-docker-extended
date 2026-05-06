@@ -29,6 +29,12 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         cls.default_config_script = (
             cls.repo_root / "startup" / "60-default-web-config.sh"
         )
+        cls.imaris_worker_script = (
+            cls.repo_root / "startup" / "40-start-imaris-celery-worker.sh"
+        )
+        cls.tools_worker_script = (
+            cls.repo_root / "startup" / "40-start-tools-celery-worker.sh"
+        )
         cls.cleanprevious_script = cls.repo_root / "startup" / "98-cleanprevious.sh"
 
     @staticmethod
@@ -78,6 +84,33 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         )
         fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
         return fake_python, calls_file
+
+    @staticmethod
+    def _make_fake_worker_venv(web_root: Path, venv_name: str) -> tuple[Path, Path]:
+        """Create a fake OMERO.web worker venv.
+
+        Inputs: `web_root`, `venv_name`. Output: `tuple[Path, Path]`.
+        """
+        bin_dir = web_root / venv_name / "bin"
+        bin_dir.mkdir(parents=True)
+        calls_file = web_root / "worker-calls.log"
+        fake_python = bin_dir / "python"
+        fake_python.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'printf \'python %s\\n\' "$*" >> "$WORKER_CALLS_FILE"\n',
+            encoding="utf-8",
+        )
+        fake_celery = bin_dir / "celery"
+        fake_celery.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'printf \'celery %s\\n\' "$*" >> "$WORKER_CALLS_FILE"\n',
+            encoding="utf-8",
+        )
+        fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+        fake_celery.chmod(fake_celery.stat().st_mode | stat.S_IXUSR)
+        return bin_dir, calls_file
 
     def test_50_config_applies_globbed_files_and_config_env_overrides(self) -> None:
         """Verify 50 config applies globbed files and config env overrides.
@@ -188,6 +221,69 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertIn(f"load --glob {config_dir}/*.omero", calls)
+
+    def test_50_config_discovers_omero_cli_from_omeroweb_root_contract(self) -> None:
+        """Verify 50 config discovers OMERO CLI from OMERO_WEB_ROOT.
+
+        Inputs: repository fixtures. Output: fails on hardcoded OMERO.web root regressions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            web_root = workspace / "custom-web-root"
+            fake_bin_dir = web_root / "venv-3.12" / "bin"
+            fake_bin_dir.mkdir(parents=True)
+            fake_omero = fake_bin_dir / "omero"
+            calls_file = workspace / "omero-calls.log"
+            fake_omero.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n',
+                encoding="utf-8",
+            )
+            fake_python = fake_bin_dir / "python3"
+            fake_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
+            fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+
+            env = {
+                "PATH": "/bin:/usr/bin",
+                "OMERO_CALLS_FILE": str(calls_file),
+                "OMERO_WEB_ROOT": str(web_root),
+                "OMERO_WEB_VENV": "venv-3.12",
+                "CONFIG_omero_web_public_enabled": "false",
+            }
+
+            subprocess.run(
+                [sys.executable, str(self.config_script)], check=True, env=env
+            )
+
+            self.assertEqual(
+                calls_file.read_text(encoding="utf-8").splitlines(),
+                ["config set -- omero.web.public.enabled false"],
+            )
+
+    def test_50_config_requires_omeroweb_root_when_auto_discovery_is_needed(
+        self,
+    ) -> None:
+        """Verify 50 config requires OMERO_WEB_ROOT for automatic discovery.
+
+        Inputs: repository fixtures. Output: fails on hidden fallback root regressions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            result = subprocess.run(
+                [sys.executable, str(self.config_script)],
+                check=False,
+                env={
+                    "PATH": str(workspace),
+                    "CONFIG_omero_web_public_enabled": "false",
+                },
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("OMERO_WEB_ROOT is required", result.stderr)
 
     def test_50_config_normalizes_legacy_plugin_aliases_before_apply(self) -> None:
         """Check 50 config normalizes legacy plugin aliases before apply parsing against the documented contract.
@@ -306,6 +402,96 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             self.assertEqual(
                 calls,
                 ['config set omero.web.server_list [["omeroserver", 14064, "omero"]]'],
+            )
+
+    def test_60_default_web_config_discovers_cli_from_omeroweb_root_contract(
+        self,
+    ) -> None:
+        """Verify 60 default web config uses OMERO_WEB_ROOT for CLI discovery.
+
+        Inputs: repository fixtures. Output: fails on hardcoded OMERO.web root regressions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            web_root = workspace / "web-root"
+            fake_bin_dir = web_root / "venv-3.12" / "bin"
+            fake_bin_dir.mkdir(parents=True)
+            fake_omero = fake_bin_dir / "omero"
+            calls_file = workspace / "omero-calls.log"
+            fake_omero.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n',
+                encoding="utf-8",
+            )
+            fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
+
+            env = {
+                "PATH": "/bin:/usr/bin",
+                "OMERO_CALLS_FILE": str(calls_file),
+                "OMERO_WEB_ROOT": str(web_root),
+                "OMERO_WEB_VENV": "venv-3.12",
+                "OMEROHOST": "omeroserver",
+                "OMERO_PORT": "14064",
+            }
+
+            subprocess.run(
+                [BASH_BIN, str(self.default_config_script)], check=True, env=env
+            )
+
+            self.assertEqual(
+                calls_file.read_text(encoding="utf-8").splitlines(),
+                ['config set omero.web.server_list [["omeroserver", 14064, "omero"]]'],
+            )
+
+    def test_celery_worker_scripts_use_omeroweb_root_contract(self) -> None:
+        """Verify Celery worker scripts use OMERO_WEB_ROOT for venv discovery.
+
+        Inputs: repository fixtures. Output: fails on hardcoded OMERO.web root regressions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            web_root = workspace / "web-root"
+            _bin_dir, calls_file = self._make_fake_worker_venv(web_root, "venv-3.12")
+
+            common_env = {
+                "PATH": "/bin:/usr/bin",
+                "WORKER_CALLS_FILE": str(calls_file),
+                "OMERO_WEB_ROOT": str(web_root),
+                "OMERO_WEB_VENV": "venv-3.12",
+            }
+
+            subprocess.run(
+                [BASH_BIN, str(self.imaris_worker_script)],
+                check=True,
+                env={
+                    **common_env,
+                    "OMERO_IMS_CELERY_QUEUE": "imaris",
+                    "OMERO_IMS_CELERY_LOGLEVEL": "info",
+                    "OMERO_IMS_CELERY_WORKER_CONCURRENCY": "1",
+                },
+            )
+            subprocess.run(
+                [BASH_BIN, str(self.tools_worker_script)],
+                check=True,
+                env={
+                    **common_env,
+                    "TOOLS_ENHANCED_SEARCH_CELERY_QUEUE": "enhanced_search",
+                    "TOOLS_ENHANCED_SEARCH_CELERY_LOGLEVEL": "info",
+                    "TOOLS_ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY": "1",
+                },
+            )
+
+            calls = calls_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn(
+                "-A omeroweb_imaris_connector.celery_app worker "
+                "--loglevel=info --concurrency=1 -Q imaris --hostname=imaris@%h",
+                calls[1],
+            )
+            self.assertIn(
+                "-A omeroweb_tools.celery_app worker --loglevel=info "
+                "--concurrency=1 -Q enhanced_search --hostname=enhanced-search@%h",
+                calls[3],
             )
 
     def test_98_cleanprevious_removes_stale_pid_file(self) -> None:

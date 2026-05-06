@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import time
+from pathlib import Path
 from typing import Any
 
 import omero
@@ -92,15 +93,96 @@ def _resolve_omero_cli() -> str:
 
     Inputs: none. Output: `str`. Raises: RuntimeError for the exercised failure path.
     """
-    candidates = [
-        "/opt/omero/web/venv-3.12/bin/omero",
-        "/opt/omero/web/venv/bin/omero",
-        shutil.which("omero"),
-    ]
-    for candidate in candidates:
-        if candidate and os.path.exists(candidate):
-            return candidate
+    for candidate in _iter_omero_cli_candidates():
+        resolved = _resolve_executable_candidate(candidate)
+        if resolved:
+            return resolved
     raise RuntimeError("OMERO CLI binary not found in OMERO.web container.")
+
+
+def _version_sort_key(path: Path) -> tuple[tuple[int, int | str], ...]:
+    """Return a natural sort key for versioned virtualenv paths.
+
+    Inputs: `path`. Output: tuple key.
+    """
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in re.split(r"(\d+)", str(path))
+        if part
+    )
+
+
+def _iter_omero_cli_candidates() -> list[str]:
+    """Return OMERO CLI candidate paths in env-driven preference order.
+
+    Inputs: none. Output: list of candidate path strings.
+    """
+    candidates: list[str] = []
+    for env_name in ("OMERO_WEB_OMERO_BIN", "OMERO_BIN"):
+        explicit = os.environ.get(env_name)
+        if explicit:
+            candidates.append(explicit)
+
+    web_root_raw = os.environ.get("OMERO_WEB_ROOT")
+    try:
+        web_root = Path(web_root_raw) if web_root_raw else None
+    except (TypeError, ValueError):
+        web_root = None
+    configured_venv = os.environ.get("OMERO_WEB_VENV")
+    if configured_venv:
+        try:
+            configured_root = Path(configured_venv)
+        except (TypeError, ValueError):
+            configured_root = None
+        if configured_root is not None and not configured_root.is_absolute():
+            configured_root = web_root / configured_root if web_root else None
+        if configured_root is not None:
+            candidates.append(str(configured_root / "bin" / "omero"))
+
+    if web_root is not None:
+        try:
+            candidates.extend(
+                str(candidate)
+                for candidate in sorted(
+                    web_root.glob("venv*/bin/omero"),
+                    key=_version_sort_key,
+                    reverse=True,
+                )
+            )
+        except (OSError, ValueError):
+            logger.debug(
+                "Unable to inspect OMERO_WEB_ROOT for OMERO CLI candidates.",
+                exc_info=True,
+            )
+
+    path_candidate = shutil.which("omero")
+    if path_candidate:
+        candidates.append(path_candidate)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate not in seen:
+            deduped.append(candidate)
+            seen.add(candidate)
+    return deduped
+
+
+def _resolve_executable_candidate(candidate: str) -> str | None:
+    """Return an executable candidate path or None.
+
+    Inputs: `candidate`. Output: resolved path string or None.
+    """
+    if not candidate:
+        return None
+    if os.path.basename(candidate) == candidate:
+        candidate = shutil.which(candidate) or candidate
+    try:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+        return None
+    except (OSError, ValueError):
+        return None
 
 
 def _extract_cli_outputs(text: str) -> dict[str, str]:
