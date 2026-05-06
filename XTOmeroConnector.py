@@ -481,6 +481,56 @@ def _data_set_signature(data_set):
     return tuple(values) if any(value is not None for value in values) else "present"
 
 
+def _data_set_has_content(data_set):
+    if data_set is None:
+        return False
+    positive_dimension_seen = False
+    for method_name in ("GetSizeX", "GetSizeY", "GetSizeZ", "GetSizeC", "GetSizeT"):
+        method = getattr(data_set, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            value = int(method())
+        except Exception:
+            return False
+        if value <= 0:
+            return False
+        positive_dimension_seen = True
+    return positive_dimension_seen
+
+
+def _current_data_set(app):
+    get_data_set = getattr(app, "GetDataSet", None)
+    if not callable(get_data_set):
+        return None
+    try:
+        return get_data_set()
+    except Exception:
+        return None
+
+
+def _ensure_current_dataset_visible(app, data_set=None):
+    if data_set is None:
+        data_set = _current_data_set(app)
+    if not _data_set_has_content(data_set):
+        return False
+    set_data_set = getattr(app, "SetDataSet", None)
+    if callable(set_data_set):
+        try:
+            if set_data_set(data_set) is not False:
+                return True
+        except Exception:
+            pass
+    set_image = getattr(app, "SetImage", None)
+    if callable(set_image):
+        try:
+            if set_image(0, data_set) is not False:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _imaris_app_snapshot(app):
     current = ""
     getter = _current_file_getter(app)
@@ -509,29 +559,62 @@ def _imaris_app_snapshot(app):
     return current, image_count, data_set_signature
 
 
+def _snapshot_changed_after_open(before, current_snapshot, expected_path):
+    current, image_count, data_set_signature = current_snapshot
+    before_current, before_image_count, before_data_set_signature = before
+    if expected_path and current and current == expected_path:
+        return True
+    if current and current != before_current:
+        return True
+    if (
+        image_count is not None
+        and before_image_count is not None
+        and image_count != before_image_count
+    ):
+        return True
+    if (
+        data_set_signature is not None
+        and before_data_set_signature is not None
+        and data_set_signature != before_data_set_signature
+    ):
+        return True
+    return data_set_signature is not None and before_data_set_signature is None
+
+
 def _wait_for_open_observable_effect(app, before, expected_path):
     expected = _normalize_path_for_compare(expected_path)
     deadline = time.time() + OPEN_VERIFY_TIMEOUT
     while time.time() <= deadline:
-        current, image_count, data_set_signature = _imaris_app_snapshot(app)
-        before_current, before_image_count, before_data_set_signature = before
-        if expected and current and current == expected:
+        if _snapshot_changed_after_open(before, _imaris_app_snapshot(app), expected):
             return True
-        if current and current != before_current:
-            return True
+        time.sleep(OPEN_VERIFY_INTERVAL)
+    return False
+
+
+def _wait_for_verified_open(app, getter, before, expected_path, before_data_set=None):
+    expected = _normalize_path_for_compare(expected_path)
+    deadline = time.time() + OPEN_VERIFY_TIMEOUT
+    while time.time() <= deadline:
+        if getter is not None:
+            try:
+                current = _normalize_path_for_compare(getter())
+            except Exception:
+                current = ""
+            if expected and current and current == expected:
+                _ensure_current_dataset_visible(app)
+                return True
+        snapshot_changed = _snapshot_changed_after_open(
+            before,
+            _imaris_app_snapshot(app),
+            expected,
+        )
+        data_set = _current_data_set(app)
+        data_set_changed = data_set is not None and data_set is not before_data_set
         if (
-            image_count is not None
-            and before_image_count is not None
-            and image_count != before_image_count
+            (snapshot_changed or data_set_changed)
+            and _data_set_has_content(data_set)
+            and _ensure_current_dataset_visible(app, data_set)
         ):
-            return True
-        if (
-            data_set_signature is not None
-            and before_data_set_signature is not None
-            and data_set_signature != before_data_set_signature
-        ):
-            return True
-        if data_set_signature is not None and before_data_set_signature is None:
             return True
         time.sleep(OPEN_VERIFY_INTERVAL)
     return False
@@ -547,6 +630,7 @@ def _open_file_in_imaris(file_path, app, verification_mode="current_file"):
         if not callable(method):
             continue
         before = _imaris_app_snapshot(app)
+        before_data_set = _current_data_set(app)
         try:
             result = method(*args)
         except TypeError:
@@ -558,11 +642,19 @@ def _open_file_in_imaris(file_path, app, verification_mode="current_file"):
         if verification_mode == "submission_only":
             return True
         if verification_mode == "current_file":
-            if getter is None or _wait_for_current_file(getter, file_path):
+            if _wait_for_verified_open(
+                app,
+                getter,
+                before,
+                file_path,
+                before_data_set,
+            ):
                 return True
             continue
         if _wait_for_open_observable_effect(app, before, file_path):
-            return True
+            if verification_mode == "observable_effect":
+                _ensure_current_dataset_visible(app)
+                return True
     return False
 
 
@@ -666,20 +758,6 @@ def _normalize_path_for_compare(path_value):
     return os.path.normcase(os.path.normpath(path_text))
 
 
-def _wait_for_current_file(getter, expected_path):
-    expected = _normalize_path_for_compare(expected_path)
-    deadline = time.time() + OPEN_VERIFY_TIMEOUT
-    while time.time() <= deadline:
-        try:
-            current = _normalize_path_for_compare(getter())
-        except Exception:
-            current = ""
-        if current and current == expected:
-            return True
-        time.sleep(OPEN_VERIFY_INTERVAL)
-    return False
-
-
 def _has_open_method(app):
     return any(
         callable(getattr(app, method_name, None))
@@ -748,7 +826,7 @@ def main():
             return 64
     if not _open_files_in_imaris(file_paths, app, require_ims=require_ims):
         print("BRIDGE_RUNNER_OPEN_UNVERIFIED")
-        return 3
+        return 4
     print("BRIDGE_RUNNER_OPENED_MANY" if len(file_paths) > 1 else "BRIDGE_RUNNER_OPENED")
     return 0
 
@@ -2212,37 +2290,6 @@ def _normalize_imaris_compare_path(path_value):
     return os.path.normcase(os.path.normpath(path_text))
 
 
-def _wait_for_imaris_current_file(
-    imaris_app,
-    expected_path,
-    timeout=IMARIS_OPEN_VERIFY_TIMEOUT,
-    interval=IMARIS_OPEN_VERIFY_INTERVAL,
-):
-    """Poll Imaris until its current file matches the expected path.
-
-    Inputs: `imaris_app`, `expected_path`, `timeout`, `interval`. Output: bool.
-    """
-    getter = _current_imaris_file_getter(imaris_app)
-    if getter is None:
-        return True
-
-    expected = _normalize_imaris_compare_path(expected_path)
-    if not expected:
-        return False
-
-    deadline = time.time() + max(0.0, float(timeout))
-    while time.time() <= deadline:
-        try:
-            current = _normalize_imaris_compare_path(getter())
-        except Exception as exc:
-            _xt_debug(f"Imaris current-file verification failed: {exc}")
-            current = ""
-        if current and current == expected:
-            return True
-        time.sleep(max(0.0, float(interval)))
-    return False
-
-
 def _file_open_call_candidates(file_path, verification_mode="current_file"):
     """Return the file open call candidates.
 
@@ -2289,6 +2336,83 @@ def _imaris_data_set_signature(data_set):
             )
             values.append(None)
     return tuple(values) if any(value is not None for value in values) else "present"
+
+
+def _imaris_data_set_has_content(data_set):
+    """Return whether an Imaris data set exposes positive dimensions.
+
+    Inputs: `data_set`. Output: bool.
+    """
+    if data_set is None:
+        return False
+    positive_dimension_seen = False
+    for method_name in ("GetSizeX", "GetSizeY", "GetSizeZ", "GetSizeC", "GetSizeT"):
+        method = getattr(data_set, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            value = int(method())
+        except Exception:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=True,
+            )
+            return False
+        if value <= 0:
+            return False
+        positive_dimension_seen = True
+    return positive_dimension_seen
+
+
+def _current_imaris_data_set(imaris_app):
+    """Return the currently loaded Imaris data set when available.
+
+    Inputs: `imaris_app`. Output: dataset object or None.
+    """
+    get_data_set = getattr(imaris_app, "GetDataSet", None)
+    if not callable(get_data_set):
+        return None
+    try:
+        return get_data_set()
+    except Exception:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py",
+            exc_info=True,
+        )
+        return None
+
+
+def _ensure_imaris_current_dataset_visible(imaris_app, data_set=None):
+    """Commit the loaded dataset back through Imaris visibility APIs.
+
+    Inputs: `imaris_app`, optional `data_set`. Output: bool indicating whether a
+    visibility API accepted the dataset.
+    """
+    if data_set is None:
+        data_set = _current_imaris_data_set(imaris_app)
+    if not _imaris_data_set_has_content(data_set):
+        return False
+    set_data_set = getattr(imaris_app, "SetDataSet", None)
+    if callable(set_data_set):
+        try:
+            if set_data_set(data_set) is not False:
+                return True
+        except Exception:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=True,
+            )
+    set_image = getattr(imaris_app, "SetImage", None)
+    if callable(set_image):
+        try:
+            if set_image(0, data_set) is not False:
+                return True
+        except Exception:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=True,
+            )
+    return False
 
 
 def _imaris_app_snapshot(imaris_app):
@@ -2358,6 +2482,53 @@ def _imaris_open_snapshot_changed(before, current_snapshot, expected_path):
     return image_count_changed or data_set_changed
 
 
+def _wait_for_imaris_verified_open(
+    imaris_app,
+    current_file_getter,
+    before,
+    expected_path,
+    before_data_set=None,
+    timeout=None,
+    interval=None,
+):
+    """Poll until opening a file is verified in the current Imaris session.
+
+    Inputs: `imaris_app`, optional `current_file_getter`, `before`,
+    `expected_path`, optional previous dataset and timing values. Output: bool.
+    """
+    if timeout is None:
+        timeout = IMARIS_OPEN_VERIFY_TIMEOUT
+    if interval is None:
+        interval = IMARIS_OPEN_VERIFY_INTERVAL
+    expected = _normalize_imaris_compare_path(expected_path)
+    deadline = time.time() + max(0.0, float(timeout))
+    while time.time() <= deadline:
+        if current_file_getter is not None:
+            try:
+                current = _normalize_imaris_compare_path(current_file_getter())
+            except Exception as exc:
+                _xt_debug(f"Imaris current-file verification failed: {exc}")
+                current = ""
+            if expected and current and current == expected:
+                _ensure_imaris_current_dataset_visible(imaris_app)
+                return True
+        snapshot_changed = _imaris_open_snapshot_changed(
+            before,
+            _imaris_app_snapshot(imaris_app),
+            expected,
+        )
+        data_set = _current_imaris_data_set(imaris_app)
+        data_set_changed = data_set is not None and data_set is not before_data_set
+        if (
+            (snapshot_changed or data_set_changed)
+            and _imaris_data_set_has_content(data_set)
+            and _ensure_imaris_current_dataset_visible(imaris_app, data_set)
+        ):
+            return True
+        time.sleep(max(0.0, float(interval)))
+    return False
+
+
 def _wait_for_imaris_open_observable_effect(
     imaris_app,
     before,
@@ -2408,6 +2579,7 @@ def _open_file_in_imaris_with_mode(file_path, imaris_app, verification_mode):
 
     last_error: Any = None
     file_path_text = str(candidate)
+    current_file_getter = _current_imaris_file_getter(imaris_app)
     for method_name, args in _file_open_call_candidates(
         file_path_text,
         verification_mode=verification_mode,
@@ -2417,6 +2589,7 @@ def _open_file_in_imaris_with_mode(file_path, imaris_app, verification_mode):
             continue
         try:
             before = _imaris_app_snapshot(imaris_app)
+            before_data_set = _current_imaris_data_set(imaris_app)
             result = method(*args)
             if result is False:
                 last_error = f"{method_name} returned False"
@@ -2429,16 +2602,23 @@ def _open_file_in_imaris_with_mode(file_path, imaris_app, verification_mode):
                     before,
                     file_path_text,
                 ):
+                    _ensure_imaris_current_dataset_visible(imaris_app)
                     return True
                 last_error = (
                     f"{method_name} returned without an observable Imaris state change"
                 )
                 continue
-            if _wait_for_imaris_current_file(imaris_app, file_path_text):
+            if _wait_for_imaris_verified_open(
+                imaris_app,
+                current_file_getter,
+                before,
+                file_path_text,
+                before_data_set,
+            ):
                 return True
             last_error = (
                 f"{method_name} returned without making the current Imaris file "
-                "match the downloaded file"
+                "match the downloaded file or loading a verified visible dataset"
             )
         except Exception as exc:
             last_error = exc
@@ -8494,7 +8674,6 @@ class OMEROBrowserDialog:
             fg="white",
             activeforeground="white",
         )
-        self.root.update_idletasks()
 
     def _toggle_connection(self):
         """Toggle the connection for `OMEROBrowserDialog`.
@@ -8674,7 +8853,6 @@ class OMEROBrowserDialog:
             Inputs: no caller arguments. Output: performs the documented action and returns None.
             """
             self.status.config(text=text, bg=color)
-            self.root.update_idletasks()
 
         self.root.after(0, update)
 
@@ -8795,6 +8973,23 @@ class OMEROBrowserDialog:
                 "Suppressed non-fatal exception in XTOmeroConnector.py",
                 exc_info=exc,
             )
+
+    def _request_background_cursor_reset(self):
+        """Schedule a safe background cursor reset on the UI thread.
+
+        Inputs: none. Output: None.
+        """
+        invoker = getattr(self, "_invoke_on_ui_thread", None)
+        if callable(invoker):
+            try:
+                invoker(self._reset_background_cursor_after_silent_work, wait=False)
+                return
+            except Exception:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=True,
+                )
+        self._reset_background_cursor_after_silent_work()
 
     def _schedule_health_ping(self):
         """Schedule a read-only connection health check.
@@ -9463,6 +9658,7 @@ class OMEROBrowserDialog:
                 self._native_bridge_last_verified_at = verified_at
                 self._native_bridge_probe_in_progress = False
                 self._native_bridge_probe_done.set()
+            self._request_background_cursor_reset()
 
     def _revalidate_native_bridge(self):
         """Synchronously verify that the cached native bridge still resolves Imaris.
@@ -9654,6 +9850,7 @@ class OMEROBrowserDialog:
         client = None
         try:
             client = OMEROWebClient(host, port, username, password, scheme=scheme)
+            del password
             if not client.connect():
                 self._clear_client_session_state(client)
                 self._invoke_on_ui_thread(
@@ -9662,7 +9859,6 @@ class OMEROBrowserDialog:
                 )
                 return
 
-            password = ""
             client.password = ""
             self._invoke_on_ui_thread(
                 lambda: self._set_status(
@@ -9692,8 +9888,6 @@ class OMEROBrowserDialog:
                 lambda: self._finish_connect_failure(client),
                 wait=False,
             )
-        finally:
-            password = ""
 
     def _finish_connect_success(
         self,

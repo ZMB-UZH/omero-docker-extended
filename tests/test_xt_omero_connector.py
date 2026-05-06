@@ -1065,15 +1065,31 @@ def test_open_file_in_imaris_uses_live_handle_for_valid_ims(tmp_path):
     class _FakeImaris:
         """Test double for fake imaris."""
 
-        @staticmethod
-        def FileOpen(path, *_args):
+        def __init__(self):
+            """Create `_FakeImaris` with empty current-file state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.current = ""
+
+        def FileOpen(self, path, *_args):
             """Record the file-open call on `_FakeImaris` for later assertions.
 
             Inputs: `path` path, `*_args`. Output: None.
             """
             opened.append(path)
+            self.current = path
 
-    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+        def GetCurrentFileName(self):
+            """Return the verified current file path.
+
+            Inputs: none. Output: current path string.
+            """
+            return self.current
+
+    imaris = _FakeImaris()
+
+    assert module.open_file_in_imaris(ims_path, imaris) is True
     assert opened == [str(ims_path)]
 
 
@@ -1090,16 +1106,32 @@ def test_open_file_in_imaris_accepts_openfile_only_handles(tmp_path):
     class _FakeImaris:
         """OpenFile-only Imaris API test double."""
 
-        @staticmethod
-        def OpenFile(path, *_args):
+        def __init__(self):
+            """Create `_FakeImaris` with empty current-file state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.current = ""
+
+        def OpenFile(self, path, *_args):
             """Record the open call.
 
             Inputs: `path`, optional API args. Output: None.
             """
             opened.append(path)
+            self.current = path
 
-    assert module._looks_like_imaris_application(_FakeImaris()) is True
-    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+        def GetCurrentFileName(self):
+            """Return the verified current file path.
+
+            Inputs: none. Output: current path string.
+            """
+            return self.current
+
+    imaris = _FakeImaris()
+
+    assert module._looks_like_imaris_application(imaris) is True
+    assert module.open_file_in_imaris(ims_path, imaris) is True
     assert opened == [str(ims_path)]
 
 
@@ -1116,16 +1148,32 @@ def test_open_file_in_imaris_accepts_legacy_loadfile_handles(tmp_path):
     class _FakeImaris:
         """LoadFile-only Imaris API test double."""
 
-        @staticmethod
-        def LoadFile(path, *_args):
+        def __init__(self):
+            """Create `_FakeImaris` with empty current-file state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.current = ""
+
+        def LoadFile(self, path, *_args):
             """Record the open call.
 
             Inputs: `path`, optional API args. Output: None.
             """
             opened.append(path)
+            self.current = path
 
-    assert module._looks_like_imaris_application(_FakeImaris()) is True
-    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is True
+        def GetCurrentFileName(self):
+            """Return the verified current file path.
+
+            Inputs: none. Output: current path string.
+            """
+            return self.current
+
+    imaris = _FakeImaris()
+
+    assert module._looks_like_imaris_application(imaris) is True
+    assert module.open_file_in_imaris(ims_path, imaris) is True
     assert opened == [str(ims_path)]
 
 
@@ -1138,11 +1186,8 @@ def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypat
     ims_path = tmp_path / "demo.ims"
     other_path = tmp_path / "other.ims"
     ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
-    monkeypatch.setattr(
-        module,
-        "_wait_for_imaris_current_file",
-        lambda imaris_app, path: imaris_app.GetCurrentFileName() == str(path),
-    )
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
 
     class _FakeImaris:
         """Test double for fake imaris."""
@@ -1171,6 +1216,250 @@ def test_open_file_in_imaris_rejects_unverified_current_file(tmp_path, monkeypat
         )
         is False
     )
+
+
+def test_open_file_in_imaris_rejects_unverified_fileopen_without_current_file(
+    tmp_path,
+    monkeypatch,
+):
+    """Confirm bare IMS FileOpen success is not treated as a verified open.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts IMS open
+    success is rejected without current-file or visible-dataset proof.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
+    opened = []
+
+    class _FakeImaris:
+        """Handle that reports no verifiable loaded file or dataset."""
+
+        @staticmethod
+        def FileOpen(path, *_args):
+            """Record an unverified FileOpen call.
+
+            Inputs: `path`, optional args. Output: None.
+            """
+            opened.append(path)
+
+    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is False
+    assert opened == [str(ims_path), str(ims_path)]
+
+
+def test_open_file_in_imaris_requires_visible_dataset_without_current_file(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify no-current-file IMS opens require an explicit visible dataset handoff.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on unverified
+    dataset handoff regressions.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
+
+    class _FakeDataSet:
+        """Dataset test double with valid dimensions."""
+
+        @staticmethod
+        def GetSizeX():
+            """Return a positive X dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 12
+
+        @staticmethod
+        def GetSizeY():
+            """Return a positive Y dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 8
+
+        @staticmethod
+        def GetSizeZ():
+            """Return a positive Z dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 1
+
+    class _FakeImaris:
+        """Handle that exposes loaded data but no current-file getter."""
+
+        def __init__(self):
+            """Create fake Imaris state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.data_set = None
+            self.visible_data_set = None
+
+        def FileOpen(self, _path, *_args):
+            """Load a dataset without exposing current-file metadata.
+
+            Inputs: `_path`, optional args. Output: None.
+            """
+            self.data_set = _FakeDataSet()
+
+        def GetDataSet(self):
+            """Return the loaded dataset.
+
+            Inputs: none. Output: dataset object or None.
+            """
+            return self.data_set
+
+        def SetDataSet(self, data_set):
+            """Record the visible dataset handoff.
+
+            Inputs: `data_set`. Output: None.
+            """
+            self.visible_data_set = data_set
+
+    imaris = _FakeImaris()
+
+    assert module.open_file_in_imaris(ims_path, imaris) is True
+    assert imaris.visible_data_set is imaris.data_set
+
+
+def test_open_file_in_imaris_accepts_visible_dataset_when_current_file_stays_stale(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify visible-dataset proof can override stale current-file metadata.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails when Imaris
+    APIs that do not update current-file metadata cannot still verify visible data.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
+
+    class _FakeDataSet:
+        """Dataset test double with valid dimensions."""
+
+        @staticmethod
+        def GetSizeX():
+            """Return a positive X dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 2
+
+        @staticmethod
+        def GetSizeY():
+            """Return a positive Y dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 2
+
+    class _FakeImaris:
+        """Handle with stale current-file metadata but visible loaded data."""
+
+        def __init__(self):
+            """Create fake Imaris state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.data_set = None
+            self.visible_data_set = None
+
+        def FileOpen(self, _path, *_args):
+            """Load a dataset while leaving current-file metadata stale.
+
+            Inputs: `_path`, optional args. Output: None.
+            """
+            self.data_set = _FakeDataSet()
+
+        @staticmethod
+        def GetCurrentFileName():
+            """Return stale current-file metadata.
+
+            Inputs: none. Output: stale path.
+            """
+            return "C:\\old\\previous.ims"
+
+        def GetDataSet(self):
+            """Return the loaded dataset.
+
+            Inputs: none. Output: dataset object or None.
+            """
+            return self.data_set
+
+        def SetDataSet(self, data_set):
+            """Record visible dataset handoff.
+
+            Inputs: `data_set`. Output: None.
+            """
+            self.visible_data_set = data_set
+
+    imaris = _FakeImaris()
+
+    assert module.open_file_in_imaris(ims_path, imaris) is True
+    assert imaris.visible_data_set is imaris.data_set
+
+
+def test_open_file_in_imaris_rejects_dataset_without_visibility_api(
+    tmp_path,
+    monkeypatch,
+):
+    """Confirm no-current-file IMS opens are rejected without visibility API proof.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts a loaded
+    dataset alone is rejected as a complete same-session open.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_TIMEOUT", 0.01)
+    monkeypatch.setattr(module, "IMARIS_OPEN_VERIFY_INTERVAL", 0.01)
+
+    class _FakeDataSet:
+        """Dataset test double with valid dimensions."""
+
+        @staticmethod
+        def GetSizeX():
+            """Return a positive X dimension.
+
+            Inputs: none. Output: int.
+            """
+            return 1
+
+    class _FakeImaris:
+        """Handle that loads data but cannot make it visible."""
+
+        def __init__(self):
+            """Create fake Imaris state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.data_set = None
+
+        def FileOpen(self, _path, *_args):
+            """Load a dataset without visibility APIs.
+
+            Inputs: `_path`, optional args. Output: None.
+            """
+            self.data_set = _FakeDataSet()
+
+        def GetDataSet(self):
+            """Return the loaded dataset.
+
+            Inputs: none. Output: dataset object or None.
+            """
+            return self.data_set
+
+    assert module.open_file_in_imaris(ims_path, _FakeImaris()) is False
 
 
 def test_open_file_in_imaris_rejects_non_ims_before_live_handle(tmp_path):
@@ -1249,9 +1538,9 @@ def test_open_file_in_imaris_raw_file_uses_submission_only_verification(
     opened = []
     monkeypatch.setattr(
         module,
-        "_wait_for_imaris_current_file",
+        "_wait_for_imaris_verified_open",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("raw FileOpen must not require current-file verification")
+            AssertionError("raw FileOpen must not require IMS-open verification")
         ),
     )
     monkeypatch.setattr(
@@ -1310,9 +1599,9 @@ def test_open_file_in_imaris_raw_file_accepts_successful_submission(
     opened = []
     monkeypatch.setattr(
         module,
-        "_wait_for_imaris_current_file",
+        "_wait_for_imaris_verified_open",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("raw FileOpen must not require current-file verification")
+            AssertionError("raw FileOpen must not require IMS-open verification")
         ),
     )
     monkeypatch.setattr(
@@ -5197,6 +5486,140 @@ def test_native_bridge_helper_reuses_imarislib_factory_across_retries(tmp_path):
     assert counter_path.read_text(encoding="utf-8") == "1"
 
 
+def test_native_bridge_helper_rejects_unverified_ims_fileopen(tmp_path):
+    """Verify the native bridge helper rejects bare IMS FileOpen success.
+
+    Inputs: pytest provides `tmp_path`. Output: helper rejects success without
+    current-file or visible-dataset proof.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    calls_path = tmp_path / "calls.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "calls_path = os.environ['IMARIS_FAKE_CALLS']",
+                "",
+                "class App:",
+                "    def FileOpen(self, *args):",
+                "        with open(calls_path, 'a', encoding='utf-8') as handle:",
+                "            handle.write(str(len(args)) + '\\n')",
+                "",
+                "class ImarisLib:",
+                "    def GetApplication(self, app_id):",
+                "        return App()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "open",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 1,
+        "retry_interval": 0,
+        "file_path": str(ims_path),
+        "require_ims": True,
+        "open_verify_timeout": 0.01,
+        "open_verify_interval": 0.01,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_CALLS"] = str(calls_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=10,
+    )
+
+    assert completed.returncode == 4
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPEN_UNVERIFIED"
+    assert calls_path.read_text(encoding="utf-8").splitlines() == ["2", "1"]
+
+
+def test_native_bridge_helper_opens_ims_with_visible_dataset_without_current_file(
+    tmp_path,
+):
+    """Verify the helper accepts no-current-file IMS only after visibility handoff.
+
+    Inputs: pytest provides `tmp_path`. Output: asserts SetDataSet handoff is
+    required and executed for no-current-file Imaris APIs.
+    """
+    module = _load_xt_module()
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    visible_path = tmp_path / "visible.txt"
+    fake_imarislib = tmp_path / "ImarisLib.py"
+    fake_imarislib.write_text(
+        "\n".join(
+            [
+                "import os",
+                "visible_path = os.environ['IMARIS_FAKE_VISIBLE']",
+                "",
+                "class DataSet:",
+                "    def GetSizeX(self):",
+                "        return 4",
+                "    def GetSizeY(self):",
+                "        return 3",
+                "    def GetSizeZ(self):",
+                "        return 1",
+                "",
+                "class App:",
+                "    def __init__(self):",
+                "        self.data_set = None",
+                "    def FileOpen(self, *args):",
+                "        self.data_set = DataSet()",
+                "    def GetDataSet(self):",
+                "        return self.data_set",
+                "    def SetDataSet(self, data_set):",
+                "        with open(visible_path, 'w', encoding='utf-8') as handle:",
+                "            handle.write('visible')",
+                "",
+                "class ImarisLib:",
+                "    def GetApplication(self, app_id):",
+                "        return App()",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    payload = {
+        "mode": "open",
+        "app_id": 17,
+        "install_roots": [str(tmp_path)],
+        "retry_attempts": 1,
+        "retry_interval": 0,
+        "file_path": str(ims_path),
+        "require_ims": True,
+        "open_verify_timeout": 0.01,
+        "open_verify_interval": 0.01,
+    }
+    env = dict(os.environ)
+    env["IMARIS_FAKE_VISIBLE"] = str(visible_path)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", module._NATIVE_BRIDGE_OPEN_HELPER],
+        check=False,
+        input=json.dumps(payload),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        env=env,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
+    assert visible_path.read_text(encoding="utf-8") == "visible"
+
+
 def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_path):
     """Verify native bridge helper prefers one argument fileopen for originals.
 
@@ -5941,13 +6364,27 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     class _FakeImaris:
         """Fake Imaris app resolved only at final handoff."""
 
-        @staticmethod
-        def FileOpen(path, *_args):
+        def __init__(self):
+            """Create fake Imaris current-file state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.current = ""
+
+        def FileOpen(self, path, *_args):
             """Record the final FileOpen call.
 
             Inputs: `path`, `*_args`. Output: None.
             """
             opened.append(path)
+            self.current = path
+
+        def GetCurrentFileName(self):
+            """Return the current file path for IMS-open verification.
+
+            Inputs: none. Output: path string.
+            """
+            return self.current
 
     resolution_results = [None, _FakeImaris()]
 
@@ -6036,13 +6473,27 @@ def test_open_downloaded_file_retries_direct_handle_when_optional_bridge_disable
     class _FakeImaris:
         """Fake Imaris app returned by delayed direct resolution."""
 
-        @staticmethod
-        def FileOpen(path, *_args):
+        def __init__(self):
+            """Create fake Imaris current-file state.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.current = ""
+
+        def FileOpen(self, path, *_args):
             """Record the final FileOpen call.
 
             Inputs: `path`, `*_args`. Output: None.
             """
             opened.append(path)
+            self.current = path
+
+        def GetCurrentFileName(self):
+            """Return the current file path for IMS-open verification.
+
+            Inputs: none. Output: path string.
+            """
+            return self.current
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
@@ -8763,6 +9214,127 @@ def test_health_ping_start_resets_background_cursor(monkeypatch):
 
     assert cursor_updates == [{"cursor": ""}]
     assert thread_starts == [(dialog._health_ping_worker, (1,), True)]
+
+
+def test_status_update_does_not_force_idle_redraw():
+    """Verify status text changes are scheduled without synchronous redraw.
+
+    Inputs: repository fixtures. Output: asserts background status updates avoid
+    Tk idle flushes that can surface as busy cursors.
+    """
+    module = _load_xt_module()
+    configs = []
+
+    class _Root:
+        """Root fake that executes scheduled callbacks immediately."""
+
+        @staticmethod
+        def after(_delay, callback):
+            """Run the scheduled callback.
+
+            Inputs: `_delay`, `callback`. Output: callback result.
+            """
+            return callback()
+
+        @staticmethod
+        def update_idletasks():
+            """Reject forced idle redraws from status updates.
+
+            Inputs: none. Output: none. Raises: AssertionError.
+            """
+            raise AssertionError("status update must not force idle redraw")
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog.status = types.SimpleNamespace(
+        config=lambda **kwargs: configs.append(kwargs)
+    )
+
+    module.OMEROBrowserDialog._set_status(dialog, "Ready", "#d4edda")
+
+    assert configs == [{"text": "Ready", "bg": "#d4edda"}]
+
+
+def test_connect_button_update_does_not_force_idle_redraw():
+    """Verify connect-button state changes avoid synchronous Tk redraws.
+
+    Inputs: repository fixtures. Output: asserts button state changes avoid Tk
+    idle flushes from non-layout code.
+    """
+    module = _load_xt_module()
+    configs = []
+
+    class _Root:
+        """Root fake that rejects idle redraw calls."""
+
+        @staticmethod
+        def update_idletasks():
+            """Reject forced idle redraws.
+
+            Inputs: none. Output: none. Raises: AssertionError.
+            """
+            raise AssertionError("connect button update must not force idle redraw")
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog.connect_btn = types.SimpleNamespace(
+        config=lambda **kwargs: configs.append(kwargs)
+    )
+
+    module.OMEROBrowserDialog._set_connect_button(
+        dialog,
+        "Connect",
+        "normal",
+        "#3498db",
+        "#2f85c7",
+    )
+
+    assert configs == [
+        {
+            "text": "Connect",
+            "state": "normal",
+            "bg": "#3498db",
+            "activebackground": "#2f85c7",
+            "fg": "white",
+            "activeforeground": "white",
+        }
+    ]
+
+
+def test_native_bridge_probe_worker_resets_background_cursor(monkeypatch):
+    """Verify native bridge probes cannot leave a busy cursor behind.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts probe completion runs
+    the UI-thread cursor reset.
+    """
+    module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
+    resets = []
+    ui_calls = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = None
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_python_executable = "stale-python"
+    dialog._native_bridge_available = True
+    dialog._native_bridge_probe_error = ""
+    dialog._native_bridge_last_verified_at = 1.0
+    dialog._native_bridge_probe_in_progress = True
+    dialog._invoke_on_ui_thread = lambda callback, wait=False: (
+        ui_calls.append(wait) or callback()
+    )
+    dialog._reset_background_cursor_after_silent_work = lambda: resets.append("reset")
+
+    module.OMEROBrowserDialog._native_bridge_probe_worker(dialog)
+
+    assert dialog._native_bridge_probe_done.is_set()
+    assert dialog._native_bridge_python_executable is None
+    assert dialog._native_bridge_available is False
+    assert dialog._native_bridge_last_verified_at == 0.0
+    assert ui_calls == [False]
+    assert resets == ["reset"]
 
 
 def test_health_ping_worker_retries_before_reporting_failure(monkeypatch):
