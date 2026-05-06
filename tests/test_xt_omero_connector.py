@@ -449,6 +449,33 @@ def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override()
     assert request.get_header("Referer") == client.base_url
 
 
+def test_omero_web_client_uses_checkbox_scheme_and_rejects_scheme_in_host():
+    """Verify OMERO.web URLs use the scheme and port controls only.
+
+    Inputs: repository fixtures. Output: fails on host/scheme boundary regressions.
+    """
+    module = _load_xt_module()
+
+    assert (
+        module.OMEROWebClient._build_base_url("omero.example.org", 443, "https")
+        == "https://omero.example.org:443"
+    )
+    assert (
+        module.OMEROWebClient._build_base_url("2001:db8::1", "443", "https")
+        == "https://[2001:db8::1]:443"
+    )
+    assert (
+        module._omero_web_host_input_error("https://omero.example.org")
+        == module.HOST_FIELD_SCHEME_ERROR_MESSAGE
+    )
+    assert (
+        module._omero_web_host_input_error("omero.example.org:443")
+        == module.HOST_FIELD_PORT_ERROR_MESSAGE
+    )
+    with pytest.raises(ValueError, match="without http"):
+        module.OMEROWebClient._build_base_url("https://omero.example.org", 443, "https")
+
+
 def test_client_detects_omero_ims_export_capability():
     """Verify client detects OMERO IMS export capability.
 
@@ -1359,6 +1386,30 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
     }
 
 
+def test_imaris_open_snapshot_changed_covers_observable_effects():
+    """Verify Imaris open snapshot comparison covers every success signal.
+
+    Inputs: repository fixtures. Output: fails on observable-effect comparison regressions.
+    """
+    module = _load_xt_module()
+    before = ("", 1, None)
+
+    assert (
+        module._imaris_open_snapshot_changed(
+            before,
+            ("C:\\data\\demo.ims", 1, None),
+            "C:\\data\\demo.ims",
+        )
+        is True
+    )
+    assert (
+        module._imaris_open_snapshot_changed(before, ("other.ims", 1, None), "") is True
+    )
+    assert module._imaris_open_snapshot_changed(before, ("", 2, None), "") is True
+    assert module._imaris_open_snapshot_changed(before, ("", 1, "present"), "") is True
+    assert module._imaris_open_snapshot_changed(before, ("", 1, None), "") is False
+
+
 def test_collect_local_folder_entries_returns_sorted_relative_paths(tmp_path):
     """Verify collect local folder entries returns sorted relative paths result shape.
 
@@ -1644,7 +1695,7 @@ def test_select_folder_reports_write_error_immediately_and_disables_load(
 
 
 def test_load_button_requires_connection_and_structural_folder_path():
-    """Verify Load stays gated by connection, converter, and path structure.
+    """Verify Load stays gated by connection, converter, path, and image selection.
 
     Inputs: repository fixtures. Output: fails on Load button gating regressions.
     """
@@ -1659,6 +1710,8 @@ def test_load_button_requires_connection_and_structural_folder_path():
     dialog.folder_path_var = _FakeVar(r"C:\exports")
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
+    dialog.images_data = [{"id": 1, "name": "selected"}]
+    dialog.ilist = _FakeListbox(["selected"], selection={0})
 
     module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
     assert dialog.load_btn.state == "disabled"
@@ -1671,6 +1724,11 @@ def test_load_button_requires_connection_and_structural_folder_path():
 
     dialog.folder_path_var = _FakeVar(r"C:\exports")
     dialog._folder_path_write_state = "unchecked"
+    dialog.ilist.selection_clear(0)
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "disabled"
+
+    dialog.ilist.selection_set(0)
     module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
     assert dialog.load_btn.state == "normal"
 
@@ -1697,6 +1755,8 @@ def test_path_change_reenables_load_after_reconnect_when_converter_is_available(
     dialog._folder_path_trace_suppressed = False
     dialog._folder_path_write_state = "empty"
     dialog.folder_path_entry = _FakeEntry()
+    dialog.images_data = [{"id": 1, "name": "selected"}]
+    dialog.ilist = _FakeListbox(["selected"], selection={0})
 
     module.OMEROBrowserDialog._on_folder_path_changed(dialog)
 
@@ -1830,6 +1890,8 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
         module.CONNECTOR_SETTINGS_PATH_KEY: r"C:\Exports\A folder",
         module.CONNECTOR_SETTINGS_CONVERTER_KEY: "Imaris",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
+        module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "false",
+        module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "true",
         sensitive_key: sensitive_value,
     }
 
@@ -1847,6 +1909,11 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
     assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
     assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == r"C:\Exports\A folder"
     assert loaded[module.CONNECTOR_SETTINGS_CONVERTER_KEY] == "Imaris"
+    assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "false"
+    assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "true"
+    assert (
+        loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
+    )
 
 
 def test_connector_settings_writer_tightens_private_file_modes(tmp_path):
@@ -1937,7 +2004,10 @@ def test_connector_settings_load_skips_settings_directory_symlink(
     )
 
     assert loaded == {}
-    assert logs == ["Connector settings load skipped: settings directory is a symlink"]
+    assert logs == [
+        "Connector settings load skipped: "
+        "Connector settings directory is not a regular directory"
+    ]
 
 
 def test_connector_settings_load_logs_malformed_values_without_crashing(
@@ -1972,6 +2042,249 @@ def test_connector_settings_load_logs_malformed_values_without_crashing(
     assert "unterminated" not in logs[0]
 
 
+def test_connector_show_log_preference_defaults_enabled_and_reads_false(tmp_path):
+    """Verify startup console visibility defaults on and honors saved false.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on startup show-log regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+
+    assert module._load_connector_show_log_preference(settings_path) is True
+
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="{module.CONNECTOR_INFO_VERSION}"',
+                f'{module.CONNECTOR_SETTINGS_SHOW_LOG_KEY}="false"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert module._load_connector_show_log_preference(settings_path) is False
+
+    settings_path.write_text(
+        f'{module.CONNECTOR_SETTINGS_SHOW_LOG_KEY}="unterminated\n',
+        encoding="utf-8",
+    )
+    assert module._load_connector_show_log_preference(settings_path) is True
+
+
+def test_connector_settings_version_prepare_creates_new_file_with_defaults(tmp_path):
+    """Verify first boot creates a current-version connector settings file.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on first-boot settings regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+
+    assert module._prepare_connector_settings_for_current_version(settings_path) is True
+
+    loaded = module._load_connector_settings(settings_path)
+    assert (
+        loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
+    )
+    assert loaded[module.CONNECTOR_SETTINGS_AUTOSAVE_KEY] == "true"
+    assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "true"
+    assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "false"
+
+
+def test_connector_settings_version_parses_info_dialog_version(monkeypatch):
+    """Verify settings version is parsed from the info-dialog version value.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on version parsing regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setattr(module, "CONNECTOR_INFO_VERSION", "OMERO Connector 2.3.4")
+
+    assert module._current_connector_settings_version() == "2.3.4"
+
+
+def test_connector_settings_version_prepare_preserves_same_version_settings(tmp_path):
+    """Verify same-version startup keeps user settings while refreshing version.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on same-version settings regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                "# keep operator comments",
+                f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="{module.CONNECTOR_INFO_VERSION}"',
+                f'{module.CONNECTOR_SETTINGS_HOST_KEY}="omero.example.org"',
+                f'{module.CONNECTOR_SETTINGS_SHOW_LOG_KEY}="false"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert module._prepare_connector_settings_for_current_version(settings_path) is True
+
+    content = settings_path.read_text(encoding="utf-8")
+    loaded = module._load_connector_settings(settings_path)
+    assert "# keep operator comments" in content
+    assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
+    assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "false"
+    assert (
+        loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
+    )
+    assert not module._connector_settings_backup_path(settings_path, 1).exists()
+
+
+def test_connector_settings_version_mismatch_archives_old_file(tmp_path):
+    """Verify version mismatch archives old settings and creates a fresh file.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on settings migration regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                "# previous settings",
+                f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"',
+                f'{module.CONNECTOR_SETTINGS_HOST_KEY}="old.example.org"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert module._prepare_connector_settings_for_current_version(settings_path) is True
+
+    backup_path = module._connector_settings_backup_path(settings_path, 1)
+    backup_content = backup_path.read_text(encoding="utf-8")
+    loaded = module._load_connector_settings(settings_path)
+    assert "# previous settings" in backup_content
+    assert f'{module.CONNECTOR_SETTINGS_HOST_KEY}="old.example.org"' in backup_content
+    assert (
+        loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
+    )
+    assert module.CONNECTOR_SETTINGS_HOST_KEY not in loaded
+
+
+def test_connector_settings_version_mismatch_rotates_existing_backups(tmp_path):
+    """Verify old, old2, old3 backup rotation is generated programmatically.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on settings backup rotation regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\ncurrent\n',
+        encoding="utf-8",
+    )
+    module._connector_settings_backup_path(settings_path, 1).write_text(
+        "old-one\n", encoding="utf-8"
+    )
+    module._connector_settings_backup_path(settings_path, 2).write_text(
+        "old-two\n", encoding="utf-8"
+    )
+
+    assert module._prepare_connector_settings_for_current_version(settings_path) is True
+
+    assert (
+        module._connector_settings_backup_path(settings_path, 1).read_text(
+            encoding="utf-8"
+        )
+        == f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\ncurrent\n'
+    )
+    assert (
+        module._connector_settings_backup_path(settings_path, 2).read_text(
+            encoding="utf-8"
+        )
+        == "old-one\n"
+    )
+    assert (
+        module._connector_settings_backup_path(settings_path, 3).read_text(
+            encoding="utf-8"
+        )
+        == "old-two\n"
+    )
+
+
+def test_connector_settings_version_migration_rejects_unsafe_backup_symlink(
+    tmp_path, monkeypatch
+):
+    """Verify settings migration never follows or overwrites backup symlinks.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on symlink regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\n',
+        encoding="utf-8",
+    )
+    outside_path = tmp_path / "outside.env"
+    outside_path.write_text("outside\n", encoding="utf-8")
+    backup_path = module._connector_settings_backup_path(settings_path, 1)
+    try:
+        backup_path.symlink_to(outside_path)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+
+    assert (
+        module._prepare_connector_settings_for_current_version(settings_path) is False
+    )
+
+    assert backup_path.is_symlink()
+    assert outside_path.read_text(encoding="utf-8") == "outside\n"
+    assert settings_path.read_text(encoding="utf-8") == (
+        f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\n'
+    )
+    assert not module._connector_settings_backup_path(settings_path, 2).exists()
+    assert logs == [
+        "Connector settings version preparation failed: OSError",
+    ]
+
+
+def test_connector_settings_version_migration_rejects_settings_symlink(
+    tmp_path, monkeypatch
+):
+    """Verify settings migration never follows a symlinked settings file.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on settings symlink regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    outside_path = tmp_path / "outside.env"
+    outside_path.write_text(
+        f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\n',
+        encoding="utf-8",
+    )
+    try:
+        settings_path.symlink_to(outside_path)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this platform")
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+
+    assert (
+        module._prepare_connector_settings_for_current_version(settings_path) is False
+    )
+
+    assert settings_path.is_symlink()
+    assert outside_path.read_text(encoding="utf-8") == (
+        f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="0.9.0"\n'
+    )
+    assert not module._connector_settings_backup_path(settings_path, 1).exists()
+    assert logs == [
+        "Connector settings version preparation failed: OSError",
+    ]
+
+
 def test_connector_settings_snapshot_excludes_password_value(tmp_path):
     """Verify in-memory password entry values are never in persisted settings.
 
@@ -1985,6 +2298,8 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
     dialog.pass_entry = _FakeEntry("super-secret")
     dialog.https_var = _FakeVar(True)
     dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
@@ -2002,6 +2317,9 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
         module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path),
         module.CONNECTOR_SETTINGS_CONVERTER_KEY: "OMERO",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
+        module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
+        module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        module.CONNECTOR_SETTINGS_VERSION_KEY: module.CONNECTOR_INFO_VERSION,
     }
 
 
@@ -2023,6 +2341,8 @@ def test_autosave_toggle_updates_settings_immediately_without_password(tmp_path)
     dialog.pass_entry = _FakeEntry("super-secret")
     dialog.https_var = _FakeVar(True)
     dialog.autosave_settings_var = _FakeVar(False)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
@@ -2031,6 +2351,86 @@ def test_autosave_toggle_updates_settings_immediately_without_password(tmp_path)
 
     content = settings_path.read_text(encoding="utf-8")
     assert module.CONNECTOR_SETTINGS_AUTOSAVE_KEY + '="false"' in content
+    assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="false"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+
+
+def test_show_log_toggle_updates_settings_immediately_without_password(
+    tmp_path, monkeypatch
+):
+    """Verify Show log toggles write and apply immediately before connection.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on show-log persistence regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    settings_path = module._connector_settings_env_path(tmp_path)
+    dialog._connected = False
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(False)
+    dialog.search_function_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog._show_autosave_settings_error = _noop
+    visibility_calls = []
+    monkeypatch.setattr(
+        module, "_configure_xt_console_visibility", visibility_calls.append
+    )
+
+    module.OMEROBrowserDialog._on_show_log_changed(dialog)
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert visibility_calls == [False]
+    assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="false"' in content
+    assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+
+
+def test_search_function_toggle_updates_settings_immediately_without_password(
+    tmp_path,
+):
+    """Verify Search function toggles persist immediately without credentials.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on search-option persistence regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    settings_path = module._connector_settings_env_path(tmp_path)
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog._show_autosave_settings_error = _noop
+
+    module.OMEROBrowserDialog._on_search_function_changed(dialog)
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
     assert "PASSWORD" not in content
     assert "super-secret" not in content
 
@@ -2055,6 +2455,8 @@ def test_autosave_write_failure_logs_and_keeps_dialog_usable(tmp_path, monkeypat
     dialog.pass_entry = _FakeEntry("super-secret")
     dialog.https_var = _FakeVar(True)
     dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
@@ -2123,6 +2525,8 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     dialog.pass_entry = _FakeEntry("super-secret")
     dialog.https_var = _FakeVar(True)
     dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
     dialog.autosave_settings_check = _FakeButton()
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
@@ -2158,6 +2562,8 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert module.CONNECTOR_SETTINGS_USERNAME_KEY + '="alice"' in content
     assert module.CONNECTOR_SETTINGS_HTTPS_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_PATH_KEY + f'="{tmp_path}"' in content
+    assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="false"' in content
     assert dialog.pass_entry.value == ""
     password_attr = "pass" + "word"
     assert getattr(created_clients[0], password_attr) == str()
@@ -2228,6 +2634,45 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
             "Cannot connect to OMERO server.\nPlease check your credentials.",
         )
     ]
+
+
+def test_connect_rejects_scheme_in_host_before_client_creation(monkeypatch):
+    """Verify Host rejects URL schemes before any OMERO.web client is created.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on host-field validation regressions.
+    """
+    module = _load_xt_module()
+    errors = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = False
+    dialog._connection_in_progress = False
+    dialog.client = None
+    dialog.host_entry = _FakeEntry("https://omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("typed-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.root = object()
+    dialog._set_converter_options = _noop
+    dialog._set_folder_export_capability = _noop
+    monkeypatch.setattr(
+        module,
+        "OMEROWebClient",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("invalid host must not create a client")
+        ),
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+        raising=False,
+    )
+
+    module.OMEROBrowserDialog._connect(dialog)
+
+    assert errors == [("Invalid Host", module.HOST_FIELD_SCHEME_ERROR_MESSAGE)]
+    assert dialog.client is None
 
 
 def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
@@ -2535,6 +2980,7 @@ def test_rounded_button_redraw_omits_internal_horizontal_strokes():
     button._pressed = False
     button._hover = False
     button._radius = 7
+    button._compact_height = False
 
     module._RoundedButton._redraw(button)
 
@@ -2649,14 +3095,26 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
         "self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)"
         in source
     )
+    assert "default_show_log = _connector_settings_bool(" in source
+    assert "self.show_log_var = tk.BooleanVar(value=default_show_log)" in source
+    assert "default_search_function = _connector_settings_bool(" in source
+    assert (
+        "self.search_function_var = tk.BooleanVar(value=default_search_function)"
+        in source
+    )
     assert 'text="Autosave settings"' in source
+    assert 'text="Show log"' in source
+    assert 'text="Search function"' in source
     assert 'text="Save settings"' not in source
     assert 'state=_tk_constant("DISABLED", "disabled")' in source
     assert "command=self._on_autosave_settings_changed" in source
+    assert "command=self._on_show_log_changed" in source
+    assert "command=self._on_search_function_changed" in source
     assert "bg=FOLDER_PATH_SELECT_BG" in source
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
     assert "height=38" in source
+    assert "compact_height=True" in source
     assert "def _align_path_row_control_heights(self):" in source
     assert 'getattr(self, "folder_path_entry", None), "winfo_height"' in source
     assert (
@@ -2667,10 +3125,15 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     assert "configure(height=entry_height)" in source
     assert 'text="Export folder to OMERO"' in source
     init_marker = source.index("def __init__(self, imaris, imaris_id=None):")
+    settings_prepare = source.index(
+        "_prepare_connector_settings_for_current_version(self._settings_file_path)",
+        init_marker,
+    )
     settings_load = source.index(
         "self._saved_settings = _load_connector_settings", init_marker
     )
     tk_load = source.index("_ensure_tk_loaded()", init_marker)
+    assert settings_prepare < settings_load
     assert settings_load < tk_load
     assert 'tooltip="Interact with OMERO"' in source
 
@@ -2707,10 +3170,12 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
-    assert "CONVERTER_DROPDOWN_WIDTH = 232" in source
+    assert "CONVERTER_DROPDOWN_WIDTH = 116" in source
     assert "CONVERTER_DROPDOWN_TEXT_PAD = 10" in source
     assert "CONVERTER_DROPDOWN_ARROW_WIDTH = 24" in source
     assert "CONVERTER_SLOT_WIDTH = 619" in source
+    assert "AUTOSAVE_SETTINGS_FRAME_WIDTH = 450" in source
+    assert "AUTOSAVE_SETTINGS_OPTION_GAP = 34" in source
     assert "class _ConverterDropdown:" in source
     assert "self._arrow = tk.Canvas(" in source
     assert 'text="v"' not in source
@@ -2727,10 +3192,14 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     )
     assert "def _checkbutton_text_offset(widget):" in source
     assert "self.converter_dropdown = _ConverterDropdown(" in source
+    assert "on_open=self._clear_browser_listbox_focus" in source
     assert "self.converter_dropdown.pack(side=tk.LEFT)" in source
     assert "self.refresh_btn.pack(side=tk.RIGHT)" in source
     assert "tk.Menubutton(" not in source
     assert "tk.Menu(" not in source
+    assert 'popup.bind("<FocusOut>", lambda _event: self.close_popup())' not in source
+    assert "popup.focus_force()" not in source
+    assert "def _clear_browser_listbox_focus(self):" in source
     assert 'self._preferred_converter_setting = ""' in source
     assert "def _select_converter(self, value):" in source
     assert "dropdown.set_options(options)" in source
@@ -2827,6 +3296,62 @@ def test_path_row_alignment_matches_refresh_to_entry_height():
     assert dialog.converter_slot.config_calls == [{"height": 31}]
 
 
+def test_converter_dropdown_open_clears_stale_browser_listbox_focus():
+    """Verify converter popup opening does not restore browser panel focus.
+
+    Inputs: repository fixtures. Output: fails on dropdown/listbox focus regressions.
+    """
+    module = _load_xt_module()
+
+    class _Widget:
+        """Simple Tk-like widget with a parent pointer."""
+
+        def __init__(self, master=None):
+            """Create fake widget.
+
+            Inputs: optional `master`. Output: initializes parent pointer.
+            """
+            self.master = master
+
+    class _Root:
+        """Fake root exposing focus state."""
+
+        def __init__(self, focused_widget):
+            """Create fake root.
+
+            Inputs: focused widget. Output: initializes focus records.
+            """
+            self.focused_widget = focused_widget
+            self.focus_set_calls = 0
+
+        def focus_get(self):
+            """Return focused widget.
+
+            Inputs: none. Output: widget.
+            """
+            return self.focused_widget
+
+        def focus_set(self):
+            """Record focus reset.
+
+            Inputs: none. Output: None.
+            """
+            self.focus_set_calls += 1
+            self.focused_widget = self
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.plist = _Widget()
+    dialog.dlist = _Widget()
+    dialog.ilist = _Widget()
+    focused_child = _Widget(master=dialog.dlist)
+    dialog.root = _Root(focused_child)
+
+    module.OMEROBrowserDialog._clear_browser_listbox_focus(dialog)
+
+    assert dialog.root.focus_set_calls == 1
+    assert dialog.root.focused_widget is dialog.root
+
+
 def test_converter_selection_refreshes_load_button_state():
     """Verify converter menu selection recomputes the Load button state.
 
@@ -2872,6 +3397,8 @@ def test_converter_selection_autosaves_immediately_after_connection(tmp_path):
     dialog.pass_entry = _FakeEntry("super-secret")
     dialog.https_var = _FakeVar(True)
     dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
@@ -2882,6 +3409,8 @@ def test_converter_selection_autosaves_immediately_after_connection(tmp_path):
 
     content = settings_path.read_text(encoding="utf-8")
     assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
+    assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="false"' in content
     assert "PASSWORD" not in content
     assert "super-secret" not in content
 
@@ -3067,6 +3596,7 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     ]
     assert "create_arc(" not in password_source
     assert password_source.count("create_oval(") == 1
+    assert "create_polygon(" in password_source
     assert "create_text(" not in password_source
     assert "PASSWORD_REVEAL_ICON_FONT" not in source
     assert "_antialiased_circle_image(" not in password_source
@@ -3115,9 +3645,99 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert '("Version:", CONNECTOR_INFO_VERSION)' in info_source
     assert 'metadata_label_font = ("Arial", 9, "bold")' in info_source
     assert "font=metadata_label_font" in info_source
-    assert "close_button.grid(row=4," in info_source
+    assert "row=4, column=2" in info_source
     assert "info_window.grab_set()" in source
     assert "self.root.wait_window(info_window)" in source
+
+
+def test_blocking_messagebox_locks_background_window_and_cursors(monkeypatch):
+    """Verify modal message boxes prevent background UI interaction artifacts.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on modal background lock regressions.
+    """
+    module = _load_xt_module()
+
+    class _Widget:
+        """Minimal Tk-like widget for modal background locking tests."""
+
+        def __init__(self, cursor="", root=None):
+            """Create a widget with cursor and root ownership.
+
+            Inputs: `cursor`, `root`. Output: fake widget instance.
+            """
+            self.cursor = cursor
+            self.root = root or self
+            self.children = []
+            self.disabled = False
+
+        def cget(self, key):
+            """Return a fake widget option.
+
+            Inputs: `key`. Output: configured fake value.
+            """
+            if key == "cursor":
+                return self.cursor
+            raise KeyError(key)
+
+        def configure(self, **kwargs):
+            """Configure fake widget options.
+
+            Inputs: `kwargs`. Output: None.
+            """
+            if "cursor" in kwargs:
+                self.cursor = kwargs["cursor"]
+
+        def winfo_children(self):
+            """Return child widgets.
+
+            Inputs: none. Output: children list.
+            """
+            return list(self.children)
+
+        def winfo_toplevel(self):
+            """Return the top-level root widget.
+
+            Inputs: none. Output: root widget.
+            """
+            return self.root
+
+        @staticmethod
+        def winfo_exists():
+            """Return whether the fake widget still exists.
+
+            Inputs: none. Output: bool.
+            """
+            return True
+
+        def attributes(self, option, value):
+            """Record fake top-level disabled state.
+
+            Inputs: `option`, `value`. Output: None.
+            """
+            assert option == "-disabled"
+            self.disabled = bool(value)
+
+    root = _Widget()
+    button = _Widget(cursor="hand2", root=root)
+    root.children.append(button)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = root
+    observed = []
+
+    def _showwarning(title, message, parent=None):
+        """Capture state while the modal warning is active.
+
+        Inputs: messagebox arguments. Output: bool.
+        """
+        observed.append((title, message, parent is root, root.disabled, button.cursor))
+        return True
+
+    monkeypatch.setattr(module.messagebox, "showwarning", _showwarning, raising=False)
+
+    assert module.OMEROBrowserDialog._show_warning_dialog(dialog, "Title", "Body")
+    assert observed == [("Title", "Body", True, True, "arrow")]
+    assert root.disabled is False
+    assert button.cursor == "hand2"
 
 
 def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
@@ -3127,7 +3747,8 @@ def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
-    assert "AUTOSAVE_SETTINGS_FRAME_WIDTH = 168" in source
+    assert "AUTOSAVE_SETTINGS_FRAME_WIDTH = 450" in source
+    assert "AUTOSAVE_SETTINGS_OPTION_GAP = 34" in source
     assert "conn_frame.grid_columnconfigure(7, weight=1)" in source
     assert "conn_frame.grid_columnconfigure(8, weight=1)" not in source
     assert "self.autosave_settings_frame = tk.Frame(" in source
@@ -3142,6 +3763,11 @@ def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
         "            self.autosave_settings_frame,"
     ) in source
     assert "self.autosave_settings_check.pack(side=tk.LEFT)" in source
+    assert 'text="Show log"' in source
+    assert "command=self._on_show_log_changed" in source
+    assert 'text="Search function"' in source
+    assert "command=self._on_search_function_changed" in source
+    assert "padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0)" in source
     assert "self.converter_text_offset_spacer.pack(side=tk.LEFT, fill=tk.Y)" in source
     assert (
         "converter_text_spacer.config(width=_checkbutton_text_offset(autosave_check))"
@@ -3998,6 +4624,46 @@ def test_images_panel_click_sets_focus_for_native_border_highlight():
     assert dialog._image_selection_anchor == 1
 
 
+def test_image_selection_updates_load_button_enabled_state():
+    """Verify Load enables only while at least one image is selected.
+
+    Inputs: repository fixtures. Output: fails on image-selection load gating regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._connected = True
+    dialog.client = object()
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog.images_data = [{"id": 1}, {"id": 2}]
+    dialog.ilist = _FakeListbox(items=["a", "b"], selection=set())
+    dialog.load_btn = _FakeButton()
+    dialog._image_selection_anchor = None
+
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "disabled"
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=1, state=0)
+    )
+
+    assert result == "break"
+    assert dialog.ilist.selection == {1}
+    assert dialog.load_btn.state == "normal"
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=1, state=0x0004)
+    )
+
+    assert result == "break"
+    assert dialog.ilist.selection == set()
+    assert dialog.load_btn.state == "disabled"
+
+
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):
     """Confirm open file in imaris does not launch fallback when live handle fails exposes the expected failure.
 
@@ -4764,6 +5430,16 @@ def test_safe_url_for_log_redacts_host_ids_and_query_values():
     assert malicious_url == ("/api/v0/m/images/?username=<redacted>&group=readers")
     assert "leak.example" not in malicious_url
 
+    duplicate_url = module._safe_url_for_log(
+        "https://omero.example.org/api/v0/m/images/"
+        "?username=alice&username=bob&unsafe%20key=secret&group=readers%0A"
+    )
+    assert duplicate_url == (
+        "/api/v0/m/images/?username=alice&unsafe_key=<redacted>&group=<redacted>"
+    )
+    assert "bob" not in duplicate_url
+    assert "secret" not in duplicate_url
+
 
 def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
     """Verify download chunk size is bounded runtime configuration.
@@ -5394,6 +6070,8 @@ def test_set_converter_options_populates_dropdown_without_blank_entry():
     dialog.folder_path_var = _FakeVar(r"C:\exports")
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
+    dialog.images_data = [{"id": 1, "name": "selected"}]
+    dialog.ilist = _FakeListbox(["selected"], selection=set())
 
     module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
 
@@ -5402,8 +6080,12 @@ def test_set_converter_options_populates_dropdown_without_blank_entry():
     assert "-" not in dropdown.options
     assert dialog.converter_var.value == "OMERO"
     assert dialog.converter_frame.shown is True
-    assert dialog.load_btn.state == "normal"
+    assert dialog.load_btn.state == "disabled"
     assert dialog.refresh_btn.state == "normal"
+
+    dialog.ilist.selection_set(0)
+    module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
+    assert dialog.load_btn.state == "normal"
 
     module.OMEROBrowserDialog._select_converter(dialog, "Imaris")
     assert dialog.converter_var.value == "Imaris"
@@ -5807,7 +6489,7 @@ def test_refresh_preserves_project_and_dataset_but_clears_image_selection():
     assert dialog.dlist.curselection() == (0,)
     assert dialog.ilist.curselection() == ()
     assert dialog.refresh_btn.state == "normal"
-    assert dialog.load_btn.state == "normal"
+    assert dialog.load_btn.state == "disabled"
     assert dialog.status_updates[-1][0] == "OMERO browser refreshed"
 
 
@@ -6695,6 +7377,91 @@ def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
     ]
 
 
+def test_xt_entrypoint_applies_saved_show_log_before_startup_work(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify saved Show log state is applied before GUI/startup diagnostics.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on startup Show log ordering regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    settings_path = module._connector_settings_env_path(tmp_path)
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        "\n".join(
+            [
+                f'{module.CONNECTOR_SETTINGS_VERSION_KEY}="{module.CONNECTOR_INFO_VERSION}"',
+                f'{module.CONNECTOR_SETTINGS_SHOW_LOG_KEY}="false"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    supported = module._WindowsPlatformStatus(
+        supported=True,
+        message="OMERO Connector running on supported Windows 10.0.22631 via test.",
+    )
+    events = []
+
+    class _FakeDialog:
+        """Fake browser dialog for entrypoint ordering."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Record dialog construction.
+
+            Inputs: ignored. Output: None.
+            """
+            events.append(("dialog", None))
+
+        @staticmethod
+        def show():
+            """Record dialog show.
+
+            Inputs: none. Output: None.
+            """
+            events.append(("show", None))
+
+    monkeypatch.setattr(module, "_windows_platform_status", lambda: supported)
+    monkeypatch.setattr(
+        module,
+        "_configure_xt_console_visibility",
+        lambda enabled: events.append(("visibility", enabled)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_set_process_window_title",
+        lambda title: events.append(("title", title)) or True,
+    )
+    monkeypatch.setattr(
+        module,
+        "_xt_write_log",
+        lambda _path, message: events.append(("log", message)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_ensure_tk_loaded",
+        lambda: events.append(("tk", None)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_log_imaris_xt_diagnostics",
+        lambda: events.append(("diagnostics", None)),
+    )
+    monkeypatch.setattr(
+        module, "_resolve_imaris_application", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(module, "OMEROBrowserDialog", _FakeDialog)
+
+    module.XTOmeroConnector(None)
+
+    assert events[:2] == [("visibility", False), ("title", "OMERO Connector")]
+    assert ("tk", None) in events
+    assert ("dialog", None) in events
+    assert ("show", None) in events
+
+
 def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
     """Verify is IMS file accepts only existing regular hdf5 files.
 
@@ -6774,6 +7541,74 @@ def test_xt_console_log_mirrors_command_window_output_to_settings_log(
     log_text = log_path.read_text(encoding="utf-8")
     assert "Press ENTER to close..." in captured.out
     assert "Press ENTER to close..." in log_text
+
+
+def test_xt_console_log_hidden_mode_writes_file_without_stdout(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Verify hidden command-window mode still writes the rolling log.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`, and `capsys`. Output: fails on Show log suppression regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    module._XT_RUNTIME_STATE.log_path = None
+    module._XT_RUNTIME_STATE.console_output_enabled = False
+
+    module._xt_console_log("hidden connector message")
+
+    captured = capsys.readouterr()
+    log_path = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME / module.XT_LOG_FILE_NAME
+    assert "hidden connector message" not in captured.out
+    assert module._XT_RUNTIME_STATE.log_path == str(log_path)
+    assert "hidden connector message" in log_path.read_text(encoding="utf-8")
+
+
+def test_configure_xt_console_visibility_uses_windows_show_window(monkeypatch):
+    """Verify Show log uses the Windows console API without shelling out.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on Windows console visibility regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+
+    class _FakeKernel32:
+        """Fake kernel32 console lookup."""
+
+        @staticmethod
+        def GetConsoleWindow():
+            """Return fake console handle.
+
+            Inputs: none. Output: int handle.
+            """
+            return 1234
+
+    class _FakeUser32:
+        """Fake user32 visibility API."""
+
+        calls = []
+
+        @classmethod
+        def ShowWindow(cls, handle, command):
+            """Record ShowWindow calls.
+
+            Inputs: `handle`, `command`. Output: int success.
+            """
+            cls.calls.append((handle, command))
+            return 1
+
+    fake_ctypes = types.SimpleNamespace(
+        windll=types.SimpleNamespace(kernel32=_FakeKernel32, user32=_FakeUser32)
+    )
+    monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
+
+    assert module._configure_xt_console_visibility(False) is True
+    assert module._XT_RUNTIME_STATE.console_output_enabled is False
+    assert module._configure_xt_console_visibility(True) is True
+    assert module._XT_RUNTIME_STATE.console_output_enabled is True
+    assert _FakeUser32.calls == [(1234, 0), (1234, 5)]
 
 
 def test_xt_console_output_is_centralized_for_file_mirroring():

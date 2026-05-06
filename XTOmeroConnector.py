@@ -19,6 +19,7 @@ import hashlib
 import http.client
 import http.cookiejar
 import importlib
+import ipaddress
 import json
 import logging
 import math
@@ -41,7 +42,7 @@ import urllib.request
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ OMERO_CONNECTOR_WINDOW_HEIGHT = 760
 MINIMUM_WINDOWS_MAJOR = 10
 MINIMUM_WINDOWS_MINOR = 0
 CONVERTER_MENU_FONT = ("Arial", 10)
-CONVERTER_DROPDOWN_WIDTH = 232
+CONVERTER_DROPDOWN_WIDTH = 116
 CONVERTER_DROPDOWN_HEIGHT = 36
 CONVERTER_DROPDOWN_TEXT_PAD = 10
 CONVERTER_DROPDOWN_ARROW_WIDTH = 24
@@ -179,7 +180,7 @@ CONNECTOR_HELP_ICON_FG = "#174a63"
 CONNECTOR_INFO_ICON_BG = "#d8dee6"
 CONNECTOR_INFO_ICON_ACTIVE_BG = "#c6ced8"
 CONNECTOR_INFO_ICON_FG = "#2f3a45"
-CONNECTOR_PANEL_ICON_SIZE = 36
+CONNECTOR_PANEL_ICON_SIZE = 32
 CONNECTOR_PANEL_ICON_FRAME_HEIGHT = 42
 CONNECTOR_PANEL_ICON_FONT = ("Segoe UI", 13, "bold")
 PASSWORD_REVEAL_DURATION_MS = 30000
@@ -187,7 +188,8 @@ PASSWORD_REVEAL_BUTTON_SIZE = 18
 PASSWORD_REVEAL_ICON_BG = "#f8fafc"
 PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
 PASSWORD_REVEAL_ICON_FG = "#425466"
-AUTOSAVE_SETTINGS_FRAME_WIDTH = 168
+AUTOSAVE_SETTINGS_FRAME_WIDTH = 450
+AUTOSAVE_SETTINGS_OPTION_GAP = 34
 CONVERTER_SLOT_WIDTH = 619
 BROWSER_PANEL_DEFAULT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
 BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)
@@ -211,7 +213,17 @@ FOLDER_PATH_PLACEHOLDER_FG = "#9ca3af"
 FOLDER_PATH_TEXT_FG = "#111827"
 LOCAL_PATH_WRITE_ERROR_TITLE = "Path Not Writable"
 LOCAL_PATH_WRITE_ERROR_MESSAGE = (
-    "Please select or enter an existing folder that Imaris can write to."
+    "Please select or type an existing folder that Imaris can write to."
+)
+HOST_FIELD_SCHEME_ERROR_MESSAGE = (
+    "Enter the OMERO.web host without http:// or https://. "
+    "Use the HTTPS checkbox and Port field instead."
+)
+HOST_FIELD_PORT_ERROR_MESSAGE = (
+    "Enter the OMERO.web host without a port. Use the Port field instead."
+)
+HOST_FIELD_INVALID_ERROR_MESSAGE = (
+    "Enter a valid OMERO.web hostname or IP address only."
 )
 LOCAL_PATH_WRITE_TEST_PREFIX = ".omero_connector_write_test_"
 PRIVATE_DIRECTORY_MODE = stat.S_IRWXU
@@ -242,6 +254,11 @@ CONNECTOR_SETTINGS_HTTPS_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HTTPS"
 CONNECTOR_SETTINGS_PATH_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PATH"
 CONNECTOR_SETTINGS_CONVERTER_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "CONVERTER"
 CONNECTOR_SETTINGS_AUTOSAVE_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "AUTOSAVE_SETTINGS"
+CONNECTOR_SETTINGS_SHOW_LOG_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "SHOW_LOG"
+CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY = (
+    CONNECTOR_SETTINGS_KEY_PREFIX + "SEARCH_FUNCTION"
+)
+CONNECTOR_SETTINGS_VERSION_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "VERSION"
 CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_HOST_KEY,
     CONNECTOR_SETTINGS_PORT_KEY,
@@ -250,6 +267,9 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_PATH_KEY,
     CONNECTOR_SETTINGS_CONVERTER_KEY,
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
+    CONNECTOR_SETTINGS_SHOW_LOG_KEY,
+    CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY,
+    CONNECTOR_SETTINGS_VERSION_KEY,
 )
 _ROUNDED_BUTTON_OPTION_ALIASES = {
     "background": "bg",
@@ -296,6 +316,7 @@ class _XtRuntimeState:
     """Data container for XT runtime state."""
 
     log_path: Optional[str] = None
+    console_output_enabled: bool = True
 
 
 _XT_LOG_LOCK = threading.Lock()
@@ -374,7 +395,11 @@ def _prepare_imaris_xt_environment(install_roots):
             if callable(add_dll_directory):
                 try:
                     add_dll_directory(normalized)
-                except Exception:
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
                     continue
             added.append(normalized)
     os.environ["PATH"] = os.pathsep.join(path_parts)
@@ -825,6 +850,47 @@ def _native_imaris_bridge_enabled():
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+VISIBLE_LOG_QUERY_VALUE_KEYS = {"group", "username"}
+
+
+def _safe_log_query_key(key):
+    """Return a bounded, log-safe query key.
+
+    Inputs: `key`. Output: sanitized key text.
+    """
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", key)[:64] or "param"
+
+
+def _safe_visible_log_query_value(value):
+    """Return a safe visible query value or None when it must be redacted.
+
+    Inputs: `value`. Output: sanitized visible value or None.
+    """
+    text = str(value or "")
+    if (
+        "://" in text
+        or "/" in text
+        or "\\" in text
+        or any(ord(char) < 32 for char in text)
+        or len(text) > 128
+    ):
+        return None
+    return re.sub(r"[^A-Za-z0-9 @._:+-]", "_", text) or "<empty>"
+
+
+def _safe_log_query_pair(key, value):
+    """Return a redacted-or-visible log-safe query pair.
+
+    Inputs: `key`, `value`. Output: `(safe_key, safe_value)`.
+    """
+    safe_key = _safe_log_query_key(key)
+    if safe_key.lower() in VISIBLE_LOG_QUERY_VALUE_KEYS:
+        safe_value = _safe_visible_log_query_value(value)
+        if safe_value is not None:
+            return safe_key, safe_value
+    return safe_key, "<redacted>"
+
+
 def _safe_url_for_log(url):
     """Return a diagnostic URL shape without hostnames, IDs, or sensitive query values.
 
@@ -839,25 +905,12 @@ def _safe_url_for_log(url):
     if not parsed.query:
         return path
 
-    visible_value_keys = {"group", "username"}
     safe_pairs: List[Tuple[str, str]] = []
     for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True):
-        safe_key = re.sub(r"[^A-Za-z0-9_.-]", "_", key)[:64] or "param"
+        safe_key, safe_value = _safe_log_query_pair(key, value)
         if any(pair_key == safe_key for pair_key, _pair_value in safe_pairs):
             continue
-        if safe_key.lower() in visible_value_keys:
-            value = str(value or "")
-            if (
-                "://" not in value
-                and "/" not in value
-                and "\\" not in value
-                and not any(ord(char) < 32 for char in value)
-                and len(value) <= 128
-            ):
-                safe_value = re.sub(r"[^A-Za-z0-9 @._:+-]", "_", value) or "<empty>"
-                safe_pairs.append((safe_key, safe_value))
-                continue
-        safe_pairs.append((safe_key, "<redacted>"))
+        safe_pairs.append((safe_key, safe_value))
     if not safe_pairs:
         return path
     query = "&".join(f"{key}={value}" for key, value in safe_pairs)
@@ -1296,6 +1349,183 @@ def _connector_settings_env_path(home_path=None):
     return home / AUTOSAVE_SETTINGS_DIR_NAME / AUTOSAVE_SETTINGS_FILE_NAME
 
 
+def _current_connector_settings_version():
+    """Return the version string persisted in connector settings.
+
+    Inputs: none. Output: `str`.
+    """
+    version_text = str(CONNECTOR_INFO_VERSION or "").strip()
+    match = re.search(r"\b\d+(?:\.\d+)*\b", version_text)
+    return match.group(0) if match else version_text
+
+
+def _default_connector_settings_for_current_version():
+    """Return new-user connector settings for the current version.
+
+    Inputs: none. Output: dict.
+    """
+    return {
+        CONNECTOR_SETTINGS_VERSION_KEY: _current_connector_settings_version(),
+        CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
+        CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
+        CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+    }
+
+
+def _connector_settings_with_current_version(settings):
+    """Return normalized settings with the current connector version.
+
+    Inputs: `settings`. Output: dict.
+    """
+    normalized = {key: str(settings.get(key, "")) for key in CONNECTOR_SETTINGS_KEYS}
+    normalized[CONNECTOR_SETTINGS_VERSION_KEY] = _current_connector_settings_version()
+    return normalized
+
+
+def _path_kind_without_follow(path):
+    """Classify a path without following symlinks.
+
+    Inputs: `path`. Output: path kind string.
+    """
+    try:
+        mode = Path(path).lstat().st_mode
+    except FileNotFoundError:
+        return "missing"
+    except (OSError, TypeError, ValueError):
+        return "error"
+    if stat.S_ISLNK(mode):
+        return "symlink"
+    if stat.S_ISREG(mode):
+        return "file"
+    if stat.S_ISDIR(mode):
+        return "dir"
+    return "other"
+
+
+def _connector_settings_target_safety_error(target, allow_missing_file=True):
+    """Return an error when a settings target is outside the connector contract.
+
+    Inputs: `target`, `allow_missing_file`. Output: `str` or empty.
+    """
+    try:
+        target = Path(target)
+    except TypeError:
+        return "Connector settings path is invalid"
+    if not target.is_absolute():
+        return "Connector settings path is not absolute"
+    if target.name != AUTOSAVE_SETTINGS_FILE_NAME:
+        return "Connector settings path has an unexpected file name"
+    if target.parent.name != AUTOSAVE_SETTINGS_DIR_NAME:
+        return "Connector settings path has an unexpected directory name"
+
+    parent_kind = _path_kind_without_follow(target.parent)
+    if parent_kind not in {"missing", "dir"}:
+        return "Connector settings directory is not a regular directory"
+
+    target_kind = _path_kind_without_follow(target)
+    if target_kind == "missing" and allow_missing_file:
+        return ""
+    if target_kind != "file":
+        return "Connector settings path is not a regular file"
+    return ""
+
+
+def _connector_settings_backup_path(target, backup_index):
+    """Return the generated backup path for a connector settings file.
+
+    Inputs: `target`, `backup_index`. Output: `Path`.
+    """
+    index = int(backup_index)
+    if index < 1:
+        raise ValueError("Connector settings backup index must be positive")
+    suffix = ".old" if index == 1 else f".old{index}"
+    target = Path(target)
+    return target.with_name(target.name + suffix)
+
+
+def _existing_connector_settings_backup_indexes(target):
+    """Return contiguous existing safe connector settings backup indexes.
+
+    Inputs: `target`. Output: list of positive integers. Raises: OSError.
+    """
+    indexes = []  # type: List[int]
+    index = 1
+    while True:
+        backup_path = _connector_settings_backup_path(target, index)
+        backup_kind = _path_kind_without_follow(backup_path)
+        if backup_kind == "missing":
+            return indexes
+        if backup_kind != "file":
+            raise OSError("Connector settings backup path is not a regular file")
+        indexes.append(index)
+        index += 1
+
+
+def _rotate_connector_settings_backups(target):
+    """Rotate generated connector settings backups upward without overwriting.
+
+    Inputs: `target`. Output: None. Raises: OSError.
+    """
+    safety_error = _connector_settings_target_safety_error(
+        target, allow_missing_file=False
+    )
+    if safety_error:
+        raise OSError(safety_error)
+
+    for index in reversed(_existing_connector_settings_backup_indexes(target)):
+        source_path = _connector_settings_backup_path(target, index)
+        destination_path = _connector_settings_backup_path(target, index + 1)
+        if _path_kind_without_follow(destination_path) != "missing":
+            raise OSError("Connector settings backup destination already exists")
+        source_path.rename(destination_path)
+
+    first_backup_path = _connector_settings_backup_path(target, 1)
+    if _path_kind_without_follow(first_backup_path) != "missing":
+        raise OSError("Connector settings backup destination already exists")
+    Path(target).rename(first_backup_path)
+
+
+def _prepare_connector_settings_for_current_version(settings_path=None):
+    """Create or migrate connector settings for the current app version.
+
+    Inputs: optional `settings_path`. Output: bool.
+    """
+    try:
+        target = (
+            Path(settings_path)
+            if settings_path is not None
+            else _connector_settings_env_path()
+        )
+        safety_error = _connector_settings_target_safety_error(target)
+        if safety_error:
+            raise OSError(safety_error)
+        current_version = _current_connector_settings_version()
+        if _path_kind_without_follow(target) == "missing":
+            _atomic_write_connector_settings(
+                _default_connector_settings_for_current_version(), target
+            )
+            return True
+
+        settings = _load_connector_settings(target)
+        if settings.get(CONNECTOR_SETTINGS_VERSION_KEY) != current_version:
+            _rotate_connector_settings_backups(target)
+            _atomic_write_connector_settings(
+                _default_connector_settings_for_current_version(), target
+            )
+            _log_connector_settings_event(
+                "Connector settings version changed; previous settings archived"
+            )
+            return True
+
+        _atomic_write_connector_settings(settings, target)
+        return True
+    except (OSError, TypeError, ValueError) as exc:
+        _log_connector_settings_event(
+            f"Connector settings version preparation failed: {type(exc).__name__}"
+        )
+        return False
+
+
 def _log_connector_settings_event(message):
     """Write a settings diagnostic without letting logging affect the UI.
 
@@ -1375,14 +1605,10 @@ def _load_connector_settings(settings_path=None):
         else _connector_settings_env_path()
     )
     try:
-        if path.parent.is_symlink():
+        safety_error = _connector_settings_target_safety_error(path)
+        if safety_error:
             _log_connector_settings_event(
-                "Connector settings load skipped: settings directory is a symlink"
-            )
-            return {}
-        if path.is_symlink():
-            _log_connector_settings_event(
-                "Connector settings load skipped: settings file is a symlink"
+                "Connector settings load skipped: " + safety_error
             )
             return {}
         if not path.is_file():
@@ -1432,6 +1658,34 @@ def _connector_settings_bool_text(value):
     Inputs: `value`. Output: `str`.
     """
     return "true" if bool(value) else "false"
+
+
+def _load_connector_show_log_preference(settings_path=None):
+    """Read only the startup console-log preference without emitting diagnostics.
+
+    Inputs: optional `settings_path`. Output: bool.
+    """
+    try:
+        path = (
+            Path(settings_path)
+            if settings_path is not None
+            else _connector_settings_env_path()
+        )
+        if _connector_settings_target_safety_error(path) or not path.is_file():
+            return True
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                key, raw_value = _split_connector_settings_env_line(line)
+                if key != CONNECTOR_SETTINGS_SHOW_LOG_KEY:
+                    continue
+                try:
+                    value = _parse_connector_settings_env_value(raw_value)
+                except ValueError:
+                    return True
+                return _connector_settings_bool(value, True)
+    except (OSError, TypeError, ValueError):
+        return True
+    return True
 
 
 def _filled_connector_setting(settings, key):
@@ -1485,12 +1739,9 @@ def _atomic_write_connector_settings(settings, settings_path=None):
             else _connector_settings_env_path()
         )
         target_dir = target.parent
-        if target.is_symlink() or (target.exists() and not target.is_file()):
-            raise OSError("Connector settings path is not a regular file")
-        if target_dir.is_symlink():
-            raise OSError("Connector settings directory is a symlink")
-        if target_dir.exists() and not target_dir.is_dir():
-            raise OSError("Connector settings directory is not a directory")
+        safety_error = _connector_settings_target_safety_error(target)
+        if safety_error:
+            raise OSError(safety_error)
         target_dir.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
         with contextlib.suppress(OSError):
             os.chmod(os.fspath(target_dir), PRIVATE_DIRECTORY_MODE)
@@ -1499,9 +1750,7 @@ def _atomic_write_connector_settings(settings, settings_path=None):
         if target.exists():
             existing_lines = target.read_text(encoding="utf-8").splitlines()
 
-        normalized = {
-            key: str(settings.get(key, "")) for key in CONNECTOR_SETTINGS_KEYS
-        }
+        normalized = _connector_settings_with_current_version(settings)
         content = (
             "\n".join(_connector_settings_output_lines(existing_lines, normalized))
             + "\n"
@@ -1684,6 +1933,35 @@ def _collect_local_folder_entries(folder_path):
     return entries
 
 
+def _configure_xt_console_visibility(show_log_enabled):
+    """Apply the connector command-window visibility preference.
+
+    Inputs: `show_log_enabled`. Output: bool indicating whether a Windows console
+    was found and updated.
+    """
+    enabled = bool(show_log_enabled)
+    _XT_RUNTIME_STATE.console_output_enabled = enabled
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        windll = getattr(ctypes, "windll")
+        kernel32 = windll.kernel32
+        user32 = windll.user32
+        console_window = kernel32.GetConsoleWindow()
+        if not console_window:
+            return False
+        show_command = 5 if enabled else 0
+        user32.ShowWindow(console_window, show_command)
+        return True
+    except Exception as exc:
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
+        return False
+
+
 def _xt_debug(message):
     """Write an XT connector debug message when debug logging is enabled.
 
@@ -1700,12 +1978,13 @@ def _xt_console_log(message="", *, end="\n", flush=False):
     Inputs: `message`, optional `end`, optional `flush`. Output: None.
     """
     text = str(message)
-    try:
-        print(text, end=end, flush=flush)
-    except (OSError, RuntimeError, ValueError) as exc:
-        logger.debug(
-            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
-        )
+    if _XT_RUNTIME_STATE.console_output_enabled:
+        try:
+            print(text, end=end, flush=flush)
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+            )
     try:
         if not _XT_RUNTIME_STATE.log_path:
             _XT_RUNTIME_STATE.log_path = _xt_log_path()
@@ -1736,6 +2015,90 @@ def _parse_port(port_value):
     if port <= 0 or port > 65535:
         return None
     return port
+
+
+def _host_text_has_url_scheme(host_text):
+    """Return whether host text starts with a URL scheme.
+
+    Inputs: `host_text`. Output: bool.
+    """
+    return bool(re.match(r"(?i)^[a-z][a-z0-9+.-]*://", host_text))
+
+
+def _host_text_has_invalid_separator(host_text):
+    """Return whether host text contains URL-only separators.
+
+    Inputs: `host_text`. Output: bool.
+    """
+    return any(char in host_text for char in "/?#@")
+
+
+def _bracketed_omero_web_host_error(host_text):
+    """Return the validation error for a bracketed host.
+
+    Inputs: `host_text`. Output: error text or an empty string.
+    """
+    try:
+        parsed = urllib.parse.urlsplit(f"//{host_text}")
+        parsed_port = parsed.port
+    except ValueError:
+        return HOST_FIELD_INVALID_ERROR_MESSAGE
+    if parsed_port is not None:
+        return HOST_FIELD_PORT_ERROR_MESSAGE
+    return "" if parsed.hostname else HOST_FIELD_INVALID_ERROR_MESSAGE
+
+
+def _colon_omero_web_host_error(host_text):
+    """Return the validation error for host text containing colons.
+
+    Inputs: `host_text`. Output: error text or an empty string.
+    """
+    try:
+        ip_address = ipaddress.ip_address(host_text)
+    except ValueError:
+        return HOST_FIELD_PORT_ERROR_MESSAGE
+    return "" if ip_address.version == 6 else HOST_FIELD_INVALID_ERROR_MESSAGE
+
+
+def _omero_web_host_input_error(host_value):
+    """Return the validation error for the OMERO.web host field.
+
+    Inputs: `host_value`. Output: error text or an empty string.
+    """
+    host_text = str(host_value or "").strip()
+    if not host_text:
+        return ""
+    if _host_text_has_url_scheme(host_text) or host_text.startswith("//"):
+        return HOST_FIELD_SCHEME_ERROR_MESSAGE
+    if any(ord(char) < 33 for char in host_text):
+        return HOST_FIELD_INVALID_ERROR_MESSAGE
+    if _host_text_has_invalid_separator(host_text):
+        return HOST_FIELD_INVALID_ERROR_MESSAGE
+    if host_text.startswith("["):
+        return _bracketed_omero_web_host_error(host_text)
+    if ":" in host_text:
+        return _colon_omero_web_host_error(host_text)
+    return ""
+
+
+def _normalized_omero_web_host_for_url(host_value):
+    """Return host text normalized for use in a URL authority.
+
+    Inputs: `host_value`. Output: host text. Raises: ValueError for invalid host input.
+    """
+    host_text = str(host_value or "").strip()
+    error = _omero_web_host_input_error(host_text)
+    if error:
+        raise ValueError(error)
+    if host_text.startswith("["):
+        return host_text
+    try:
+        ip_address = ipaddress.ip_address(host_text)
+    except ValueError:
+        return host_text
+    if ip_address.version == 6:
+        return f"[{host_text}]"
+    return host_text
 
 
 def is_ims_file(file_path):
@@ -1897,6 +2260,29 @@ def _imaris_app_snapshot(imaris_app):
     return current, image_count, data_set_signature
 
 
+def _imaris_open_snapshot_changed(before, current_snapshot, expected_path):
+    """Return whether an Imaris snapshot proves an open-file effect.
+
+    Inputs: `before`, `current_snapshot`, `expected_path`. Output: bool.
+    """
+    current, image_count, data_set_signature = current_snapshot
+    before_current, before_image_count, before_data_set_signature = before
+    if expected_path and current and current == expected_path:
+        return True
+    if current and current != before_current:
+        return True
+    image_count_changed = (
+        image_count is not None
+        and before_image_count is not None
+        and image_count != before_image_count
+    )
+    data_set_changed = data_set_signature is not None and (
+        before_data_set_signature is None
+        or data_set_signature != before_data_set_signature
+    )
+    return image_count_changed or data_set_changed
+
+
 def _wait_for_imaris_open_observable_effect(
     imaris_app,
     before,
@@ -1918,25 +2304,11 @@ def _wait_for_imaris_open_observable_effect(
     expected = _normalize_imaris_compare_path(expected_path)
     deadline = time.time() + max(0.0, float(timeout))
     while time.time() <= deadline:
-        current, image_count, data_set_signature = _imaris_app_snapshot(imaris_app)
-        before_current, before_image_count, before_data_set_signature = before
-        if expected and current and current == expected:
-            return True
-        if current and current != before_current:
-            return True
-        if (
-            image_count is not None
-            and before_image_count is not None
-            and image_count != before_image_count
+        if _imaris_open_snapshot_changed(
+            before,
+            _imaris_app_snapshot(imaris_app),
+            expected,
         ):
-            return True
-        if (
-            data_set_signature is not None
-            and before_data_set_signature is not None
-            and data_set_signature != before_data_set_signature
-        ):
-            return True
-        if data_set_signature is not None and before_data_set_signature is None:
             return True
         time.sleep(max(0.0, float(interval)))
     return False
@@ -2215,6 +2587,21 @@ def _widget_or_ancestor_is_text_input(widget):
     return False
 
 
+def _widget_is_or_descendant(widget, ancestor):
+    """Return whether `widget` is `ancestor` or one of its descendants.
+
+    Inputs: `widget`, `ancestor`. Output: bool.
+    """
+    if widget is None or ancestor is None:
+        return False
+    current = widget
+    while current is not None:
+        if current is ancestor:
+            return True
+        current = getattr(current, "master", None)
+    return False
+
+
 def _hex_to_rgb(value, fallback=(128, 128, 128)):
     """Return the hex to rgb.
 
@@ -2474,12 +2861,15 @@ class _RoundedButton:
         width=140,
         height=42,
         state=None,
+        compact_height=False,
     ):
         """Create `_RoundedButton` with `master`, `text`, `command`, `bg`, `fg`,
-        `activebackground`, `activeforeground`, `font`, `width`, `height`, and `state`.
+        `activebackground`, `activeforeground`, `font`, `width`, `height`, `state`,
+        and `compact_height`.
 
         Inputs: `master`, `text`, `command`, `bg`, `fg`, `activebackground`,
-        `activeforeground`, `font`, `width`, `height`, `state`. Output: None.
+        `activeforeground`, `font`, `width`, `height`, `state`, `compact_height`.
+        Output: None.
         """
         self._text = text
         self._command = command
@@ -2494,6 +2884,7 @@ class _RoundedButton:
         self._pressed = False
         self._hover = False
         self._radius = 7
+        self._compact_height = bool(compact_height)
         self._canvas = tk.Canvas(
             master,
             width=width,
@@ -2786,12 +3177,20 @@ class _RoundedButton:
             shadow = _shade_color(self._bg, -0.35)
 
         surface_offset = 2 if pressed else 0
-        shadow_offset = 1 if pressed else 3
-        left = 3
-        top = 2 + surface_offset
-        right = width - 4
-        bottom = height - 6 + surface_offset
-        radius = min(self._radius, max(3, (height - 10) // 2))
+        if self._compact_height:
+            shadow_offset = 1 if pressed else 2
+            left = 2
+            top = surface_offset
+            right = width - 3
+            bottom = height - 3 + surface_offset
+            radius = min(self._radius, max(3, (height - 4) // 2))
+        else:
+            shadow_offset = 1 if pressed else 3
+            left = 3
+            top = 2 + surface_offset
+            right = width - 4
+            bottom = height - 6 + surface_offset
+            radius = min(self._radius, max(3, (height - 10) // 2))
 
         self._draw_round_rect(
             left + 1,
@@ -2873,6 +3272,7 @@ class _ConverterDropdown:
         master,
         variable,
         command=None,
+        on_open=None,
         width=CONVERTER_DROPDOWN_WIDTH,
         height=CONVERTER_DROPDOWN_HEIGHT,
         font=CONVERTER_MENU_FONT,
@@ -2887,6 +3287,7 @@ class _ConverterDropdown:
         """
         self._variable = variable
         self._command = command
+        self._on_open = on_open
         self._width = int(width)
         self._height = int(height)
         self._font = font
@@ -2897,6 +3298,8 @@ class _ConverterDropdown:
         self._text_pad = CONVERTER_DROPDOWN_TEXT_PAD
         self._options = []
         self._popup = None
+        self._root_click_bind_id = None
+        self._root_escape_bind_id = None
         self._hover = False
         self._open = False
         self._border = "#aeb8c2"
@@ -3084,6 +3487,8 @@ class _ConverterDropdown:
         if not self._options:
             return
         self.close_popup()
+        if callable(self._on_open):
+            self._on_open()
         self._open = True
         self._apply_style()
         self._frame.update_idletasks()
@@ -3098,7 +3503,6 @@ class _ConverterDropdown:
             f"{self._frame.winfo_rooty() + self._frame.winfo_height()}"
         )
         popup.bind("<Escape>", lambda _event: self.close_popup())
-        popup.bind("<FocusOut>", lambda _event: self.close_popup())
         container = tk.Frame(popup, bg=self._border, bd=0)
         container.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         for option in self._options:
@@ -3130,8 +3534,58 @@ class _ConverterDropdown:
                 lambda _event, value=option: self._choose(value),
             )
         self._popup = popup
+        self._bind_root_click_close()
         popup.lift()
-        popup.focus_force()
+
+    def _bind_root_click_close(self):
+        """Close the popup on the next click outside the selector and popup.
+
+        Inputs: none. Output: None.
+        """
+        root = self._frame.winfo_toplevel()
+        bind = getattr(root, "bind", None)
+        if callable(bind):
+            self._root_click_bind_id = bind(
+                "<ButtonPress-1>",
+                self._close_on_root_click_outside,
+                add="+",
+            )
+            self._root_escape_bind_id = bind(
+                "<Escape>",
+                lambda _event: self.close_popup(),
+                add="+",
+            )
+
+    def _unbind_root_click_close(self):
+        """Remove the temporary outside-click binding.
+
+        Inputs: none. Output: None.
+        """
+        root = self._frame.winfo_toplevel()
+        unbind = getattr(root, "unbind", None)
+        if callable(unbind):
+            for sequence, bind_id in (
+                ("<ButtonPress-1>", self._root_click_bind_id),
+                ("<Escape>", self._root_escape_bind_id),
+            ):
+                if bind_id:
+                    with contextlib.suppress(Exception):
+                        unbind(sequence, bind_id)
+        self._root_click_bind_id = None
+        self._root_escape_bind_id = None
+
+    def _close_on_root_click_outside(self, event):
+        """Close the dropdown when the root receives an outside click.
+
+        Inputs: Tk event. Output: None.
+        """
+        event_widget = getattr(event, "widget", None)
+        if _widget_is_or_descendant(event_widget, self._frame):
+            return None
+        if _widget_is_or_descendant(event_widget, self._popup):
+            return None
+        self.close_popup()
+        return None
 
     def close_popup(self):
         """Close the dropdown popup and restore selector state.
@@ -3142,6 +3596,7 @@ class _ConverterDropdown:
         self._popup = None
         self._open = False
         self._apply_style()
+        self._unbind_root_click_close()
         if popup is None:
             return
         try:
@@ -3211,7 +3666,7 @@ class _PasswordRevealButton(_RoundedButton):
         right = min(width - 3.0, center_x + 6.2)
         top = center_y - 4.0
         bottom = center_y + 4.0
-        self._canvas.create_line(
+        self._canvas.create_polygon(
             left,
             center_y,
             center_x - 3.4,
@@ -3222,26 +3677,16 @@ class _PasswordRevealButton(_RoundedButton):
             top,
             right,
             center_y,
-            smooth=True,
-            fill=icon,
-            width=1.3,
-            capstyle=tk.ROUND,
-        )
-        self._canvas.create_line(
-            left,
-            center_y,
-            center_x - 3.4,
+            center_x + 3.4,
             bottom,
             center_x,
             bottom - 0.5,
-            center_x + 3.4,
+            center_x - 3.4,
             bottom,
-            right,
-            center_y,
             smooth=True,
-            fill=icon,
+            fill="",
+            outline=icon,
             width=1.3,
-            capstyle=tk.ROUND,
         )
         radius = 2.0 if visible else 1.45
         self._canvas.create_oval(
@@ -3264,54 +3709,81 @@ class _PasswordRevealButton(_RoundedButton):
             )
 
 
-def _iter_imaris_executable_candidates():
-    """Yield plausible Imaris executable paths without requiring admin access.
+def _unique_path_candidate(path, seen):
+    """Return a normalized candidate path once.
 
-    Inputs: none. Output: yielded values.
+    Inputs: `path`, `seen`. Output: normalized path or None.
     """
-    seen = set()
+    normalized = os.path.normpath(path)
+    if normalized in seen:
+        return None
+    seen.add(normalized)
+    return normalized
 
-    def _yield_candidate(path):
-        """Yield the candidate.
 
-        Inputs: `path` path. Output: iterator of yielded items.
-        """
-        normalized = os.path.normpath(path)
-        if normalized in seen:
-            return
-        seen.add(normalized)
-        yield normalized
+def _iter_unique_path_candidates(candidates, seen):
+    """Yield normalized path candidates that have not been seen.
 
-    env_candidate = os.environ.get("IMARIS_EXE", "").strip()
-    if env_candidate:
-        yield from _yield_candidate(env_candidate)
+    Inputs: `candidates`, `seen`. Output: yielded normalized path strings.
+    """
+    for candidate in candidates:
+        normalized = _unique_path_candidate(candidate, seen)
+        if normalized is not None:
+            yield normalized
 
+
+def _import_winreg_module():
+    """Return the Windows registry module when available.
+
+    Inputs: none. Output: module or None.
+    """
     winreg_module: Any = None
     try:
         winreg_module = importlib.import_module("winreg")
     except ImportError:
-        winreg_module = None
+        return None
+    return winreg_module
 
-    if winreg_module is not None:
-        reg_locations = [
-            (
-                winreg_module.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
-            ),
-            (
-                winreg_module.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
-            ),
-        ]
-        for hive, subkey in reg_locations:
-            try:
-                with winreg_module.OpenKey(hive, subkey) as key:
-                    value, _ = winreg_module.QueryValueEx(key, None)
-                if value:
-                    yield from _yield_candidate(value)
-            except (OSError, ValueError):
-                continue
 
+def _imaris_registry_locations(winreg_module):
+    """Return registry locations that may define the Imaris executable.
+
+    Inputs: `winreg_module`. Output: tuple of registry location pairs.
+    """
+    return (
+        (
+            winreg_module.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
+        ),
+        (
+            winreg_module.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
+        ),
+    )
+
+
+def _iter_imaris_registry_executable_candidates(winreg_module):
+    """Yield Imaris executable candidates from the Windows registry.
+
+    Inputs: `winreg_module`. Output: yielded path strings.
+    """
+    if winreg_module is None:
+        return
+    for hive, subkey in _imaris_registry_locations(winreg_module):
+        try:
+            with winreg_module.OpenKey(hive, subkey) as key:
+                value, _ = winreg_module.QueryValueEx(key, None)
+        except (OSError, ValueError):
+            continue
+        if value:
+            yield value
+
+
+def _iter_imaris_vendor_roots():
+    """Yield installation vendor roots under Windows program directories.
+
+    Inputs: none. Output: yielded directory strings.
+    """
     base_dirs = [
         os.environ.get("ProgramW6432"),
         os.environ.get("ProgramFiles"),
@@ -3326,19 +3798,63 @@ def _iter_imaris_executable_candidates():
             continue
         for vendor_dir in vendor_dirs:
             vendor_root = os.path.join(base_dir, vendor_dir)
-            if not os.path.isdir(vendor_root):
-                continue
-            try:
-                entries = sorted(os.listdir(vendor_root), reverse=True)
-            except Exception:
-                entries = []
-            for entry in entries:
-                if not entry.lower().startswith("imaris"):
-                    continue
-                candidate = os.path.join(vendor_root, entry, "Imaris.exe")
-                if not _is_supported_imaris_install_path(candidate):
-                    continue
-                yield from _yield_candidate(candidate)
+            if os.path.isdir(vendor_root):
+                yield vendor_root
+
+
+def _safe_sorted_directory_entries(path, *, reverse=False):
+    """Return sorted directory entries or an empty tuple when unavailable.
+
+    Inputs: `path`, optional `reverse`. Output: tuple of entry names.
+    """
+    try:
+        return tuple(sorted(os.listdir(path), reverse=reverse))
+    except Exception:
+        return ()
+
+
+def _imaris_vendor_entry_executable_path(vendor_root, entry):
+    """Return the supported Imaris executable path for a vendor entry.
+
+    Inputs: `vendor_root`, `entry`. Output: path string or None.
+    """
+    if not entry.lower().startswith("imaris"):
+        return None
+    candidate = os.path.join(vendor_root, entry, "Imaris.exe")
+    if not _is_supported_imaris_install_path(candidate):
+        return None
+    return candidate
+
+
+def _iter_imaris_vendor_executable_candidates():
+    """Yield supported Imaris executable candidates from vendor directories.
+
+    Inputs: none. Output: yielded path strings.
+    """
+    for vendor_root in _iter_imaris_vendor_roots():
+        for entry in _safe_sorted_directory_entries(vendor_root, reverse=True):
+            candidate = _imaris_vendor_entry_executable_path(vendor_root, entry)
+            if candidate is not None:
+                yield candidate
+
+
+def _iter_imaris_executable_candidates():
+    """Yield plausible Imaris executable paths without requiring admin access.
+
+    Inputs: none. Output: yielded values.
+    """
+    seen: Set[str] = set()
+    env_candidate = os.environ.get("IMARIS_EXE", "").strip()
+    if env_candidate:
+        yield from _iter_unique_path_candidates((env_candidate,), seen)
+    yield from _iter_unique_path_candidates(
+        _iter_imaris_registry_executable_candidates(_import_winreg_module()),
+        seen,
+    )
+    yield from _iter_unique_path_candidates(
+        _iter_imaris_vendor_executable_candidates(),
+        seen,
+    )
 
 
 def _find_imaris_executable():
@@ -4466,9 +4982,14 @@ class OMEROWebClient:
 
         Inputs: `host`, `port`, `scheme`. Output: URL string.
         """
-        if host.startswith("http://") or host.startswith("https://"):
-            return host.rstrip("/")
-        return f"{scheme}://{host}:{port}"
+        safe_scheme = str(scheme or "").strip().lower()
+        if safe_scheme not in {"http", "https"}:
+            raise ValueError("Unsupported OMERO.web URL scheme.")
+        safe_port = _parse_port(port)
+        if safe_port is None:
+            raise ValueError("Invalid OMERO.web port.")
+        safe_host = _normalized_omero_web_host_for_url(host)
+        return f"{safe_scheme}://{safe_host}:{safe_port}"
 
     def _create_request_with_cookies(self, url, data=None, method=None):
         """Create the request with cookies for `OMEROWebClient`.
@@ -5970,6 +6491,13 @@ class OMEROBrowserDialog:
         self.select_folder_btn: Any
         self.autosave_settings_var: Any
         self.autosave_settings_check: Any
+        self.show_log_var: Any
+        self.show_log_check: Any
+        self.search_function_var: Any
+        self.search_function_check: Any
+        self._modal_background_lock_depth = 0
+        self._modal_background_cursor_restore = []
+        self._modal_background_window_disabled = False
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_trace_id = None
@@ -5983,6 +6511,7 @@ class OMEROBrowserDialog:
         self._preferred_converter_setting = ""
         try:
             self._settings_file_path = _connector_settings_env_path()
+            _prepare_connector_settings_for_current_version(self._settings_file_path)
             self._saved_settings = _load_connector_settings(self._settings_file_path)
         except OSError as exc:
             self._autosave_settings_write_error = str(exc)
@@ -6073,6 +6602,12 @@ class OMEROBrowserDialog:
         )
         default_autosave_settings = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_AUTOSAVE_KEY), True
+        )
+        default_show_log = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_SHOW_LOG_KEY), True
+        )
+        default_search_function = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY), False
         )
 
         self.host_label = self._connection_label(conn_frame, "Host:")
@@ -6169,6 +6704,8 @@ class OMEROBrowserDialog:
         self.connect_btn.grid(row=0, column=5, rowspan=2, padx=(10, 12), pady=5)
 
         self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
+        self.show_log_var = tk.BooleanVar(value=default_show_log)
+        self.search_function_var = tk.BooleanVar(value=default_search_function)
         self.autosave_settings_frame = tk.Frame(
             conn_frame,
             width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
@@ -6191,6 +6728,26 @@ class OMEROBrowserDialog:
             disabledforeground="#7a828a",
         )
         self.autosave_settings_check.pack(side=tk.LEFT)
+        self.show_log_check = tk.Checkbutton(
+            self.autosave_settings_frame,
+            text="Show log",
+            variable=self.show_log_var,
+            command=self._on_show_log_changed,
+        )
+        self.show_log_check.pack(
+            side=tk.LEFT,
+            padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
+        )
+        self.search_function_check = tk.Checkbutton(
+            self.autosave_settings_frame,
+            text="Search function",
+            variable=self.search_function_var,
+            command=self._on_search_function_changed,
+        )
+        self.search_function_check.pack(
+            side=tk.LEFT,
+            padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
+        )
 
         self._preferred_converter_setting = default_converter
         self.converter_var = tk.StringVar(value="")
@@ -6218,6 +6775,7 @@ class OMEROBrowserDialog:
             self.converter_frame,
             variable=self.converter_var,
             command=self._select_converter,
+            on_open=self._clear_browser_listbox_focus,
             bg="#f8f9fa",
             fg="#2c3e50",
             activebackground="#e9eef3",
@@ -6236,6 +6794,7 @@ class OMEROBrowserDialog:
             font=("Arial", 10, "bold"),
             width=112,
             height=36,
+            compact_height=True,
         )
         self.refresh_btn.pack(side=tk.RIGHT)
         self.converter_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -6290,6 +6849,7 @@ class OMEROBrowserDialog:
             font=("Arial", 10, "bold"),
             width=96,
             height=38,
+            compact_height=True,
         )
         self.select_folder_btn.grid(row=2, column=5, padx=(10, 12), pady=5, sticky=tk.W)
         self.panel_icon_frame = tk.Frame(conn_frame)
@@ -6827,6 +7387,205 @@ class OMEROBrowserDialog:
         getter: Any = getattr(variable, "get", None)
         return bool(getter() if callable(getter) else False)
 
+    def _show_log_enabled(self):
+        """Return whether command-window log output should be visible.
+
+        Inputs: none. Output: bool.
+        """
+        variable = getattr(self, "show_log_var", None)
+        getter: Any = getattr(variable, "get", None)
+        return bool(getter() if callable(getter) else True)
+
+    def _search_function_enabled(self):
+        """Return whether the placeholder search option is selected.
+
+        Inputs: none. Output: bool.
+        """
+        variable = getattr(self, "search_function_var", None)
+        getter: Any = getattr(variable, "get", None)
+        return bool(getter() if callable(getter) else False)
+
+    def _iter_modal_background_widgets(self):
+        """Yield main-window widgets whose cursors must be neutral during modals.
+
+        Inputs: none. Output: yielded Tk widgets.
+        """
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        stack = [root]
+        while stack:
+            widget = stack.pop()
+            if widget is not root:
+                toplevel_getter = getattr(widget, "winfo_toplevel", None)
+                try:
+                    if callable(toplevel_getter) and toplevel_getter() is not root:
+                        continue
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
+                    continue
+            yield widget
+            children_getter = getattr(widget, "winfo_children", None)
+            if callable(children_getter):
+                try:
+                    stack.extend(children_getter())
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
+                    continue
+
+    def _set_main_window_disabled(self, disabled):
+        """Block or restore direct input to the main connector window.
+
+        Inputs: `disabled`. Output: bool indicating whether Tk accepted the request.
+        """
+        root = getattr(self, "root", None)
+        for method_name in ("attributes", "wm_attributes"):
+            setter = getattr(root, method_name, None)
+            if callable(setter):
+                try:
+                    setter("-disabled", bool(disabled))
+                    return True
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
+                    continue
+        return False
+
+    def _lock_modal_background(self):
+        """Neutralize background interaction while a blocking child is active.
+
+        Inputs: none. Output: None.
+        """
+        depth = int(getattr(self, "_modal_background_lock_depth", 0) or 0)
+        self._modal_background_lock_depth = depth + 1
+        if depth:
+            return
+
+        cursor_restore = []
+        for widget in self._iter_modal_background_widgets():
+            getter = getattr(widget, "cget", None)
+            setter = getattr(widget, "configure", None)
+            if not callable(getter) or not callable(setter):
+                continue
+            try:
+                cursor_restore.append((widget, getter("cursor")))
+                setter(cursor="arrow")
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
+                continue
+        self._modal_background_cursor_restore = cursor_restore
+        self._modal_background_window_disabled = self._set_main_window_disabled(True)
+
+    def _unlock_modal_background(self):
+        """Restore the main connector window after a blocking child closes.
+
+        Inputs: none. Output: None.
+        """
+        depth = int(getattr(self, "_modal_background_lock_depth", 0) or 0)
+        if depth > 1:
+            self._modal_background_lock_depth = depth - 1
+            return
+        self._modal_background_lock_depth = 0
+
+        for widget, cursor in reversed(
+            list(getattr(self, "_modal_background_cursor_restore", []) or [])
+        ):
+            exists = getattr(widget, "winfo_exists", None)
+            setter = getattr(widget, "configure", None)
+            try:
+                if callable(setter) and (not callable(exists) or exists()):
+                    setter(cursor=cursor)
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
+                continue
+        self._modal_background_cursor_restore = []
+
+        if getattr(self, "_modal_background_window_disabled", False):
+            self._set_main_window_disabled(False)
+        self._modal_background_window_disabled = False
+
+    @staticmethod
+    def _call_messagebox_function(function, title, message, parent):
+        """Call a Tk messagebox function with a parent when supported.
+
+        Inputs: `function`, `title`, `message`, `parent`. Output: function result.
+        """
+        try:
+            return function(title, message, parent=parent)
+        except TypeError as exc:
+            message_text = str(exc)
+            if "parent" not in message_text and "keyword" not in message_text:
+                raise
+            return function(title, message)
+
+    def _run_blocking_modal(self, callback):
+        """Run a blocking modal while the main window cannot be interacted with.
+
+        Inputs: `callback`. Output: callback result.
+        """
+        self._lock_modal_background()
+        try:
+            return callback()
+        finally:
+            self._unlock_modal_background()
+
+    def _show_messagebox_dialog(self, kind, title, message):
+        """Show a modal messagebox with the main window locked behind it.
+
+        Inputs: `kind`, `title`, `message`. Output: messagebox result.
+        """
+        function = getattr(messagebox, kind)
+        return self._run_blocking_modal(
+            lambda: self._call_messagebox_function(
+                function,
+                title,
+                message,
+                getattr(self, "root", None),
+            )
+        )
+
+    def _show_warning_dialog(self, title, message):
+        """Show a modal warning dialog.
+
+        Inputs: `title`, `message`. Output: messagebox result.
+        """
+        return self._show_messagebox_dialog("showwarning", title, message)
+
+    def _show_error_dialog(self, title, message):
+        """Show a modal error dialog.
+
+        Inputs: `title`, `message`. Output: messagebox result.
+        """
+        return self._show_messagebox_dialog("showerror", title, message)
+
+    def _show_info_dialog(self, title, message):
+        """Show a modal information dialog.
+
+        Inputs: `title`, `message`. Output: messagebox result.
+        """
+        return self._show_messagebox_dialog("showinfo", title, message)
+
+    def _ask_yes_no_dialog(self, title, message):
+        """Show a modal yes/no question dialog.
+
+        Inputs: `title`, `message`. Output: bool.
+        """
+        return bool(self._show_messagebox_dialog("askyesno", title, message))
+
     def _connector_settings_snapshot(self):
         """Return the connector settings that may be persisted.
 
@@ -6847,6 +7606,13 @@ class OMEROBrowserDialog:
             CONNECTOR_SETTINGS_AUTOSAVE_KEY: _connector_settings_bool_text(
                 self._autosave_settings_enabled()
             ),
+            CONNECTOR_SETTINGS_SHOW_LOG_KEY: _connector_settings_bool_text(
+                self._show_log_enabled()
+            ),
+            CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: _connector_settings_bool_text(
+                self._search_function_enabled()
+            ),
+            CONNECTOR_SETTINGS_VERSION_KEY: _current_connector_settings_version(),
         }
 
     def _write_autosave_settings(self):
@@ -6874,13 +7640,12 @@ class OMEROBrowserDialog:
             self._autosave_settings_write_error = str(exc)
             return False
 
-    @staticmethod
-    def _show_autosave_settings_error():
+    def _show_autosave_settings_error(self):
         """Show the generic autosave-settings write error.
 
         Inputs: none. Output: None.
         """
-        messagebox.showwarning(
+        self._show_warning_dialog(
             AUTOSAVE_SETTINGS_ERROR_TITLE,
             AUTOSAVE_SETTINGS_ERROR_MESSAGE,
         )
@@ -6991,6 +7756,23 @@ class OMEROBrowserDialog:
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
 
+    def _on_show_log_changed(self):
+        """Persist and apply the command-window log visibility setting.
+
+        Inputs: none. Output: None.
+        """
+        _configure_xt_console_visibility(self._show_log_enabled())
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+
+    def _on_search_function_changed(self):
+        """Persist the placeholder search-function setting immediately.
+
+        Inputs: none. Output: None.
+        """
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+
     def _enable_autosave_after_verified_connection(self):
         """Enable autosave controls and persist verified connection settings.
 
@@ -7071,13 +7853,12 @@ class OMEROBrowserDialog:
             return False
         return getattr(self, "_folder_path_write_state", "unchecked") != "unwritable"
 
-    @staticmethod
-    def _show_folder_path_write_error():
+    def _show_folder_path_write_error(self):
         """Show the common local-folder write error.
 
         Inputs: no caller arguments. Output: None.
         """
-        messagebox.showerror(
+        self._show_error_dialog(
             LOCAL_PATH_WRITE_ERROR_TITLE,
             LOCAL_PATH_WRITE_ERROR_MESSAGE,
         )
@@ -7176,16 +7957,16 @@ class OMEROBrowserDialog:
         if self._folder_export_in_progress:
             return
         if getattr(self, "_refresh_in_progress", False):
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "Refresh In Progress",
                 "Please wait for the OMERO browser refresh to finish.",
             )
             return
         if not self._connected or self.client is None:
-            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            self._show_warning_dialog("Not Connected", "Please connect to OMERO first.")
             return
         if not self._folder_export_available:
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "Export Unavailable",
                 self._folder_export_reason
                 or "Folder export is not available on this OMERO.web instance.",
@@ -7197,7 +7978,7 @@ class OMEROBrowserDialog:
             return
 
         if _coerce_path(selected_folder) is None:
-            messagebox.showerror(
+            self._show_error_dialog(
                 "Invalid Folder",
                 "Please select or enter an existing folder.",
             )
@@ -7205,14 +7986,14 @@ class OMEROBrowserDialog:
 
         folder_name = _folder_display_name(selected_folder)
         if _is_filesystem_root(selected_folder) or not folder_name:
-            messagebox.showerror(
+            self._show_error_dialog(
                 "Invalid Folder",
                 "Please select a regular folder, not a filesystem root.",
             )
             return
 
         if not _safe_is_directory(selected_folder):
-            messagebox.showerror(
+            self._show_error_dialog(
                 "Invalid Folder",
                 "Please select or enter an existing folder.",
             )
@@ -7224,7 +8005,7 @@ class OMEROBrowserDialog:
             "\n"
             "This will upload every file inside the selected folder."
         )
-        if not messagebox.askyesno("Confirm folder export", confirmation):
+        if not self._ask_yes_no_dialog("Confirm folder export", confirmation):
             return
 
         self._set_actions_busy_for_export(True)
@@ -7338,7 +8119,7 @@ class OMEROBrowserDialog:
         prompt = "\n".join(lines)
         return bool(
             self._invoke_on_ui_thread(
-                lambda: messagebox.askyesno(
+                lambda: self._ask_yes_no_dialog(
                     "Confirm Compatible OMERO Export",
                     prompt,
                 )
@@ -7972,7 +8753,7 @@ class OMEROBrowserDialog:
             status_color="#f8d7da",
             clear_password=False,
         )
-        messagebox.showerror(
+        self._show_error_dialog(
             "Connection Lost",
             "The OMERO connection was lost. Please reconnect to continue.",
         )
@@ -7982,99 +8763,109 @@ class OMEROBrowserDialog:
 
         Inputs: `title`, `message`. Output: None.
         """
-        self.root.after(0, lambda: messagebox.showerror(title, message))
+        self.root.after(0, lambda: self._show_error_dialog(title, message))
 
     def _show_info(self, title, message):
         """Show the info for `OMEROBrowserDialog`.
 
         Inputs: `title`, `message`. Output: None.
         """
-        self.root.after(0, lambda: messagebox.showinfo(title, message))
+        self.root.after(0, lambda: self._show_info_dialog(title, message))
 
     def _show_connector_info(self):
         """Show the modal OMERO connector information window.
 
         Inputs: none. Output: None.
         """
-        info_window = tk.Toplevel(self.root)
-        info_window.title(CONNECTOR_INFO_TITLE)
-        info_window.resizable(False, False)
-        info_window.transient(self.root)
-        info_window.configure(bg="#f8fafc")
 
-        frame = tk.Frame(info_window, padx=18, pady=16, bg="#f8fafc")
-        frame.grid(row=0, column=0, sticky=tk.NSEW)
-        frame.grid_columnconfigure(0, weight=0)
-        frame.grid_columnconfigure(1, weight=1)
-        frame.grid_columnconfigure(2, weight=0)
+        def _show_modal():
+            """Build and show the blocking connector information dialog.
 
-        disclaimer = tk.Label(
-            frame,
-            text=CONNECTOR_INFO_DISCLAIMER,
-            font=("Arial", 9),
-            bg="#f8fafc",
-            fg="#374151",
-            anchor=tk.W,
-            justify=tk.LEFT,
-            wraplength=390,
-        )
-        disclaimer.grid(
-            row=0,
-            column=0,
-            columnspan=3,
-            sticky=tk.EW,
-            pady=0,
-        )
+            Inputs: none. Output: None.
+            """
+            info_window = tk.Toplevel(self.root)
+            info_window.title(CONNECTOR_INFO_TITLE)
+            info_window.resizable(False, False)
+            info_window.transient(self.root)
+            info_window.configure(bg="#f8fafc")
 
-        metadata_label_font = ("Arial", 9, "bold")
-        metadata_value_font = ("Arial", 9)
-        metadata_rows = (
-            ("Author(s):", CONNECTOR_INFO_AUTHOR),
-            ("Contact:", CONNECTOR_INFO_CONTACT),
-            ("Version:", CONNECTOR_INFO_VERSION),
-        )
-        for row_index, (label_text, value_text) in enumerate(metadata_rows, start=1):
-            tk.Label(
+            frame = tk.Frame(info_window, padx=18, pady=16, bg="#f8fafc")
+            frame.grid(row=0, column=0, sticky=tk.NSEW)
+            frame.grid_columnconfigure(0, weight=0)
+            frame.grid_columnconfigure(1, weight=1)
+            frame.grid_columnconfigure(2, weight=0)
+
+            disclaimer = tk.Label(
                 frame,
-                text=label_text,
-                font=metadata_label_font,
+                text=CONNECTOR_INFO_DISCLAIMER,
+                font=("Arial", 9),
                 bg="#f8fafc",
-                fg="#1f2937",
+                fg="#374151",
                 anchor=tk.W,
-            ).grid(row=row_index, column=0, sticky=tk.W, pady=0)
-            tk.Label(
+                justify=tk.LEFT,
+                wraplength=390,
+            )
+            disclaimer.grid(
+                row=0,
+                column=0,
+                columnspan=3,
+                sticky=tk.EW,
+                pady=0,
+            )
+
+            metadata_label_font = ("Arial", 9, "bold")
+            metadata_value_font = ("Arial", 9)
+            metadata_rows = (
+                ("Author(s):", CONNECTOR_INFO_AUTHOR),
+                ("Contact:", CONNECTOR_INFO_CONTACT),
+                ("Version:", CONNECTOR_INFO_VERSION),
+            )
+            for row_index, (label_text, value_text) in enumerate(
+                metadata_rows, start=1
+            ):
+                tk.Label(
+                    frame,
+                    text=label_text,
+                    font=metadata_label_font,
+                    bg="#f8fafc",
+                    fg="#1f2937",
+                    anchor=tk.W,
+                ).grid(row=row_index, column=0, sticky=tk.W, pady=0)
+                tk.Label(
+                    frame,
+                    text=value_text,
+                    font=metadata_value_font,
+                    bg="#f8fafc",
+                    fg="#1f2937",
+                    anchor=tk.W,
+                ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0), pady=0)
+
+            close_button = tk.Button(
                 frame,
-                text=value_text,
-                font=metadata_value_font,
-                bg="#f8fafc",
-                fg="#1f2937",
-                anchor=tk.W,
-            ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0), pady=0)
+                text="Close",
+                command=info_window.destroy,
+                font=("Arial", 9),
+                width=10,
+                default=_tk_constant("ACTIVE", "active"),
+            )
+            close_button.grid(row=4, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
 
-        close_button = tk.Button(
-            frame,
-            text="Close",
-            command=info_window.destroy,
-            font=("Arial", 9),
-            width=10,
-            default=_tk_constant("ACTIVE", "active"),
-        )
-        close_button.grid(row=4, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
+            info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
+            info_window.update_idletasks()
+            parent_x = int(self.root.winfo_rootx() or 0)
+            parent_y = int(self.root.winfo_rooty() or 0)
+            parent_w = int(self.root.winfo_width() or 0)
+            parent_h = int(self.root.winfo_height() or 0)
+            width = int(info_window.winfo_reqwidth() or 0)
+            height = int(info_window.winfo_reqheight() or 0)
+            x_pos = parent_x + max(0, (parent_w - width) // 2)
+            y_pos = parent_y + max(0, (parent_h - height) // 2)
+            info_window.geometry(f"{width}x{height}+{x_pos}+{y_pos}")
+            close_button.focus_set()
+            info_window.grab_set()
+            self.root.wait_window(info_window)
 
-        info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
-        info_window.update_idletasks()
-        parent_x = int(self.root.winfo_rootx() or 0)
-        parent_y = int(self.root.winfo_rooty() or 0)
-        parent_w = int(self.root.winfo_width() or 0)
-        parent_h = int(self.root.winfo_height() or 0)
-        width = int(info_window.winfo_reqwidth() or 0)
-        height = int(info_window.winfo_reqheight() or 0)
-        x_pos = parent_x + max(0, (parent_w - width) // 2)
-        y_pos = parent_y + max(0, (parent_h - height) // 2)
-        info_window.geometry(f"{width}x{height}+{x_pos}+{y_pos}")
-        close_button.focus_set()
-        info_window.grab_set()
-        self.root.wait_window(info_window)
+        self._run_blocking_modal(_show_modal)
 
     def _invoke_on_ui_thread(self, callback, wait=True):
         """A callback on Tk's UI thread and optionally wait for the result.
@@ -8575,7 +9366,7 @@ class OMEROBrowserDialog:
         pw = self.pass_entry.get()
 
         if not all([h, p, u, pw]):
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "Missing Fields", "Please fill all connection fields"
             )
             return
@@ -8585,10 +9376,15 @@ class OMEROBrowserDialog:
 
         port = _parse_port(p)
         if port is None:
-            messagebox.showerror(
+            self._show_error_dialog(
                 "Invalid Port",
                 "Please enter a valid numeric port (1-65535) for the OMERO.web server.",
             )
+            return
+
+        host_error = _omero_web_host_input_error(h)
+        if host_error:
+            self._show_error_dialog("Invalid Host", host_error)
             return
 
         self._connection_in_progress = True
@@ -8651,7 +9447,7 @@ class OMEROBrowserDialog:
                 self._set_autosave_settings_control_state(False)
                 self._set_status("Connection failed", "#f8d7da")
                 self._set_connection_indicator("error")
-                messagebox.showerror(
+                self._show_error_dialog(
                     "Connection Failed",
                     "Cannot connect to OMERO server.\nPlease check your credentials.",
                 )
@@ -8907,6 +9703,31 @@ class OMEROBrowserDialog:
             except Exception as exc:
                 _xt_debug(f"Listbox focus failed: {type(exc).__name__}")
 
+    def _clear_browser_listbox_focus(self):
+        """Move focus off browser listboxes before non-browser controls open.
+
+        Inputs: none. Output: None.
+        """
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        focus_get = getattr(root, "focus_get", None)
+        try:
+            focused_widget = focus_get() if callable(focus_get) else None
+        except Exception as exc:
+            _xt_debug(f"Listbox focus lookup failed: {type(exc).__name__}")
+            return
+        for listbox_name in ("plist", "dlist", "ilist"):
+            listbox = getattr(self, listbox_name, None)
+            if _widget_is_or_descendant(focused_widget, listbox):
+                focus_set = getattr(root, "focus_set", None)
+                if callable(focus_set):
+                    try:
+                        focus_set()
+                    except Exception as exc:
+                        _xt_debug(f"Root focus reset failed: {type(exc).__name__}")
+                return
+
     def _selected_image_count(self):
         """Return the number of currently selected valid images.
 
@@ -8927,9 +9748,7 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
-        load_btn = getattr(self, "load_btn", None)
-        if load_btn is not None:
-            load_btn.config(text=self._load_button_text())
+        self._set_load_button_for_converter()
 
     def _on_images_select_all(self, event):
         """Select every image in the Images panel only.
@@ -9096,6 +9915,7 @@ class OMEROBrowserDialog:
                 and getattr(self, "client", None) is not None
                 and converter_value in {"OMERO", "Imaris"}
                 and self._folder_path_allows_load_button()
+                and self._selected_image_count() > 0
                 and not getattr(self, "_load_in_progress", False)
                 and not getattr(self, "_folder_export_in_progress", False)
             )
@@ -9241,7 +10061,7 @@ class OMEROBrowserDialog:
         if self._refresh_in_progress:
             return
         if not self._connected or self.client is None:
-            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            self._show_warning_dialog("Not Connected", "Please connect to OMERO first.")
             return
 
         self._refresh_in_progress = True
@@ -9538,10 +10358,10 @@ class OMEROBrowserDialog:
         Inputs: no caller arguments. Output: loads the described state and returns None.
         """
         if not getattr(self, "_connected", False) or self.client is None:
-            messagebox.showwarning("Not Connected", "Please connect to OMERO first.")
+            self._show_warning_dialog("Not Connected", "Please connect to OMERO first.")
             return
         if getattr(self, "_refresh_in_progress", False):
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "Refresh In Progress",
                 "Please wait for the OMERO browser refresh to finish.",
             )
@@ -9549,7 +10369,7 @@ class OMEROBrowserDialog:
 
         selected_path = self._current_local_folder_path()
         if not _is_structurally_valid_folder_path(selected_path):
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "No Path Selected",
                 "Please type or select a folder path first.",
             )
@@ -9562,12 +10382,15 @@ class OMEROBrowserDialog:
 
         selected_images = self._selected_images()
         if not selected_images:
-            messagebox.showwarning("No Selection", "Please select at least one image")
+            self._show_warning_dialog(
+                "No Selection", "Please select at least one image"
+            )
+            self._set_load_button_for_converter()
             return
 
         converter = _stringvar_value(getattr(self, "converter_var", None))
         if converter not in {"OMERO", "Imaris"}:
-            messagebox.showwarning(
+            self._show_warning_dialog(
                 "No Converter",
                 "Please connect to OMERO and select an available converter.",
             )
@@ -9591,7 +10414,7 @@ class OMEROBrowserDialog:
             worker_args = (selected_images, converter)
             worker_target = self._load_multiple_worker
 
-        if not messagebox.askyesno(
+        if not self._ask_yes_no_dialog(
             "Confirm Load",
             confirmation,
         ):
@@ -10040,6 +10863,15 @@ def XTOmeroConnector(aImarisId):
         _xt_console_log(block_message)
         return
 
+    settings_path = None
+    try:
+        settings_path = _connector_settings_env_path()
+        _prepare_connector_settings_for_current_version(settings_path)
+    except OSError as exc:
+        _log_connector_settings_event(
+            f"Connector settings version preparation failed: {type(exc).__name__}"
+        )
+    _configure_xt_console_visibility(_load_connector_show_log_preference(settings_path))
     _set_process_window_title("OMERO Connector")
     try:
         _xt_write_log(log_path, "=== XTOmeroConnector starting ===")
@@ -10082,12 +10914,14 @@ def XTOmeroConnector(aImarisId):
             f"{e}\n\nA detailed log was written to:\n{log_path}",
         )
         # Keep console open when launched by double-click / Imaris
-        try:
-            _xt_wait_for_enter_to_close()
-        except Exception as exc:
-            logger.debug(
-                "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
-            )
+        if _XT_RUNTIME_STATE.console_output_enabled:
+            try:
+                _xt_wait_for_enter_to_close()
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
 
 
 if __name__ == "__main__":
@@ -10096,9 +10930,11 @@ if __name__ == "__main__":
         XTOmeroConnector(None)
     except Exception as e:
         _xt_console_log("Fatal: " + str(e))
-        try:
-            _xt_wait_for_enter_to_close()
-        except Exception as exc:
-            logger.debug(
-                "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
-            )
+        if _XT_RUNTIME_STATE.console_output_enabled:
+            try:
+                _xt_wait_for_enter_to_close()
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )

@@ -9,19 +9,36 @@
   field after successful login.
 - Restored converter selection as an autosaved setting and persisted converter
   changes immediately when `Autosave settings` is enabled.
+- Added `Show log` and placeholder `Search function` preferences to the
+  connector settings file. `Show log` defaults on and can hide the command
+  window while retaining the rolling file log; `Search function` defaults off
+  until the feature is wired.
+- Added a connector settings version tag that is refreshed on every standalone
+  XT startup. If an existing `settings.env` has no current matching version,
+  the connector archives it as `settings.env.old`, rotating existing generated
+  backups upward as `settings.env.old2`, `settings.env.old3`, and so on before
+  creating a fresh current-version settings file.
+- Tightened OMERO.web host validation so the Host field accepts hostnames/IPs
+  only. `http://` and `https://` belong to the `Use HTTPS` checkbox state, and
+  ports belong to the Port field.
 - Reworked folder export so `Export folder to OMERO` always opens the native
   folder chooser before `Confirm folder export`; the typed path is only the
   first export chooser location hint for a session.
 - Added draggable Projects, Datasets, and Images panel splitters with bounded
   proportional widths and removed refresh-time action-button repaint flicker.
+- Stabilized the converter selector popup so opening it does not restore stale
+  browser-panel focus highlights.
+- Tightened `Load images into Imaris` availability so it stays disabled until
+  the connection, converter, path, and at least one Images-panel selection are
+  all present.
 - Wired the connector info button to a modal version, author, and as-is
-  disclaimer dialog.
+  disclaimer dialog that locks the main connector window behind it.
 
 ### Validation Focus
 
 - Focused standalone connector unit coverage for password handling, autosaved
-  converter settings, folder-export chooser ordering, bounded panel resizing,
-  and refresh action-button state.
+  converter and log-visibility settings, folder-export chooser ordering,
+  bounded panel resizing, and refresh action-button state.
 - Tk/Xvfb layout verification for minimum-width behavior and visible widget
   alignment.
 
