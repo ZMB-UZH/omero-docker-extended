@@ -5787,6 +5787,174 @@ def test_dialog_direct_handle_reacquisition_is_not_icepy_flag_gated(monkeypatch)
     assert ui_calls == ["resolve"]
 
 
+def test_handoff_target_uses_numeric_imaris_id_without_optional_icepy(monkeypatch):
+    """Verify a numeric XT id is enough to attempt final same-session handoff.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on converter visibility regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+
+    assert dialog._has_imaris_handoff_target() is True
+
+
+def test_pre_export_readiness_allows_numeric_id_when_direct_handle_is_not_ready(
+    monkeypatch,
+):
+    """Verify pre-export readiness does not block a valid delayed XT handoff.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on premature preflight blocking.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    status_updates = []
+    ui_calls = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = -1
+    dialog.root = types.SimpleNamespace(after=lambda _delay, callback: callback())
+    dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
+    dialog._invoke_on_ui_thread = lambda callback: (
+        ui_calls.append("resolve") or callback()
+    )
+    monkeypatch.setattr(
+        module, "_resolve_imaris_application", lambda *_args, **_kwargs: None
+    )
+
+    assert dialog._ensure_native_open_ready_before_export() is True
+    assert dialog.imaris is None
+    assert status_updates == ["Checking Imaris same-session open support..."]
+    assert ui_calls == ["resolve"]
+
+
+def test_pre_export_readiness_still_rejects_missing_handoff_target(monkeypatch):
+    """Verify pre-export readiness still fails when there is no handle or XT id.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on missing-target validation regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = None
+    dialog._set_status = _noop
+
+    assert dialog._ensure_native_open_ready_before_export() is False
+
+
+@pytest.mark.parametrize(
+    ("converter", "filename", "payload", "expected_download", "require_ims"),
+    [
+        ("OMERO", "sample.ims", b"\x89HDF\r\n\x1a\npayload", "ims", True),
+        ("Imaris", "sample.lif", b"native input", "original", False),
+    ],
+)
+def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
+    tmp_path,
+    monkeypatch,
+    converter,
+    filename,
+    payload,
+    expected_download,
+    require_ims,
+):
+    """Verify delayed direct XT handle resolution is retried at final handoff.
+
+    Inputs: pytest provides fixtures and converter parameters. Output: fails on the no-bridge preflight regression.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    local_file = tmp_path / filename
+    local_file.write_bytes(payload)
+    downloads = []
+    opened = []
+    errors = []
+
+    class _FakeImaris:
+        """Fake Imaris app resolved only at final handoff."""
+
+        @staticmethod
+        def FileOpen(path, *_args):
+            """Record the final FileOpen call.
+
+            Inputs: `path`, `*_args`. Output: None.
+            """
+            opened.append(path)
+
+    resolution_results = [None, _FakeImaris()]
+
+    def _resolve_imaris_application(imaris_id, **_kwargs):
+        """Return no handle during preflight and a handle during final open.
+
+        Inputs: `imaris_id`, keyword arguments. Output: fake Imaris app or None.
+        """
+        assert imaris_id == "17"
+        return resolution_results.pop(0)
+
+    def _download_ims_export(image_id, download_dir, fallback_name):
+        """Record server-side IMS export download.
+
+        Inputs: OMERO image id, target directory, fallback name. Output: local file path.
+        """
+        downloads.append(("ims", image_id, Path(download_dir).name, fallback_name))
+        return str(local_file)
+
+    def _download_original_file(image_id, download_dir, fallback_name):
+        """Record original-file download.
+
+        Inputs: OMERO image id, target directory, fallback name. Output: local file path.
+        """
+        downloads.append(("original", image_id, Path(download_dir).name, fallback_name))
+        return str(local_file)
+
+    monkeypatch.setattr(
+        module, "_resolve_imaris_application", _resolve_imaris_application
+    )
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = -1
+    dialog.root = types.SimpleNamespace(after=lambda _delay, callback: callback())
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog.client = types.SimpleNamespace(
+        download_ims_export=_download_ims_export,
+        download_original_file=_download_original_file,
+    )
+    dialog._set_status = _noop
+    dialog._show_info = _noop
+    dialog._show_error = lambda _title, message: errors.append(message)
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        None if not wait else callback()
+    )
+
+    module.OMEROBrowserDialog._load_worker(
+        dialog,
+        {"id": 7, "name": filename},
+        converter,
+    )
+
+    assert downloads == [
+        (
+            expected_download,
+            7,
+            "img_7",
+            "img_7.ims" if converter == "OMERO" else filename,
+        )
+    ]
+    assert opened == [str(local_file)]
+    assert dialog.temp_files == [str(local_file)]
+    assert dialog.imaris is not None
+    assert resolution_results == []
+    assert errors == []
+
+
 def test_open_downloaded_file_retries_direct_handle_when_optional_bridge_disabled(
     tmp_path,
     monkeypatch,
@@ -6138,7 +6306,7 @@ def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(module, "_xt_debug", logs.append)
 
-    assert dialog._detect_converter_options_after_connection() == ["OMERO"]
+    assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
     assert not any("bridge" in message.lower() for message in logs)
 
 
