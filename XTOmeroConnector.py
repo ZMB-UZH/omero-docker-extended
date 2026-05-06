@@ -6140,7 +6140,8 @@ class OMEROBrowserDialog:
         if self._window_is_smaller_than(root, width, height):
             root.geometry(f"{width}x{height}")
 
-    def _current_window_minimum_size(self, root):
+    @staticmethod
+    def _current_window_minimum_size(root):
         """Return the minimum size required by the current connector layout.
 
         Inputs: `root`. Output: tuple of width and height.
