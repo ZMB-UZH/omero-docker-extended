@@ -40,6 +40,14 @@ def _load_xt_module():
     return module
 
 
+def _enable_native_bridge(module, monkeypatch):
+    """Enable the opt-in IcePy-backed native bridge for tests that cover it.
+
+    Inputs: `module`, `monkeypatch`. Output: None.
+    """
+    monkeypatch.setenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, "true")
+
+
 TEST_LOGIN_VALUE = "test-login-value"
 _TEST_CSRF_FIXTURE = "xref-session-123"
 
@@ -224,6 +232,7 @@ class _FakeEntry:
         self.value = value
         self.configs = []
         self.options = {}
+        self.bindings = {}
 
     def get(self):
         """Return the stored entry value.
@@ -246,6 +255,13 @@ class _FakeEntry:
         """
         self.configs.append(kwargs)
         self.options.update(kwargs)
+
+    def bind(self, sequence, callback):
+        """Record a Tk binding.
+
+        Inputs: `sequence`, `callback`. Output: None.
+        """
+        self.bindings[sequence] = callback
 
 
 class _FakeButton:
@@ -752,6 +768,7 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application uses imarislib factory.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     expected = object()
 
     class _FakeImarisLibFactory:
@@ -778,6 +795,7 @@ def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application retries until handle available.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     expected = object()
     calls = {"count": 0}
 
@@ -813,6 +831,7 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application accepts numeric string.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     expected = object()
 
     class _FakeImarisLibFactory:
@@ -840,6 +859,7 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
     Raises: ImportError when validation or the called operation fails.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
 
     real_import = builtins.__import__
 
@@ -858,6 +878,43 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
     assert module._resolve_imaris_application(17) is None
 
 
+def test_native_imaris_bridge_is_disabled_by_default_without_import_noise(monkeypatch):
+    """Verify the IcePy bridge flag is disabled by default and quiet.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on opt-in bridge regressions.
+    Raises: AssertionError if disabled startup attempts bridge imports.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+
+    real_import = builtins.__import__
+
+    def _guarded_import(name, *args, **kwargs):
+        """Fail if disabled startup attempts Imaris bridge imports.
+
+        Inputs: import call arguments. Output: imported module for non-bridge imports.
+        Raises: AssertionError for disabled bridge imports.
+        """
+        if name in {"ImarisLib", "IcePy"}:
+            raise AssertionError("disabled native bridge must not import IcePy code")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _guarded_import)
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: "")
+    monkeypatch.setattr(module, "_iter_imaris_install_roots", lambda: iter(()))
+
+    assert module._native_imaris_bridge_enabled() is False
+    assert module._resolve_imaris_application(17) is None
+    module._log_imaris_xt_diagnostics()
+
+    joined_messages = "\n".join(messages)
+    assert "IcePy" not in joined_messages
+    assert "ImarisLib_error" not in joined_messages
+
+
 def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
     monkeypatch,
 ):
@@ -867,6 +924,7 @@ def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
     Raises: ImportError when validation or the called operation fails.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     messages = []
 
     real_import = builtins.__import__
@@ -2309,6 +2367,31 @@ def test_password_reveal_is_timed_and_clear_cancels_pending_timer():
     assert "after-1" in cancelled
 
 
+def test_hidden_password_copy_and_cut_are_blocked_without_blocking_paste():
+    """Verify hidden password mode blocks clipboard extraction only.
+
+    Inputs: repository fixtures. Output: fails on password clipboard regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+
+    dialog._password_revealed = False
+    assert module.OMEROBrowserDialog._block_hidden_password_clipboard(dialog) == "break"
+
+    dialog._password_revealed = True
+    assert module.OMEROBrowserDialog._block_hidden_password_clipboard(dialog) is None
+
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    password_binding_source = source[
+        source.index("self.pass_entry.bind") : source.index(
+            "self.password_reveal_btn = _PasswordRevealButton("
+        )
+    ]
+    assert "<<Copy>>" in password_binding_source
+    assert "<<Cut>>" in password_binding_source
+    assert "<<Paste>>" not in password_binding_source
+
+
 def test_rounded_button_config_updates_only_changed_state():
     """Verify rounded button configuration avoids redundant redraws.
 
@@ -2375,20 +2458,106 @@ def test_rounded_button_config_updates_only_changed_state():
     assert cursor_syncs == ["cursor"]
 
 
+def test_rounded_button_redraw_omits_internal_horizontal_strokes():
+    """Verify rounded buttons do not draw decorative internal separator lines.
+
+    Inputs: repository fixtures. Output: fails on rounded button style regressions.
+    """
+    module = _load_xt_module()
+
+    class _Canvas:
+        """Canvas fake that records draw operations."""
+
+        def __init__(self):
+            """Create the fake canvas.
+
+            Inputs: none. Output: initializes draw-operation storage.
+            """
+            self.lines = []
+            self.polygons = []
+            self.texts = []
+
+        @staticmethod
+        def winfo_width():
+            """Return fake width.
+
+            Inputs: none. Output: int.
+            """
+            return 120
+
+        @staticmethod
+        def winfo_height():
+            """Return fake height.
+
+            Inputs: none. Output: int.
+            """
+            return 42
+
+        @staticmethod
+        def delete(_tag):
+            """Accept delete calls.
+
+            Inputs: `_tag`. Output: None.
+            """
+
+        def create_polygon(self, *args, **kwargs):
+            """Record rounded-rectangle polygon calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.polygons.append((args, kwargs))
+
+        def create_text(self, *args, **kwargs):
+            """Record text calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.texts.append((args, kwargs))
+
+        def create_line(self, *args, **kwargs):
+            """Record line calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.lines.append((args, kwargs))
+
+    button = object.__new__(module._RoundedButton)
+    button._canvas = _Canvas()
+    button._bg = "#3498db"
+    button._fg = "white"
+    button._active_bg = "#2f85c7"
+    button._active_fg = "white"
+    button._font = ("Arial", 10, "bold")
+    button._text = "Connect"
+    button._width = 120
+    button._height = 42
+    button._state = "normal"
+    button._pressed = False
+    button._hover = False
+    button._radius = 7
+
+    module._RoundedButton._redraw(button)
+
+    assert len(button._canvas.polygons) == 2
+    assert len(button._canvas.texts) == 1
+    assert button._canvas.lines == []
+
+
 def test_browser_dialog_places_folder_selector_inside_connection_settings():
     """Verify folder selector UI stays inside the connection settings panel.
 
     Inputs: repository fixtures. Output: fails on UI layout regressions.
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
-    connection_marker = "conn_frame.grid_columnconfigure(8, weight=1)"
+    connection_marker = "conn_frame.grid_columnconfigure(7, weight=1)"
     selector_marker = "self.folder_path_entry = tk.Entry(\n            conn_frame,"
     browser_marker = "# Browser\n        browser = tk.Frame(self.root)"
 
     assert source.index(connection_marker) < source.index(selector_marker)
     assert source.index(selector_marker) < source.index(browser_marker)
     assert "folder_path_frame" not in source
-    assert 'self._connection_label(conn_frame, "Path:").grid' in source
+    assert 'self.path_label = self._connection_label(conn_frame, "Path:")' in source
+    assert "self.path_label.grid(" in source
     assert 'FOLDER_PATH_PLACEHOLDER = "Type or select local path..."' in source
     assert (
         "self.folder_path_entry.grid(\n            row=2,\n            column=1,"
@@ -2401,9 +2570,35 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     ) in source
     assert "self.password_frame.grid_columnconfigure(0, weight=1)" in source
     assert "self.pass_entry = tk.Entry(\n            self.password_frame," in source
+    assert "PASSWORD_REVEAL_BUTTON_SIZE = 18" in source
+    assert "ipady=0" in source
     assert "self.password_reveal_btn = _PasswordRevealButton(" in source
     assert "self._visible = False\n        super().__init__(*args, **kwargs)" in source
     assert "command=self._toggle_password_reveal" in source
+    assert (
+        'self.pass_entry.bind("<Control-c>", self._block_hidden_password_clipboard)'
+        in source
+    )
+    assert (
+        'self.pass_entry.bind("<Control-x>", self._block_hidden_password_clipboard)'
+        in source
+    )
+    assert (
+        'self.pass_entry.bind("<<Copy>>", self._block_hidden_password_clipboard)'
+        in source
+    )
+    assert (
+        'self.pass_entry.bind("<<Cut>>", self._block_hidden_password_clipboard)'
+        in source
+    )
+    assert (
+        '"<<Paste>>"'
+        not in source[
+            source.index("self.pass_entry.bind") : source.index(
+                "self.password_reveal_btn = _PasswordRevealButton("
+            )
+        ]
+    )
     assert "self.connect_btn.grid(row=0, column=5," in source
     assert "self.select_folder_btn.grid(row=2, column=5," in source
     assert (
@@ -2435,8 +2630,12 @@ def test_connection_setting_labels_are_start_aligned_without_moving_entries():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
-    for label in ("Host", "Port", "Username", "Password", "Path"):
+    for label in ("Port", "Username", "Password"):
         assert f'self._connection_label(conn_frame, "{label}:").grid' in source
+    assert 'self.host_label = self._connection_label(conn_frame, "Host:")' in source
+    assert 'self.path_label = self._connection_label(conn_frame, "Path:")' in source
+    assert "self.host_label.grid(" in source
+    assert "self.path_label.grid(" in source
 
     assert 'anchor=_tk_constant("W", "w")' in source
     assert 'justify=_tk_constant("LEFT", "left")' in source
@@ -2444,6 +2643,9 @@ def test_connection_setting_labels_are_start_aligned_without_moving_entries():
     assert source.count('sticky=_tk_constant("NSEW", "nsew"), pady=5') >= 5
     assert "self.host_entry.grid(row=0, column=1, pady=5, padx=5)" in source
     assert "self.user_entry.grid(row=1, column=1, pady=5, padx=5)" in source
+    assert (
+        "self.port_entry.grid(row=0, column=3, pady=5, padx=5, sticky=tk.W)" in source
+    )
 
 
 def test_converter_selector_remains_wired_in_connection_settings_panel():
@@ -2453,23 +2655,36 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
-    assert "self.converter_frame = tk.Frame(conn_frame)" in source
+    assert "CONVERTER_DROPDOWN_WIDTH = 232" in source
+    assert "CONVERTER_DROPDOWN_TEXT_PAD = 10" in source
+    assert "CONVERTER_SLOT_WIDTH = 448" in source
+    assert "class _ConverterDropdown:" in source
+    assert "self.converter_slot = tk.Frame(" in source
+    assert "self.converter_slot.pack_propagate(False)" in source
+    assert "self.converter_frame = tk.Frame(self.converter_slot)" in source
     assert 'tk.Label(self.converter_frame, text="Converter:").pack' in source
-    assert "self.converter_menu = tk.Menubutton(" in source
-    assert "self.converter_menu.pack(side=tk.LEFT)" in source
+    assert "self.converter_dropdown = _ConverterDropdown(" in source
+    assert "self.converter_dropdown.pack(side=tk.LEFT)" in source
+    assert "tk.Menubutton(" not in source
+    assert "tk.Menu(" not in source
     assert 'self._preferred_converter_setting = ""' in source
     assert "def _select_converter(self, value):" in source
-    assert "command=partial(self._select_converter, option)" in source
+    assert "dropdown.set_options(options)" in source
     assert (
-        "self.converter_frame.grid(\n            row=2,\n            column=8,"
-        in source
+        "self.converter_slot.grid(\n            row=2,\n            column=7," in source
     )
-    assert "sticky=tk.E,\n            padx=(12, 12)," in source
-    assert "width=CONVERTER_MENU_WIDTH" in source
-    assert "self.converter_frame.grid_remove()" in source
+    assert "columnspan=2,\n            sticky=tk.E," in source
+    assert "converter_slot.grid_configure(padx=(18, 0))" in source
+    assert "self.converter_frame.pack_forget()" in source
+    assert "self.converter_frame.grid_remove()" not in source
+    assert 'f"{width}x{height}+{self._frame.winfo_rootx()}+"' in source
+    assert "container.pack(fill=tk.BOTH, expand=True, padx=(2, 1), pady=1)" in source
+    assert "highlighted = self._open or self._hover" in source
+    assert "if _native_imaris_bridge_enabled():" in source
     assert (
-        "self._reset_native_bridge_probe_for_converter_detection()\n"
-        "        self._start_native_bridge_probe()" in source
+        "if _native_imaris_bridge_enabled():\n"
+        "            self._reset_native_bridge_probe_for_converter_detection()\n"
+        "            self._start_native_bridge_probe()" in source
     )
     assert "def _has_imaris_handoff_target(self):" in source
 
@@ -2533,12 +2748,13 @@ def test_converter_selection_autosaves_immediately_after_connection(tmp_path):
     assert "super-secret" not in content
 
 
-def test_converter_detection_resets_stale_native_probe_before_waiting():
+def test_converter_detection_resets_stale_native_probe_before_waiting(monkeypatch):
     """Verify reconnect converter detection does not reuse a stale bridge failure.
 
     Inputs: repository fixtures. Output: fails on reconnect converter regressions.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
 
     class _Done:
         """Immediate done event for converter detection."""
@@ -2616,12 +2832,15 @@ def test_converter_detection_resets_stale_native_probe_before_waiting():
     assert options == ["OMERO", "Imaris"]
 
 
-def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exists():
+def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exists(
+    monkeypatch,
+):
     """Verify a failed background probe does not hide valid converter choices.
 
     Inputs: repository fixtures. Output: fails on converter visibility regressions.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -2637,12 +2856,13 @@ def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exis
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
 
-def test_converter_detection_keeps_imaris_choice_without_server_converter():
+def test_converter_detection_keeps_imaris_choice_without_server_converter(monkeypatch):
     """Verify local Imaris handoff remains selectable when OMERO export is absent.
 
     Inputs: repository fixtures. Output: fails on converter visibility regressions.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -2697,13 +2917,28 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
         )
     ]
     assert "create_arc(" not in circular_source
-    assert "diameter = max(12, min(width, height) - 8)" in circular_source
-    assert "shadow_shift = 1 if pressed else 2" in circular_source
-    assert 'outline=""' in circular_source
-    assert "panel_icon_frame = tk.Frame(conn_frame)" in source
-    assert "panel_icon_frame.grid(\n            row=0,\n            column=8," in source
+    assert "create_oval(" not in circular_source
+    assert (
+        "_antialiased_circle_image(self._canvas, width, height, fill, outline)"
+        in circular_source
+    )
+    password_source = source[
+        source.index("class _PasswordRevealButton(_RoundedButton):") : source.index(
+            "class OMEROWebClient"
+        )
+    ]
+    assert "create_arc(" not in password_source
+    assert "create_oval(" not in password_source
+    assert "_antialiased_circle_image(" not in password_source
+    assert "self._canvas.create_image(" not in password_source
+    assert '"\\u25c9" if visible else "\\u25cb"' in password_source
+    assert "self.panel_icon_frame = tk.Frame(conn_frame)" in source
+    assert (
+        "self.panel_icon_frame.grid(\n            row=0,\n            column=8,"
+        in source
+    )
     assert "rowspan=2,\n            sticky=tk.NE," in source
-    assert "padx=(12, 12)," in source
+    assert "panel_icon_frame.grid_configure(padx=(12, 0))" in source
     assert "self.help_btn = _CircularIconButton(" in source
     assert 'text="?",' in source
     assert "bg=CONNECTOR_HELP_ICON_BG" in source
@@ -2718,8 +2953,25 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "bg=CONNECTOR_INFO_ICON_BG" in source
     assert "fg=CONNECTOR_INFO_ICON_FG" in source
     assert "self.info_btn.pack(side=tk.LEFT)" in source
-    assert 'CONNECTOR_INFO_VERSION = "1.0"' in source
+    assert 'CONNECTOR_INFO_VERSION = "1.0.0"' in source
     assert 'CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"' in source
+    assert 'CONNECTOR_INFO_CONTACT = "mitridisefstratios@gmail.com"' in source
+    assert '"contributors are not liable' not in source
+    assert '"service interruption' not in source
+    assert "No liability can " in source
+    info_source = source[
+        source.index("def _show_connector_info(self):") : source.index(
+            "def _invoke_on_ui_thread", source.index("def _show_connector_info(self):")
+        )
+    ]
+    assert "text=CONNECTOR_INFO_TITLE" not in info_source
+    assert "title_label" not in info_source
+    assert "pady=(0, 3)" not in info_source
+    assert '("Author(s):", CONNECTOR_INFO_AUTHOR)' in info_source
+    assert '("Contact:", CONNECTOR_INFO_CONTACT)' in info_source
+    assert '("Version:", CONNECTOR_INFO_VERSION)' in info_source
+    assert 'metadata_label_font = ("Arial", 9, "bold")' in info_source
+    assert "font=metadata_label_font" in info_source
     assert "info_window.grab_set()" in source
     assert "self.root.wait_window(info_window)" in source
 
@@ -2732,19 +2984,20 @@ def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
     assert "AUTOSAVE_SETTINGS_FRAME_WIDTH = 168" in source
-    assert "conn_frame.grid_columnconfigure(8, weight=1)" in source
-    assert "conn_frame.grid_columnconfigure(7, weight=1)" not in source
+    assert "conn_frame.grid_columnconfigure(7, weight=1)" in source
+    assert "conn_frame.grid_columnconfigure(8, weight=1)" not in source
     assert "self.autosave_settings_frame = tk.Frame(" in source
     assert (
-        "self.autosave_settings_frame.grid(\n            row=2,\n            column=7,"
+        "self.autosave_settings_frame.grid(\n            row=0,\n            column=6,"
         in source
     )
+    assert "padx=(34, 0)" in source
     assert "self.autosave_settings_frame.grid_propagate(False)" in source
     assert (
         "self.autosave_settings_check = tk.Checkbutton(\n"
         "            self.autosave_settings_frame,"
     ) in source
-    assert "self.autosave_settings_check.pack(side=tk.RIGHT)" in source
+    assert "self.autosave_settings_check.pack(side=tk.LEFT)" in source
     assert "panel_icon_frame.grid_propagate(False)" not in source
     assert source.index("self.autosave_settings_frame.grid(") < source.index(
         "panel_icon_frame.grid("
@@ -2759,7 +3012,8 @@ def test_status_text_aligns_with_load_button_start():
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
     assert "ACTION_ROW_HORIZONTAL_PAD = 10" in source
-    assert "ACTION_BUTTON_PAD = 2" in source
+    assert "ACTION_BUTTON_PAD = 0" in source
+    assert "ACTION_BUTTON_GAP = 4" in source
     assert "STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD" in source
     assert "actions.pack(fill=tk.X, padx=ACTION_ROW_HORIZONTAL_PAD" in source
     assert (
@@ -2767,9 +3021,103 @@ def test_status_text_aligns_with_load_button_start():
         in source
     )
     assert "padx=STATUS_TEXT_PAD,\n            pady=5," in source
-    assert "BOTTOM_PROGRESS_RESERVED_HEIGHT = 8" in source
+    assert "BOTTOM_PROGRESS_RESERVED_HEIGHT = 12" in source
+    assert "bg=_widget_background(self.root)" in source
+    assert (
+        "height=BOTTOM_PROGRESS_RESERVED_HEIGHT,\n            bg=STATUS_NEUTRAL_BG"
+        not in source
+    )
     assert "bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)" in source
     assert "bottom_progress_margin.pack_propagate(False)" in source
+
+
+def test_connection_indicator_draws_single_flat_circle():
+    """Verify bottom-right connection indicator has no shadow or inner highlight.
+
+    Inputs: repository fixtures. Output: fails on status-indicator drawing regressions.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+    indicator_source = source[
+        source.index("def _draw_connection_indicator(self, state):") : source.index(
+            "def _set_connection_indicator",
+            source.index("def _draw_connection_indicator(self, state):"),
+        )
+    ]
+
+    assert indicator_source.count("canvas.create_oval(") == 1
+    assert "shadow" not in indicator_source
+    assert "highlight" not in indicator_source
+
+
+def test_non_input_click_clears_text_input_focus():
+    """Verify clicking non-input UI clears blinking entry cursors.
+
+    Inputs: repository fixtures. Output: fails on focus-clear regressions.
+    """
+    module = _load_xt_module()
+    cleared_focus = []
+
+    class _Widget:
+        """Small widget fake with Tk class and parent chain."""
+
+        def __init__(self, widget_class, master=None):
+            """Create widget fake.
+
+            Inputs: `widget_class`, optional `master`. Output: initialized fake.
+            """
+            self._widget_class = widget_class
+            self.master = master
+
+        def winfo_class(self):
+            """Return fake Tk widget class.
+
+            Inputs: none. Output: widget class string.
+            """
+            return self._widget_class
+
+    class _Root:
+        """Root fake for focus clearing."""
+
+        def __init__(self, focused):
+            """Create root fake.
+
+            Inputs: `focused`. Output: initialized fake.
+            """
+            self._focused = focused
+
+        def focus_get(self):
+            """Return currently focused widget.
+
+            Inputs: none. Output: widget.
+            """
+            return self._focused
+
+        @staticmethod
+        def focus_set():
+            """Record focus clear.
+
+            Inputs: none. Output: None.
+            """
+            cleared_focus.append("root")
+
+    focused_entry = _Widget("Entry")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root(focused_entry)
+
+    module.OMEROBrowserDialog._clear_text_focus_on_non_input_click(
+        dialog,
+        types.SimpleNamespace(widget=_Widget("Button")),
+    )
+    assert cleared_focus == ["root"]
+
+    module.OMEROBrowserDialog._clear_text_focus_on_non_input_click(
+        dialog,
+        types.SimpleNamespace(widget=_Widget("Entry")),
+    )
+    assert cleared_focus == ["root"]
+
+    nested_entry_child = _Widget("Canvas", master=_Widget("Entry"))
+    assert module._widget_or_ancestor_is_text_input(nested_entry_child) is True
 
 
 def test_browser_panels_use_draggable_splitters_with_fraction_limits():
@@ -2789,12 +3137,17 @@ def test_browser_panels_use_draggable_splitters_with_fraction_limits():
         "self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)"
         in source
     )
+    assert "self._browser_panel_layout_widths = None" in source
     assert "self._browser_sash_drag_index = None" in source
     assert "@staticmethod\n    def _current_window_minimum_size(root):" in source
     assert 'cursor="sb_h_double_arrow"' in source
     assert "p_frame.grid(row=0, column=0, sticky=tk.NSEW)" in source
     assert "d_frame.grid(row=0, column=2, sticky=tk.NSEW)" in source
     assert "i_frame.grid(row=0, column=4, sticky=tk.NSEW)" in source
+    assert "listbox.grid(row=0, column=0, sticky=tk.NSEW)" in source
+    assert "y_scroll.grid(row=0, column=1, sticky=tk.NS)" in source
+    assert "x_scroll.grid(row=1, column=0, sticky=tk.EW)" in source
+    assert "layout_widths = tuple(widths)" in source
     assert "p_frame.pack(side=tk.LEFT" not in source
     assert "d_frame.pack(side=tk.LEFT" not in source
     assert "i_frame.pack(side=tk.LEFT" not in source
@@ -2827,6 +3180,7 @@ def test_browser_panel_layout_applies_stored_percentages_on_resize():
             """
             self.width = width
             self.columns = {}
+            self.configure_calls = []
 
         def winfo_width(self):
             """Return current fake width.
@@ -2841,6 +3195,7 @@ def test_browser_panel_layout_applies_stored_percentages_on_resize():
             Inputs: `column`, `**kwargs`. Output: None.
             """
             self.columns[column] = kwargs
+            self.configure_calls.append((column, kwargs))
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     browser = _Browser(916)
@@ -2855,6 +3210,10 @@ def test_browser_panel_layout_applies_stored_percentages_on_resize():
     assert browser.columns[4] == {"minsize": 360, "weight": 0}
     assert browser.columns[1] == {"minsize": module.BROWSER_SPLITTER_WIDTH, "weight": 0}
     assert browser.columns[3] == {"minsize": module.BROWSER_SPLITTER_WIDTH, "weight": 0}
+    assert len(browser.configure_calls) == 5
+
+    module.OMEROBrowserDialog._apply_browser_panel_layout(dialog)
+    assert len(browser.configure_calls) == 5
 
 
 def test_browser_panel_drag_updates_fraction_state():
@@ -2913,21 +3272,24 @@ def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
     """
     source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
 
-    assert "actions.grid_columnconfigure(2, weight=1)" in source
-    assert "self.load_btn = _RoundedButton(" in source
+    assert "actions.grid_columnconfigure(1, minsize=ACTION_BUTTON_GAP)" in source
+    assert "actions.grid_columnconfigure(3, weight=1)" in source
+    assert "class _NativeButton:" in source
+    assert '"takefocus": False' in source
+    assert "self.load_btn = _NativeButton(" in source
     assert "width=260,\n            height=52," in source
     assert (
         "self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
         in source
     )
     assert (
-        "self.export_btn.grid(row=0, column=1, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
+        "self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
         in source
     )
-    assert "close_btn = _RoundedButton(" in source
+    assert "close_btn = _NativeButton(" in source
     assert "width=120,\n            height=52," in source
     assert (
-        "close_btn.grid(row=0, column=3, sticky=tk.E, padx=ACTION_BUTTON_PAD)" in source
+        "close_btn.grid(row=0, column=4, sticky=tk.E, padx=ACTION_BUTTON_PAD)" in source
     )
     assert "self.load_btn.pack(" not in source
     assert "self.export_btn.pack(" not in source
@@ -3023,7 +3385,7 @@ def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
             "Export the selected folder to OMERO root path as a dataset?\n\n"
             "Dataset name: selected\n"
             "\n"
-            "This uploads every file inside the selected folder.",
+            "This will upload every file inside the selected folder.",
         )
     ]
     assert busy_states == [True]
@@ -4229,10 +4591,26 @@ def test_safe_url_for_log_redacts_host_ids_and_query_values():
     )
 
     assert safe_url == (
-        "/api/v0/m/projects/<id>/datasets/?group=<redacted>&base_url=<redacted>"
+        "/api/v0/m/projects/<id>/datasets/?group=-1&base_url=<redacted>"
     )
     assert "omero.example.org" not in safe_url
     assert "51" not in safe_url
+
+    safe_user_url = module._safe_url_for_log(
+        f"{scheme}://omero.example.org/api/v0/m/images/7/"
+        "?username=alice.smith&group=Facility%20Staff&experimenter=42"
+    )
+    assert safe_user_url == (
+        "/api/v0/m/images/<id>/?username=alice.smith&group=Facility Staff"
+        "&experimenter=<redacted>"
+    )
+
+    malicious_url = module._safe_url_for_log(
+        f"{scheme}://omero.example.org/api/v0/m/images/"
+        f"?username={scheme}%3A%2F%2Fleak.example%2Fapi&group=readers"
+    )
+    assert malicious_url == ("/api/v0/m/images/?username=<redacted>&group=readers")
+    assert "leak.example" not in malicious_url
 
 
 def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
@@ -4304,6 +4682,7 @@ def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner requires numeric imaris ID.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     attempts = []
     monkeypatch.setattr(
@@ -4329,6 +4708,7 @@ def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch)
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner tries discovered python until success.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         module,
@@ -4368,12 +4748,15 @@ def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch)
     ]
 
 
-def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable():
+def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable(
+    monkeypatch,
+):
     """Confirm dialog native bridge probe runs before export and blocks when unavailable is rejected at the boundary.
 
     Inputs: repository fixtures. Output: fails on regressions in dialog native bridge probe runs before export and blocks when unavailable.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -4395,12 +4778,13 @@ def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailab
     ]
 
 
-def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle():
+def test_dialog_native_bridge_probe_does_not_trust_non_opening_handle(monkeypatch):
     """Verify dialog native bridge probe does not trust non opening handle.
 
     Inputs: repository fixtures. Output: fails on regressions in dialog native bridge probe does not trust non opening handle.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = object()
     dialog.imaris_id = "17"
@@ -4429,6 +4813,7 @@ def test_dialog_native_bridge_probe_revalidates_stale_cached_python(
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe revalidates stale cached python.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -4472,6 +4857,7 @@ def test_dialog_native_bridge_probe_blocks_after_failed_revalidation(
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe blocks after failed revalidation.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -4508,6 +4894,7 @@ def test_dialog_native_bridge_probe_skips_recent_revalidation(tmp_path, monkeypa
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in dialog native bridge probe skips recent revalidation.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -4537,6 +4924,7 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dialog native bridge probe uses cached python for open.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
@@ -4580,12 +4968,13 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     ]
 
 
-def test_detect_converter_options_defaults_omero_when_server_supports_it():
+def test_detect_converter_options_defaults_omero_when_server_supports_it(monkeypatch):
     """Verify detect converter options defaults OMERO when server supports it.
 
     Inputs: repository fixtures. Output: fails on regressions in detect converter options defaults OMERO when server supports it.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._native_bridge_probe_done = module.threading.Event()
     dialog._native_bridge_probe_done.set()
@@ -4600,12 +4989,13 @@ def test_detect_converter_options_defaults_omero_when_server_supports_it():
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
 
-def test_detect_converter_options_hides_omero_without_server_capability():
+def test_detect_converter_options_hides_omero_without_server_capability(monkeypatch):
     """Verify detect converter options hides OMERO without server capability.
 
     Inputs: repository fixtures. Output: fails on regressions in detect converter options hides OMERO without server capability.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._native_bridge_probe_done = module.threading.Event()
     dialog._native_bridge_probe_done.set()
@@ -4620,12 +5010,15 @@ def test_detect_converter_options_hides_omero_without_server_capability():
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
 
 
-def test_detect_converter_options_hides_dropdown_when_native_open_unavailable():
+def test_detect_converter_options_hides_dropdown_when_native_open_unavailable(
+    monkeypatch,
+):
     """Verify detect converter options hides dropdown when native open unavailable.
 
     Inputs: repository fixtures. Output: fails on regressions in detect converter options hides dropdown when native open unavailable.
     """
     module = _load_xt_module()
+    _enable_native_bridge(module, monkeypatch)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._native_bridge_probe_done = module.threading.Event()
     dialog._native_bridge_probe_done.set()
@@ -4644,6 +5037,40 @@ def test_detect_converter_options_hides_dropdown_when_native_open_unavailable():
     assert dialog._detect_converter_options_after_connection() == []
 
 
+def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
+    monkeypatch,
+):
+    """Verify disabled IcePy bridge probing is silent during converter detection.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on disabled bridge regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    logs = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._native_bridge_probe_done = module.threading.Event()
+    dialog._native_bridge_probe_lock = module.threading.Lock()
+    dialog._native_bridge_available = False
+    dialog._native_bridge_probe_error = ""
+    dialog._reset_native_bridge_probe_for_converter_detection = lambda: (
+        _ for _ in ()
+    ).throw(AssertionError("disabled bridge must not reset native probing"))
+    dialog._start_native_bridge_probe = lambda: (_ for _ in ()).throw(
+        AssertionError("disabled bridge must not start native probing")
+    )
+    dialog.client = types.SimpleNamespace(
+        has_omero_ims_export_capability=lambda: (_ for _ in ()).throw(
+            AssertionError("OMERO converter should not be queried without handoff")
+        )
+    )
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+
+    assert dialog._detect_converter_options_after_connection() == []
+    assert not any("bridge" in message.lower() for message in logs)
+
+
 def test_set_converter_options_hides_dropdown_and_disables_load():
     """Verify set converter options hides dropdown and disables load.
 
@@ -4651,30 +5078,22 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
     """
     module = _load_xt_module()
 
-    class DummyMenu:
-        """Test double for dummy menu."""
+    class DummyDropdown:
+        """Test double for converter dropdown."""
 
         def __init__(self):
-            """Create `DummyMenu` with its default state.
+            """Create `DummyDropdown` with its default state.
 
             Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
-            self.deleted = False
+            self.options = None
 
-        def delete(self, start, end):
-            """Delete the delete for `DummyMenu`.
+        def set_options(self, options):
+            """Record converter options.
 
-            Inputs: `start`, `end`. Output: None.
+            Inputs: `options`. Output: None.
             """
-            self.deleted = (start, end)
-
-        @staticmethod
-        def add_command(label, command):
-            """Add the command for `DummyMenu`.
-
-            Inputs: `label`, `command`. Output: None. Raises: AssertionError when validation or the called operation fails.
-            """
-            raise AssertionError("no command should be added without options")
+            self.options = list(options)
 
     class DummyFrame:
         """Test double for dummy frame."""
@@ -4727,9 +5146,9 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
             """
             self.value = value
 
-    menu = DummyMenu()
+    dropdown = DummyDropdown()
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog.converter_menu = {"menu": menu}
+    dialog.converter_dropdown = dropdown
     dialog.converter_var = DummyVar()
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = DummyButton()
@@ -4737,44 +5156,36 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
 
     module.OMEROBrowserDialog._set_converter_options(dialog, [])
 
-    assert menu.deleted == (0, "end")
+    assert dropdown.options == []
     assert dialog.converter_var.value == ""
     assert dialog.converter_frame.hidden is True
     assert dialog.load_btn.state == "disabled"
     assert dialog.refresh_btn.state == "disabled"
 
 
-def test_set_converter_options_populates_menu_without_blank_entry():
-    """Verify set converter options populates menu without blank entry.
+def test_set_converter_options_populates_dropdown_without_blank_entry():
+    """Verify set converter options populates dropdown without blank entry.
 
     Inputs: repository fixtures. Output: fails on regressions in set converter options populates menu without blank entry.
     """
     module = _load_xt_module()
 
-    class DummyMenu:
-        """Test double for dummy menu."""
+    class DummyDropdown:
+        """Test double for converter dropdown."""
 
         def __init__(self):
-            """Create `DummyMenu` with its default state.
+            """Create `DummyDropdown` with its default state.
 
             Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
-            self.deleted = None
-            self.commands = []
+            self.options = None
 
-        def delete(self, start, end):
-            """Delete the delete for `DummyMenu`.
+        def set_options(self, options):
+            """Record converter options.
 
-            Inputs: `start`, `end`. Output: None.
+            Inputs: `options`. Output: None.
             """
-            self.deleted = (start, end)
-
-        def add_command(self, label, command, **kwargs):
-            """Add the command for `DummyMenu`.
-
-            Inputs: `label`, `command`, `**kwargs` keyword arguments. Output: None.
-            """
-            self.commands.append((label, command, kwargs))
+            self.options = list(options)
 
     class DummyFrame:
         """Test double for dummy frame."""
@@ -4827,9 +5238,9 @@ def test_set_converter_options_populates_menu_without_blank_entry():
             """
             self.value = value
 
-    menu = DummyMenu()
+    dropdown = DummyDropdown()
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog.converter_menu = types.SimpleNamespace(menu=menu)
+    dialog.converter_dropdown = dropdown
     dialog.converter_var = DummyVar()
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = DummyButton()
@@ -4842,21 +5253,15 @@ def test_set_converter_options_populates_menu_without_blank_entry():
 
     module.OMEROBrowserDialog._set_converter_options(dialog, ["OMERO", "Imaris"])
 
-    labels = [label for label, _command, _kwargs in menu.commands]
-    assert menu.deleted == (0, "end")
-    assert labels == ["OMERO", "Imaris"]
-    assert "" not in labels
-    assert "-" not in labels
-    assert all(
-        kwargs == {"font": module.CONVERTER_MENU_FONT, "hidemargin": True}
-        for _label, _command, kwargs in menu.commands
-    )
+    assert dropdown.options == ["OMERO", "Imaris"]
+    assert "" not in dropdown.options
+    assert "-" not in dropdown.options
     assert dialog.converter_var.value == "OMERO"
     assert dialog.converter_frame.shown is True
     assert dialog.load_btn.state == "normal"
     assert dialog.refresh_btn.state == "normal"
 
-    menu.commands[1][1]()
+    module.OMEROBrowserDialog._select_converter(dialog, "Imaris")
     assert dialog.converter_var.value == "Imaris"
 
 
@@ -4867,29 +5272,22 @@ def test_set_converter_options_restores_saved_converter_when_available():
     """
     module = _load_xt_module()
 
-    class DummyMenu:
-        """Menu fake for saved converter restoration."""
+    class DummyDropdown:
+        """Dropdown fake for saved converter restoration."""
 
         def __init__(self):
-            """Create command recorder.
+            """Create option recorder.
 
-            Inputs: none. Output: initializes commands.
+            Inputs: none. Output: initializes options.
             """
-            self.commands = []
+            self.options = None
 
-        @staticmethod
-        def delete(_start, _end):
-            """Accept menu deletion.
+        def set_options(self, options):
+            """Record options.
 
-            Inputs: ignored. Output: None.
+            Inputs: `options`. Output: None.
             """
-
-        def add_command(self, label, command, **kwargs):
-            """Record menu command.
-
-            Inputs: `label`, `command`, `**kwargs`. Output: None.
-            """
-            self.commands.append((label, command, kwargs))
+            self.options = list(options)
 
     class DummyFrame:
         """Frame fake for saved converter restoration."""
@@ -4902,7 +5300,7 @@ def test_set_converter_options_restores_saved_converter_when_available():
             """
 
     dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog.converter_menu = types.SimpleNamespace(menu=DummyMenu())
+    dialog.converter_dropdown = DummyDropdown()
     dialog.converter_var = _FakeVar("")
     dialog.converter_frame = DummyFrame()
     dialog.load_btn = _FakeButton()
@@ -4921,10 +5319,10 @@ def test_set_converter_options_restores_saved_converter_when_available():
     assert dialog._preferred_converter_setting == "Imaris"
 
 
-def test_show_converter_frame_updates_main_window_minimum_width():
-    """Verify visible converter controls cannot be cut off by window shrink.
+def test_show_converter_frame_uses_reserved_slot_without_resizing_window():
+    """Verify converter show does not resize the already-reserved layout.
 
-    Inputs: repository fixtures. Output: fails on min-width regressions.
+    Inputs: repository fixtures. Output: fails on converter-slot regressions.
     """
     module = _load_xt_module()
 
@@ -5019,8 +5417,8 @@ def test_show_converter_frame_updates_main_window_minimum_width():
     module.OMEROBrowserDialog._show_converter_frame(dialog)
 
     assert dialog.converter_frame.grid_calls == 1
-    assert dialog.root.min_size == (1483, 760)
-    assert dialog.root.geometry_calls == ["1483x760"]
+    assert dialog.root.min_size == (module.OMERO_CONNECTOR_WINDOW_WIDTH, 760)
+    assert dialog.root.geometry_calls == []
 
 
 def test_scrolled_listbox_disables_active_underline(monkeypatch):
@@ -5043,13 +5441,12 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
             self.orient = orient
             self.command = None
 
-        @staticmethod
-        def pack(**_kwargs):
-            """Apply pack geometry management.
+        def grid(self, **kwargs):
+            """Apply grid geometry management.
 
             Inputs: `**_kwargs`. Output: None.
             """
-            return None
+            self.grid_kwargs = kwargs
 
         def config(self, **kwargs):
             """Apply widget configuration.
@@ -5086,13 +5483,12 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
             """
             self.config_calls.append(kwargs)
 
-        @staticmethod
-        def pack(**_kwargs):
-            """Apply pack geometry management.
+        def grid(self, **kwargs):
+            """Apply grid geometry management.
 
             Inputs: `**_kwargs`. Output: None.
             """
-            return None
+            self.grid_kwargs = kwargs
 
         @staticmethod
         def yview(*_args):
@@ -5110,6 +5506,31 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
             """
             return None
 
+    class _FakeParent:
+        """Parent fake that records listbox grid expansion."""
+
+        def __init__(self):
+            """Create fake parent.
+
+            Inputs: none. Output: initializes records.
+            """
+            self.rows = {}
+            self.columns = {}
+
+        def grid_rowconfigure(self, row, **kwargs):
+            """Record row configuration.
+
+            Inputs: `row`, `**kwargs`. Output: None.
+            """
+            self.rows[row] = kwargs
+
+        def grid_columnconfigure(self, column, **kwargs):
+            """Record column configuration.
+
+            Inputs: `column`, `**kwargs`. Output: None.
+            """
+            self.columns[column] = kwargs
+
     monkeypatch.setattr(
         module,
         "tk",
@@ -5125,13 +5546,20 @@ def test_scrolled_listbox_disables_active_underline(monkeypatch):
             NONE="none",
             HORIZONTAL="horizontal",
             VERTICAL="vertical",
+            NSEW="nsew",
+            NS="ns",
+            EW="ew",
         ),
     )
 
-    listbox = module.OMEROBrowserDialog._build_scrolled_listbox(object())
+    parent = _FakeParent()
+    listbox = module.OMEROBrowserDialog._build_scrolled_listbox(parent)
 
     assert listbox is created["listbox"]
     assert listbox.kwargs["activestyle"] == "none"
+    assert parent.rows[0] == {"weight": 1}
+    assert parent.columns[0] == {"weight": 1}
+    assert listbox.grid_kwargs == {"row": 0, "column": 0, "sticky": "nsew"}
 
 
 def test_selected_images_returns_all_valid_indexes():
@@ -5410,8 +5838,11 @@ def test_refresh_browser_does_not_repaint_action_buttons(monkeypatch):
     dialog.export_btn = _FakeButton()
     dialog._current_selected_project_id = lambda: "project-1"
     dialog._current_selected_dataset_id = lambda: "dataset-1"
-    dialog._set_status = _noop
-    dialog._set_connection_indicator = _noop
+    statuses = []
+    dialog._set_status = lambda *args, **_kwargs: statuses.append(args)
+    dialog._set_connection_indicator = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("refresh start must not repaint the status bar indicator")
+    )
 
     class _FakeThread:
         """Fake refresh thread recorder."""
@@ -5437,6 +5868,7 @@ def test_refresh_browser_does_not_repaint_action_buttons(monkeypatch):
     assert dialog.refresh_btn.configs == [{"state": "disabled"}]
     assert dialog.load_btn.configs == []
     assert dialog.export_btn.configs == []
+    assert statuses == [("Refreshing OMERO browser...", "#fff3cd")]
     assert threads == [
         (
             dialog._refresh_worker,
@@ -6268,8 +6700,8 @@ def test_browser_dialog_sets_initial_window_as_minimum_size():
     module.OMEROBrowserDialog._configure_initial_window_constraints(dialog)
 
     assert dialog.root.updated is True
-    assert dialog.root.geometry_value == "1010x760"
-    assert dialog.root.minimum_size == (1010, 760)
+    assert dialog.root.geometry_value == "1180x760"
+    assert dialog.root.minimum_size == (1180, 760)
     assert dialog.root.resizable_value == (True, True)
 
 
