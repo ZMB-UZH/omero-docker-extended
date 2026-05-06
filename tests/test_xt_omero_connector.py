@@ -2657,6 +2657,14 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
     assert "height=38" in source
+    assert "def _align_path_row_control_heights(self):" in source
+    assert 'getattr(self, "folder_path_entry", None), "winfo_height"' in source
+    assert (
+        'getattr(self, "select_folder_btn", None),\n'
+        '            getattr(self, "refresh_btn", None),\n'
+        '            getattr(self, "converter_dropdown", None),' in source
+    )
+    assert "configure(height=entry_height)" in source
     assert 'text="Export folder to OMERO"' in source
     init_marker = source.index("def __init__(self, imaris, imaris_id=None):")
     settings_load = source.index(
@@ -2701,28 +2709,40 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
 
     assert "CONVERTER_DROPDOWN_WIDTH = 232" in source
     assert "CONVERTER_DROPDOWN_TEXT_PAD = 10" in source
-    assert "CONVERTER_SLOT_WIDTH = 448" in source
+    assert "CONVERTER_DROPDOWN_ARROW_WIDTH = 24" in source
+    assert "CONVERTER_SLOT_WIDTH = 619" in source
     assert "class _ConverterDropdown:" in source
+    assert "self._arrow = tk.Canvas(" in source
+    assert 'text="v"' not in source
+    assert "self._arrow.create_line(" in source
+    assert "capstyle=tk.ROUND" in source
+    assert "joinstyle=tk.ROUND" in source
     assert "self.converter_slot = tk.Frame(" in source
     assert "self.converter_slot.pack_propagate(False)" in source
     assert "self.converter_frame = tk.Frame(self.converter_slot)" in source
-    assert 'tk.Label(self.converter_frame, text="Converter:").pack' in source
+    assert "self.converter_text_offset_spacer = tk.Frame(" in source
+    assert (
+        'self.converter_label = tk.Label(self.converter_frame, text="Converter:")'
+        in source
+    )
+    assert "def _checkbutton_text_offset(widget):" in source
     assert "self.converter_dropdown = _ConverterDropdown(" in source
     assert "self.converter_dropdown.pack(side=tk.LEFT)" in source
+    assert "self.refresh_btn.pack(side=tk.RIGHT)" in source
     assert "tk.Menubutton(" not in source
     assert "tk.Menu(" not in source
     assert 'self._preferred_converter_setting = ""' in source
     assert "def _select_converter(self, value):" in source
     assert "dropdown.set_options(options)" in source
     assert (
-        "self.converter_slot.grid(\n            row=2,\n            column=7," in source
+        "self.converter_slot.grid(\n            row=2,\n            column=6," in source
     )
-    assert "columnspan=2,\n            sticky=tk.E," in source
-    assert "converter_slot.grid_configure(padx=(18, 0))" in source
+    assert "columnspan=3,\n            sticky=tk.W," in source
+    assert "converter_slot.grid_configure(padx=(34, 0))" in source
     assert "self.converter_frame.pack_forget()" in source
     assert "self.converter_frame.grid_remove()" not in source
     assert 'f"{width}x{height}+{self._frame.winfo_rootx()}+"' in source
-    assert "container.pack(fill=tk.BOTH, expand=True, padx=(2, 1), pady=1)" in source
+    assert "container.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)" in source
     assert "highlighted = self._open or self._hover" in source
     assert "if _native_imaris_bridge_enabled():" in source
     assert (
@@ -2736,6 +2756,75 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     )
     assert "if can_attempt_imaris_handoff and self.client:" not in source
     assert "def _has_imaris_handoff_target(self):" in source
+
+
+def test_path_row_alignment_matches_refresh_to_entry_height():
+    """Verify path-row controls adopt the rendered path-entry height.
+
+    Inputs: repository fixtures. Output: fails on path-row height regressions.
+    """
+    module = _load_xt_module()
+
+    class _Root:
+        """Fake root that records idle updates."""
+
+        def __init__(self):
+            """Create fake root state.
+
+            Inputs: none. Output: initializes call records.
+            """
+            self.idle_updates = 0
+
+        def update_idletasks(self):
+            """Record idle update.
+
+            Inputs: none. Output: None.
+            """
+            self.idle_updates += 1
+
+    class _Entry:
+        """Fake entry exposing a rendered height."""
+
+        @staticmethod
+        def winfo_height():
+            """Return rendered entry height.
+
+            Inputs: none. Output: int.
+            """
+            return 31
+
+    class _Control:
+        """Fake command control that records configuration."""
+
+        def __init__(self):
+            """Create fake control state.
+
+            Inputs: none. Output: initializes configuration records.
+            """
+            self.config_calls = []
+
+        def config(self, **kwargs):
+            """Record widget configuration.
+
+            Inputs: keyword options. Output: None.
+            """
+            self.config_calls.append(dict(kwargs))
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = _Root()
+    dialog.folder_path_entry = _Entry()
+    dialog.select_folder_btn = _Control()
+    dialog.refresh_btn = _Control()
+    dialog.converter_dropdown = _Control()
+    dialog.converter_slot = _Control()
+
+    module.OMEROBrowserDialog._align_path_row_control_heights(dialog)
+
+    assert dialog.root.idle_updates == 1
+    assert dialog.select_folder_btn.config_calls == [{"height": 31}]
+    assert dialog.refresh_btn.config_calls == [{"height": 31}]
+    assert dialog.converter_dropdown.config_calls == [{"height": 31}]
+    assert dialog.converter_slot.config_calls == [{"height": 31}]
 
 
 def test_converter_selection_refreshes_load_button_state():
@@ -3053,6 +3142,11 @@ def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
         "            self.autosave_settings_frame,"
     ) in source
     assert "self.autosave_settings_check.pack(side=tk.LEFT)" in source
+    assert "self.converter_text_offset_spacer.pack(side=tk.LEFT, fill=tk.Y)" in source
+    assert (
+        "converter_text_spacer.config(width=_checkbutton_text_offset(autosave_check))"
+        in source
+    )
     assert "panel_icon_frame.grid_propagate(False)" not in source
     assert source.index("self.autosave_settings_frame.grid(") < source.index(
         "panel_icon_frame.grid("
