@@ -12,7 +12,8 @@ repository. Use it before attempting speculative code changes.
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
-| Export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch; no live Imaris handle was provided back to the standalone connector | Confirm whether the connector received a live XT handle; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy-backed bridge |
+| Export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
+| A `Volume` object appears in Imaris but the exported IMS is not visibly opened | File-open returned or changed scene state without proving the downloaded IMS became visible | Treat this as failed handoff; inspect log lines after `Using Imaris handle type=...` for current-file or visible-dataset verification |
 
 ## Failure History Captured Here
 
@@ -228,6 +229,17 @@ Operational rule:
   same-session bridge runner for that explicit final open request. Disabled
   optional probing still means no startup IcePy diagnostics, no background
   alternate-Python discovery, and no fresh Imaris launch.
+- OMERO-generated IMS handoff success is stricter than a successful
+  `FileOpen`, `OpenFile`, or `LoadFile` method return. The connector accepts an
+  IMS open only when Imaris reports the downloaded file as the exact current
+  file, or when the call produces a loaded dataset with positive dimensions and
+  that dataset is accepted by `SetDataSet` or `SetImage(0, ...)` for the current
+  session. The dataset path covers Imaris APIs where current-file metadata is
+  absent or does not update even though the loaded data can be made visible. A
+  bare method return, a transient scene object, or a generic image-count change
+  is not enough for IMS success. Original/raw-file handoff for the `Imaris`
+  converter remains submission-only because native vendor parsing can continue
+  inside Imaris after the XT API accepts the file.
 - the local path field is the source of truth for loading images into Imaris
   and for the first folder-export chooser location hint only. For
   `Load images into Imaris`, downloaded IMS files and original files are stored
@@ -251,7 +263,9 @@ Operational rule:
   health checks. A transient failure is retried before the UI is changed; if
   all retries fail, the connector reports that the connection was lost, clears
   OMERO browser state, disables OMERO actions, and returns to the connect-ready
-  state.
+  state. Silent health checks and native bridge probes must not force
+  synchronous Tk idle redraws or leave a busy cursor on the main-window
+  background after they complete.
 - `Load images into Imaris` is enabled only after a verified OMERO connection,
   an available converter, a structurally valid local path that is not known to
   be unwritable, and at least one selected entry in the Images panel are all
