@@ -2730,6 +2730,11 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
         "            self._reset_native_bridge_probe_for_converter_detection()\n"
         "            self._start_native_bridge_probe()" in source
     )
+    assert (
+        "if self.client:\n            omero_available = self.client.has_omero_ims_export_capability()"
+        in source
+    )
+    assert "if can_attempt_imaris_handoff and self.client:" not in source
     assert "def _has_imaris_handoff_target(self):" in source
 
 
@@ -2972,10 +2977,12 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
         )
     ]
     assert "create_arc(" not in password_source
-    assert "create_oval(" not in password_source
+    assert password_source.count("create_oval(") == 1
+    assert "create_text(" not in password_source
+    assert "PASSWORD_REVEAL_ICON_FONT" not in source
     assert "_antialiased_circle_image(" not in password_source
     assert "self._canvas.create_image(" not in password_source
-    assert '"\\u25c9" if visible else "\\u25cb"' in password_source
+    assert "capstyle=tk.ROUND" in password_source
     assert "self.panel_icon_frame = tk.Frame(conn_frame)" in source
     assert (
         "self.panel_icon_frame.grid(\n            row=0,\n            column=8,"
@@ -3011,11 +3018,15 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "text=CONNECTOR_INFO_TITLE" not in info_source
     assert "title_label" not in info_source
     assert "pady=(0, 3)" not in info_source
+    assert "pady=(0, 14)" not in info_source
+    assert "disclaimer.grid(" in info_source
+    assert "pady=0" in info_source
     assert '("Author(s):", CONNECTOR_INFO_AUTHOR)' in info_source
     assert '("Contact:", CONNECTOR_INFO_CONTACT)' in info_source
     assert '("Version:", CONNECTOR_INFO_VERSION)' in info_source
     assert 'metadata_label_font = ("Arial", 9, "bold")' in info_source
     assert "font=metadata_label_font" in info_source
+    assert "close_button.grid(row=4," in info_source
     assert "info_window.grab_set()" in source
     assert "self.root.wait_window(info_window)" in source
 
@@ -3073,6 +3084,7 @@ def test_status_text_aligns_with_load_button_start():
     )
     assert "bottom_progress_margin.pack(fill=tk.X, side=tk.BOTTOM)" in source
     assert "bottom_progress_margin.pack_propagate(False)" in source
+    assert "padx=(STATUS_TEXT_PAD, STATUS_TEXT_PAD)" in source
 
 
 def test_connection_indicator_draws_single_flat_circle():
@@ -3089,6 +3101,7 @@ def test_connection_indicator_draws_single_flat_circle():
     ]
 
     assert indicator_source.count("canvas.create_oval(") == 1
+    assert "canvas.create_oval(6, 4, 28, 26" in indicator_source
     assert "shadow" not in indicator_source
     assert "highlight" not in indicator_source
 
@@ -3318,9 +3331,10 @@ def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
 
     assert "actions.grid_columnconfigure(1, minsize=ACTION_BUTTON_GAP)" in source
     assert "actions.grid_columnconfigure(3, weight=1)" in source
-    assert "class _NativeButton:" in source
-    assert '"takefocus": False' in source
-    assert "self.load_btn = _NativeButton(" in source
+    assert "class _NativeButton:" not in source
+    assert '"takefocus": False' not in source
+    assert "class _RoundedButton:" in source
+    assert "self.load_btn = _RoundedButton(" in source
     assert "width=260,\n            height=52," in source
     assert (
         "self.load_btn.grid(row=0, column=0, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
@@ -3330,7 +3344,7 @@ def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
         "self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
         in source
     )
-    assert "close_btn = _NativeButton(" in source
+    assert "close_btn = _RoundedButton(" in source
     assert "width=120,\n            height=52," in source
     assert (
         "close_btn.grid(row=0, column=4, sticky=tk.E, padx=ACTION_BUTTON_PAD)" in source
@@ -5054,12 +5068,12 @@ def test_detect_converter_options_hides_omero_without_server_capability(monkeypa
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
 
 
-def test_detect_converter_options_hides_dropdown_when_native_open_unavailable(
+def test_detect_converter_options_keeps_omero_when_native_open_unavailable(
     monkeypatch,
 ):
-    """Verify detect converter options hides dropdown when native open unavailable.
+    """Verify OMERO capability is not hidden by missing native Imaris handoff.
 
-    Inputs: repository fixtures. Output: fails on regressions in detect converter options hides dropdown when native open unavailable.
+    Inputs: repository fixtures. Output: fails on converter visibility regressions.
     """
     module = _load_xt_module()
     _enable_native_bridge(module, monkeypatch)
@@ -5072,13 +5086,9 @@ def test_detect_converter_options_hides_dropdown_when_native_open_unavailable(
     dialog._native_bridge_probe_error = "bridge unavailable"
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
-    dialog.client = types.SimpleNamespace(
-        has_omero_ims_export_capability=lambda: (_ for _ in ()).throw(
-            AssertionError("server capability must not be checked")
-        )
-    )
+    dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
 
-    assert dialog._detect_converter_options_after_connection() == []
+    assert dialog._detect_converter_options_after_connection() == ["OMERO"]
 
 
 def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
@@ -5104,14 +5114,10 @@ def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
     dialog._start_native_bridge_probe = lambda: (_ for _ in ()).throw(
         AssertionError("disabled bridge must not start native probing")
     )
-    dialog.client = types.SimpleNamespace(
-        has_omero_ims_export_capability=lambda: (_ for _ in ()).throw(
-            AssertionError("OMERO converter should not be queried without handoff")
-        )
-    )
+    dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(module, "_xt_debug", logs.append)
 
-    assert dialog._detect_converter_options_after_connection() == []
+    assert dialog._detect_converter_options_after_connection() == ["OMERO"]
     assert not any("bridge" in message.lower() for message in logs)
 
 
