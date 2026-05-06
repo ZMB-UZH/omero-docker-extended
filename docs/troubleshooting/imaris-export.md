@@ -170,9 +170,15 @@ Operational rule:
 - the standalone connector first tries to open the exported file through the live
   Imaris XT handle so the existing session is reused,
 - IcePy-backed native bridge probing is disabled by default. When
-  `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is unset or false, startup does not
-  import `ImarisLib` or `IcePy`, does not log missing IcePy diagnostics, and
-  relies only on a live XT handle supplied by the current Imaris session,
+  `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is unset or false, startup does not run
+  standalone `IcePy` diagnostics, native bridge probing, alternate-Python
+  discovery, or fresh-session bridge launch. The normal Imaris-launched XT path
+  still resolves the live application id through `ImarisLib`; if that direct
+  handle is not ready at startup, the connector retries the same direct XT
+  handle path before download/conversion and before the final file handoff. If
+  the handle remains unavailable, the log reports only that the direct handle
+  could not be resolved and suppresses disabled optional-bridge dependency
+  details,
 - when `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is explicitly set to `1`, `true`,
   `yes`, or `on`, native Imaris bridge compatibility is probed in the background
   as the dialog opens, and the connector must not start server-side conversion

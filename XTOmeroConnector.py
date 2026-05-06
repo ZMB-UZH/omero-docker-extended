@@ -4952,9 +4952,6 @@ def _resolve_imaris_application(
     if _looks_like_imaris_application(aImarisId):
         return aImarisId
 
-    if not _native_imaris_bridge_enabled():
-        return None
-
     app_id = _coerce_imaris_id(aImarisId)
     if app_id is None:
         return None
@@ -4990,18 +4987,32 @@ def _resolve_imaris_application(
                 if app is not None:
                     return app
         except Exception as exc:
-            version_info = ".".join(str(part) for part in sys.version_info[:3])
-            _xt_debug(
-                "Direct Imaris XT bridge is unavailable in this Python: "
-                f"{exc}. Current Python={version_info}. "
-                "The connector will use the compatible native bridge runner if available."
-            )
+            _log_direct_imaris_resolution_failure(exc)
             break
 
         if attempt + 1 < attempts:
             time.sleep(max(0.0, float(retry_interval)))
 
     return None
+
+
+def _log_direct_imaris_resolution_failure(exc):
+    """Log direct Imaris handle resolution failure without disabled IcePy noise.
+
+    Inputs: `exc`. Output: None.
+    """
+    version_info = ".".join(str(part) for part in sys.version_info[:3])
+    if not _native_imaris_bridge_enabled():
+        _xt_debug(
+            "Direct Imaris XT handle is unavailable in this Python. "
+            f"Current Python={version_info}."
+        )
+        return
+    _xt_debug(
+        "Direct Imaris XT bridge is unavailable in this Python: "
+        f"{exc}. Current Python={version_info}. "
+        "The connector will use the compatible native bridge runner if available."
+    )
 
 
 # =============================================================================
@@ -9040,6 +9051,44 @@ class OMEROBrowserDialog:
             require_ims=require_ims,
         )
 
+    def _resolve_direct_imaris_handle_for_handoff(self):
+        """Resolve the normal XT Imaris handle for a same-session file handoff.
+
+        Inputs: none. Output: bool.
+        """
+        if _looks_like_imaris_application(getattr(self, "imaris", None)):
+            return True
+        if _coerce_imaris_id(getattr(self, "imaris_id", None)) is None:
+            return False
+
+        def _resolve_on_current_thread():
+            """Resolve and cache the current Imaris application handle.
+
+            Inputs: none. Output: bool.
+            """
+            if _looks_like_imaris_application(getattr(self, "imaris", None)):
+                return True
+            _xt_debug("Attempting direct Imaris XT handle acquisition")
+            resolved = _resolve_imaris_application(
+                self.imaris_id,
+                retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+            )
+            if _looks_like_imaris_application(resolved):
+                self.imaris = resolved
+                _xt_debug("Resolved direct Imaris XT handle for current session")
+                return True
+            self.imaris = None
+            return False
+
+        if threading.get_ident() == getattr(self, "_ui_thread_id", None):
+            return _resolve_on_current_thread()
+        invoker = getattr(self, "_invoke_on_ui_thread", None)
+        root_after = getattr(getattr(self, "root", None), "after", None)
+        if callable(invoker) and callable(root_after):
+            return bool(invoker(_resolve_on_current_thread))
+        return _resolve_on_current_thread()
+
     def _open_downloaded_file_in_imaris(self, downloaded_file, require_ims=True):
         """Open one downloaded IMS file in the connected Imaris application.
 
@@ -9061,19 +9110,12 @@ class OMEROBrowserDialog:
                 require_ims=require_ims,
             )
 
-        if native_bridge_enabled and self.imaris is None:
+        if self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle is not available in this Python; "
                 "attempting UI-thread acquisition"
             )
-            try:
-                self.imaris = _resolve_imaris_application(
-                    self.imaris_id,
-                    retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
-                    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
-                )
-            except Exception as exc:
-                _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
+            self._resolve_direct_imaris_handle_for_handoff()
 
         if native_bridge_enabled and self.imaris is None:
             _xt_debug(
@@ -9142,19 +9184,12 @@ class OMEROBrowserDialog:
                 require_ims=require_ims,
             )
 
-        if native_bridge_enabled and self.imaris is None:
+        if self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle is not available in this Python; "
                 "attempting UI-thread acquisition for batch open"
             )
-            try:
-                self.imaris = _resolve_imaris_application(
-                    self.imaris_id,
-                    retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
-                    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
-                )
-            except Exception as exc:
-                _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
+            self._resolve_direct_imaris_handle_for_handoff()
 
         if open_files_in_imaris(downloaded_files, self.imaris, require_ims=require_ims):
             return True
@@ -9381,10 +9416,13 @@ class OMEROBrowserDialog:
         if _looks_like_imaris_application(self.imaris):
             return True
 
+        self._set_status("Checking Imaris same-session open support...", "#fff3cd")
+        if self._resolve_direct_imaris_handle_for_handoff():
+            return True
+
         if not _native_imaris_bridge_enabled():
             return False
 
-        self._set_status("Checking Imaris same-session open support...", "#fff3cd")
         with self._native_bridge_probe_lock:
             initial_available = self._native_bridge_available
             initial_last_verified_at = self._native_bridge_last_verified_at

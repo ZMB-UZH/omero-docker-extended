@@ -816,7 +816,7 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application uses imarislib factory.
     """
     module = _load_xt_module()
-    _enable_native_bridge(module, monkeypatch)
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
     expected = object()
 
     class _FakeImarisLibFactory:
@@ -834,6 +834,7 @@ def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
     fake_module = types.SimpleNamespace(ImarisLib=_FakeImarisLibFactory)
     monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
 
+    assert module._native_imaris_bridge_enabled() is False
     assert module._resolve_imaris_application(17) is expected
 
 
@@ -843,7 +844,7 @@ def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application retries until handle available.
     """
     module = _load_xt_module()
-    _enable_native_bridge(module, monkeypatch)
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
     expected = object()
     calls = {"count": 0}
 
@@ -879,7 +880,7 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in resolve imaris application accepts numeric string.
     """
     module = _load_xt_module()
-    _enable_native_bridge(module, monkeypatch)
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
     expected = object()
 
     class _FakeImarisLibFactory:
@@ -926,11 +927,13 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
     assert module._resolve_imaris_application(17) is None
 
 
-def test_native_imaris_bridge_is_disabled_by_default_without_import_noise(monkeypatch):
-    """Verify the IcePy bridge flag is disabled by default and quiet.
+def test_optional_icepy_bridge_is_disabled_by_default_without_diagnostic_import_noise(
+    monkeypatch,
+):
+    """Verify the IcePy bridge flag is disabled by default and diagnostics are quiet.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on opt-in bridge regressions.
-    Raises: AssertionError if disabled startup attempts bridge imports.
+    Raises: AssertionError if disabled diagnostics attempt bridge imports.
     """
     module = _load_xt_module()
     monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
@@ -955,12 +958,45 @@ def test_native_imaris_bridge_is_disabled_by_default_without_import_noise(monkey
     monkeypatch.setattr(module, "_iter_imaris_install_roots", lambda: iter(()))
 
     assert module._native_imaris_bridge_enabled() is False
-    assert module._resolve_imaris_application(17) is None
     module._log_imaris_xt_diagnostics()
 
     joined_messages = "\n".join(messages)
     assert "IcePy" not in joined_messages
     assert "ImarisLib_error" not in joined_messages
+
+
+def test_resolve_imaris_application_hides_icepy_detail_when_optional_bridge_disabled(
+    monkeypatch,
+):
+    """Verify disabled optional bridge does not leak missing IcePy import detail.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on direct handle diagnostics regressions.
+    Raises: ImportError for the exercised failure path.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    messages = []
+
+    real_import = builtins.__import__
+
+    def _raising_import(name, *args, **kwargs):
+        """Return the raising import.
+
+        Inputs: `name` name, `*args` positional arguments, `**kwargs` keyword arguments.
+        Output: `real_import` result. Raises: ImportError for the exercised failure path.
+        """
+        if name == "ImarisLib":
+            raise ImportError("IcePy missing")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _raising_import)
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+
+    assert module._resolve_imaris_application(17) is None
+    joined_messages = "\n".join(messages)
+    assert "Direct Imaris XT handle is unavailable" in joined_messages
+    assert "IcePy" not in joined_messages
+    assert "compatible native bridge runner" not in joined_messages
 
 
 def test_resolve_imaris_application_bridge_failure_message_keeps_runner_path(
@@ -5720,6 +5756,77 @@ def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch)
     ]
 
 
+def test_dialog_direct_handle_reacquisition_is_not_icepy_flag_gated(monkeypatch):
+    """Verify direct XT handle reacquisition works with optional IcePy probing disabled.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on pre-download bridge readiness regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = -1
+    dialog.root = types.SimpleNamespace(after=lambda _delay, callback: callback())
+    status_updates = []
+    ui_calls = []
+    resolved_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)
+    dialog._set_status = lambda text, _color="#ecf0f1": status_updates.append(text)
+    dialog._invoke_on_ui_thread = lambda callback: (
+        ui_calls.append("resolve") or callback()
+    )
+    monkeypatch.setattr(
+        module,
+        "_resolve_imaris_application",
+        lambda imaris_id, **_kwargs: resolved_handle if imaris_id == "17" else None,
+    )
+
+    assert dialog._ensure_native_open_ready_before_export() is True
+    assert dialog.imaris is resolved_handle
+    assert status_updates == ["Checking Imaris same-session open support..."]
+    assert ui_calls == ["resolve"]
+
+
+def test_open_downloaded_file_retries_direct_handle_when_optional_bridge_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify final file open reacquires direct XT handle without optional IcePy probing.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on final handoff regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    opened = []
+
+    class _FakeImaris:
+        """Fake Imaris app returned by delayed direct resolution."""
+
+        @staticmethod
+        def FileOpen(path, *_args):
+            """Record the final FileOpen call.
+
+            Inputs: `path`, `*_args`. Output: None.
+            """
+            opened.append(path)
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = None
+    dialog.imaris_id = "17"
+    dialog._ui_thread_id = module.threading.get_ident()
+    dialog._set_status = _noop
+    monkeypatch.setattr(
+        module,
+        "_resolve_imaris_application",
+        lambda imaris_id, **_kwargs: _FakeImaris() if imaris_id == "17" else None,
+    )
+
+    assert dialog._open_downloaded_file_in_imaris(str(ims_path), require_ims=True)
+    assert opened == [str(ims_path)]
+
+
 def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable(
     monkeypatch,
 ):
@@ -7604,6 +7711,89 @@ def test_xt_entrypoint_applies_saved_show_log_before_startup_work(
     assert ("tk", None) in events
     assert ("dialog", None) in events
     assert ("show", None) in events
+
+
+def test_xt_entrypoint_resolves_direct_imaris_handle_when_optional_bridge_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify normal Imaris-launched handle resolution is independent of IcePy probing.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on startup bridge regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    supported = module._WindowsPlatformStatus(
+        supported=True,
+        message="OMERO Connector running on supported Windows 10.0.22631 via test.",
+    )
+    resolved_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)
+    captured = {}
+
+    class _FakeImarisLibFactory:
+        """Fake ImarisLib factory for entrypoint handle resolution."""
+
+        @staticmethod
+        def GetApplication(app_id):
+            """Return the fake current Imaris application.
+
+            Inputs: `app_id`. Output: `resolved_handle`.
+            """
+            assert app_id == 17
+            return resolved_handle
+
+    class _FakeDialog:
+        """Fake browser dialog capturing constructor arguments."""
+
+        def __init__(self, imaris, imaris_id=None):
+            """Capture the Imaris handle and id passed to the dialog.
+
+            Inputs: `imaris`, `imaris_id`. Output: None.
+            """
+            captured["imaris"] = imaris
+            captured["imaris_id"] = imaris_id
+
+        @staticmethod
+        def show():
+            """Do not open Tk during this entrypoint contract test.
+
+            Inputs: none. Output: None.
+            """
+
+    monkeypatch.setitem(
+        sys.modules,
+        "ImarisLib",
+        types.SimpleNamespace(ImarisLib=_FakeImarisLibFactory),
+    )
+    monkeypatch.setattr(module, "_windows_platform_status", lambda: supported)
+    monkeypatch.setattr(module, "_xt_log_path", lambda: str(tmp_path / "xt.log"))
+    monkeypatch.setattr(module, "_install_xt_console_interrupt_guard", lambda: None)
+    monkeypatch.setattr(module, "_restore_xt_console_interrupt_guard", _noop)
+    monkeypatch.setattr(
+        module, "_connector_settings_env_path", lambda: tmp_path / "settings.env"
+    )
+    monkeypatch.setattr(
+        module, "_prepare_connector_settings_for_current_version", _noop
+    )
+    monkeypatch.setattr(
+        module, "_load_connector_show_log_preference", lambda _path: True
+    )
+    monkeypatch.setattr(module, "_configure_xt_console_visibility", _noop)
+    monkeypatch.setattr(module, "_set_process_window_title", _noop)
+    monkeypatch.setattr(module, "_xt_write_log", _noop)
+    monkeypatch.setattr(module, "_ensure_tk_loaded", _noop)
+    monkeypatch.setattr(module, "_log_imaris_xt_diagnostics", _noop)
+    monkeypatch.setattr(
+        module,
+        "_prepare_imaris_xt_environment",
+        lambda: {"paths": [], "dll_dirs": []},
+    )
+    monkeypatch.setattr(module, "OMEROBrowserDialog", _FakeDialog)
+
+    module.XTOmeroConnector("17")
+
+    assert module._native_imaris_bridge_enabled() is False
+    assert captured == {"imaris": resolved_handle, "imaris_id": "17"}
 
 
 def test_is_ims_file_accepts_only_existing_regular_hdf5_files(tmp_path):
