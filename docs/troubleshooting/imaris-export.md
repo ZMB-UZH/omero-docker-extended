@@ -13,7 +13,7 @@ repository. Use it before attempting speculative code changes.
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
 | IMS export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final IMS handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
-| Selected Image export downloads but Imaris shows only a transient scene object or no pixels | Selected-image export was submitted through the XT file-open bridge instead of the Imaris executable/import path | The `Imaris` converter must submit the tracked OMERO.web OME-TIFF export to discovered `Imaris.exe`, matching a manual drag/drop onto the Imaris icon |
+| Selected Image export downloads but Imaris shows only a transient scene object or no pixels | Selected-image export was submitted through the XT file-open bridge or the main Imaris executable instead of Imaris File Converter | The `Imaris` converter must submit the tracked OMERO.web OME-TIFF export to discovered `ImarisFileConverter.exe`, matching a manual drag/drop onto the Imaris icon |
 | A `Volume` object appears in Imaris but the exported IMS is not visibly opened | File-open returned or changed scene state without proving the downloaded IMS became visible | Treat this as failed handoff; inspect log lines after `Using Imaris handle type=...` for current-file or visible-dataset verification |
 
 ## Failure History Captured Here
@@ -218,12 +218,15 @@ Operational rule:
   the current `omero_imaris_connector_v1` flag. Older or standard OMERO.web
   deployments that do not return the explicit capabilities JSON are treated as
   not OMERO-capable. `Imaris` remains independent of that custom endpoint and is
-  shown when an installed `Imaris.exe` is discoverable through the environment,
-  Windows App Paths registry, or standard Imaris vendor installation roots.
-  Converter detection does not run native IcePy bridge probing. For `OMERO`,
+  shown when an installed `ImarisFileConverter.exe` is discoverable next to the
+  cached or discovered `Imaris.exe`. The first startup records the discovered
+  `Imaris.exe` path in `.imaris_omero_connector/settings.env` as `IMARIS_EXE`;
+  later startups check that saved path first and avoid registry/vendor-directory
+  scans when it still points to an existing executable. Converter detection does
+  not run native IcePy bridge probing. For `OMERO`,
   the pre-download readiness check still verifies a live same-session IMS open
   path before server-side conversion starts. For `Imaris`, the pre-download
-  readiness check verifies only that the installed Imaris executable can be
+  readiness check verifies only that the installed Imaris File Converter can be
   discovered before requesting the standard selected Image export.
 - OMERO-generated IMS handoff success is stricter than a successful
   `FileOpen`, `OpenFile`, or `LoadFile` method return. The connector accepts an
@@ -236,7 +239,7 @@ Operational rule:
   is not enough for IMS success. The `Imaris` converter does not download
   original/raw files; it submits only connector-tracked selected Image exports
   from the standard OMERO.web Image export endpoint to the discovered
-  `Imaris.exe`.
+  `ImarisFileConverter.exe`.
 - the local path field is the source of truth for loading images into Imaris
   and for the first folder-export chooser location hint only. For
   `Load images into Imaris`, downloaded IMS files and selected Image exports are
@@ -277,8 +280,9 @@ Operational rule:
   behavior is reserved for a later connector iteration. After a verified
   connection, the connector writes `.imaris_omero_connector/settings.env` under
   the detected user home with only host, port, username, HTTPS state, local
-  path, selected converter, autosave state, show-log state, and search-function
-  state, plus the connector version. The version value is refreshed silently on
+  path, selected converter, autosave state, show-log state, search-function
+  state, the cached `IMARIS_EXE` path when discovered, and the connector
+  version. The version value is refreshed silently on
   every standalone XT startup from the same version value shown by the info
   dialog. If an existing `settings.env` has no matching current version, the
   connector archives it as `settings.env.old` and creates a fresh settings
@@ -308,21 +312,24 @@ Operational rule:
 - the connection-panel info button opens a small modal dialog with the connector
   version, author, and as-is disclaimer. The dialog blocks interaction with the
   main connector window until closed.
-- `Imaris` is shown only when an installed `Imaris.exe` can be discovered. This
-  mode downloads the standard OMERO.web export for the selected OMERO Image ID
-  and submits that tracked export to `Imaris.exe`, matching the observed manual
-  drag/drop behavior. It must not use `ImarisLib.FileOpen`, `OpenFile`,
-  `LoadFile`, Windows file associations, archived originals, or source-file
-  parsers for this selected-image path.
+- `Imaris` is shown only when an installed `ImarisFileConverter.exe` can be
+  discovered from the cached or discovered Imaris installation path. This mode
+  downloads the standard OMERO.web export for the selected OMERO Image ID and
+  submits that tracked export to `ImarisFileConverter.exe`, matching the
+  observed manual drag/drop behavior without opening a new full Imaris window.
+  It must not use the main `Imaris.exe` as a fallback, `ImarisLib.FileOpen`,
+  `OpenFile`, `LoadFile`, Windows file associations, archived originals, or
+  source-file parsers for this selected-image path.
 - for selected Image exports, success means the operating system accepted the
-  `Imaris.exe` launch request with the connector-tracked OMERO.web export as
-  the file argument. This is intentionally different from the IMS
+  `ImarisFileConverter.exe` launch request with the connector-tracked OMERO.web
+  export as the file argument. This is intentionally different from the IMS
   same-session-verification contract.
 - when multiple images are selected, the connector must finish every selected
   Image export or server-side IMS export before handing the prepared files to
   Imaris. The `OMERO` path then opens IMS files through the same-session
-  file-open API. The `Imaris` path submits each tracked selected Image export to
-  the discovered Imaris executable.
+  file-open API. The `Imaris` path submits all tracked selected Image exports
+  to one discovered Imaris File Converter launch so the converter receives the
+  selection as one batch.
 - the standalone browser refresh action re-queries projects, datasets, and
   images without keeping stale image selections. If the selected dataset no
   longer exists, datasets remain visible for the selected project and images are

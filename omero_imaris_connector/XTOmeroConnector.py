@@ -260,6 +260,7 @@ CONNECTOR_SETTINGS_SHOW_LOG_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "SHOW_LOG"
 CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY = (
     CONNECTOR_SETTINGS_KEY_PREFIX + "SEARCH_FUNCTION"
 )
+CONNECTOR_SETTINGS_IMARIS_EXE_KEY = "IMARIS_EXE"
 CONNECTOR_SETTINGS_VERSION_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "VERSION"
 CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_HOST_KEY,
@@ -271,6 +272,7 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
     CONNECTOR_SETTINGS_SHOW_LOG_KEY,
     CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY,
+    CONNECTOR_SETTINGS_IMARIS_EXE_KEY,
     CONNECTOR_SETTINGS_VERSION_KEY,
 )
 _ROUNDED_BUTTON_OPTION_ALIASES = {
@@ -1800,6 +1802,55 @@ def _filled_connector_setting(settings, key):
     return text if text.strip() else ""
 
 
+def _is_existing_supported_imaris_executable_path(path_value):
+    """Return whether `path_value` is an existing supported Imaris.exe path.
+
+    Inputs: `path_value`. Output: bool.
+    """
+    candidate = _existing_regular_file_path(path_value)
+    if candidate is None:
+        return False
+    if candidate.name.lower() != "imaris.exe":
+        return False
+    return _is_supported_imaris_install_path(candidate)
+
+
+def _connector_settings_imaris_executable_candidate(settings_path=None):
+    """Return the saved Imaris.exe path from connector settings when valid.
+
+    Inputs: optional `settings_path`. Output: path text or None.
+    """
+    settings = _load_connector_settings(settings_path)
+    candidate = _filled_connector_setting(settings, CONNECTOR_SETTINGS_IMARIS_EXE_KEY)
+    if _is_existing_supported_imaris_executable_path(candidate):
+        return str(_coerce_path(candidate))
+    return None
+
+
+def _ensure_connector_settings_imaris_executable(settings_path=None):
+    """Persist the discovered Imaris.exe path in connector settings when missing.
+
+    Inputs: optional `settings_path`. Output: path text or empty string.
+    """
+    path = (
+        Path(settings_path)
+        if settings_path is not None
+        else _connector_settings_env_path()
+    )
+    cached = _connector_settings_imaris_executable_candidate(path)
+    if cached:
+        return cached
+
+    discovered = _find_imaris_executable(settings_path=path)
+    if not discovered:
+        return ""
+
+    settings = _load_connector_settings(path)
+    settings[CONNECTOR_SETTINGS_IMARIS_EXE_KEY] = discovered
+    _atomic_write_connector_settings(settings, path)
+    return discovered
+
+
 def _connector_settings_output_lines(existing_lines, settings):
     """Return rewritten connector settings lines with known keys normalized.
 
@@ -1827,13 +1878,24 @@ def _connector_settings_output_lines(existing_lines, settings):
     return output
 
 
+def _close_file_descriptor_suppressing_os_error(descriptor):
+    """Close an OS file descriptor while suppressing cleanup errors.
+
+    Inputs: `descriptor` optional int file descriptor. Output: None.
+    """
+    if descriptor is None:
+        return
+    with contextlib.suppress(OSError):
+        os.close(descriptor)
+
+
 def _atomic_write_connector_settings(settings, settings_path=None):
     """Atomically write connector settings without storing credentials.
 
     Inputs: `settings`, optional `settings_path`. Output: None. Raises: OSError.
     """
-    descriptor = None
-    temp_path = None
+    descriptor: Optional[int] = None
+    temp_path: Optional[Path] = None
     try:
         target = (
             Path(settings_path)
@@ -1857,15 +1919,16 @@ def _atomic_write_connector_settings(settings, settings_path=None):
             "\n".join(_connector_settings_output_lines(existing_lines, normalized))
             + "\n"
         )
-        temp_path = target_dir / f".{target.name}.{uuid.uuid4().hex}.tmp"
+        temp_path_for_write = target_dir / f".{target.name}.{uuid.uuid4().hex}.tmp"
+        temp_path = temp_path_for_write
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-        descriptor = os.open(os.fspath(temp_path), flags, PRIVATE_FILE_MODE)
+        descriptor = os.open(os.fspath(temp_path_for_write), flags, PRIVATE_FILE_MODE)
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             descriptor = None
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(os.fspath(temp_path), os.fspath(target))
+        os.replace(os.fspath(temp_path_for_write), os.fspath(target))
         with contextlib.suppress(OSError):
             os.chmod(os.fspath(target), PRIVATE_FILE_MODE)
     except (OSError, TypeError, ValueError) as exc:
@@ -1874,9 +1937,7 @@ def _atomic_write_connector_settings(settings, settings_path=None):
         )
         raise
     finally:
-        if descriptor is not None:
-            with contextlib.suppress(OSError):
-                os.close(descriptor)
+        _close_file_descriptor_suppressing_os_error(descriptor)
         with contextlib.suppress(OSError):
             if temp_path is not None and temp_path.exists():
                 temp_path.unlink()
@@ -4129,15 +4190,33 @@ def _iter_imaris_vendor_executable_candidates():
                 yield candidate
 
 
-def _iter_imaris_executable_candidates():
+def _iter_imaris_home_executable_candidates():
+    """Yield Imaris.exe candidates from the configured Imaris install root.
+
+    Inputs: none. Output: yielded path strings.
+    """
+    env_root = os.environ.get("IMARIS_HOME", "").strip()
+    if not env_root:
+        return
+    yield os.path.join(os.path.normpath(env_root), "Imaris.exe")
+
+
+def _iter_imaris_executable_candidates(settings_path=None):
     """Yield plausible Imaris executable paths without requiring admin access.
 
-    Inputs: none. Output: yielded values.
+    Inputs: optional `settings_path`. Output: yielded values.
     """
     seen: Set[str] = set()
+    settings_candidate = _connector_settings_imaris_executable_candidate(settings_path)
+    if settings_candidate:
+        yield from _iter_unique_path_candidates((settings_candidate,), seen)
     env_candidate = os.environ.get("IMARIS_EXE", "").strip()
     if env_candidate:
         yield from _iter_unique_path_candidates((env_candidate,), seen)
+    yield from _iter_unique_path_candidates(
+        _iter_imaris_home_executable_candidates(),
+        seen,
+    )
     yield from _iter_unique_path_candidates(
         _iter_imaris_registry_executable_candidates(_import_winreg_module()),
         seen,
@@ -4148,48 +4227,96 @@ def _iter_imaris_executable_candidates():
     )
 
 
-def _find_imaris_executable():
+def _find_imaris_executable(settings_path=None):
     """Return a launchable Imaris.exe path if present.
+
+    Inputs: optional `settings_path`. Output: `candidate` or None.
+    """
+    if os.name != "nt":
+        return None
+    for candidate in _iter_imaris_executable_candidates(settings_path):
+        if _is_existing_supported_imaris_executable_path(candidate):
+            return candidate
+    return None
+
+
+def _imaris_file_converter_executable_path(imaris_executable):
+    """Return the sibling Imaris File Converter executable path.
+
+    Inputs: `imaris_executable`. Output: path text or None.
+    """
+    candidate = _existing_regular_file_path(imaris_executable)
+    if candidate is None:
+        return None
+    converter = candidate.with_name("ImarisFileConverter.exe")
+    if converter.is_file() and _is_supported_imaris_install_path(converter):
+        return str(converter)
+    return None
+
+
+def _iter_imaris_file_converter_executable_candidates():
+    """Yield Imaris File Converter executable candidates.
+
+    Inputs: none. Output: yielded path strings.
+    """
+    seen: Set[str] = set()
+    imaris_executable = _find_imaris_executable()
+    if imaris_executable:
+        converter = _imaris_file_converter_executable_path(imaris_executable)
+        if converter:
+            yield from _iter_unique_path_candidates((converter,), seen)
+    for install_root in _iter_imaris_install_roots():
+        converter = os.path.join(install_root, "ImarisFileConverter.exe")
+        yield from _iter_unique_path_candidates((converter,), seen)
+
+
+def _find_imaris_file_converter_executable():
+    """Return a launchable ImarisFileConverter.exe path if present.
 
     Inputs: none. Output: `candidate` or None.
     """
     if os.name != "nt":
         return None
-    for candidate in _iter_imaris_executable_candidates():
-        if os.path.isfile(candidate) and _is_supported_imaris_install_path(candidate):
-            return candidate
+    for candidate in _iter_imaris_file_converter_executable_candidates():
+        path = _existing_regular_file_path(candidate)
+        if path is not None and path.name.lower() == "imarisfileconverter.exe":
+            if _is_supported_imaris_install_path(path):
+                return str(path)
     return None
 
 
-def _submit_file_to_imaris_executable(file_path):
-    """Submit one existing file to the installed Imaris executable.
+def _submit_files_to_imaris_file_converter(file_paths):
+    """Submit existing files to the installed Imaris File Converter.
 
-    Inputs: `file_path`. Output: bool indicating whether the GUI launch request
-    was accepted by the OS.
+    Inputs: `file_paths`. Output: bool indicating whether the GUI launch
+    request was accepted by the OS.
     """
-    candidate = _existing_regular_file_path(file_path)
-    if candidate is None:
-        _xt_debug("Imaris executable handoff skipped: file does not exist")
+    candidates = _existing_regular_file_path_list(file_paths)
+    if candidates is None:
+        _xt_debug("Imaris File Converter handoff skipped: file does not exist")
         return False
-    imaris_executable = _find_imaris_executable()
-    if not imaris_executable:
-        _xt_debug("Imaris executable handoff skipped: Imaris.exe was not found")
+    file_converter_executable = _find_imaris_file_converter_executable()
+    if not file_converter_executable:
+        _xt_debug(
+            "Imaris File Converter handoff skipped: "
+            "ImarisFileConverter.exe was not found"
+        )
         return False
     try:
         subprocess.Popen(
-            [imaris_executable, str(candidate)],
-            cwd=os.path.dirname(imaris_executable) or None,
+            [file_converter_executable] + [str(candidate) for candidate in candidates],
+            cwd=os.path.dirname(file_converter_executable) or None,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=True,
         )
     except Exception as exc:
-        _xt_debug("Imaris executable handoff failed: " f"{type(exc).__name__}: {exc}")
+        _xt_debug(f"Imaris File Converter handoff failed: {type(exc).__name__}: {exc}")
         return False
     _xt_debug(
-        "Imaris converter: submitted selected Image export to installed "
-        "Imaris executable"
+        "Imaris converter: submitted selected Image export"
+        f"{'s' if len(candidates) != 1 else ''} to Imaris File Converter"
     )
     return True
 
@@ -4208,7 +4335,7 @@ def submit_selected_image_export_to_imaris_converter(file_path):
             "Selected-image export handoff skipped: file is not a readable TIFF file"
         )
         return False
-    return _submit_file_to_imaris_executable(candidate)
+    return _submit_files_to_imaris_file_converter([candidate])
 
 
 def submit_selected_image_exports_to_imaris_converter(file_paths):
@@ -4239,10 +4366,7 @@ def submit_selected_image_exports_to_imaris_converter(file_paths):
             )
             return False
 
-    for file_path in file_paths:
-        if not _submit_file_to_imaris_executable(file_path):
-            return False
-    return True
+    return _submit_files_to_imaris_file_converter(file_paths)
 
 
 def _existing_regular_file_path_list(file_paths):
@@ -5080,7 +5204,9 @@ def _collect_imaris_xt_diagnostics():
     Inputs: none. Output: dict.
     """
     native_bridge_enabled = _native_imaris_bridge_enabled()
+    saved_settings = _load_connector_settings()
     exe_path = _find_imaris_executable()
+    file_converter_path = _find_imaris_file_converter_executable()
     install_roots = list(_iter_imaris_install_roots())
     xt_paths = []
     for install_root in install_roots:
@@ -5100,9 +5226,16 @@ def _collect_imaris_xt_diagnostics():
         "python_version": sys.version.replace("\n", " "),
         "python_version_short": python_version_short,
         "imaris_exe_env": os.environ.get("IMARIS_EXE", ""),
+        "imaris_exe_settings": _filled_connector_setting(
+            saved_settings, CONNECTOR_SETTINGS_IMARIS_EXE_KEY
+        ),
         "imaris_home_env": os.environ.get("IMARIS_HOME", ""),
         "imaris_executable": exe_path or "",
         "imaris_executable_exists": _safe_path_exists(exe_path),
+        "imaris_file_converter": file_converter_path or "",
+        "imaris_file_converter_exists": (
+            bool(file_converter_path) and _safe_path_exists(file_converter_path)
+        ),
         "install_roots": install_roots,
         "xt_candidate_paths": [
             {"path": candidate, "exists": _safe_path_exists(candidate)}
@@ -5134,12 +5267,18 @@ def _log_imaris_xt_diagnostics():
         f"python_executable={diagnostics['python_executable']} "
         f"python_version={diagnostics['python_version_short']} "
         f"imaris_exe={diagnostics['imaris_executable'] or '<not found>'} "
-        f"imaris_exe_exists={diagnostics['imaris_executable_exists']}"
+        f"imaris_exe_exists={diagnostics['imaris_executable_exists']} "
+        "imaris_file_converter="
+        f"{diagnostics['imaris_file_converter'] or '<not found>'} "
+        "imaris_file_converter_exists="
+        f"{diagnostics['imaris_file_converter_exists']}"
     )
     _xt_debug(
         "XT diagnostics env: "
         f"IMARIS_HOME={diagnostics['imaris_home_env'] or '<unset>'} "
-        f"IMARIS_EXE={diagnostics['imaris_exe_env'] or '<unset>'}"
+        f"IMARIS_EXE={diagnostics['imaris_exe_env'] or '<unset>'} "
+        "settings_IMARIS_EXE="
+        f"{diagnostics['imaris_exe_settings'] or '<unset>'}"
     )
     for install_root in diagnostics["install_roots"]:
         _xt_debug(f"XT diagnostics install_root={install_root}")
@@ -6912,6 +7051,7 @@ class OMEROBrowserDialog:
         try:
             self._settings_file_path = _connector_settings_env_path()
             _prepare_connector_settings_for_current_version(self._settings_file_path)
+            _ensure_connector_settings_imaris_executable(self._settings_file_path)
             self._saved_settings = _load_connector_settings(self._settings_file_path)
         except OSError as exc:
             self._autosave_settings_write_error = str(exc)
@@ -7995,6 +8135,28 @@ class OMEROBrowserDialog:
         https_variable = getattr(self, "https_var", None)
         https_getter: Any = getattr(https_variable, "get", None)
         https_value = https_getter() if callable(https_getter) else False
+        imaris_executable = _filled_connector_setting(
+            getattr(self, "_saved_settings", {}),
+            CONNECTOR_SETTINGS_IMARIS_EXE_KEY,
+        )
+        if not _is_existing_supported_imaris_executable_path(imaris_executable):
+            settings_file_path = getattr(self, "_settings_file_path", None)
+            try:
+                settings_target = (
+                    Path(settings_file_path) if settings_file_path is not None else None
+                )
+            except TypeError:
+                settings_target = None
+            if (
+                settings_target is not None
+                and not _connector_settings_target_safety_error(settings_target)
+            ):
+                imaris_executable = (
+                    _connector_settings_imaris_executable_candidate(settings_target)
+                    or ""
+                )
+            else:
+                imaris_executable = ""
         return {
             CONNECTOR_SETTINGS_HOST_KEY: self._entry_text("host_entry").strip(),
             CONNECTOR_SETTINGS_PORT_KEY: self._entry_text("port_entry").strip(),
@@ -8013,6 +8175,7 @@ class OMEROBrowserDialog:
             CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: _connector_settings_bool_text(
                 self._search_function_enabled()
             ),
+            CONNECTOR_SETTINGS_IMARIS_EXE_KEY: imaris_executable,
             CONNECTOR_SETTINGS_VERSION_KEY: _current_connector_settings_version(),
         }
 
@@ -8905,7 +9068,7 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: bool.
         """
-        return _find_imaris_executable() is not None
+        return _find_imaris_file_converter_executable() is not None
 
     def _detect_folder_export_after_connection(self, client=None):
         """Detect folder export availability after connection.
@@ -9464,7 +9627,10 @@ class OMEROBrowserDialog:
             return False
 
         if selected_image_export:
-            self._set_status("Submitting selected Image export to Imaris...", "#fff3cd")
+            self._set_status(
+                "Submitting selected Image export to Imaris File Converter...",
+                "#fff3cd",
+            )
             return submit_selected_image_export_to_imaris_converter(downloaded_file)
 
         self._set_status("Opening IMS in Imaris...", "#fff3cd")
@@ -9569,7 +9735,8 @@ class OMEROBrowserDialog:
 
         if selected_image_export:
             self._set_status(
-                "Submitting selected Image exports to Imaris...", "#fff3cd"
+                "Submitting selected Image exports to Imaris File Converter...",
+                "#fff3cd",
             )
             return submit_selected_image_exports_to_imaris_converter(downloaded_files)
 
@@ -9913,8 +10080,8 @@ class OMEROBrowserDialog:
         if self._has_imaris_converter_handoff_target():
             return True
         _xt_debug(
-            "Imaris converter handoff is unavailable before export: Imaris.exe "
-            "could not be discovered"
+            "Imaris converter handoff is unavailable before export: "
+            "ImarisFileConverter.exe could not be discovered"
         )
         return False
 
@@ -10990,8 +11157,11 @@ class OMEROBrowserDialog:
             raise RuntimeError("Selected-image export is missing after download.")
         if not is_tiff_file(candidate):
             raise RuntimeError("Selected-image export is not a readable TIFF file.")
-        tracked = getattr(self, "_selected_image_export_files", None)
-        if not isinstance(tracked, set):
+        tracked_candidate = getattr(self, "_selected_image_export_files", None)
+        tracked: Set[Any]
+        if isinstance(tracked_candidate, set):
+            tracked = tracked_candidate
+        else:
             tracked = set()
             self._selected_image_export_files = tracked
         tracked.add(self._selected_image_export_key(candidate))
@@ -11002,7 +11172,10 @@ class OMEROBrowserDialog:
 
         Inputs: `file_path`. Output: bool.
         """
-        tracked = getattr(self, "_selected_image_export_files", set())
+        tracked_candidate = getattr(self, "_selected_image_export_files", None)
+        tracked: Set[Any] = (
+            tracked_candidate if isinstance(tracked_candidate, set) else set()
+        )
         key = self._selected_image_export_key(file_path)
         return bool(key and key in tracked and is_tiff_file(file_path))
 
@@ -11171,8 +11344,8 @@ class OMEROBrowserDialog:
             ):
                 raise RuntimeError(
                     "Cannot submit selected Image exports to Imaris because "
-                    "Imaris.exe could not be discovered. Download/export "
-                    "was not started."
+                    "ImarisFileConverter.exe could not be discovered. "
+                    "Download/export was not started."
                 )
 
             download_dir = self.export_dir
@@ -11201,10 +11374,15 @@ class OMEROBrowserDialog:
                 )
                 require_ims = False
                 selected_image_export = True
-                success_status = "Submitted selected Image export to Imaris"
-                success_message = "Selected Image export submitted to Imaris."
+                success_status = (
+                    "Submitted selected Image export to Imaris File Converter"
+                )
+                success_message = (
+                    "Selected Image export submitted to Imaris File Converter."
+                )
                 failure_message = (
-                    "Failed to submit the selected Image export to Imaris."
+                    "Failed to submit the selected Image export to "
+                    "Imaris File Converter."
                 )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -11296,8 +11474,8 @@ class OMEROBrowserDialog:
                 if not self._ensure_imaris_converter_handoff_ready_before_export():
                     raise RuntimeError(
                         "Cannot submit selected Image exports to Imaris because "
-                        "Imaris.exe could not be discovered. Download/export "
-                        "was not started."
+                        "ImarisFileConverter.exe could not be discovered. "
+                        "Download/export was not started."
                     )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -11380,13 +11558,16 @@ class OMEROBrowserDialog:
                 )
                 failure_message = "Imaris did not accept the prepared IMS file batch."
             else:
-                success_status = "Submitted selected Image exports to Imaris"
+                success_status = (
+                    "Submitted selected Image exports to Imaris File Converter"
+                )
                 success_message = (
-                    "All selected Image exports were submitted to Imaris "
-                    "after every download completed."
+                    "All selected Image exports were submitted to "
+                    "Imaris File Converter after every download completed."
                 )
                 failure_message = (
-                    "Imaris did not accept the selected Image export batch handoff."
+                    "Imaris File Converter did not accept the selected Image "
+                    "export batch handoff."
                 )
 
             if success:
@@ -11572,9 +11753,10 @@ def XTOmeroConnector(aImarisId):
     try:
         settings_path = _connector_settings_env_path()
         _prepare_connector_settings_for_current_version(settings_path)
+        _ensure_connector_settings_imaris_executable(settings_path)
     except OSError as exc:
         _log_connector_settings_event(
-            f"Connector settings version preparation failed: {type(exc).__name__}"
+            f"Connector settings startup preparation failed: {type(exc).__name__}"
         )
     _configure_xt_console_visibility(_load_connector_show_log_preference(settings_path))
     _set_process_window_title("OMERO Connector")
