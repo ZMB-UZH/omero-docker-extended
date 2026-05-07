@@ -165,7 +165,7 @@ Operational observability for platform administrators:
 - Server diagnostics: platform end-to-end health scripts, database connectivity tests.
 - Access: restricted to OMERO root users.
 
-### Imaris Connector Plugin (`omeroweb_imaris_connector`)
+### Imaris Connector Plugin (`omero_imaris_connector`)
 
 Asynchronous OMERO-to-Imaris export:
 

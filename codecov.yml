@@ -13,6 +13,7 @@ ignore:
   - "docs/"
   - "scripts/"
   - "env/"
+  - "omero_imaris_connector/XTOmeroConnector.py"
   - "**/templates/"
   - "**/static/"
 
@@ -47,11 +48,11 @@ coverage:
           - '!.*/tests/.*'
         threshold: 1%
       imaris-connector:
-        target: auto
+        target: 100%
         paths:
-          - 'omeroweb_imaris_connector/'
+          - 'omero_imaris_connector/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       tools-plugin:
         target: auto
         paths:

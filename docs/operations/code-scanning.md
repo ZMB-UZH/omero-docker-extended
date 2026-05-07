@@ -91,20 +91,25 @@ roots only:
 - `omero_plugin_common/`
 - `omero_web_zarr/`
 - `omeroweb_admin_tools/`
-- `omeroweb_imaris_connector/`
+- `omero_imaris_connector/`
 - `omeroweb_import/`
 - `omeroweb_omp_plugin/`
 - `omeroweb_tools/`
 
-The root `tests/` suite still runs under coverage because it exercises scripts,
-startup helpers, workflow contracts, docs checks, and other repository
-boundaries, but those files are not counted in the Codecov denominator unless
-they import one of the package roots above. `codecov.yml` intentionally ignores
-`tools/`, `startup/`, `monitoring/`, `docker/`, `docs/`, `scripts/`, `env/`,
-templates, static assets, `conftest.py`, and test files. That is why Codecov's
-line total is smaller than the repository's full Python footprint. Broaden the
-denominator only as a deliberate policy change, with matching `.coveragerc`,
-`codecov.yml`, component-status, and test updates.
+The standalone Imaris XT client
+`omero_imaris_connector/XTOmeroConnector.py` is scanned and tested by the root
+test suite, but it is excluded from the Codecov denominator because it is a
+host-side entrypoint rather than the server-side Django/Celery package measured
+by the `imaris-connector` component. The root `tests/` suite still runs under
+coverage because it exercises scripts, startup helpers, workflow contracts,
+docs checks, and other repository boundaries, but those files are not counted
+in the Codecov denominator unless they import one of the package roots above.
+`codecov.yml` intentionally ignores `tools/`, `startup/`, `monitoring/`,
+`docker/`, `docs/`, `scripts/`, `env/`, templates, static assets,
+`conftest.py`, `omero_imaris_connector/XTOmeroConnector.py`, and test files.
+That is why the Codecov line total is smaller than the repository's full Python footprint.
+Broaden the denominator only as a deliberate policy change, with
+matching `.coveragerc`, `codecov.yml`, component-status, and test updates.
 
 ## Active scanners
 
@@ -276,7 +281,7 @@ At the 2026-04-27 refresh after the successful default-branch security
 workflow, the 4 remaining GitHub alerts were repository-level Scorecard findings with
 no file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
 `BranchProtectionID`. The previous CodeQL file-level findings in
-`XTOmeroConnector.py` and the transient Semgrep transport findings from the
+`omero_imaris_connector/XTOmeroConnector.py` and the transient Semgrep transport findings from the
 first remediation push were no longer open.
 
 The same 2026-04-27 DeepSource refresh confirmed the `SH-3015` shell

@@ -487,7 +487,7 @@ RUN set -euo pipefail; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero
 
-COPY omeroweb_imaris_connector/omero_scripts/IMS_Export.py /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py
+COPY omero_imaris_connector/omero_scripts/IMS_Export.py /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py
 RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py; \
     chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py

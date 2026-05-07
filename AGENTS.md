@@ -127,10 +127,10 @@ Do not start coding until you can name the helper boundary you will harden and t
 ## Domain roots
 
 - Infrastructure: `docker-compose.yml`, `docker/`, `startup/`, `installation/`, `maintenance/`, `env/*_example.env`, `installation_paths_example.env`
-- Web plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, `omeroweb_tools/`, `omero_web_zarr/`
+- Web plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omero_imaris_connector/`, `omeroweb_tools/`, `omero_web_zarr/`
 - Shared library: `omero_plugin_common/`
 - Monitoring: `monitoring/`, `docs/operations/monitoring.md`
-- Tests: `tests/`, `omero_plugin_common/tests/`, `omeroweb_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, `omeroweb_import/tests/`, `omeroweb_tools/tests/`, `omero_web_zarr/tests/`
+- Tests: `tests/`, `omero_plugin_common/tests/`, `omero_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, `omeroweb_import/tests/`, `omeroweb_tools/tests/`, `omero_web_zarr/tests/`
 
 ## Topology facts
 
@@ -154,7 +154,7 @@ python3 tools/lint_docs_structure.py
 python3 -m unittest -v tests/test_lint_docs_structure.py
 python3 -m pytest tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omero_imaris_connector/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error

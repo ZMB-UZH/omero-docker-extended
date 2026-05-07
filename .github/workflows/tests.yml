@@ -61,7 +61,7 @@ jobs:
 
           run_suite .coverage.root tests/ tests/
           run_suite .coverage.common omero_plugin_common/tests/ omero_plugin_common/tests/
-          run_suite .coverage.imaris omeroweb_imaris_connector/tests/ omeroweb_imaris_connector/tests/
+          run_suite .coverage.imaris omero_imaris_connector/tests/ omero_imaris_connector/tests/
           run_suite .coverage.admin omeroweb_admin_tools/tests/ omeroweb_admin_tools/tests/
           run_suite .coverage.omp omeroweb_omp_plugin/tests/ omeroweb_omp_plugin/tests/
           run_suite .coverage.import omeroweb_import/tests/ omeroweb_import/tests/

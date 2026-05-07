@@ -98,7 +98,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── omeroweb_import/                   # Import plugin
 ├── omeroweb_tools/                    # User-facing tools plugin (Enhanced search)
 ├── omeroweb_admin_tools/              # Admin observability plugin
-├── omeroweb_imaris_connector/         # Imaris export plugin
+├── omero_imaris_connector/            # Imaris export plugin + XT connector
 ├── monitoring/                        # Observability stack configuration
 │   ├── prometheus/prometheus.yml      #   Scrape configs + blackbox probes
 │   ├── grafana/                       #   Dashboard JSON + provisioning
@@ -117,7 +117,6 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── docker_debian_13_install_script
 │   ├── extra_packages_debian_13_install_script
 │   └── docker_image_analysis.sh
-├── XTOmeroConnector.py                # Standalone Tkinter GUI: Imaris <-> OMERO transfer
 ├── supervisord.conf                   # Process manager: OMERO.web + co-located Celery workers
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── installation_paths_example.env     # Template: all filesystem path definitions
@@ -215,7 +214,7 @@ User-facing utilities that share the Admin Tools layout pattern without admin-on
 - Per-user opt-in metadata indexing with automatic background sync for that user's images
 - Regular-user access only; root is intentionally blocked from running searches and refreshes
 
-### Imaris Connector Plugin (`omeroweb_imaris_connector`)
+### Imaris Connector Plugin (`omero_imaris_connector`)
 
 OMERO image export to Imaris (.ims) format.
 

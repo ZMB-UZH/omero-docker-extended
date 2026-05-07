@@ -236,7 +236,7 @@ Useful commands (host):
 ## External client workflow
 
 The same job lifecycle can be driven by external clients such as
-`XTOmeroConnector.py`:
+`omero_imaris_connector/XTOmeroConnector.py`:
 
 1. `POST /omeroweb_import/start/` with `files`, `compatibility_enabled`, and
    `dataset_name_override`.

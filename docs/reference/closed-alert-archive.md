@@ -66,7 +66,7 @@
 | `trivy` | `DS002` | 15 | high | `docker/path-usage-exporter.Dockerfile` |
 | `codeql` | `py/unused-local-variable` | 14 | note | `omeroweb_import/views/core_functions.py` |
 | `trivy` | `DS-0002` | 12 | high | `docker/redis-sysctl-init.Dockerfile` |
-| `codeql` | `py/unexpected-raise-in-special-method` | 11 | note | `omeroweb_imaris_connector/tests/test_imaris_service_additional.py` |
+| `codeql` | `py/unexpected-raise-in-special-method` | 11 | note | `omero_imaris_connector/tests/test_imaris_service_additional.py` |
 | `codeql` | `js/syntax-error` | 11 | note | `omero_web_zarr/templates/webclient/annotations/includes/toolbar.html` |
 | `trivy` | `DS-0026` | 11 | low | `docker/redis-sysctl-init.Dockerfile` |
 | `bandit` | `B310` | 10 | warning | `omeroweb_admin_tools/views/index_view.py` |

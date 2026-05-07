@@ -311,7 +311,7 @@ ${OMERO_TMP_PATH}/
 │   └── compat-check/ # transient OMERO CLI isolation dirs
 ├── omeroweb-omp-plugin/
 │   └── jobs/         # filename metadata job state
-└── omeroweb-imaris-connector/
+└── omero-imaris-connector/
     └── jobs/         # Imaris export process state
 
 # server bootstrap temp namespace (separate from plugin namespaces)

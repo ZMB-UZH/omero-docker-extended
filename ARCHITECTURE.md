@@ -14,8 +14,8 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 ├─────────────────────────────────────────────────────────────────┤
 │  3. Application layer                                           │
 │     omeroweb_omp_plugin/  omeroweb_import/  omeroweb_tools/    │
-│     omeroweb_admin_tools/  omeroweb_imaris_connector/          │
-│     omero_plugin_common/  XTOmeroConnector.py                  │
+│     omeroweb_admin_tools/  omero_imaris_connector/            │
+│     omero_plugin_common/                                      │
 │     Plugin business logic, OMERO API integration, UI           │
 ├─────────────────────────────────────────────────────────────────┤
 │  2. Runtime bootstrap layer                                     │
@@ -68,7 +68,7 @@ The `omeroweb` container runs four processes via supervisord:
 
 ### 3. Application layer
 
-**Files:** `omeroweb_*`, `omero_plugin_common/`, `XTOmeroConnector.py`
+**Files:** `omeroweb_*`, `omero_imaris_connector/`, `omero_plugin_common/`
 
 Five Django app plugins register in OMERO.web via `CONFIG_omero_web_apps`:
 
@@ -77,7 +77,7 @@ omeroweb_omp_plugin ──────┐
 omeroweb_import ──────────┤
 omeroweb_tools ───────────┤
 omeroweb_admin_tools ─────┼──> omero_plugin_common
-omeroweb_imaris_connector ┘         │
+omero_imaris_connector ┘         │
                                     ├── env_utils (typed env var loading)
                                     ├── logging_utils (gateway noise reduction)
                                     ├── omero_helpers (object data extraction)
@@ -100,7 +100,7 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 - **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 
-**`XTOmeroConnector.py`** is a standalone Tkinter GUI application (not a web plugin) that runs as an ImarisXT extension for bidirectional Imaris-to-OMERO image transfer.
+**`omero_imaris_connector/XTOmeroConnector.py`** is a standalone Tkinter GUI application bundled with the Imaris connector package. It runs as an ImarisXT extension for bidirectional Imaris-to-OMERO image transfer.
 
 ### 4. Operations layer
 
@@ -133,7 +133,7 @@ Database maintenance:
    omeroweb_omp_plugin  omeroweb_import  omeroweb_tools
                             omeroweb_admin_tools
           │
-          └─── omeroweb_imaris_connector
+          └─── omero_imaris_connector
 ```
 
 Rules:

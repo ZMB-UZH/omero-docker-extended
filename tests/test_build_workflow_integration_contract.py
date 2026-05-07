@@ -1289,7 +1289,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "./omeroweb_omp_plugin",
             "./omeroweb_import",
             "./omeroweb_admin_tools",
-            "./omeroweb_imaris_connector",
+            "./omero_imaris_connector",
             "./omeroweb_tools",
             "./omero_web_zarr",
         ]
@@ -1312,7 +1312,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         expected_suites = [
             "tests/",
             "omero_plugin_common/tests/",
-            "omeroweb_imaris_connector/tests/",
+            "omero_imaris_connector/tests/",
             "omeroweb_admin_tools/tests/",
             "omeroweb_omp_plugin/tests/",
             "omeroweb_import/tests/",
@@ -1438,7 +1438,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omeroweb_omp_plugin",
             "omeroweb_import",
             "omeroweb_admin_tools",
-            "omeroweb_imaris_connector",
+            "omero_imaris_connector",
             "omeroweb_tools",
             "omero_web_zarr",
         }
@@ -1461,7 +1461,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omero_plugin_common/",
             "omero_web_zarr/",
             "omeroweb_admin_tools/",
-            "omeroweb_imaris_connector/",
+            "omero_imaris_connector/",
             "omeroweb_import/",
             "omeroweb_omp_plugin/",
             "omeroweb_tools/",

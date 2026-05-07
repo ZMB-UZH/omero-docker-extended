@@ -13,7 +13,7 @@ Use this skill to choose the narrowest correct verification set after a change.
 - `omeroweb_import/` -> `omeroweb_import/tests/`
 - `omeroweb_omp_plugin/` -> `omeroweb_omp_plugin/tests/`
 - `omeroweb_admin_tools/` -> `omeroweb_admin_tools/tests/`
-- `omeroweb_imaris_connector/` -> `omeroweb_imaris_connector/tests/`
+- `omero_imaris_connector/` -> `omero_imaris_connector/tests/`
 - `omeroweb_tools/` -> `omeroweb_tools/tests/`
 - `omero_web_zarr/` -> `omero_web_zarr/tests/`
 - `omero_plugin_common/` -> `omero_plugin_common/tests/`

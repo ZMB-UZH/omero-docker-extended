@@ -432,7 +432,7 @@ def _open_job_service_connection(host, port, secure=None):
         raise RuntimeError("Failed to open OMERO job-service session.") from e
 
 
-@app.task(bind=True, name="omeroweb_imaris_connector.run_ims_export_task")
+@app.task(bind=True, name="omero_imaris_connector.run_ims_export_task")
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     """An IMS export task.
 

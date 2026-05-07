@@ -255,15 +255,15 @@ def _import_modules(monkeypatch: pytest.MonkeyPatch):
     _install_omeroweb_stub()
 
     for module_name in [
-        "omeroweb_imaris_connector.config",
-        "omeroweb_imaris_connector.celery_app",
-        "omeroweb_imaris_connector.imaris_service",
-        "omeroweb_imaris_connector.tasks",
-        "omeroweb_imaris_connector.views",
+        "omero_imaris_connector.config",
+        "omero_imaris_connector.celery_app",
+        "omero_imaris_connector.imaris_service",
+        "omero_imaris_connector.tasks",
+        "omero_imaris_connector.views",
     ]:
         sys.modules.pop(module_name, None)
 
-    from omeroweb_imaris_connector import tasks, views
+    from omero_imaris_connector import tasks, views
 
     return tasks, views
 

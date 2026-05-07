@@ -67,12 +67,12 @@ echo "=========================================="
 
 # Test the import before starting the worker
 echo "Testing task import..."
-if ! "${venv_dir}/bin/python" -c "from omeroweb_imaris_connector.tasks import run_ims_export_task; print('Task import OK:', run_ims_export_task.name)"; then
+if ! "${venv_dir}/bin/python" -c "from omero_imaris_connector.tasks import run_ims_export_task; print('Task import OK:', run_ims_export_task.name)"; then
     echo "ERROR: Failed to import Celery tasks" >&2
     exit 1
 fi
 
-exec "${celery_bin}" -A omeroweb_imaris_connector.celery_app worker \
+exec "${celery_bin}" -A omero_imaris_connector.celery_app worker \
     --loglevel="${celery_loglevel}" \
     --concurrency="${celery_concurrency}" \
     -Q "${celery_queue}" \

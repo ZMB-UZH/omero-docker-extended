@@ -14,7 +14,7 @@ This roadmap is based only on repository evidence already present in the workspa
 - `docs/design-docs/acquisition-metadata-search-options.md` for a prior feasibility study and design direction.
 - `env/omeroserver_example.env`, `env/omeroweb_example.env`, and `env/omero-celery_example.env` for current runtime features and configurable controls.
 - `.github/workflows/*.yml` and `.github/dependabot.yml` for current quality automation and supply-chain coverage.
-- Major plugin and service code in `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`, and `omero_plugin_common/`.
+- Major plugin and service code in `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omero_imaris_connector/`, and `omero_plugin_common/`.
 
 No external product research is assumed beyond what is already captured in the repository.
 

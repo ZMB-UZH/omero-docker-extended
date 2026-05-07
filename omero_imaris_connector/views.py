@@ -30,6 +30,8 @@ INVALID_OMERO_PORT_MESSAGE = "Invalid OMERO port parameter."
 IMS_EXPORT_FAILED_MESSAGE = "IMS export failed."
 IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
 TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
+OMERO_IMS_EXPORT_CAPABILITY_FLAG = "zmb_omero_imaris_connector_v1"
+OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
 
 
 def _parse_base_url(value):
@@ -145,13 +147,15 @@ def imaris_export(request, conn=None, **kwargs):
                     sanitize_log_value(exc),
                     exc_info=sanitized_exc_info(exc),
                 )
+        omero_available = bool(celery_available and script_available)
         return JsonResponse(
             {
+                OMERO_IMS_EXPORT_CAPABILITY_KEY: OMERO_IMS_EXPORT_CAPABILITY_FLAG,
                 "converters": {
-                    "OMERO": bool(celery_available and script_available),
+                    "OMERO": omero_available,
                     "Imaris": True,
                 },
-                "omero_ims_export": bool(celery_available and script_available),
+                "omero_ims_export": omero_available,
             }
         )
 

@@ -798,7 +798,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "omeroweb_import/views/core_functions.py",
             "omeroweb_admin_tools/views/index_view.py",
             "omero_web_zarr/utils.py",
-            "omeroweb_imaris_connector/imaris_service.py",
+            "omero_imaris_connector/imaris_service.py",
             "omeroweb_omp_plugin/views/index_view.py",
             "omeroweb_import/services/omero/sem_edx_parser.py",
             "omeroweb_import/services/ome_zarr_support.py",
