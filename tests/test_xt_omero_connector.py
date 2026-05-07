@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import types
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,49 @@ def _load_xt_module():
     return module
 
 
+def _write_minimal_ome_tiff(path, pixels_attributes):
+    """Write a minimal TIFF carrying OME XML in ImageDescription.
+
+    Inputs: `path`, `pixels_attributes`. Output: None.
+    """
+    attrs = {
+        "ID": "Pixels:0",
+        "DimensionOrder": "XYZCT",
+        "Type": "uint8",
+        "SizeX": "1",
+        "SizeY": "1",
+        "SizeZ": "1",
+        "SizeC": "1",
+        "SizeT": "1",
+    }
+    attrs.update({str(key): str(value) for key, value in pixels_attributes.items()})
+    attrs_text = " ".join(f'{key}="{value}"' for key, value in attrs.items())
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">'
+        f'<Image ID="Image:0"><Pixels {attrs_text}>'
+        '<TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>'
+    )
+    description = xml.encode("utf-8") + b"\x00"
+    ifd_offset = 8
+    ifd_count = 1
+    description_offset = ifd_offset + 2 + (12 * ifd_count) + 4
+    entry = (
+        (270).to_bytes(2, "big")
+        + (2).to_bytes(2, "big")
+        + len(description).to_bytes(4, "big")
+        + description_offset.to_bytes(4, "big")
+    )
+    path.write_bytes(
+        b"MM\x00*"
+        + ifd_offset.to_bytes(4, "big")
+        + ifd_count.to_bytes(2, "big")
+        + entry
+        + (0).to_bytes(4, "big")
+        + description
+    )
+
+
 def _enable_native_bridge(module, monkeypatch):
     """Enable the opt-in IcePy-backed native bridge for tests that cover it.
 
@@ -70,6 +114,36 @@ def _require_live_imaris_install(module):
     if _test_env_flag("IMARIS_OMERO_REQUIRE_LIVE_IMARIS_TESTS"):
         raise AssertionError(message)
     raise pytest.skip.Exception(message)
+
+
+def _require_live_omero_config():
+    """Return live OMERO test configuration from environment variables.
+
+    Inputs: process environment. Output: dict or skips when incomplete.
+    """
+    required = {
+        "host": os.environ.get("OMERO_LIVE_HOST"),
+        "user": os.environ.get("OMERO_LIVE_USER"),
+        "password": os.environ.get("OMERO_LIVE_PASSWORD"),
+        "image_id": os.environ.get("OMERO_LIVE_IMAGE_ID"),
+    }
+    missing = [key for key, value in required.items() if not str(value or "").strip()]
+    if missing:
+        message = (
+            "Live OMERO test skipped; set OMERO_LIVE_HOST, OMERO_LIVE_USER, "
+            "OMERO_LIVE_PASSWORD, and OMERO_LIVE_IMAGE_ID."
+        )
+        if _test_env_flag("IMARIS_OMERO_REQUIRE_LIVE_OMERO_TESTS"):
+            raise AssertionError(message)
+        raise pytest.skip.Exception(message)
+    return {
+        "host": required["host"].strip(),
+        "port": os.environ.get("OMERO_LIVE_PORT", "443").strip() or "443",
+        "scheme": os.environ.get("OMERO_LIVE_SCHEME", "https").strip() or "https",
+        "user": required["user"].strip(),
+        "password": required["password"],
+        "image_id": int(required["image_id"]),
+    }
 
 
 TEST_LOGIN_VALUE = "test-login-value"
@@ -707,7 +781,192 @@ def test_client_rejects_non_legacy_capability_http_errors(monkeypatch):
 
     assert client.has_omero_ims_export_capability() is False
     assert "Invalid base_url parameter" not in "\n".join(messages)
-    assert "OMERO IMS export capability unavailable: HTTP 400" in messages
+    assert messages == []
+
+
+def test_client_treats_missing_custom_omero_converter_endpoint_as_quiet_unavailable(
+    monkeypatch,
+):
+    """Verify non-custom OMERO.web hosts do not emit distracting converter logs.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on OMERO/Imaris converter
+    log isolation regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(_request, timeout):
+            """Raise the normal non-custom-host 404 response.
+
+            Inputs: `_request`, `timeout`. Output: None. Raises: `_FakeHTTPError`.
+            """
+            assert timeout == 30
+            raise _FakeHTTPError(b"not found", code=404, msg="Not Found")
+
+    client.opener = _FakeOpener()
+
+    assert client.has_omero_ims_export_capability() is False
+    assert messages == []
+
+
+def test_client_can_log_custom_omero_converter_probe_when_requested(monkeypatch):
+    """Verify explicit diagnostics stay converter-scoped.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on capability diagnostic
+    wording regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(_request, timeout):
+            """Raise the normal non-custom-host 404 response.
+
+            Inputs: `_request`, `timeout`. Output: None. Raises: `_FakeHTTPError`.
+            """
+            assert timeout == 30
+            raise _FakeHTTPError(b"not found", code=404, msg="Not Found")
+
+    client.opener = _FakeOpener()
+
+    assert client.has_omero_ims_export_capability(log_unavailable=True) is False
+    assert messages == [
+        "OMERO converter: custom server-side capability not advertised (HTTP 404)"
+    ]
+
+
+def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_path):
+    """Verify OMERO converter downloads a valid IMS from the custom endpoint.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on server-side IMS download
+    contract regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    calls = []
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout):
+            """Serve start, poll, and download responses.
+
+            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
+            """
+            calls.append((request.full_url, timeout))
+            if "imaris-export/?image=63" in request.full_url:
+                return _FakeHTTPResponse(
+                    json.dumps(
+                        {
+                            "job_id": "job-1",
+                            "status_url": "/omero_imaris_connector/imaris-export/?job=job-1",
+                        }
+                    ).encode("utf-8")
+                )
+            if "job=job-1" in request.full_url:
+                return _FakeHTTPResponse(
+                    json.dumps(
+                        {
+                            "finished": True,
+                            "failed": False,
+                            "state": "SUCCESS",
+                            "download_url": "/omero_imaris_connector/imaris-export/?download=job-1",
+                        }
+                    ).encode("utf-8")
+                )
+            if "download=job-1" in request.full_url:
+                return _FakeHTTPResponse(
+                    b"\x89HDF\r\n\x1a\npayload",
+                    headers={
+                        "Content-Disposition": 'attachment; filename="selected.ims"',
+                        "Content-Length": "15",
+                    },
+                )
+            raise AssertionError(f"unexpected URL: {request.full_url}")
+
+    client.opener = _FakeOpener()
+
+    local_path = client.download_ims_export(63, tmp_path)
+
+    assert Path(local_path).name == "selected.ims"
+    assert module.is_ims_file(local_path) is True
+    assert calls[0] == (
+        (
+            f"{client.base_url}/omero_imaris_connector/imaris-export/?image=63"
+            f"&async=1&base_url={urllib.parse.quote(client.base_url, safe='')}"
+        ),
+        30,
+    )
+    assert calls[1] == (
+        f"{client.base_url}/omero_imaris_connector/imaris-export/?job=job-1",
+        30,
+    )
+    assert calls[2] == (
+        f"{client.base_url}/omero_imaris_connector/imaris-export/?download=job-1",
+        module.EXPORT_TIMEOUT + 60,
+    )
+    assert all("archived_files" not in url for url, _timeout in calls)
+    assert all("render_ome_tiff" not in url for url, _timeout in calls)
+
+
+def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
+    """Verify OMERO converter refuses a non-HDF5 IMS download response.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on invalid IMS response
+    regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout=None):
+            """Serve start, poll, and invalid download responses.
+
+            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
+            """
+            if "imaris-export/?image=64" in request.full_url:
+                return _FakeHTTPResponse(
+                    b'{"job_id": "job-2", "status_url": "/status/job-2"}'
+                )
+            if "/status/job-2" in request.full_url:
+                return _FakeHTTPResponse(
+                    b'{"finished": true, "failed": false, "download_url": "/download/job-2"}'
+                )
+            if "/download/job-2" in request.full_url:
+                return _FakeHTTPResponse(
+                    b"not an ims",
+                    headers={
+                        "Content-Disposition": 'attachment; filename="selected.ims"',
+                        "Content-Length": "10",
+                    },
+                )
+            raise AssertionError(f"unexpected URL: {request.full_url}")
+
+    client.opener = _FakeOpener()
+
+    with pytest.raises(RuntimeError, match="not a valid IMS"):
+        client.download_ims_export(64, tmp_path)
 
 
 def test_client_detects_folder_export_capability_from_start_endpoint():
@@ -3012,7 +3271,12 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert module.CONNECTOR_SETTINGS_PORT_KEY + '="443"' in content
     assert module.CONNECTOR_SETTINGS_USERNAME_KEY + '="alice"' in content
     assert module.CONNECTOR_SETTINGS_HTTPS_KEY + '="true"' in content
-    assert module.CONNECTOR_SETTINGS_PATH_KEY + f'="{tmp_path}"' in content
+    expected_path_setting = (
+        module.CONNECTOR_SETTINGS_PATH_KEY
+        + "="
+        + module._format_connector_settings_env_value(str(tmp_path))
+    )
+    assert expected_path_setting in content
     assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="false"' in content
     assert dialog.pass_entry.value == ""
@@ -6584,6 +6848,128 @@ def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
     assert "archived_files" not in opened_urls[0]
 
 
+def test_client_extracts_explicit_voxel_sizes_from_image_list_metadata():
+    """Verify selected-image list metadata carries explicit voxel sizes.
+
+    Inputs: repository fixtures. Output: fails on OMERO metadata parsing regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    opened_urls = []
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout):
+            """Return a dataset image list with explicit Pixels metadata.
+
+            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
+            """
+            opened_urls.append((request.full_url, timeout))
+            return _FakeHTTPResponse(
+                json.dumps(
+                    {
+                        "data": [
+                            {
+                                "id": 63,
+                                "Name": "selected image",
+                                "Pixels": {
+                                    "SizeX": 2048,
+                                    "SizeY": 2048,
+                                    "SizeZ": 3,
+                                    "SizeC": 2,
+                                    "SizeT": 1,
+                                    "PhysicalSizeX": 0.647934,
+                                    "PhysicalSizeY": {
+                                        "value": 647.934,
+                                        "unit": "nm",
+                                    },
+                                    "PhysicalSizeZ": 2.5,
+                                },
+                            }
+                        ]
+                    }
+                ).encode("utf-8")
+            )
+
+    client.opener = _FakeOpener()
+
+    images = client.list_images(9)
+
+    assert opened_urls == [(f"{client.api_url}/m/datasets/9/images/?group=-1", 30)]
+    assert images == [
+        {
+            "id": 63,
+            "name": "selected image",
+            "sizeX": 2048,
+            "sizeY": 2048,
+            "sizeZ": 3,
+            "sizeC": 2,
+            "sizeT": 1,
+            "voxel_sizes": {"X": "0.647934", "Y": "0.647934", "Z": "2.5"},
+            "physicalSizeX": "0.647934",
+            "physicalSizeY": "0.647934",
+            "physicalSizeZ": "2.5",
+        }
+    ]
+
+
+def test_client_get_image_metadata_extracts_detail_voxel_sizes_without_original_use():
+    """Verify image detail metadata exposes voxel sizes without selecting originals.
+
+    Inputs: repository fixtures. Output: fails on selected Image detail parsing
+    regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    opened_urls = []
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout):
+            """Return image detail metadata for one selected Image ID.
+
+            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
+            """
+            opened_urls.append((request.full_url, timeout))
+            return _FakeHTTPResponse(
+                json.dumps(
+                    {
+                        "id": 63,
+                        "Name": "selected image",
+                        "Pixels": {
+                            "PhysicalSizeX": {"value": 0.5, "unit": "um"},
+                            "PhysicalSizeY": {"value": 500, "unit": "nm"},
+                            "PhysicalSizeZ": {"value": 0.002, "unit": "mm"},
+                        },
+                        "Fileset": {
+                            "Files": [
+                                {
+                                    "Name": "source container must be ignored",
+                                }
+                            ]
+                        },
+                    }
+                ).encode("utf-8")
+            )
+
+    client.opener = _FakeOpener()
+
+    metadata = client.get_image_metadata(63)
+
+    assert opened_urls == [(f"{client.api_url}/m/images/63/?group=-1", 30)]
+    assert metadata["voxel_sizes"] == {"X": "0.5", "Y": "0.5", "Z": "2"}
+    assert metadata["physicalSizeX"] == "0.5"
+    assert metadata["physicalSizeY"] == "0.5"
+    assert metadata["physicalSizeZ"] == "2"
+    assert "original_file" not in metadata
+
+
 def test_convert_ome_tiff_to_ims_with_local_imaris_runs_imarisconvert(
     tmp_path,
     monkeypatch,
@@ -6670,6 +7056,109 @@ def test_convert_ome_tiff_to_ims_retries_without_log_argument(tmp_path, monkeypa
     assert calls[0][0][-2:] == ["-l", "none"]
     assert calls[1][0][-2:] != ["-l", "none"]
     assert calls[1][0][3:5] == ["-if", "OmeTiff"]
+
+
+def test_convert_ome_tiff_to_ims_passes_explicit_ome_voxel_sizes(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify explicit OME voxel sizes are passed to local ImarisConvert.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
+    propagation regressions.
+    """
+    module = _load_xt_module()
+    converter = tmp_path / "ImarisConvert.exe"
+    converter.write_text("fake", encoding="utf-8")
+    source_file = tmp_path / "source.ome.tif"
+    _write_minimal_ome_tiff(
+        source_file,
+        {
+            "PhysicalSizeX": "0.5",
+            "PhysicalSizeY": "750",
+            "PhysicalSizeYUnit": "nm",
+            "PhysicalSizeZ": "2.5",
+        },
+    )
+    calls = []
+
+    def _run(cmd, **kwargs):
+        """Record subprocess invocation and create a fake IMS output.
+
+        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
+        """
+        calls.append((cmd, kwargs))
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        module, "_find_imaris_convert_executable", lambda: str(converter)
+    )
+    monkeypatch.setattr(module.subprocess, "run", _run)
+
+    ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
+        source_file,
+        tmp_path,
+        fallback_name="converted.ims",
+    )
+
+    assert module.is_ims_file(ims_path) is True
+    assert len(calls) == 1
+    cmd = calls[0][0]
+    assert cmd[3:7] == ["-if", "OmeTiff", "-o", str(tmp_path / "converted.ims")]
+    assert cmd[cmd.index("-vsx") + 1] == "0.5"
+    assert cmd[cmd.index("-vsy") + 1] == "0.75"
+    assert cmd[cmd.index("-vsz") + 1] == "2.5"
+
+
+def test_convert_ome_tiff_to_ims_does_not_invent_missing_z_voxel_size(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify missing explicit Z metadata is not guessed for local ImarisConvert.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on no-assumption
+    voxel-size regressions.
+    """
+    module = _load_xt_module()
+    converter = tmp_path / "ImarisConvert.exe"
+    converter.write_text("fake", encoding="utf-8")
+    source_file = tmp_path / "source.ome.tif"
+    _write_minimal_ome_tiff(
+        source_file,
+        {
+            "PhysicalSizeX": "0.647934",
+            "PhysicalSizeY": "0.647934",
+        },
+    )
+    calls = []
+
+    def _run(cmd, **kwargs):
+        """Return the real ImarisConvert missing-Z failure shape.
+
+        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
+        """
+        calls.append((cmd, kwargs))
+        return types.SimpleNamespace(
+            returncode=2,
+            stdout="ERROR Unknown voxel size: 0.647934,0.647934,0.",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        module, "_find_imaris_convert_executable", lambda: str(converter)
+    )
+    monkeypatch.setattr(module.subprocess, "run", _run)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        module.convert_ome_tiff_to_ims_with_local_imaris(source_file, tmp_path)
+
+    message = str(excinfo.value)
+    assert "axis/axes: Z" in message
+    assert "will not invent missing voxel sizes" in message
+    assert len(calls) == 4
+    assert all("-vsx" in cmd and "-vsy" in cmd for cmd, _kwargs in calls)
+    assert all("-vsz" not in cmd for cmd, _kwargs in calls)
 
 
 def test_convert_ome_tiff_to_ims_reports_breakpoint_exit_code(tmp_path, monkeypatch):
@@ -6964,12 +7453,20 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         downloads.append(("ims", image_id, Path(download_dir), fallback_name))
         return str(local_file)
 
-    def _download_with_imaris_converter(image_id, image_name, download_dir):
+    def _download_with_imaris_converter(
+        image_id,
+        image_name,
+        download_dir,
+        image_metadata=None,
+    ):
         """Record selected-image local Imaris conversion.
 
-        Inputs: OMERO image id, image name, target directory. Output: local file path.
+        Inputs: OMERO image id, image name, target directory, image metadata. Output:
+        local file path.
         """
-        downloads.append(("imaris", image_id, image_name, Path(download_dir)))
+        downloads.append(
+            ("imaris", image_id, image_name, Path(download_dir), image_metadata)
+        )
         return str(local_file)
 
     monkeypatch.setattr(
@@ -7009,7 +7506,9 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     if converter == "OMERO":
         assert downloads == [(expected_download, 7, tmp_path, "img_7.ims")]
     else:
-        assert downloads == [(expected_download, 7, filename, tmp_path)]
+        assert downloads == [
+            (expected_download, 7, filename, tmp_path, {"id": 7, "name": filename})
+        ]
     assert opened == [str(local_file)]
     assert dialog.temp_files == [str(local_file)]
     assert dialog.imaris is not None
@@ -8635,13 +9134,29 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
     opened = []
     statuses = []
     info_messages = []
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
 
-    def _convert_ome_tiff_to_ims(source_file, download_dir, fallback_name):
+    def _convert_ome_tiff_to_ims(
+        source_file,
+        download_dir,
+        fallback_name,
+        voxel_size_overrides=None,
+    ):
         """Record local Imaris conversion.
 
-        Inputs: `source_file`, `download_dir`, `fallback_name`. Output: IMS path.
+        Inputs: `source_file`, `download_dir`, `fallback_name`,
+        `voxel_size_overrides`. Output: IMS path.
         """
-        calls.append(("convert", Path(source_file), Path(download_dir), fallback_name))
+        calls.append(
+            (
+                "convert",
+                Path(source_file),
+                Path(download_dir),
+                fallback_name,
+                voxel_size_overrides,
+            )
+        )
         return str(ims_file)
 
     monkeypatch.setattr(
@@ -8679,13 +9194,13 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
 
     module.OMEROBrowserDialog._load_worker(
         dialog,
-        {"id": 7, "name": "sample.lif"},
+        {"id": 7, "name": "selected image"},
         "Imaris",
     )
 
     assert calls == [
         ("ome-tiff", 7, tmp_path, "img_7.ome.tif"),
-        ("convert", ome_tiff_file, tmp_path, "img_7.ims"),
+        ("convert", ome_tiff_file, tmp_path, "img_7.ims", {}),
     ]
     assert opened == [(str(ims_file), True)]
     assert dialog.temp_files == [str(ome_tiff_file), str(ims_file)]
@@ -8695,9 +9210,182 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
         ("Success", "IMS file opened in the current Imaris session.")
     ]
     assert all("original" not in status[0].lower() for status in statuses)
+    joined_logs = "\n".join(logs)
+    assert "OMERO converter:" not in joined_logs
+    assert "custom IMS export" not in joined_logs
+    assert "Imaris converter:" in joined_logs
 
 
-def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
+def test_imaris_converter_merges_selected_image_and_detail_voxel_metadata(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify Imaris converter passes only explicit selected-image voxel metadata.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
+    propagation regressions in the local Imaris path.
+    """
+    module = _load_xt_module()
+    ome_tiff_file = tmp_path / "img_7.ome.tif"
+    ome_tiff_file.write_bytes(b"II*\x00selected-image")
+    ims_file = tmp_path / "img_7.ims"
+    ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    calls = []
+    statuses = []
+
+    def _convert_ome_tiff_to_ims(
+        source_file,
+        download_dir,
+        fallback_name,
+        voxel_size_overrides=None,
+    ):
+        """Record local Imaris conversion metadata.
+
+        Inputs: conversion arguments. Output: IMS path.
+        """
+        calls.append(
+            (
+                "convert",
+                Path(source_file),
+                Path(download_dir),
+                fallback_name,
+                voxel_size_overrides,
+            )
+        )
+        return str(ims_file)
+
+    monkeypatch.setattr(
+        module,
+        "convert_ome_tiff_to_ims_with_local_imaris",
+        _convert_ome_tiff_to_ims,
+    )
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.temp_files = []
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+    dialog.client = types.SimpleNamespace(
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name: (
+            calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
+            or str(ome_tiff_file)
+        ),
+        get_image_metadata=lambda image_id: (
+            calls.append(("detail", image_id))
+            or {
+                "Pixels": {
+                    "PhysicalSizeY": {"value": 750, "unit": "nm"},
+                    "PhysicalSizeZ": {"value": 2.5, "unit": "um"},
+                }
+            }
+        ),
+        download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("archived original download must not run")
+        ),
+    )
+
+    result = module.OMEROBrowserDialog._download_selected_image_with_imaris_converter(
+        dialog,
+        7,
+        "selected image",
+        tmp_path,
+        image_metadata={
+            "Pixels": {
+                "PhysicalSizeX": 0.5,
+                "PhysicalSizeY": {"value": 500, "unit": "nm"},
+            }
+        },
+    )
+
+    assert result == str(ims_file)
+    assert calls == [
+        ("detail", 7),
+        ("ome-tiff", 7, tmp_path, "img_7.ome.tif"),
+        (
+            "convert",
+            ome_tiff_file,
+            tmp_path,
+            "img_7.ims",
+            {"X": "0.5", "Y": "0.5", "Z": "2.5"},
+        ),
+    ]
+    assert dialog.temp_files == [str(ome_tiff_file)]
+    assert (
+        statuses[0][0] == "Imaris converter: exporting selected Image 7 as OME-TIFF..."
+    )
+
+
+def test_imaris_converter_does_not_query_detail_when_selected_metadata_is_complete(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify complete selected-image metadata avoids extra detail requests.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
+    request-boundary regressions.
+    """
+    module = _load_xt_module()
+    ome_tiff_file = tmp_path / "img_8.ome.tif"
+    ome_tiff_file.write_bytes(b"II*\x00selected-image")
+    ims_file = tmp_path / "img_8.ims"
+    ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    calls = []
+
+    monkeypatch.setattr(
+        module,
+        "convert_ome_tiff_to_ims_with_local_imaris",
+        lambda source_file, download_dir, fallback_name, voxel_size_overrides=None: (
+            calls.append(
+                (
+                    "convert",
+                    Path(source_file),
+                    Path(download_dir),
+                    fallback_name,
+                    voxel_size_overrides,
+                )
+            )
+            or str(ims_file)
+        ),
+    )
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.temp_files = []
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog.client = types.SimpleNamespace(
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name: (
+            calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
+            or str(ome_tiff_file)
+        ),
+        get_image_metadata=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("image detail request must not run")
+        ),
+    )
+
+    result = module.OMEROBrowserDialog._download_selected_image_with_imaris_converter(
+        dialog,
+        8,
+        "selected image",
+        tmp_path,
+        image_metadata={
+            "voxel_sizes": {"X": "0.25", "Y": "0.25", "Z": "1.5"},
+        },
+    )
+
+    assert result == str(ims_file)
+    assert calls == [
+        ("ome-tiff", 8, tmp_path, "img_8.ome.tif"),
+        (
+            "convert",
+            ome_tiff_file,
+            tmp_path,
+            "img_8.ims",
+            {"X": "0.25", "Y": "0.25", "Z": "1.5"},
+        ),
+    ]
+
+
+def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
+    tmp_path,
+    monkeypatch,
+):
     """Verify load worker OMERO converter downloads IMS and requires IMS.
 
     Inputs: pytest provides `tmp_path`. Output: fails on regressions in load worker OMERO converter downloads IMS and requires IMS.
@@ -8706,6 +9394,8 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
     ims_file = tmp_path / "sample.ims"
     ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
     calls = []
+    logs = []
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.export_dir = str(tmp_path)
@@ -8742,6 +9432,9 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(tmp_path):
     assert opened == [(str(ims_file), True)]
     assert dialog.temp_files == [str(ims_file)]
     assert not (tmp_path / "img_8").exists()
+    joined_logs = "\n".join(logs)
+    assert "Imaris converter:" not in joined_logs
+    assert "selected Image OME-TIFF" not in joined_logs
 
 
 def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path):
@@ -8830,13 +9523,21 @@ def test_load_multiple_worker_imaris_converts_selected_images_before_opening(
     statuses = []
     info_messages = []
 
-    def _download_with_imaris_converter(image_id, image_name, download_dir):
+    def _download_with_imaris_converter(
+        image_id,
+        image_name,
+        download_dir,
+        image_metadata=None,
+    ):
         """Convert one selected image through the local Imaris converter.
 
-        Inputs: `image_id`, `image_name`, `download_dir`. Output: IMS path.
+        Inputs: `image_id`, `image_name`, `download_dir`, `image_metadata`. Output:
+        IMS path.
         """
         assert not opened
-        events.append(("convert", image_id, image_name, Path(download_dir)))
+        events.append(
+            ("convert", image_id, image_name, Path(download_dir), image_metadata)
+        )
         return files_by_id[image_id]
 
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -8867,13 +9568,28 @@ def test_load_multiple_worker_imaris_converts_selected_images_before_opening(
 
     module.OMEROBrowserDialog._load_multiple_worker(
         dialog,
-        [{"id": 21, "name": "first.lif"}, {"id": 22, "name": "second.czi"}],
+        [
+            {"id": 21, "name": "well A01 field 1"},
+            {"id": 22, "name": "well A01 field 2"},
+        ],
         "Imaris",
     )
 
     assert events == [
-        ("convert", 21, "first.lif", tmp_path),
-        ("convert", 22, "second.czi", tmp_path),
+        (
+            "convert",
+            21,
+            "well A01 field 1",
+            tmp_path,
+            {"id": 21, "name": "well A01 field 1"},
+        ),
+        (
+            "convert",
+            22,
+            "well A01 field 2",
+            tmp_path,
+            {"id": 22, "name": "well A01 field 2"},
+        ),
     ]
     assert opened == [([str(first_ims), str(second_ims)], True)]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
@@ -9105,6 +9821,7 @@ def test_xt_entrypoint_blocks_before_gui_on_unsupported_platform(
     module = _load_xt_module()
     log_calls = []
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     expected_log_path = str(
         tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME / module.XT_LOG_FILE_NAME
     )
@@ -9174,6 +9891,7 @@ def test_xt_entrypoint_applies_saved_show_log_before_startup_work(
     """
     module = _load_xt_module()
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     settings_path = module._connector_settings_env_path(tmp_path)
     settings_path.parent.mkdir()
     settings_path.write_text(
@@ -9359,6 +10077,7 @@ def test_xt_write_log_uses_settings_directory_and_rejects_unsafe_paths(
     """
     module = _load_xt_module()
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
     log_path = Path(module._xt_log_path())
     settings_dir = tmp_path / module.AUTOSAVE_SETTINGS_DIR_NAME
@@ -9379,7 +10098,12 @@ def test_xt_write_log_uses_settings_directory_and_rejects_unsafe_paths(
     log_path.unlink()
     symlink_path = settings_dir / module.XT_LOG_FILE_NAME
     symlink_target = tmp_path.parent / "connector-link-target.log"
-    symlink_path.symlink_to(symlink_target)
+    try:
+        symlink_path.symlink_to(symlink_target)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is unavailable for this test user.")
+        raise
     module._xt_write_log(str(symlink_path), "through symlink")
     assert not symlink_target.exists()
 
@@ -9395,7 +10119,9 @@ def test_xt_console_log_mirrors_command_window_output_to_settings_log(
     """
     module = _load_xt_module()
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     module._XT_RUNTIME_STATE.log_path = None
+    module._XT_RUNTIME_STATE.console_output_enabled = True
 
     module._xt_console_log("visible connector message")
 
@@ -9424,6 +10150,7 @@ def test_xt_console_log_hidden_mode_writes_file_without_stdout(
     """
     module = _load_xt_module()
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     module._XT_RUNTIME_STATE.log_path = None
     module._XT_RUNTIME_STATE.console_output_enabled = False
 
@@ -9434,6 +10161,7 @@ def test_xt_console_log_hidden_mode_writes_file_without_stdout(
     assert "hidden connector message" not in captured.out
     assert module._XT_RUNTIME_STATE.log_path == str(log_path)
     assert "hidden connector message" in log_path.read_text(encoding="utf-8")
+    module._XT_RUNTIME_STATE.console_output_enabled = True
 
 
 def test_configure_xt_console_visibility_uses_windows_show_window(monkeypatch):
@@ -9643,6 +10371,7 @@ def test_xt_debug_initializes_settings_directory_log_and_rotates(
     """
     module = _load_xt_module()
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(module, "XT_LOG_MAX_BYTES", 64)
     monkeypatch.setattr(module, "XT_LOG_BACKUP_COUNT", 2)
     module._XT_RUNTIME_STATE.log_path = None
@@ -10617,6 +11346,48 @@ def test_live_imaris_converter_detection_is_mandatory_when_imaris_present():
     converter_path = Path(converter_executable)
     assert converter_path.is_file()
     assert converter_path.name.lower() in {"imarisconvert.exe", "imarisconvert"}
+
+
+def test_live_omero_selected_image_converter_boundaries(tmp_path):
+    """Verify live OMERO selected-image boundaries when credentials are supplied.
+
+    Inputs: pytest provides `tmp_path` and OMERO_LIVE_* environment variables.
+    Output: skips without live config; otherwise fails on live host regressions.
+    """
+    module = _load_xt_module()
+    config = _require_live_omero_config()
+    client = module.OMEROWebClient(
+        config["host"],
+        config["port"],
+        config["user"],
+        config["password"],
+        scheme=config["scheme"],
+    )
+
+    assert client.connect() is True
+    image_metadata = client.get_image_metadata(config["image_id"])
+    assert image_metadata.get("id") == config["image_id"]
+
+    ome_tiff_path = client.download_selected_image_ome_tiff(
+        config["image_id"],
+        tmp_path,
+    )
+    assert module.is_tiff_file(ome_tiff_path) is True
+
+    if client.has_omero_ims_export_capability():
+        ims_path = client.download_ims_export(config["image_id"], tmp_path)
+        assert module.is_ims_file(ims_path) is True
+
+    if _test_env_flag("IMARIS_OMERO_RUN_LIVE_IMARIS_CONVERSION"):
+        _require_live_imaris_install(module)
+        converted_path = module.convert_ome_tiff_to_ims_with_local_imaris(
+            ome_tiff_path,
+            tmp_path,
+            voxel_size_overrides=module._explicit_physical_sizes_from_image_metadata(
+                image_metadata
+            ),
+        )
+        assert module.is_ims_file(converted_path) is True
 
 
 def test_resolve_imaris_application_returns_direct_handle():

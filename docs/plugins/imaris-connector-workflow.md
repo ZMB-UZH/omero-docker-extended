@@ -161,6 +161,9 @@ flowchart TD
 
 This path is custom by design. It must not appear for arbitrary OMERO
 installations that do not explicitly expose this repository's capability flag.
+For a standard non-custom OMERO.web host, a missing custom capability endpoint is
+treated as an ordinary absence of the `OMERO` converter, not as an Imaris
+converter warning or failure.
 
 ## Imaris converter path
 
@@ -169,21 +172,44 @@ OMERO.web installations and a local Imaris 11 or newer installation. It does not
 require the custom IMS export endpoint or the server-side Imaris conversion
 script.
 
+On the client workstation, the XT connector startup gate requires Windows 10 or
+later. Windows 11 is included by that version rule; the connector must not
+special-case a single Windows release.
+
+The path is source-format agnostic. It never downloads archived originals,
+filesets, source containers, nested folder payloads, or repository-managed
+source paths. The original data may come from any OMERO-supported source,
+including high-content screening layouts and OME-Zarr-backed images, because the
+client requests only the selected OMERO Image ID through standard OMERO.web.
+Diagnostics for this path are scoped as `Imaris converter` messages; normal
+absence of the custom server-side OMERO converter must not leak into this path.
+
 ```mermaid
 flowchart TD
     A[User selects Imaris converter] --> B[Verify same-session Imaris handoff target]
     B --> C[Export selected OMERO Image ID as OME-TIFF through OMERO.web]
     C --> D[Validate downloaded file is TIFF or BigTIFF]
-    D --> E[Run local ImarisConvert]
-    E --> F[Validate output is IMS/HDF5]
-    F --> G[Open IMS in the current Imaris session]
+    D --> E[Collect explicit selected-image voxel metadata]
+    E --> F[Run local ImarisConvert]
+    F --> G[Validate output is IMS/HDF5]
+    G --> H[Open IMS in the current Imaris session]
 ```
 
 The selected-image export uses the OMERO.web image export endpoint for the
-selected Image ID. It does not use `webgateway/archived_files/download/`, and it
-does not download the full archived original container. If the selected-image
-OME-TIFF export is unavailable, the connector fails explicitly instead of
-falling back to original-file download.
+selected Image ID. The OME-TIFF file is only the standard OMERO.web transport
+envelope for the selected Image pixels that ImarisConvert can read locally; it
+is not a source-filetype decision and it is not a download of the archived
+original container. The client does not use
+`webgateway/archived_files/download/`. If the selected-image OME-TIFF export is
+unavailable, the connector fails explicitly instead of falling back to
+original-file download.
+
+Voxel-size metadata is handled without guessing. The connector may pass
+`-vsx`, `-vsy`, and `-vsz` to ImarisConvert only when the corresponding value is
+explicitly present in selected Image metadata returned by OMERO.web or in the
+selected-image OME-TIFF metadata. Missing axes remain missing; the connector does
+not infer Z from X/Y, single-plane status, source filename, source format, or any
+installation-specific rule.
 
 Local conversion:
 
@@ -191,15 +217,16 @@ Local conversion:
 flowchart TD
     A[Selected-image OME-TIFF exists] --> B{TIFF signature valid?}
     B -->|No| C[Stop: invalid selected-image export]
-    B -->|Yes| D[Find ImarisConvert]
-    D --> E{Converter found?}
-    E -->|No| F[Stop: local Imaris converter unavailable]
-    E -->|Yes| G[Try compatible ImarisConvert argument forms]
-    G --> H{Any attempt exits 0 and writes IMS?}
-    H -->|No| I[Report exit code in decimal and hex]
-    H -->|Yes| J{Output IMS/HDF5 signature valid?}
-    J -->|No| K[Stop: conversion did not produce IMS]
-    J -->|Yes| L[Return IMS path to handoff flow]
+    B -->|Yes| D[Merge explicit selected-image metadata]
+    D --> E[Find ImarisConvert]
+    E --> F{Converter found?}
+    F -->|No| G[Stop: local Imaris converter unavailable]
+    F -->|Yes| H[Try compatible ImarisConvert argument forms]
+    H --> I{Any attempt exits 0 and writes IMS?}
+    I -->|No| J[Report exit code and missing explicit voxel axes]
+    I -->|Yes| K{Output IMS/HDF5 signature valid?}
+    K -->|No| L[Stop: conversion did not produce IMS]
+    K -->|Yes| M[Return IMS path to handoff flow]
 ```
 
 The connector reports Windows breakpoint-style converter failures with both
@@ -260,8 +287,13 @@ download or conversion fails.
 - No same-session Imaris handoff target: no download or conversion is started.
 - Selected-image OME-TIFF endpoint unavailable: the `Imaris` path fails without
   downloading archived originals.
+- Selected-image voxel metadata missing for an axis required by ImarisConvert:
+  the `Imaris` path reports the missing explicit axis and does not invent a
+  voxel size.
 - Local Imaris converter nonzero exit: the connector reports the exit code and
   bounded stdout/stderr.
+- Server-side IMS download is not IMS/HDF5: the `OMERO` path rejects the file
+  before any Imaris handoff.
 - Local conversion output is not IMS/HDF5: the connector refuses to open it.
 - Multi-image preparation failure: no batch handoff is attempted.
 
@@ -275,10 +307,21 @@ The regression suite covers the critical contracts:
 - Stale `settings.env` converter values are ignored.
 - The `Imaris` path uses selected Image ID OME-TIFF export.
 - The `Imaris` path does not call archived original download.
-- Local Imaris conversion command construction is checked.
+- The `Imaris` path passes only explicit selected-image voxel sizes to
+  ImarisConvert.
+- The `Imaris` path fails missing-Z metadata without guessing a replacement.
+- Local Imaris conversion command construction is checked, including the
+  documented `-vsx`, `-vsy`, and `-vsz` flags.
+- The `OMERO` path rejects non-HDF5 IMS download responses.
 - Breakpoint-style local conversion exit codes include hexadecimal diagnostics.
 - Single-image and multi-image load workers require valid IMS outputs before
   Imaris handoff.
+- Optional live OMERO coverage is available through `OMERO_LIVE_HOST`,
+  `OMERO_LIVE_PORT`, `OMERO_LIVE_SCHEME`, `OMERO_LIVE_USER`,
+  `OMERO_LIVE_PASSWORD`, and `OMERO_LIVE_IMAGE_ID`. The live test authenticates,
+  downloads the selected-image OME-TIFF, checks server-side IMS export when the
+  custom capability exists, and can run local Imaris conversion only when
+  `IMARIS_OMERO_RUN_LIVE_IMARIS_CONVERSION` is explicitly enabled.
 
 ## Related docs
 
