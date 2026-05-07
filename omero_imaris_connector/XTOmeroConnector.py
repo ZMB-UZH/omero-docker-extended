@@ -40,6 +40,7 @@ import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -2280,6 +2281,370 @@ def is_tiff_file(file_path):
         return False
 
 
+def _positive_float_text(value):
+    """Return a stable positive float string or None.
+
+    Inputs: `value`. Output: text or None.
+    """
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric) or numeric <= 0:
+        return None
+    return f"{numeric:.12g}"
+
+
+def _length_unit_factor_to_micrometers(unit):
+    """Return a length unit multiplier to micrometers.
+
+    Inputs: `unit`. Output: multiplier or None.
+    """
+    text = str(unit or "\u00b5m").strip()
+    if not text:
+        text = "\u00b5m"
+    normalized = (
+        text.replace("\u00b5", "u")
+        .replace("\u03bc", "u")
+        .replace("\u212b", "angstrom")
+        .strip()
+        .lower()
+    )
+    normalized = re.sub(r"[\s_\-]+", "", normalized)
+    return {
+        "m": 1_000_000.0,
+        "meter": 1_000_000.0,
+        "meters": 1_000_000.0,
+        "metre": 1_000_000.0,
+        "metres": 1_000_000.0,
+        "cm": 10_000.0,
+        "centimeter": 10_000.0,
+        "centimeters": 10_000.0,
+        "centimetre": 10_000.0,
+        "centimetres": 10_000.0,
+        "mm": 1_000.0,
+        "millimeter": 1_000.0,
+        "millimeters": 1_000.0,
+        "millimetre": 1_000.0,
+        "millimetres": 1_000.0,
+        "um": 1.0,
+        "microm": 1.0,
+        "micrometer": 1.0,
+        "micrometers": 1.0,
+        "micrometre": 1.0,
+        "micrometres": 1.0,
+        "micron": 1.0,
+        "microns": 1.0,
+        "nm": 0.001,
+        "nanometer": 0.001,
+        "nanometers": 0.001,
+        "nanometre": 0.001,
+        "nanometres": 0.001,
+        "pm": 0.000001,
+        "picometer": 0.000001,
+        "picometers": 0.000001,
+        "picometre": 0.000001,
+        "picometres": 0.000001,
+        "angstrom": 0.0001,
+        "angstroms": 0.0001,
+    }.get(normalized)
+
+
+def _length_quantity_to_micrometers_text(value, unit=None):
+    """Return an explicit positive length quantity in micrometers.
+
+    Inputs: `value`, optional `unit`. Output: text or None.
+    """
+    quantity = value
+    unit_value = unit
+    if isinstance(value, dict):
+        quantity = _first_present_mapping_value(
+            value,
+            (
+                "value",
+                "Value",
+                "magnitude",
+                "Magnitude",
+                "number",
+                "Number",
+            ),
+        )
+        unit_value = unit_value or _first_present_mapping_value(
+            value,
+            (
+                "unit",
+                "Unit",
+                "symbol",
+                "Symbol",
+                "unitSymbol",
+                "UnitSymbol",
+                "units",
+                "Units",
+            ),
+        )
+    try:
+        numeric = float(quantity)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric) or numeric <= 0:
+        return None
+    factor = _length_unit_factor_to_micrometers(unit_value)
+    if factor is None:
+        return None
+    return _positive_float_text(numeric * factor)
+
+
+def _first_present_mapping_value(mapping, keys):
+    """Return the first present value for any key in a mapping.
+
+    Inputs: `mapping`, `keys`. Output: value or None.
+    """
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        if key in mapping:
+            return mapping.get(key)
+    return None
+
+
+def _explicit_physical_sizes_from_pixels_mapping(pixels):
+    """Return explicit physical pixel sizes in micrometers from Pixels metadata.
+
+    Inputs: `pixels` mapping. Output: axis-to-size mapping.
+    """
+    if not isinstance(pixels, dict):
+        return {}
+    result = {}
+    for axis in ("X", "Y", "Z"):
+        value = _first_present_mapping_value(
+            pixels,
+            (
+                f"PhysicalSize{axis}",
+                f"physicalSize{axis}",
+                f"physical_size_{axis.lower()}",
+            ),
+        )
+        unit = _first_present_mapping_value(
+            pixels,
+            (
+                f"PhysicalSize{axis}Unit",
+                f"physicalSize{axis}Unit",
+                f"physical_size_{axis.lower()}_unit",
+            ),
+        )
+        text = _length_quantity_to_micrometers_text(value, unit)
+        if text:
+            result[axis] = text
+    return result
+
+
+def _explicit_physical_sizes_from_image_metadata(metadata):
+    """Return explicit physical pixel sizes from selected Image metadata.
+
+    Inputs: `metadata` mapping. Output: axis-to-size mapping.
+    """
+    if not isinstance(metadata, dict):
+        return {}
+    normalized = metadata.get("voxel_sizes") or metadata.get("voxelSizes")
+    sizes = _merge_explicit_voxel_size_mappings(normalized)
+    if sizes:
+        return sizes
+    pixels = (
+        metadata.get("Pixels")
+        or metadata.get("pixels")
+        or metadata.get("primaryPixels")
+        or metadata.get("PrimaryPixels")
+        or {}
+    )
+    sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
+    if sizes:
+        return sizes
+    return _explicit_physical_sizes_from_pixels_mapping(metadata)
+
+
+def _merge_explicit_voxel_size_mappings(*mappings):
+    """Merge explicit voxel size mappings without inventing missing axes.
+
+    Inputs: axis-to-size mappings. Output: merged mapping.
+    """
+    merged = {}
+    for mapping in mappings:
+        if not isinstance(mapping, dict):
+            continue
+        for axis in ("X", "Y", "Z"):
+            if axis in merged:
+                continue
+            text = _positive_float_text(mapping.get(axis))
+            if text:
+                merged[axis] = text
+    return merged
+
+
+def _voxel_size_args_from_mapping(voxel_sizes):
+    """Return ImarisConvert voxel-size arguments for explicit axes only.
+
+    Inputs: `voxel_sizes` mapping. Output: command argument list.
+    """
+    args = []
+    for axis, flag in (("X", "-vsx"), ("Y", "-vsy"), ("Z", "-vsz")):
+        text = _positive_float_text(
+            voxel_sizes.get(axis) if isinstance(voxel_sizes, dict) else None
+        )
+        if text:
+            args.extend([flag, text])
+    return args
+
+
+def _tiff_type_size(tiff_type):
+    """Return the byte width for a TIFF field type.
+
+    Inputs: `tiff_type`. Output: integer byte width.
+    """
+    return {
+        1: 1,
+        2: 1,
+        3: 2,
+        4: 4,
+        5: 8,
+        6: 1,
+        7: 1,
+        8: 2,
+        9: 4,
+        10: 8,
+        11: 4,
+        12: 8,
+        16: 8,
+        17: 8,
+        18: 8,
+    }.get(int(tiff_type), 1)
+
+
+def _read_tiff_image_description(file_path):
+    """Read TIFF ImageDescription from the first IFD.
+
+    Inputs: `file_path`. Output: string or empty string.
+    """
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        return ""
+    try:
+        with candidate.open("rb") as handle:
+            header = handle.read(16)
+            if len(header) < 8:
+                return ""
+            if header[:2] == b"II":
+                endian = "<"
+            elif header[:2] == b"MM":
+                endian = ">"
+            else:
+                return ""
+            magic = int.from_bytes(header[2:4], "little" if endian == "<" else "big")
+            if magic == 42:
+                ifd_offset = int.from_bytes(
+                    header[4:8], "little" if endian == "<" else "big"
+                )
+                count_width = 2
+                entry_width = 12
+                value_width = 4
+            elif magic == 43:
+                if len(header) < 16:
+                    return ""
+                offset_size = int.from_bytes(
+                    header[4:6], "little" if endian == "<" else "big"
+                )
+                if offset_size != 8:
+                    return ""
+                ifd_offset = int.from_bytes(
+                    header[8:16], "little" if endian == "<" else "big"
+                )
+                count_width = 8
+                entry_width = 20
+                value_width = 8
+            else:
+                return ""
+
+            handle.seek(ifd_offset)
+            raw_count = handle.read(count_width)
+            if len(raw_count) != count_width:
+                return ""
+            entry_count = int.from_bytes(
+                raw_count, "little" if endian == "<" else "big"
+            )
+            for _index in range(entry_count):
+                entry = handle.read(entry_width)
+                if len(entry) != entry_width:
+                    return ""
+                tag = int.from_bytes(entry[0:2], "little" if endian == "<" else "big")
+                if tag != 270:
+                    continue
+                field_type = int.from_bytes(
+                    entry[2:4], "little" if endian == "<" else "big"
+                )
+                if magic == 42:
+                    count = int.from_bytes(
+                        entry[4:8], "little" if endian == "<" else "big"
+                    )
+                    value_or_offset = entry[8:12]
+                else:
+                    count = int.from_bytes(
+                        entry[4:12], "little" if endian == "<" else "big"
+                    )
+                    value_or_offset = entry[12:20]
+                byte_count = _tiff_type_size(field_type) * count
+                if byte_count <= value_width:
+                    raw_value = value_or_offset[:byte_count]
+                else:
+                    value_offset = int.from_bytes(
+                        value_or_offset, "little" if endian == "<" else "big"
+                    )
+                    handle.seek(value_offset)
+                    raw_value = handle.read(byte_count)
+                return raw_value.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    return ""
+
+
+def _ome_pixels_metadata_from_tiff(file_path):
+    """Return the first OME Pixels metadata mapping from a TIFF file.
+
+    Inputs: `file_path`. Output: dict.
+    """
+    description = _read_tiff_image_description(file_path)
+    if not description or "<OME" not in description:
+        return {}
+    try:
+        root = ET.fromstring(description)
+    except ET.ParseError:
+        return {}
+    namespace = ""
+    if root.tag.startswith("{") and "}" in root.tag:
+        namespace = root.tag.split("}", 1)[0].strip("{")
+    pixels = (
+        root.find(f".//{{{namespace}}}Pixels") if namespace else root.find(".//Pixels")
+    )
+    if pixels is None:
+        return {}
+    return dict(pixels.attrib)
+
+
+def _explicit_ome_physical_size_z(file_path):
+    """Return explicit OME PhysicalSizeZ from selected-image OME-TIFF metadata.
+
+    Inputs: `file_path`. Output: positive float text or None.
+    """
+    return _explicit_ome_physical_sizes_from_tiff(file_path).get("Z")
+
+
+def _explicit_ome_physical_sizes_from_tiff(file_path):
+    """Return explicit OME physical sizes from selected-image OME-TIFF metadata.
+
+    Inputs: `file_path`. Output: axis-to-size mapping.
+    """
+    pixels = _ome_pixels_metadata_from_tiff(file_path)
+    return _explicit_physical_sizes_from_pixels_mapping(pixels)
+
+
 def _format_process_exit_code(returncode):
     """Return a decimal and hexadecimal process exit code string.
 
@@ -2292,10 +2657,10 @@ def _format_process_exit_code(returncode):
     return f"{code} (0x{code & 0xFFFFFFFF:08X})"
 
 
-def _local_imaris_convert_error(completed):
+def _local_imaris_convert_error(completed, *, voxel_sizes=None):
     """Return a bounded local Imaris converter error message.
 
-    Inputs: `completed` subprocess result. Output: message string.
+    Inputs: `completed` subprocess result, `voxel_sizes`. Output: message string.
     """
     parts = [
         "Local Imaris conversion failed with exit code "
@@ -2307,6 +2672,20 @@ def _local_imaris_convert_error(completed):
         parts.append(f"stdout: {stdout[:2000]}")
     if stderr:
         parts.append(f"stderr: {stderr[:2000]}")
+    if "Unknown voxel size:" in f"{stdout}\n{stderr}":
+        missing_axes = [
+            axis
+            for axis in ("X", "Y", "Z")
+            if not _positive_float_text(
+                voxel_sizes.get(axis) if isinstance(voxel_sizes, dict) else None
+            )
+        ]
+        missing_text = ", ".join(missing_axes) if missing_axes else "none"
+        parts.append(
+            "The selected-image metadata does not provide explicit positive "
+            f"voxel size metadata for axis/axes: {missing_text}. The connector "
+            "will not invent missing voxel sizes."
+        )
     return " ".join(parts)
 
 
@@ -2361,18 +2740,31 @@ def _imaris_convert_subprocess_kwargs():
     return kwargs
 
 
-def _iter_imaris_convert_commands(converter, source_path, output_path, input_format):
+def _iter_imaris_convert_commands(
+    converter,
+    source_path,
+    output_path,
+    input_format,
+    voxel_sizes=None,
+):
     """Yield compatible ImarisConvert command forms.
 
-    Inputs: `converter`, `source_path`, `output_path`, `input_format`. Output:
-    yielded command lists.
+    Inputs: `converter`, `source_path`, `output_path`, `input_format`,
+    `voxel_sizes`. Output: yielded command lists.
     """
     base = [converter, "-i", str(source_path)]
+    voxel_args = _voxel_size_args_from_mapping(voxel_sizes or {})
     if input_format:
-        yield base + ["-if", str(input_format), "-o", output_path, "-l", "none"]
-        yield base + ["-if", str(input_format), "-o", output_path]
-    yield base + ["-o", output_path, "-l", "none"]
-    yield base + ["-o", output_path]
+        yield base + ["-if", str(input_format), "-o", output_path] + voxel_args + [
+            "-l",
+            "none",
+        ]
+        yield base + ["-if", str(input_format), "-o", output_path] + voxel_args
+    yield base + ["-o", output_path] + voxel_args + [
+        "-l",
+        "none",
+    ]
+    yield base + ["-o", output_path] + voxel_args
 
 
 def convert_file_to_ims_with_local_imaris(
@@ -2380,17 +2772,21 @@ def convert_file_to_ims_with_local_imaris(
     output_dir,
     fallback_name="image.ims",
     input_format=None,
+    voxel_size_overrides=None,
 ):
     """Convert a local source image file to IMS with the local Imaris converter.
 
-    Inputs: `source_file`, `output_dir`, `fallback_name`, `input_format`. Output:
-    IMS path. Raises: RuntimeError when validation or conversion fails.
+    Inputs: `source_file`, `output_dir`, `fallback_name`, `input_format`,
+    `voxel_size_overrides`. Output: IMS path. Raises: RuntimeError when validation
+    or conversion fails.
     """
     source_path = _existing_regular_file_path(source_file)
     if source_path is None:
         raise RuntimeError("Selected Imaris conversion source file is missing.")
     if is_ims_file(source_path):
-        _xt_debug("Local Imaris conversion skipped because source is already IMS")
+        _xt_debug(
+            "Imaris converter: local conversion skipped because source is already IMS"
+        )
         return str(source_path)
     if output_dir is None:
         output_dir = os.path.dirname(str(source_path))
@@ -2413,15 +2809,20 @@ def convert_file_to_ims_with_local_imaris(
         default_extension=".ims",
     )
     output_path = _unique_download_path(output_dir, output_name)
-    _xt_debug("Converting selected OMERO Image source to IMS with local ImarisConvert")
+    _xt_debug(
+        "Imaris converter: converting selected-image export to IMS with local "
+        "ImarisConvert"
+    )
     completed = None
     attempted = 0
+    voxel_sizes = _merge_explicit_voxel_size_mappings(voxel_size_overrides)
     try:
         for cmd in _iter_imaris_convert_commands(
             converter,
             source_path,
             output_path,
             input_format,
+            voxel_sizes=voxel_sizes,
         ):
             attempted += 1
             with contextlib.suppress(OSError):
@@ -2440,16 +2841,18 @@ def convert_file_to_ims_with_local_imaris(
                     **_imaris_convert_subprocess_kwargs(),
                 )
             if completed.returncode == 0 and is_ims_file(output_path):
-                _xt_debug("Local Imaris conversion produced a valid IMS file")
+                _xt_debug(
+                    "Imaris converter: local conversion produced a valid IMS file"
+                )
                 return output_path
             _xt_debug(
-                "Local Imaris conversion attempt failed with exit code "
+                "Imaris converter: local conversion attempt failed with exit code "
                 f"{_format_process_exit_code(completed.returncode)}"
             )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
-            "Local Imaris conversion timed out while converting the selected OMERO "
-            "Image source."
+            "Local Imaris conversion timed out while converting the selected-image "
+            "export."
         ) from exc
     except Exception as exc:
         raise RuntimeError(
@@ -2460,7 +2863,7 @@ def convert_file_to_ims_with_local_imaris(
         raise RuntimeError("Local Imaris conversion did not start.")
     if completed.returncode != 0:
         raise RuntimeError(
-            f"{_local_imaris_convert_error(completed)} "
+            f"{_local_imaris_convert_error(completed, voxel_sizes=voxel_sizes)} "
             f"Attempted {attempted} compatible argument form(s)."
         )
     if not is_ims_file(output_path):
@@ -2474,22 +2877,28 @@ def convert_ome_tiff_to_ims_with_local_imaris(
     source_file,
     output_dir,
     fallback_name="image.ims",
+    voxel_size_overrides=None,
 ):
     """Convert a selected-image OME-TIFF to IMS with the local Imaris converter.
 
-    Inputs: `source_file`, `output_dir`, `fallback_name`. Output: IMS path. Raises:
-    RuntimeError when validation or conversion fails.
+    Inputs: `source_file`, `output_dir`, `fallback_name`, `voxel_size_overrides`.
+    Output: IMS path. Raises: RuntimeError when validation or conversion fails.
     """
     source_path = _existing_regular_file_path(source_file)
     if source_path is None:
         raise RuntimeError("Selected-image OME-TIFF export is missing.")
     if not is_tiff_file(source_path):
         raise RuntimeError("Selected-image export is not a readable TIFF file.")
+    physical_sizes = _merge_explicit_voxel_size_mappings(
+        _explicit_ome_physical_sizes_from_tiff(source_path),
+        voxel_size_overrides,
+    )
     return convert_file_to_ims_with_local_imaris(
         source_path,
         output_dir,
         fallback_name=fallback_name,
         input_format="OmeTiff",
+        voxel_size_overrides=physical_sizes,
     )
 
 
@@ -6041,13 +6450,18 @@ class OMEROWebClient:
         result = {
             "id": image_id,
             "name": data.get("Name") or data.get("name") or "",
-            "original_file": None,
         }
-
-        fileset = data.get("Fileset") or data.get("fileset") or {}
-        files = fileset.get("Files") or fileset.get("files") or []
-        if files:
-            result["original_file"] = files[0].get("Name") or files[0].get("name")
+        pixels = data.get("Pixels") or data.get("pixels") or {}
+        physical_sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
+        if physical_sizes:
+            result["voxel_sizes"] = physical_sizes
+            for axis, key in (
+                ("X", "physicalSizeX"),
+                ("Y", "physicalSizeY"),
+                ("Z", "physicalSizeZ"),
+            ):
+                if axis in physical_sizes:
+                    result[key] = physical_sizes[axis]
 
         return result
 
@@ -6111,45 +6525,62 @@ class OMEROWebClient:
                 return response
         return None
 
-    def has_omero_ims_export_capability(self):
+    def has_omero_ims_export_capability(self, *, log_unavailable=False):
         """Return True when this OMERO.web instance exposes server-side IMS export.
 
-        Inputs: none. Output: `available`.
+        Inputs: optional `log_unavailable`. Output: `available`.
         """
         if not self.session_id:
             return False
         base = self.base_url.rstrip("/")
         capability_url = f"{base}/omero_imaris_connector/imaris-export/?capabilities=1"
-        _xt_debug(
-            "Checking OMERO IMS export capability endpoint="
-            f"{_safe_url_for_log(capability_url)}"
-        )
         req = self._create_request_with_cookies(capability_url)
         try:
             with self.opener.open(req, timeout=30) as response:
-                if self._check_login_redirect(response, "IMS export capability check"):
+                if self._check_login_redirect(
+                    response, "OMERO converter capability check"
+                ):
                     return False
                 raw_body = response.read().decode("utf-8", errors="replace")
                 payload = json.loads(raw_body)
         except urllib.error.HTTPError as exc:
-            _xt_debug(f"OMERO IMS export capability unavailable: HTTP {exc.code}")
+            if log_unavailable:
+                _xt_debug(
+                    "OMERO converter: custom server-side capability not advertised "
+                    f"(HTTP {exc.code})"
+                )
             return False
         except Exception as exc:
-            _xt_debug(f"OMERO IMS export capability unavailable: {exc}")
+            if log_unavailable:
+                _xt_debug(
+                    "OMERO converter: custom server-side capability probe failed: "
+                    f"{type(exc).__name__}"
+                )
             return False
         if not isinstance(payload, dict):
-            _xt_debug("OMERO IMS export capability returned non-object JSON")
+            if log_unavailable:
+                _xt_debug(
+                    "OMERO converter: custom server-side capability response was "
+                    "not an object"
+                )
             return False
         capability_flag = payload.get(OMERO_IMS_EXPORT_CAPABILITY_KEY)
         if capability_flag != OMERO_IMS_EXPORT_CAPABILITY_FLAG:
-            _xt_debug("OMERO IMS export capability flag is missing or unsupported")
+            if log_unavailable:
+                _xt_debug(
+                    "OMERO converter: custom server-side capability flag is missing "
+                    "or unsupported"
+                )
             return False
         converters = payload.get("converters")
         converter_available = (
             isinstance(converters, dict) and converters.get("OMERO") is True
         )
         available = bool(payload.get("omero_ims_export") and converter_available)
-        _xt_debug(f"OMERO IMS export capability available={available}")
+        if available:
+            _xt_debug("OMERO converter: custom server-side IMS export is available")
+        elif log_unavailable:
+            _xt_debug("OMERO converter: custom server-side IMS export is disabled")
         return available
 
     def get_folder_export_capability(self):
@@ -6545,17 +6976,26 @@ class OMEROWebClient:
             if image_id is None:
                 continue
             pixels = img.get("Pixels") or img.get("pixels") or {}
-            out.append(
-                {
-                    "id": image_id,
-                    "name": img.get("Name") or img.get("name") or f"Image {image_id}",
-                    "sizeX": pixels.get("SizeX", pixels.get("sizeX", 0)),
-                    "sizeY": pixels.get("SizeY", pixels.get("sizeY", 0)),
-                    "sizeZ": pixels.get("SizeZ", pixels.get("sizeZ", 1)),
-                    "sizeC": pixels.get("SizeC", pixels.get("sizeC", 1)),
-                    "sizeT": pixels.get("SizeT", pixels.get("sizeT", 1)),
-                }
-            )
+            item = {
+                "id": image_id,
+                "name": img.get("Name") or img.get("name") or f"Image {image_id}",
+                "sizeX": pixels.get("SizeX", pixels.get("sizeX", 0)),
+                "sizeY": pixels.get("SizeY", pixels.get("sizeY", 0)),
+                "sizeZ": pixels.get("SizeZ", pixels.get("sizeZ", 1)),
+                "sizeC": pixels.get("SizeC", pixels.get("sizeC", 1)),
+                "sizeT": pixels.get("SizeT", pixels.get("sizeT", 1)),
+            }
+            physical_sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
+            if physical_sizes:
+                item["voxel_sizes"] = physical_sizes
+                for axis, key in (
+                    ("X", "physicalSizeX"),
+                    ("Y", "physicalSizeY"),
+                    ("Z", "physicalSizeZ"),
+                ):
+                    if axis in physical_sizes:
+                        item[key] = physical_sizes[axis]
+            out.append(item)
         return out
 
     def download_ims_export(
@@ -6591,15 +7031,20 @@ class OMEROWebClient:
 
         encoded_query = urllib.parse.urlencode(query_params)
         export_url = f"{base}/omero_imaris_connector/imaris-export/?{encoded_query}"
-        _xt_debug(f"Requesting IMS export endpoint={_safe_url_for_log(export_url)}")
+        _xt_debug(
+            "OMERO converter: requesting custom IMS export endpoint="
+            f"{_safe_url_for_log(export_url)}"
+        )
 
         # Create request with explicit cookies
         req = self._create_request_with_cookies(export_url)
 
         try:
             with self.opener.open(req, timeout=30) as response:
-                if self._check_login_redirect(response, "IMS export request"):
-                    if not self._attempt_reauth("IMS export request"):
+                if self._check_login_redirect(
+                    response, "OMERO converter IMS export request"
+                ):
+                    if not self._attempt_reauth("OMERO converter IMS export request"):
                         raise RuntimeError(
                             "Not authenticated to OMERO.web (redirected to login). "
                             "Please login again."
@@ -6615,18 +7060,20 @@ class OMEROWebClient:
                     payload = json.loads(raw_body)
                 except json.JSONDecodeError as exc:
                     raise RuntimeError(
-                        "IMS export failed: server returned a non-JSON response. "
+                        "OMERO converter IMS export failed: server returned a non-JSON response. "
                         "Please verify the OMERO.web Imaris connector is healthy."
                     ) from exc
 
                 job_id = payload.get("job_id")
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
-                    raise RuntimeError(f"Unexpected response from server: {payload}")
+                    raise RuntimeError(
+                        f"Unexpected OMERO converter response from server: {payload}"
+                    )
 
                 status_url = self._normalize_url(status_url, base)
                 _xt_debug(
-                    "IMS export started; polling endpoint="
+                    "OMERO converter: IMS export started; polling endpoint="
                     f"{_safe_url_for_log(status_url)}"
                 )
 
@@ -6640,7 +7087,7 @@ class OMEROWebClient:
             while time.time() < deadline:
                 poll_count += 1
                 _xt_debug(
-                    f"IMS export poll #{poll_count} endpoint="
+                    f"OMERO converter: IMS export poll #{poll_count} endpoint="
                     f"{_safe_url_for_log(status_url)}"
                 )
 
@@ -6649,7 +7096,9 @@ class OMEROWebClient:
 
                 try:
                     with self.opener.open(poll_req, timeout=30) as poll_response:
-                        if self._check_login_redirect(poll_response, "IMS export poll"):
+                        if self._check_login_redirect(
+                            poll_response, "OMERO converter IMS export poll"
+                        ):
                             # Try to re-extract cookies in case they were updated
                             self._extract_cookies_from_jar()
                             _xt_debug(
@@ -6658,11 +7107,13 @@ class OMEROWebClient:
                             )
                             if not reauth_attempted:
                                 reauth_attempted = True
-                                if self._attempt_reauth("IMS export poll"):
+                                if self._attempt_reauth(
+                                    "OMERO converter IMS export poll"
+                                ):
                                     continue
                             raise RuntimeError(
                                 "Not authenticated to OMERO.web (redirected to login) "
-                                "while polling IMS export. "
+                                "while polling OMERO converter IMS export. "
                                 "Session may have expired. Please try again."
                             )
 
@@ -6673,7 +7124,7 @@ class OMEROWebClient:
                             poll_payload = json.loads(poll_body)
                         except json.JSONDecodeError as exc:
                             raise RuntimeError(
-                                "IMS export poll failed: server returned a non-JSON response. "
+                                "OMERO converter IMS export poll failed: server returned a non-JSON response. "
                                 "Please verify the OMERO.web Imaris connector is healthy."
                             ) from exc
 
@@ -6681,17 +7132,20 @@ class OMEROWebClient:
                     if e.code in (401, 403):
                         if not reauth_attempted:
                             reauth_attempted = True
-                            if self._attempt_reauth("IMS export poll HTTP error"):
+                            if self._attempt_reauth(
+                                "OMERO converter IMS export poll HTTP error"
+                            ):
                                 continue
                         raise RuntimeError(
-                            f"Authentication error ({e.code}) while polling IMS export. "
+                            f"Authentication error ({e.code}) while polling OMERO "
+                            "converter IMS export. "
                             "Session may have expired. Please try again."
                         )
                     raise
 
                 last_state = poll_payload.get("state")
                 _xt_debug(
-                    "IMS export poll state="
+                    "OMERO converter: IMS export poll state="
                     f"{last_state} finished={bool(poll_payload.get('finished'))} "
                     f"failed={bool(poll_payload.get('failed'))} "
                     f"status={poll_payload.get('status') or '<unset>'}"
@@ -6699,7 +7153,9 @@ class OMEROWebClient:
 
                 if poll_payload.get("failed"):
                     error_msg = poll_payload.get("error", "unknown error")
-                    raise RuntimeError(f"IMS export failed: {error_msg}")
+                    raise RuntimeError(
+                        f"OMERO converter IMS export failed: {error_msg}"
+                    )
 
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
@@ -6710,19 +7166,26 @@ class OMEROWebClient:
                 time.sleep(EXPORT_POLL_INTERVAL)
 
             if not download_url:
-                raise RuntimeError(f"IMS export timed out (last state: {last_state})")
+                raise RuntimeError(
+                    f"OMERO converter IMS export timed out (last state: {last_state})"
+                )
 
             # Download the file
-            _xt_debug(f"Downloading IMS endpoint={_safe_url_for_log(download_url)}")
+            _xt_debug(
+                "OMERO converter: downloading IMS endpoint="
+                f"{_safe_url_for_log(download_url)}"
+            )
             download_req = self._create_request_with_cookies(download_url)
 
             with self.opener.open(
                 download_req, timeout=EXPORT_TIMEOUT + 60
             ) as response:
-                if self._check_login_redirect(response, "IMS export download"):
+                if self._check_login_redirect(
+                    response, "OMERO converter IMS export download"
+                ):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web (redirected to login) "
-                        "while downloading IMS export."
+                        "while downloading OMERO converter IMS export."
                     )
 
                 cd = response.headers.get("Content-Disposition", "")
@@ -6738,7 +7201,9 @@ class OMEROWebClient:
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
 
-                _xt_debug("Downloading IMS to selected local connector path")
+                _xt_debug(
+                    "OMERO converter: downloading IMS to selected local connector path"
+                )
                 with open(local_path, "wb") as f:
                     while True:
                         chunk = response.read(chunk_size)
@@ -6764,8 +7229,12 @@ class OMEROWebClient:
                 )
             if os.path.getsize(local_path) <= 0:
                 raise RuntimeError("Downloaded IMS file is empty")
+            if not is_ims_file(local_path):
+                raise RuntimeError(
+                    "Downloaded IMS export is not a valid IMS (HDF5) file."
+                )
 
-            _xt_debug("IMS export downloaded OK")
+            _xt_debug("OMERO converter: IMS export downloaded OK")
             return local_path
 
         except urllib.error.HTTPError as e:
@@ -6777,10 +7246,17 @@ class OMEROWebClient:
                     "Suppressed non-fatal exception in XTOmeroConnector.py",
                     exc_info=exc,
                 )
-            _xt_debug(f"IMS export HTTP error body omitted length={body_length}")
-            raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}") from e
+            _xt_debug(
+                "OMERO converter: IMS export HTTP error body omitted "
+                f"length={body_length}"
+            )
+            raise RuntimeError(
+                f"OMERO converter IMS export HTTPError {e.code}: {e.reason}"
+            ) from e
         except urllib.error.URLError as e:
-            raise RuntimeError(f"IMS export failed (URLError): {e}") from e
+            raise RuntimeError(
+                f"OMERO converter IMS export failed (URLError): {e}"
+            ) from e
 
     def download_selected_image_ome_tiff(
         self,
@@ -6807,7 +7283,7 @@ class OMEROWebClient:
         base = self.base_url.rstrip("/")
         export_url = f"{base}/webgateway/render_ome_tiff/i/{int(image_id)}/"
         _xt_debug(
-            "Requesting selected Image OME-TIFF export endpoint="
+            "Imaris converter: requesting selected Image OME-TIFF export endpoint="
             f"{_safe_url_for_log(export_url)}"
         )
         req = self._create_request_with_cookies(export_url)
@@ -6815,7 +7291,7 @@ class OMEROWebClient:
         try:
             with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
                 if self._check_login_redirect(
-                    response, "selected Image OME-TIFF export"
+                    response, "Imaris converter selected Image OME-TIFF export"
                 ):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web while exporting selected Image "
@@ -6849,7 +7325,9 @@ class OMEROWebClient:
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
 
-                _xt_debug("Downloading selected OMERO Image OME-TIFF export")
+                _xt_debug(
+                    "Imaris converter: downloading selected Image OME-TIFF export"
+                )
                 with open(local_path, "wb") as f:
                     while True:
                         chunk = response.read(chunk_size)
@@ -6880,7 +7358,7 @@ class OMEROWebClient:
                     "Selected Image OME-TIFF export is not a readable TIFF file."
                 )
 
-            _xt_debug("Selected Image OME-TIFF export downloaded OK")
+            _xt_debug("Imaris converter: selected Image OME-TIFF export downloaded OK")
             return local_path
         except urllib.error.HTTPError as e:
             try:
@@ -6892,7 +7370,7 @@ class OMEROWebClient:
                     exc_info=exc,
                 )
             _xt_debug(
-                "Selected Image OME-TIFF export HTTP error body omitted "
+                "Imaris converter: selected Image OME-TIFF export HTTP error body omitted "
                 f"length={body_length}"
             )
             if e.code == 404:
@@ -11050,13 +11528,27 @@ class OMEROBrowserDialog:
         image_id,
         image_name,
         download_dir,
+        image_metadata=None,
     ):
         """Export one OMERO Image ID and convert it with local Imaris.
 
-        Inputs: `image_id`, `image_name`, `download_dir`. Output: IMS path.
+        Inputs: `image_id`, `image_name`, `download_dir`, `image_metadata`. Output:
+        IMS path.
         """
+        metadata = _merge_explicit_voxel_size_mappings(
+            _explicit_physical_sizes_from_image_metadata(image_metadata)
+        )
+        if set(metadata) != {"X", "Y", "Z"}:
+            get_image_metadata = getattr(self.client, "get_image_metadata", None)
+            if callable(get_image_metadata):
+                detail_metadata = get_image_metadata(image_id)
+                metadata = _merge_explicit_voxel_size_mappings(
+                    metadata,
+                    _explicit_physical_sizes_from_image_metadata(detail_metadata),
+                )
         self._set_status(
-            f"Exporting selected Image {image_id} as OME-TIFF...", "#fff3cd"
+            f"Imaris converter: exporting selected Image {image_id} as OME-TIFF...",
+            "#fff3cd",
         )
         ome_tiff_file = self.client.download_selected_image_ome_tiff(
             image_id,
@@ -11065,17 +11557,18 @@ class OMEROBrowserDialog:
         )
         self.temp_files.append(ome_tiff_file)
         self._set_status(
-            f"Converting selected Image {image_id} to IMS with local Imaris...",
+            f"Imaris converter: converting selected Image {image_id} to IMS locally...",
             "#fff3cd",
         )
         ims_file = convert_ome_tiff_to_ims_with_local_imaris(
             ome_tiff_file,
             download_dir,
             fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
+            voxel_size_overrides=metadata,
         )
         _xt_debug(
-            "Selected OMERO Image ID exported via standard OMERO.web and converted "
-            "with local ImarisConvert"
+            "Imaris converter: selected Image ID exported via standard OMERO.web "
+            "and converted with local ImarisConvert"
         )
         return ims_file
 
@@ -11222,8 +11715,12 @@ class OMEROBrowserDialog:
             download_dir = self.export_dir
 
             if converter == "OMERO":
-                self._set_status(f"Exporting IMS for {image_name}...", "#fff3cd")
-                self._set_status("Running server-side IMS export...", "#fff3cd")
+                self._set_status(
+                    f"OMERO converter: exporting IMS for {image_name}...", "#fff3cd"
+                )
+                self._set_status(
+                    "OMERO converter: running server-side IMS export...", "#fff3cd"
+                )
                 downloaded_file = self.client.download_ims_export(
                     image_id,
                     download_dir,
@@ -11234,6 +11731,7 @@ class OMEROBrowserDialog:
                     image_id,
                     image_name,
                     download_dir,
+                    image_metadata=img,
                 )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -11335,7 +11833,8 @@ class OMEROBrowserDialog:
 
                 if converter == "OMERO":
                     self._set_status(
-                        f"Exporting IMS {index}/{count}: {image_name}", "#fff3cd"
+                        f"OMERO converter: exporting IMS {index}/{count}: {image_name}",
+                        "#fff3cd",
                     )
                     downloaded_file = self.client.download_ims_export(
                         image_id,
@@ -11344,7 +11843,8 @@ class OMEROBrowserDialog:
                     )
                 else:
                     self._set_status(
-                        f"Exporting selected Image {index}/{count}: {image_name}",
+                        f"Imaris converter: exporting selected Image {index}/{count}: "
+                        f"{image_name}",
                         "#fff3cd",
                     )
                     downloaded_file = (
@@ -11352,6 +11852,7 @@ class OMEROBrowserDialog:
                             image_id,
                             image_name,
                             download_dir,
+                            image_metadata=img,
                         )
                     )
 
