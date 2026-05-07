@@ -1,0 +1,29 @@
+# Keep repository text normalized for Windows and Linux contributors.
+* text=auto eol=lf
+
+# Windows launcher formats may keep CRLF in the working tree.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets must never be line-ending normalized.
+*.7z binary
+*.bmp binary
+*.db binary
+*.dll binary
+*.exe binary
+*.gif binary
+*.gz binary
+*.h5 binary
+*.ico binary
+*.ims binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.png binary
+*.pyd binary
+*.so binary
+*.sqlite binary
+*.tif binary
+*.tiff binary
+*.webp binary
+*.zip binary

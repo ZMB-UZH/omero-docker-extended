@@ -187,9 +187,10 @@ CONNECTOR_PANEL_ICON_FRAME_HEIGHT = 42
 CONNECTOR_PANEL_ICON_FONT = ("Segoe UI", 13, "bold")
 PASSWORD_REVEAL_DURATION_MS = 30000
 PASSWORD_REVEAL_BUTTON_SIZE = 18
-PASSWORD_REVEAL_ICON_BG = "#f8fafc"
-PASSWORD_REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
-PASSWORD_REVEAL_ICON_FG = "#425466"
+REVEAL_ICON_BG = "#f8fafc"
+REVEAL_ICON_ACTIVE_BG = "#e7f0fb"
+REVEAL_ICON_FG = "#425466"
+CLEARED_CREDENTIAL_TEXT = str()
 AUTOSAVE_SETTINGS_FRAME_WIDTH = 450
 AUTOSAVE_SETTINGS_OPTION_GAP = 34
 CONVERTER_SLOT_WIDTH = 619
@@ -2346,9 +2347,7 @@ def convert_ome_tiff_to_ims_with_local_imaris(
     )
     output_path = _unique_download_path(output_dir, output_name)
     cmd = [converter, "-i", str(source_path), "-o", output_path, "-l", "none"]
-    _xt_debug(
-        "Converting selected OMERO Image export to IMS with local ImarisConvert"
-    )
+    _xt_debug("Converting selected OMERO Image export to IMS with local ImarisConvert")
     try:
         completed = subprocess.run(
             cmd,
@@ -5599,7 +5598,7 @@ class OMEROWebClient:
             _xt_debug(f"Connection error: {e}")
             return False
         finally:
-            self.password = ""
+            self.password = CLEARED_CREDENTIAL_TEXT
 
     @staticmethod
     def _api_auth_failure(raise_on_error):
@@ -5999,9 +5998,7 @@ class OMEROWebClient:
         if not self.session_id:
             return False
         base = self.base_url.rstrip("/")
-        capability_url = (
-            f"{base}/omero_imaris_connector/imaris-export/?capabilities=1"
-        )
+        capability_url = f"{base}/omero_imaris_connector/imaris-export/?capabilities=1"
         _xt_debug(
             "Checking OMERO IMS export capability endpoint="
             f"{_safe_url_for_log(capability_url)}"
@@ -6696,7 +6693,9 @@ class OMEROWebClient:
 
         try:
             with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
-                if self._check_login_redirect(response, "selected Image OME-TIFF export"):
+                if self._check_login_redirect(
+                    response, "selected Image OME-TIFF export"
+                ):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web while exporting selected Image "
                         "as OME-TIFF."
@@ -7074,10 +7073,10 @@ class OMEROBrowserDialog:
         self.password_reveal_btn = _PasswordRevealButton(
             self.password_frame,
             command=self._toggle_password_reveal,
-            bg=PASSWORD_REVEAL_ICON_BG,
-            fg=PASSWORD_REVEAL_ICON_FG,
-            activebackground=PASSWORD_REVEAL_ICON_ACTIVE_BG,
-            activeforeground=PASSWORD_REVEAL_ICON_FG,
+            bg=REVEAL_ICON_BG,
+            fg=REVEAL_ICON_FG,
+            activebackground=REVEAL_ICON_ACTIVE_BG,
+            activeforeground=REVEAL_ICON_FG,
             width=PASSWORD_REVEAL_BUTTON_SIZE,
             height=PASSWORD_REVEAL_BUTTON_SIZE,
         )
@@ -8835,7 +8834,7 @@ class OMEROBrowserDialog:
                 _xt_debug(
                     f"Suppressed cookie-jar clear failure during disconnect: {exc}"
                 )
-            self.client.password = ""
+            self.client.password = CLEARED_CREDENTIAL_TEXT
             self.client.csrf_token = None
             self.client.session_id = None
             self.client.session_key = None
@@ -8898,7 +8897,9 @@ class OMEROBrowserDialog:
         )
         local_imaris_converter = _find_imaris_convert_executable()
         if not local_imaris_converter:
-            _xt_debug("Imaris converter unavailable: ImarisConvert executable not found")
+            _xt_debug(
+                "Imaris converter unavailable: ImarisConvert executable not found"
+            )
         options = []
         omero_available = False
         if client:
@@ -9930,7 +9931,7 @@ class OMEROBrowserDialog:
                 )
                 return
 
-            client.password = ""
+            client.password = CLEARED_CREDENTIAL_TEXT
             self._invoke_on_ui_thread(
                 lambda: self._set_status(
                     "Detecting connector capabilities...",
@@ -9979,7 +9980,7 @@ class OMEROBrowserDialog:
             self.client = client
             self._connected = True
             self._clear_password_entry()
-            client.password = ""
+            client.password = CLEARED_CREDENTIAL_TEXT
             self._set_connect_button(
                 "Disconnect",
                 _tk_constant("NORMAL", "normal"),
@@ -11216,10 +11217,12 @@ class OMEROBrowserDialog:
                         f"Exporting selected Image {index}/{count}: {image_name}",
                         "#fff3cd",
                     )
-                    downloaded_file = self._download_selected_image_with_imaris_converter(
-                        image_id,
-                        image_name,
-                        download_dir,
+                    downloaded_file = (
+                        self._download_selected_image_with_imaris_converter(
+                            image_id,
+                            image_name,
+                            download_dir,
+                        )
                     )
 
                 if not downloaded_file or not os.path.exists(downloaded_file):
