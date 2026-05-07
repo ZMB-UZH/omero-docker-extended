@@ -68,8 +68,8 @@ def _require_live_imaris_install(module):
         return imaris_executable
     message = "Supported Imaris 11+ installation is not detectable on this host."
     if _test_env_flag("IMARIS_OMERO_REQUIRE_LIVE_IMARIS_TESTS"):
-        pytest.fail(message)
-    pytest.skip(message)
+        raise AssertionError(message)
+    raise pytest.skip.Exception(message)
 
 
 TEST_LOGIN_VALUE = "test-login-value"
@@ -4080,7 +4080,9 @@ def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exis
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: r"C:\Imaris\ImarisConvert.exe"
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
     )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
@@ -4105,7 +4107,9 @@ def test_converter_detection_keeps_imaris_choice_without_server_converter(monkey
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
     monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: r"C:\Imaris\ImarisConvert.exe"
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
     )
 
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
@@ -5280,9 +5284,7 @@ def test_direct_imaris_resolution_does_not_import_native_bridge_in_process():
     tree = ast.parse(source)
 
     function_nodes = {
-        node.name: node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
+        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
     }
     resolver = function_nodes["_resolve_imaris_application"]
     resolver_imports = [
@@ -6338,7 +6340,9 @@ def test_convert_ome_tiff_to_ims_with_local_imaris_runs_imarisconvert(
         Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(module, "_find_imaris_convert_executable", lambda: str(converter))
+    monkeypatch.setattr(
+        module, "_find_imaris_convert_executable", lambda: str(converter)
+    )
     monkeypatch.setattr(module.subprocess, "run", _run)
 
     ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
@@ -6368,7 +6372,9 @@ def test_convert_ome_tiff_to_ims_reports_breakpoint_exit_code(tmp_path, monkeypa
     converter.write_text("fake", encoding="utf-8")
     source_file = tmp_path / "source.ome.tif"
     source_file.write_bytes(b"II*\x00selected-image")
-    monkeypatch.setattr(module, "_find_imaris_convert_executable", lambda: str(converter))
+    monkeypatch.setattr(
+        module, "_find_imaris_convert_executable", lambda: str(converter)
+    )
     monkeypatch.setattr(
         module.subprocess,
         "run",
@@ -7185,7 +7191,9 @@ def test_detect_converter_options_keeps_omero_when_native_open_unavailable(
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: r"C:\Imaris\ImarisConvert.exe"
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
     )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO"]
@@ -7217,7 +7225,9 @@ def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(module, "_xt_debug", logs.append)
     monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: r"C:\Imaris\ImarisConvert.exe"
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
     )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
@@ -10249,7 +10259,9 @@ def test_live_imaris_install_detection_is_mandatory_when_present(monkeypatch):
     imaris_executable = _require_live_imaris_install(module)
     executable_path = Path(imaris_executable)
     install_root = executable_path.parent
-    install_root_key = module.os.path.normcase(module.os.path.normpath(str(install_root)))
+    install_root_key = module.os.path.normcase(
+        module.os.path.normpath(str(install_root))
+    )
     detected_roots = {
         module.os.path.normcase(module.os.path.normpath(str(root)))
         for root in module._iter_imaris_install_roots()
@@ -10262,9 +10274,9 @@ def test_live_imaris_install_detection_is_mandatory_when_present(monkeypatch):
 
     diagnostics = module._collect_imaris_xt_diagnostics()
     assert diagnostics["imaris_executable_exists"] is True
-    assert module.os.path.normcase(module.os.path.normpath(diagnostics["imaris_executable"])) == (
-        module.os.path.normcase(module.os.path.normpath(imaris_executable))
-    )
+    assert module.os.path.normcase(
+        module.os.path.normpath(diagnostics["imaris_executable"])
+    ) == (module.os.path.normcase(module.os.path.normpath(imaris_executable)))
     assert diagnostics["native_bridge_enabled"] is False
     assert diagnostics["imarislib_import"] == {"ok": False, "error": ""}
     assert diagnostics["icepy_import"] == {"ok": False, "error": ""}

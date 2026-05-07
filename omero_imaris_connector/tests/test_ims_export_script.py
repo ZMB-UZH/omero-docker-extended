@@ -831,8 +831,7 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         is None
     )
     assert (
-        module._managed_original_file_path(managed_root, "C:/demo", "image.tif")
-        is None
+        module._managed_original_file_path(managed_root, "C:/demo", "image.tif") is None
     )
     assert (
         module._managed_original_file_path(
