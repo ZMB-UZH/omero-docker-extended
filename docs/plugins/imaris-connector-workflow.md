@@ -194,8 +194,8 @@ flowchart TD
     B -->|Yes| D[Find ImarisConvert]
     D --> E{Converter found?}
     E -->|No| F[Stop: local Imaris converter unavailable]
-    E -->|Yes| G[Run ImarisConvert -i input -o output -l none]
-    G --> H{Exit code 0?}
+    E -->|Yes| G[Try compatible ImarisConvert argument forms]
+    G --> H{Any attempt exits 0 and writes IMS?}
     H -->|No| I[Report exit code in decimal and hex]
     H -->|Yes| J{Output IMS/HDF5 signature valid?}
     J -->|No| K[Stop: conversion did not produce IMS]

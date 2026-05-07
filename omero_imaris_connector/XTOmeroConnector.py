@@ -2310,21 +2310,88 @@ def _local_imaris_convert_error(completed):
     return " ".join(parts)
 
 
-def convert_ome_tiff_to_ims_with_local_imaris(
+@contextlib.contextmanager
+def _windows_error_dialogs_suppressed():
+    """Suppress Windows process crash dialogs while a converter subprocess runs.
+
+    Inputs: none. Output: context manager.
+    """
+    if os.name != "nt":
+        yield
+        return
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        sem_failcriticalerrors = 0x0001
+        sem_nogpfaulterrorbox = 0x0002
+        sem_noopenfileerrorbox = 0x8000
+        flags = sem_failcriticalerrors | sem_nogpfaulterrorbox | sem_noopenfileerrorbox
+        previous = kernel32.SetErrorMode(flags)
+    except Exception:
+        yield
+        return
+    try:
+        yield
+    finally:
+        with contextlib.suppress(Exception):
+            kernel32.SetErrorMode(previous)
+
+
+def _imaris_convert_subprocess_kwargs():
+    """Return platform-specific subprocess options for local ImarisConvert.
+
+    Inputs: none. Output: dict.
+    """
+    if os.name != "nt":
+        return {}
+
+    kwargs = {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+
+    startupinfo_type = getattr(subprocess, "STARTUPINFO", None)
+    startf_use_showwindow = getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+    if startupinfo_type is not None and startf_use_showwindow:
+        startupinfo = startupinfo_type()
+        startupinfo.dwFlags |= startf_use_showwindow
+        startupinfo.wShowWindow = 0
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
+def _iter_imaris_convert_commands(converter, source_path, output_path, input_format):
+    """Yield compatible ImarisConvert command forms.
+
+    Inputs: `converter`, `source_path`, `output_path`, `input_format`. Output:
+    yielded command lists.
+    """
+    base = [converter, "-i", str(source_path)]
+    if input_format:
+        yield base + ["-if", str(input_format), "-o", output_path, "-l", "none"]
+        yield base + ["-if", str(input_format), "-o", output_path]
+    yield base + ["-o", output_path, "-l", "none"]
+    yield base + ["-o", output_path]
+
+
+def convert_file_to_ims_with_local_imaris(
     source_file,
     output_dir,
     fallback_name="image.ims",
+    input_format=None,
 ):
-    """Convert a selected-image OME-TIFF to IMS with the local Imaris converter.
+    """Convert a local source image file to IMS with the local Imaris converter.
 
-    Inputs: `source_file`, `output_dir`, `fallback_name`. Output: IMS path. Raises:
-    RuntimeError when validation or conversion fails.
+    Inputs: `source_file`, `output_dir`, `fallback_name`, `input_format`. Output:
+    IMS path. Raises: RuntimeError when validation or conversion fails.
     """
     source_path = _existing_regular_file_path(source_file)
     if source_path is None:
-        raise RuntimeError("Selected-image OME-TIFF export is missing.")
-    if not is_tiff_file(source_path):
-        raise RuntimeError("Selected-image export is not a readable TIFF file.")
+        raise RuntimeError("Selected Imaris conversion source file is missing.")
+    if is_ims_file(source_path):
+        _xt_debug("Local Imaris conversion skipped because source is already IMS")
+        return str(source_path)
     if output_dir is None:
         output_dir = os.path.dirname(str(source_path))
     if not os.path.isdir(output_dir):
@@ -2346,37 +2413,84 @@ def convert_ome_tiff_to_ims_with_local_imaris(
         default_extension=".ims",
     )
     output_path = _unique_download_path(output_dir, output_name)
-    cmd = [converter, "-i", str(source_path), "-o", output_path, "-l", "none"]
-    _xt_debug("Converting selected OMERO Image export to IMS with local ImarisConvert")
+    _xt_debug("Converting selected OMERO Image source to IMS with local ImarisConvert")
+    completed = None
+    attempted = 0
     try:
-        completed = subprocess.run(
-            cmd,
-            check=False,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            timeout=LOCAL_IMARIS_CONVERT_TIMEOUT,
-            cwd=os.path.dirname(converter) or None,
-        )
+        for cmd in _iter_imaris_convert_commands(
+            converter,
+            source_path,
+            output_path,
+            input_format,
+        ):
+            attempted += 1
+            with contextlib.suppress(OSError):
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            with _windows_error_dialogs_suppressed():
+                completed = subprocess.run(
+                    cmd,
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                    timeout=LOCAL_IMARIS_CONVERT_TIMEOUT,
+                    cwd=os.path.dirname(converter) or None,
+                    **_imaris_convert_subprocess_kwargs(),
+                )
+            if completed.returncode == 0 and is_ims_file(output_path):
+                _xt_debug("Local Imaris conversion produced a valid IMS file")
+                return output_path
+            _xt_debug(
+                "Local Imaris conversion attempt failed with exit code "
+                f"{_format_process_exit_code(completed.returncode)}"
+            )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
-            "Local Imaris conversion timed out while converting the selected "
-            "OMERO Image export."
+            "Local Imaris conversion timed out while converting the selected OMERO "
+            "Image source."
         ) from exc
     except Exception as exc:
         raise RuntimeError(
             f"Local Imaris conversion could not start: {type(exc).__name__}: {exc}"
         ) from exc
 
+    if completed is None:
+        raise RuntimeError("Local Imaris conversion did not start.")
     if completed.returncode != 0:
-        raise RuntimeError(_local_imaris_convert_error(completed))
+        raise RuntimeError(
+            f"{_local_imaris_convert_error(completed)} "
+            f"Attempted {attempted} compatible argument form(s)."
+        )
     if not is_ims_file(output_path):
         raise RuntimeError(
             "Local Imaris conversion completed but did not produce a valid IMS file."
         )
-    _xt_debug("Local Imaris conversion produced a valid IMS file")
     return output_path
+
+
+def convert_ome_tiff_to_ims_with_local_imaris(
+    source_file,
+    output_dir,
+    fallback_name="image.ims",
+):
+    """Convert a selected-image OME-TIFF to IMS with the local Imaris converter.
+
+    Inputs: `source_file`, `output_dir`, `fallback_name`. Output: IMS path. Raises:
+    RuntimeError when validation or conversion fails.
+    """
+    source_path = _existing_regular_file_path(source_file)
+    if source_path is None:
+        raise RuntimeError("Selected-image OME-TIFF export is missing.")
+    if not is_tiff_file(source_path):
+        raise RuntimeError("Selected-image export is not a readable TIFF file.")
+    return convert_file_to_ims_with_local_imaris(
+        source_path,
+        output_dir,
+        fallback_name=fallback_name,
+        input_format="OmeTiff",
+    )
 
 
 def _current_imaris_file_getter(imaris_app):

@@ -6624,10 +6624,52 @@ def test_convert_ome_tiff_to_ims_with_local_imaris_runs_imarisconvert(
     cmd, kwargs = calls[0]
     assert cmd[:2] == [str(converter), "-i"]
     assert cmd[2] == str(source_file)
-    assert cmd[3] == "-o"
-    assert cmd[5:] == ["-l", "none"]
+    assert cmd[3:5] == ["-if", "OmeTiff"]
+    assert cmd[5] == "-o"
+    assert cmd[7:] == ["-l", "none"]
     assert kwargs["cwd"] == str(tmp_path)
     assert kwargs["timeout"] == module.LOCAL_IMARIS_CONVERT_TIMEOUT
+
+
+def test_convert_ome_tiff_to_ims_retries_without_log_argument(tmp_path, monkeypatch):
+    """Verify local Imaris conversion retries another compatible command form.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in
+    local Imaris converter argument compatibility.
+    """
+    module = _load_xt_module()
+    converter = tmp_path / "ImarisConvert.exe"
+    converter.write_text("fake", encoding="utf-8")
+    source_file = tmp_path / "source.ome.tif"
+    source_file.write_bytes(b"II*\x00selected-image")
+    calls = []
+
+    def _run(cmd, **kwargs):
+        """Fail the first argument form and succeed the second.
+
+        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
+        """
+        calls.append((cmd, kwargs))
+        if len(calls) == 1:
+            return types.SimpleNamespace(returncode=2, stdout="", stderr="bad args")
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        module, "_find_imaris_convert_executable", lambda: str(converter)
+    )
+    monkeypatch.setattr(module.subprocess, "run", _run)
+
+    ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
+        source_file,
+        tmp_path,
+    )
+
+    assert module.is_ims_file(ims_path) is True
+    assert len(calls) == 2
+    assert calls[0][0][-2:] == ["-l", "none"]
+    assert calls[1][0][-2:] != ["-l", "none"]
+    assert calls[1][0][3:5] == ["-if", "OmeTiff"]
 
 
 def test_convert_ome_tiff_to_ims_reports_breakpoint_exit_code(tmp_path, monkeypatch):
