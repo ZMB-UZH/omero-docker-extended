@@ -2752,6 +2752,119 @@ def test_connector_settings_version_prepare_creates_new_file_with_defaults(tmp_p
     assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "false"
 
 
+def test_connector_first_boot_records_discovered_imaris_exe_in_settings(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify first boot persists the discovered Imaris.exe path.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on
+    cached Imaris path regressions.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir(parents=True)
+    imaris_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setenv("IMARIS_EXE", str(imaris_exe))
+
+    assert module._prepare_connector_settings_for_current_version(settings_path) is True
+    assert module._ensure_connector_settings_imaris_executable(settings_path) == str(
+        imaris_exe
+    )
+
+    loaded = module._load_connector_settings(settings_path)
+    assert loaded[module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY] == str(imaris_exe)
+
+
+def test_connector_cached_imaris_exe_prevents_repeated_install_searches(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify a valid saved Imaris.exe path short-circuits later discovery.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails when a
+    cached path still falls through to registry or install-directory scanning.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    cached_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    other_exe = tmp_path / "Imaris 12.0.0" / "Imaris.exe"
+    cached_exe.parent.mkdir(parents=True)
+    other_exe.parent.mkdir(parents=True)
+    cached_exe.write_text("", encoding="utf-8")
+    other_exe.write_text("", encoding="utf-8")
+    module._atomic_write_connector_settings(
+        {module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: str(cached_exe)},
+        settings_path,
+    )
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setenv("IMARIS_EXE", str(other_exe))
+    monkeypatch.setattr(
+        module,
+        "_iter_imaris_registry_executable_candidates",
+        lambda _winreg: (_ for _ in ()).throw(
+            AssertionError("cached Imaris path must prevent registry search")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_iter_imaris_vendor_executable_candidates",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("cached Imaris path must prevent vendor search")
+        ),
+    )
+
+    assert module._find_imaris_executable(settings_path) == str(cached_exe)
+    assert module._ensure_connector_settings_imaris_executable(settings_path) == str(
+        cached_exe
+    )
+
+
+def test_file_converter_detection_uses_cached_imaris_exe_before_scanning(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify File Converter discovery is derived from cached Imaris.exe first.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails when
+    selected-image converter detection repeats install discovery unnecessarily.
+    """
+    module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    imaris_root = tmp_path / "Imaris 11.0.0"
+    cached_exe = imaris_root / "Imaris.exe"
+    file_converter = imaris_root / "ImarisFileConverter.exe"
+    imaris_root.mkdir(parents=True)
+    cached_exe.write_text("", encoding="utf-8")
+    file_converter.write_text("", encoding="utf-8")
+    module._atomic_write_connector_settings(
+        {module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: str(cached_exe)},
+        settings_path,
+    )
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(module, "_connector_settings_env_path", lambda: settings_path)
+    monkeypatch.delenv("IMARIS_EXE", raising=False)
+    monkeypatch.delenv("IMARIS_HOME", raising=False)
+    monkeypatch.setattr(
+        module,
+        "_iter_imaris_registry_executable_candidates",
+        lambda _winreg: (_ for _ in ()).throw(
+            AssertionError("cached Imaris path must prevent registry search")
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_iter_imaris_vendor_executable_candidates",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("cached Imaris path must prevent vendor search")
+        ),
+    )
+
+    assert module._find_imaris_file_converter_executable() == str(file_converter)
+
+
 def test_connector_settings_version_parses_info_dialog_version(monkeypatch):
     """Verify settings version is parsed from the info-dialog version value.
 
@@ -2964,6 +3077,8 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
+    dialog._saved_settings = {}
+    dialog._settings_file_path = module._connector_settings_env_path(tmp_path)
 
     snapshot = module.OMEROBrowserDialog._connector_settings_snapshot(dialog)
 
@@ -2980,8 +3095,38 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
         module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: "",
         module.CONNECTOR_SETTINGS_VERSION_KEY: module.CONNECTOR_INFO_VERSION,
     }
+
+
+def test_connector_settings_snapshot_preserves_cached_imaris_exe(tmp_path):
+    """Verify autosave snapshots do not erase the cached Imaris.exe path.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on Imaris path persistence
+    regressions.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir(parents=True)
+    imaris_exe.write_text("", encoding="utf-8")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog._settings_file_path = module._connector_settings_env_path(tmp_path)
+    dialog._saved_settings = {module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: str(imaris_exe)}
+
+    snapshot = module.OMEROBrowserDialog._connector_settings_snapshot(dialog)
+
+    assert snapshot[module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY] == str(imaris_exe)
 
 
 def test_autosave_toggle_updates_settings_immediately_without_password(tmp_path):
@@ -4036,10 +4181,13 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     assert "container.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)" in source
     assert "highlighted = self._open or self._hover" in source
     assert "if _native_imaris_bridge_enabled():" in source
-    assert "_reset_native_bridge_probe_for_converter_detection()" not in (
-        source.split("def _detect_converter_options_after_connection", 1)[1].split(
-            "def _has_imaris_handoff_target", 1
-        )[0]
+    assert (
+        "_reset_native_bridge_probe_for_converter_detection()"
+        not in (
+            source.split("def _detect_converter_options_after_connection", 1)[1].split(
+                "def _has_imaris_handoff_target", 1
+            )[0]
+        )
     )
     assert (
         "if client:\n            omero_available = client.has_omero_ims_export_capability()"
@@ -5744,7 +5892,7 @@ def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp
 
 
 def test_xt_connector_never_launches_fresh_imaris_for_ims_fallback():
-    """Verify only the selected-image path launches Imaris.exe.
+    """Verify only the selected-image path launches Imaris File Converter.
 
     Inputs: repository fixtures. Output: fails on regressions that reintroduce
     fresh-session IMS fallback launches or ImarisServerIce process spawning.
@@ -5769,7 +5917,7 @@ def test_xt_connector_never_launches_fresh_imaris_for_ims_fallback():
                 and call_node.func.attr == "Popen"
             ):
                 popen_call_functions.append(function_node.name)
-    assert popen_call_functions == ["_submit_file_to_imaris_executable"]
+    assert popen_call_functions == ["_submit_files_to_imaris_file_converter"]
 
 
 def test_direct_imaris_resolution_does_not_import_native_bridge_in_process():
@@ -6760,7 +6908,7 @@ def test_xt_connector_imaris_load_path_does_not_download_archived_originals():
 
     assert "download_original_file" not in source
     assert "download_selected_image_ome_tiff" in source
-    removed_converter_name = "convert_ome_tiff" "_to_ims_with_local_imaris"
+    removed_converter_name = "convert_ome_tiff_to_ims_with_local_imaris"
     assert removed_converter_name not in source
     assert "_mark_selected_image_export_file" in source
 
@@ -7150,6 +7298,8 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         imaris_root.mkdir()
         imaris_executable = imaris_root / "Imaris.exe"
         imaris_executable.write_text("", encoding="utf-8")
+        file_converter_executable = imaris_root / "ImarisFileConverter.exe"
+        file_converter_executable.write_text("", encoding="utf-8")
         monkeypatch.setattr(
             module,
             "_find_imaris_executable",
@@ -7204,7 +7354,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         assert len(resolution_results) == 2
         assert launched == [
             (
-                [str(imaris_executable), str(local_file)],
+                [str(file_converter_executable), str(local_file)],
                 {
                     "cwd": str(imaris_root),
                     "stdin": module.subprocess.DEVNULL,
@@ -8874,8 +9024,12 @@ def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly
     assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif")]
     assert opened == [(str(ome_tiff_file), False, True)]
     assert dialog.temp_files == [str(ome_tiff_file)]
-    assert statuses[-1][0] == "Submitted selected Image export to Imaris"
-    assert info_messages == [("Success", "Selected Image export submitted to Imaris.")]
+    assert statuses[-1][0] == (
+        "Submitted selected Image export to Imaris File Converter"
+    )
+    assert info_messages == [
+        ("Success", "Selected Image export submitted to Imaris File Converter.")
+    ]
     assert all("original" not in status[0].lower() for status in statuses)
     joined_logs = "\n".join(logs)
     assert "OMERO converter:" not in joined_logs
@@ -8925,11 +9079,11 @@ def test_imaris_converter_marks_selected_export_without_detail_or_conversion(
     )
 
 
-def test_submit_selected_image_export_uses_discovered_imaris_executable(
+def test_submit_selected_image_export_uses_discovered_imaris_file_converter(
     tmp_path,
     monkeypatch,
 ):
-    """Verify selected-image handoff matches OS Imaris executable submission.
+    """Verify selected-image handoff targets Imaris File Converter.
 
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on executable
     handoff regressions.
@@ -8941,6 +9095,8 @@ def test_submit_selected_image_export_uses_discovered_imaris_executable(
     imaris_root.mkdir()
     imaris_executable = imaris_root / "Imaris.exe"
     imaris_executable.write_text("", encoding="utf-8")
+    file_converter_executable = imaris_root / "ImarisFileConverter.exe"
+    file_converter_executable.write_text("", encoding="utf-8")
     calls = []
     monkeypatch.setattr(
         module, "_find_imaris_executable", lambda: str(imaris_executable)
@@ -8978,7 +9134,7 @@ def test_submit_selected_image_export_uses_discovered_imaris_executable(
     assert module.submit_selected_image_export_to_imaris_converter(ome_tiff_file)
     assert calls == [
         {
-            "args": [str(imaris_executable), str(ome_tiff_file)],
+            "args": [str(file_converter_executable), str(ome_tiff_file)],
             "cwd": str(imaris_root),
             "stdin": module.subprocess.DEVNULL,
             "stdout": module.subprocess.DEVNULL,
@@ -8988,11 +9144,94 @@ def test_submit_selected_image_export_uses_discovered_imaris_executable(
     ]
 
 
+def test_submit_selected_image_exports_uses_one_file_converter_batch(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify multi-selected exports are sent to one File Converter process.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on
+    regressions that submit selected images as separate converter launches.
+    """
+    module = _load_xt_module()
+    first_export = tmp_path / "first.ome.tif"
+    second_export = tmp_path / "second.ome.tif"
+    first_export.write_bytes(b"II*\x00first")
+    second_export.write_bytes(b"II*\x00second")
+    imaris_root = tmp_path / "Imaris 11.0.0"
+    imaris_root.mkdir()
+    imaris_executable = imaris_root / "Imaris.exe"
+    imaris_executable.write_text("", encoding="utf-8")
+    file_converter_executable = imaris_root / "ImarisFileConverter.exe"
+    file_converter_executable.write_text("", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        module, "_find_imaris_executable", lambda: str(imaris_executable)
+    )
+    monkeypatch.setattr(
+        module.subprocess,
+        "Popen",
+        lambda args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert module.submit_selected_image_exports_to_imaris_converter(
+        [first_export, second_export]
+    )
+    assert calls == [
+        (
+            [
+                str(file_converter_executable),
+                str(first_export),
+                str(second_export),
+            ],
+            {
+                "cwd": str(imaris_root),
+                "stdin": module.subprocess.DEVNULL,
+                "stdout": module.subprocess.DEVNULL,
+                "stderr": module.subprocess.DEVNULL,
+                "close_fds": True,
+            },
+        )
+    ]
+
+
+def test_submit_selected_image_export_never_falls_back_to_main_imaris_exe(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify missing File Converter does not launch the main Imaris window.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on fallback
+    regressions that re-open full Imaris for selected-image handoff.
+    """
+    module = _load_xt_module()
+    ome_tiff_file = tmp_path / "selected.ome.tif"
+    ome_tiff_file.write_bytes(b"II*\x00selected-image")
+    imaris_root = tmp_path / "Imaris 11.0.0"
+    imaris_root.mkdir()
+    imaris_executable = imaris_root / "Imaris.exe"
+    imaris_executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        module, "_find_imaris_executable", lambda: str(imaris_executable)
+    )
+    monkeypatch.setattr(
+        module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("main Imaris.exe must not be launched as fallback")
+        ),
+    )
+
+    assert (
+        module.submit_selected_image_export_to_imaris_converter(ome_tiff_file) is False
+    )
+
+
 def test_submit_selected_image_export_rejects_non_tiff_before_launch(
     tmp_path,
     monkeypatch,
 ):
-    """Verify selected-image executable handoff validates the downloaded export.
+    """Verify selected-image converter handoff validates the downloaded export.
 
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on validation
     boundary regressions.
@@ -9001,7 +9240,9 @@ def test_submit_selected_image_export_rejects_non_tiff_before_launch(
     plain_file = tmp_path / "selected.bin"
     plain_file.write_bytes(b"not a tiff")
     monkeypatch.setattr(
-        module, "_find_imaris_executable", lambda: str(tmp_path / "Imaris.exe")
+        module,
+        "_find_imaris_file_converter_executable",
+        lambda: str(tmp_path / "ImarisFileConverter.exe"),
     )
     monkeypatch.setattr(
         module.subprocess,
@@ -9036,11 +9277,11 @@ def test_open_downloaded_file_refuses_untracked_selected_image_export(tmp_path):
     )
 
 
-def test_open_downloaded_file_submits_tracked_selected_image_export_to_executable(
+def test_open_downloaded_file_submits_tracked_selected_image_export_to_converter(
     tmp_path,
     monkeypatch,
 ):
-    """Verify tracked selected-image export uses Imaris executable handoff.
+    """Verify tracked selected-image export uses Imaris File Converter handoff.
 
     Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on selected
     image executable handoff regressions.
@@ -9058,7 +9299,7 @@ def test_open_downloaded_file_submits_tracked_selected_image_export_to_executabl
     monkeypatch.setattr(
         module,
         "submit_selected_image_export_to_imaris_converter",
-        lambda file_path: (submitted.append(Path(file_path)) or True),
+        lambda file_path: submitted.append(Path(file_path)) or True,
     )
 
     assert (
@@ -9281,9 +9522,11 @@ def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
     ]
     assert opened == [([str(first_export), str(second_export)], False, True)]
     assert dialog.temp_files == [str(first_export), str(second_export)]
-    assert statuses[-1][0] == "Submitted selected Image exports to Imaris"
+    assert statuses[-1][0] == (
+        "Submitted selected Image exports to Imaris File Converter"
+    )
     assert info_messages[0][0] == "Success"
-    assert "submitted to Imaris" in info_messages[0][1]
+    assert "submitted to Imaris File Converter" in info_messages[0][1]
 
 
 def test_load_worker_blocks_before_download_when_native_open_unavailable(tmp_path):
@@ -10809,8 +11052,11 @@ def test_disconnect_preserves_password_only_when_requested():
     assert dialog.pass_entry.value == ""
 
 
-def test_find_imaris_executable_prefers_env_override(tmp_path, monkeypatch):
-    """Verify find imaris executable prefers env override.
+def test_find_imaris_executable_uses_env_override_without_saved_path(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify find imaris executable uses env override when settings lack one.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in find imaris executable prefers env override.
     """
@@ -10818,6 +11064,8 @@ def test_find_imaris_executable_prefers_env_override(tmp_path, monkeypatch):
     imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
     imaris_exe.parent.mkdir()
     imaris_exe.write_text("", encoding="utf-8")
+    settings_path = module._connector_settings_env_path(tmp_path / "home")
+    monkeypatch.setattr(module, "_connector_settings_env_path", lambda: settings_path)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setenv("IMARIS_EXE", str(imaris_exe))
 
@@ -10966,13 +11214,18 @@ def test_collect_imaris_xt_diagnostics_skips_unloaded_native_bridge_imports(
     assert "in-process import skipped" in diagnostics["icepy_import"]["error"]
 
 
-def test_no_imaris_install_detection_is_non_blocking_when_absent(monkeypatch):
+def test_no_imaris_install_detection_is_non_blocking_when_absent(
+    tmp_path,
+    monkeypatch,
+):
     """Verify missing Imaris is a non-blocking detection result.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions that make
     ordinary non-Imaris test hosts hang or fail during local capability detection.
     """
     module = _load_xt_module()
+    settings_path = module._connector_settings_env_path(tmp_path)
+    monkeypatch.setattr(module, "_connector_settings_env_path", lambda: settings_path)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.delenv("IMARIS_EXE", raising=False)
     monkeypatch.delenv("IMARIS_HOME", raising=False)
@@ -11020,6 +11273,10 @@ def test_live_imaris_install_detection_is_mandatory_when_present(monkeypatch):
 
     diagnostics = module._collect_imaris_xt_diagnostics()
     assert diagnostics["imaris_executable_exists"] is True
+    assert diagnostics["imaris_file_converter_exists"] is True
+    assert Path(diagnostics["imaris_file_converter"]).name.lower() == (
+        "imarisfileconverter.exe"
+    )
     assert module.os.path.normcase(
         module.os.path.normpath(diagnostics["imaris_executable"])
     ) == (module.os.path.normcase(module.os.path.normpath(imaris_executable)))
