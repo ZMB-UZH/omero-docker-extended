@@ -5368,6 +5368,17 @@ class OMEROWebClient:
 
         return req
 
+    @staticmethod
+    def _build_direct_opener(cookie_jar):
+        """Build an OMERO.web opener that ignores process proxy settings.
+
+        Inputs: `cookie_jar`. Output: urllib opener.
+        """
+        return urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            urllib.request.HTTPCookieProcessor(cookie_jar),
+        )
+
     def _extract_cookies_from_jar(self):
         """Extract session and CSRF cookies from the cookie jar.
 
@@ -5516,11 +5527,7 @@ class OMEROWebClient:
         try:
             # Create fresh cookie jar
             self.cookie_jar = http.cookiejar.CookieJar()
-            self.opener = urllib.request.build_opener(
-                urllib.request.HTTPCookieProcessor(self.cookie_jar)
-            )
-            # Set default timeout
-            urllib.request.install_opener(self.opener)
+            self.opener = self._build_direct_opener(self.cookie_jar)
 
             login_url = f"{self.base_url}/webclient/login/"
             _xt_debug(
@@ -9304,17 +9311,26 @@ class OMEROBrowserDialog:
                     anchor=tk.W,
                 ).grid(row=row_index, column=1, sticky=tk.W, padx=(4, 0), pady=0)
 
+            def _close_info_window():
+                """Close only the connector information child window.
+
+                Inputs: none. Output: None.
+                """
+                with contextlib.suppress(Exception):
+                    info_window.grab_release()
+                info_window.destroy()
+
             close_button = tk.Button(
                 frame,
                 text="Close",
-                command=info_window.destroy,
+                command=_close_info_window,
                 font=("Arial", 9),
                 width=10,
                 default=_tk_constant("ACTIVE", "active"),
             )
             close_button.grid(row=4, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
 
-            info_window.protocol("WM_DELETE_WINDOW", info_window.destroy)
+            info_window.protocol("WM_DELETE_WINDOW", _close_info_window)
             info_window.update_idletasks()
             parent_x = int(self.root.winfo_rootx() or 0)
             parent_y = int(self.root.winfo_rooty() or 0)
@@ -9329,7 +9345,7 @@ class OMEROBrowserDialog:
             info_window.grab_set()
             self.root.wait_window(info_window)
 
-        self._run_blocking_modal(_show_modal)
+        _show_modal()
 
     def _invoke_on_ui_thread(self, callback, wait=True):
         """A callback on Tk's UI thread and optionally wait for the result.
