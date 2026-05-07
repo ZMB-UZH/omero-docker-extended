@@ -381,16 +381,6 @@ def _is_ims_file(file_path):
         return False
 
 
-def _is_tiff_file(file_path):
-    if not os.path.isfile(file_path):
-        return False
-    try:
-        with open(file_path, "rb") as handle:
-            return handle.read(4) in {b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"}
-    except Exception:
-        return False
-
-
 def _prepare_imaris_xt_environment(install_roots):
     path_parts = os.environ.get("PATH", "").split(os.pathsep)
     add_dll_directory = getattr(os, "add_dll_directory", None)
@@ -673,7 +663,6 @@ def _open_files_in_imaris(
     file_paths,
     app,
     require_ims=True,
-    selected_image_export=False,
 ):
     if isinstance(file_paths, (str, bytes, os.PathLike)):
         file_paths = [file_paths]
@@ -690,11 +679,7 @@ def _open_files_in_imaris(
             return False
         if not os.path.isfile(path_text):
             return False
-        if require_ims and not _is_ims_file(path_text):
-            return False
-        if not require_ims and not selected_image_export:
-            return False
-        if selected_image_export and not _is_tiff_file(path_text):
+        if not require_ims or not _is_ims_file(path_text):
             return False
         validated.append(path_text)
 
@@ -829,7 +814,9 @@ def main():
         print("BRIDGE_RUNNER_INVALID_FILE_LIST")
         return 64
     require_ims = payload.get("require_ims", True) is not False
-    selected_image_export = bool(payload.get("selected_image_export")) and not require_ims
+    if not require_ims:
+        print("BRIDGE_RUNNER_INVALID_FILE_LIST")
+        return 64
     for file_path in file_paths:
         try:
             file_path = os.fspath(file_path)
@@ -845,17 +832,10 @@ def main():
         if require_ims and not _is_ims_file(file_path):
             print("BRIDGE_RUNNER_INVALID_IMS")
             return 64
-        if selected_image_export and not _is_tiff_file(file_path):
-            print("BRIDGE_RUNNER_INVALID_SELECTED_IMAGE_EXPORT")
-            return 64
-        if not require_ims and not selected_image_export:
-            print("BRIDGE_RUNNER_INVALID_FILE_LIST")
-            return 64
     if not _open_files_in_imaris(
         file_paths,
         app,
         require_ims=require_ims,
-        selected_image_export=selected_image_export,
     ):
         print("BRIDGE_RUNNER_OPEN_UNVERIFIED")
         return 4
@@ -2690,24 +2670,6 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     return _open_file_in_imaris_with_mode(file_path, imaris_app, "current_file")
 
 
-def open_selected_image_export_in_imaris(file_path, imaris_app):
-    """Open a connector-downloaded selected-image export in Imaris.
-
-    Inputs: `file_path`, `imaris_app`. Output: `_open_file_in_imaris_with_mode`
-    result.
-    """
-    candidate = _existing_regular_file_path(file_path)
-    if candidate is None:
-        _xt_debug("Selected-image export open skipped: file does not exist")
-        return False
-    if not is_tiff_file(candidate):
-        _xt_debug(
-            "Selected-image export open skipped: file is not a readable TIFF file"
-        )
-        return False
-    return _open_file_in_imaris_with_mode(candidate, imaris_app, "observable_effect")
-
-
 def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
     """Open local IMS files in an existing Imaris application.
 
@@ -2748,41 +2710,6 @@ def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
             imaris_app,
             require_ims=True,
         )
-    return open_files_as_imaris_image_slots(validated_paths, imaris_app)
-
-
-def open_selected_image_exports_in_imaris(file_paths, imaris_app):
-    """Open connector-downloaded selected-image exports in Imaris.
-
-    Inputs: `file_paths`, `imaris_app`. Output: bool.
-    """
-    if isinstance(file_paths, (str, bytes, os.PathLike)):
-        file_paths = [file_paths]
-    else:
-        try:
-            file_paths = list(file_paths)
-        except TypeError:
-            file_paths = []
-    if not file_paths:
-        _xt_debug("Selected-image export multi-open skipped: no files were provided")
-        return False
-
-    validated_paths = []
-    for file_path in file_paths:
-        candidate = _existing_regular_file_path(file_path)
-        if candidate is None:
-            _xt_debug("Selected-image export multi-open skipped: one file is missing")
-            return False
-        if not is_tiff_file(candidate):
-            _xt_debug(
-                "Selected-image export multi-open skipped: one file is not a "
-                "readable TIFF file"
-            )
-            return False
-        validated_paths.append(str(candidate))
-
-    if len(validated_paths) == 1:
-        return open_selected_image_export_in_imaris(validated_paths[0], imaris_app)
     return open_files_as_imaris_image_slots(validated_paths, imaris_app)
 
 
@@ -4234,6 +4161,90 @@ def _find_imaris_executable():
     return None
 
 
+def _submit_file_to_imaris_executable(file_path):
+    """Submit one existing file to the installed Imaris executable.
+
+    Inputs: `file_path`. Output: bool indicating whether the GUI launch request
+    was accepted by the OS.
+    """
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        _xt_debug("Imaris executable handoff skipped: file does not exist")
+        return False
+    imaris_executable = _find_imaris_executable()
+    if not imaris_executable:
+        _xt_debug("Imaris executable handoff skipped: Imaris.exe was not found")
+        return False
+    try:
+        subprocess.Popen(
+            [imaris_executable, str(candidate)],
+            cwd=os.path.dirname(imaris_executable) or None,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except Exception as exc:
+        _xt_debug("Imaris executable handoff failed: " f"{type(exc).__name__}: {exc}")
+        return False
+    _xt_debug(
+        "Imaris converter: submitted selected Image export to installed "
+        "Imaris executable"
+    )
+    return True
+
+
+def submit_selected_image_export_to_imaris_converter(file_path):
+    """Submit one connector-selected Image export to Imaris' own converter.
+
+    Inputs: `file_path`. Output: bool.
+    """
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        _xt_debug("Selected-image export handoff skipped: file does not exist")
+        return False
+    if not is_tiff_file(candidate):
+        _xt_debug(
+            "Selected-image export handoff skipped: file is not a readable TIFF file"
+        )
+        return False
+    return _submit_file_to_imaris_executable(candidate)
+
+
+def submit_selected_image_exports_to_imaris_converter(file_paths):
+    """Submit connector-selected Image exports to Imaris' own converter.
+
+    Inputs: `file_paths`. Output: bool.
+    """
+    if isinstance(file_paths, (str, bytes, os.PathLike)):
+        file_paths = [file_paths]
+    else:
+        try:
+            file_paths = list(file_paths)
+        except TypeError:
+            file_paths = []
+    if not file_paths:
+        _xt_debug("Selected-image export batch handoff skipped: no files provided")
+        return False
+
+    for file_path in file_paths:
+        candidate = _existing_regular_file_path(file_path)
+        if candidate is None:
+            _xt_debug("Selected-image export batch handoff skipped: file is missing")
+            return False
+        if not is_tiff_file(candidate):
+            _xt_debug(
+                "Selected-image export batch handoff skipped: one file is not a "
+                "readable TIFF file"
+            )
+            return False
+
+    for file_path in file_paths:
+        if not _submit_file_to_imaris_executable(file_path):
+            return False
+    return True
+
+
 def _existing_regular_file_path_list(file_paths):
     """Return existing regular file path list.
 
@@ -4411,12 +4422,11 @@ def _native_bridge_payload(
     file_path=None,
     file_paths=None,
     require_ims=True,
-    selected_image_export=False,
 ):
     """Return the native bridge payload.
 
     Inputs: `imaris_id`, `mode`, `file_path` file path, `file_paths`,
-    `require_ims`, `selected_image_export`. Output: ID value.
+    `require_ims`. Output: ID value.
     """
     app_id = _coerce_imaris_id(imaris_id)
     if app_id is None:
@@ -4435,15 +4445,9 @@ def _native_bridge_payload(
     if file_path is not None:
         payload["file_path"] = str(file_path)
         payload["require_ims"] = bool(require_ims)
-        payload["selected_image_export"] = bool(
-            selected_image_export and not require_ims
-        )
     if file_paths is not None:
         payload["file_paths"] = [str(path) for path in file_paths]
         payload["require_ims"] = bool(require_ims)
-        payload["selected_image_export"] = bool(
-            selected_image_export and not require_ims
-        )
     return payload
 
 
@@ -4481,10 +4485,6 @@ def _native_bridge_open_action(stdout, payload):
 
     Inputs: `stdout`, `payload` payload. Output: `str`.
     """
-    if isinstance(payload, dict) and payload.get("selected_image_export"):
-        return (
-            "completed selected-image export open request in the current Imaris session"
-        )
     return "completed IMS open request in the current Imaris session"
 
 
@@ -4516,7 +4516,6 @@ def _log_native_bridge_stdout(stdout, context, payload):
         "BRIDGE_RUNNER_INVALID_FILE_LIST",
         "BRIDGE_RUNNER_MISSING_FILE",
         "BRIDGE_RUNNER_INVALID_IMS",
-        "BRIDGE_RUNNER_INVALID_SELECTED_IMAGE_EXPORT",
         "BRIDGE_RUNNER_OPEN_FAILED",
         "BRIDGE_RUNNER_OPEN_UNVERIFIED",
     }:
@@ -4620,21 +4619,18 @@ def _run_native_bridge_open_helper(
     file_path,
     imaris_id,
     require_ims=True,
-    selected_image_export=False,
 ):
     """Run the native bridge open helper.
 
-    Inputs: `python_executable`, `file_path` file path, `imaris_id`, `require_ims`,
-    `selected_image_export`. Output: `_run_native_bridge_helper` result.
+    Inputs: `python_executable`, `file_path` file path, `imaris_id`,
+    `require_ims`. Output: `_run_native_bridge_helper` result.
     """
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
         return False
     if require_ims and not is_ims_file(candidate):
         return False
-    if not require_ims and not selected_image_export:
-        return False
-    if selected_image_export and not is_tiff_file(candidate):
+    if not require_ims:
         return False
     return _run_native_bridge_helper(
         python_executable,
@@ -4643,7 +4639,6 @@ def _run_native_bridge_open_helper(
             "open",
             file_path=candidate,
             require_ims=bool(require_ims),
-            selected_image_export=bool(selected_image_export and not require_ims),
         ),
         "open",
         NATIVE_BRIDGE_RUNNER_TIMEOUT,
@@ -4655,23 +4650,18 @@ def _run_native_bridge_open_many_helper(
     file_paths,
     imaris_id,
     require_ims=True,
-    selected_image_export=False,
 ):
     """Run the native bridge open many helper.
 
-    Inputs: `python_executable`, `file_paths`, `imaris_id`, `require_ims`,
-    `selected_image_export`. Output: `_run_native_bridge_helper` result.
+    Inputs: `python_executable`, `file_paths`, `imaris_id`, `require_ims`.
+    Output: `_run_native_bridge_helper` result.
     """
     candidates = _existing_regular_file_path_list(file_paths)
     if candidates is None:
         return False
     if require_ims and any(not is_ims_file(candidate) for candidate in candidates):
         return False
-    if not require_ims and not selected_image_export:
-        return False
-    if selected_image_export and any(
-        not is_tiff_file(candidate) for candidate in candidates
-    ):
+    if not require_ims:
         return False
     return _run_native_bridge_helper(
         python_executable,
@@ -4680,7 +4670,6 @@ def _run_native_bridge_open_many_helper(
             "open",
             file_paths=candidates,
             require_ims=bool(require_ims),
-            selected_image_export=bool(selected_image_export and not require_ims),
         ),
         "open_many",
         NATIVE_BRIDGE_RUNNER_TIMEOUT,
@@ -4707,13 +4696,12 @@ def _open_file_in_imaris_with_native_bridge_runner(
     imaris_id,
     preferred_python_executable=None,
     require_ims=True,
-    selected_image_export=False,
     allow_when_disabled=False,
 ):
     """Try compatible installed Python runtimes while staying on Imaris file-open APIs.
 
     Inputs: `file_path`, `imaris_id`, `preferred_python_executable`, `require_ims`,
-    `selected_image_export`, `allow_when_disabled`. Output: bool.
+    `allow_when_disabled`. Output: bool.
     """
     if not allow_when_disabled and not _native_imaris_bridge_enabled():
         return False
@@ -4744,7 +4732,6 @@ def _open_file_in_imaris_with_native_bridge_runner(
             file_path,
             imaris_id,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
         ):
             return True
     if not attempted:
@@ -4757,13 +4744,12 @@ def _open_files_in_imaris_with_native_bridge_runner(
     imaris_id,
     preferred_python_executable=None,
     require_ims=True,
-    selected_image_export=False,
     allow_when_disabled=False,
 ):
     """Try compatible installed Python runtimes while staying on Imaris file-open APIs.
 
-    Inputs: `file_paths`, `imaris_id`, `preferred_python_executable`, `require_ims`,
-    `selected_image_export`, `allow_when_disabled`. Output: `bool`.
+    Inputs: `file_paths`, `imaris_id`, `preferred_python_executable`,
+    `require_ims`, `allow_when_disabled`. Output: `bool`.
     """
     if not allow_when_disabled and not _native_imaris_bridge_enabled():
         return False
@@ -4782,7 +4768,6 @@ def _open_files_in_imaris_with_native_bridge_runner(
             imaris_id,
             preferred_python_executable=preferred_python_executable,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -4807,7 +4792,6 @@ def _open_files_in_imaris_with_native_bridge_runner(
             candidates,
             imaris_id,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
         ):
             return True
     if not attempted:
@@ -8895,29 +8879,7 @@ class OMEROBrowserDialog:
         """
         if client is None:
             client = self.client
-        if _native_imaris_bridge_enabled():
-            self._reset_native_bridge_probe_for_converter_detection()
-            self._start_native_bridge_probe()
-            if not self._native_bridge_probe_done.wait(
-                timeout=NATIVE_BRIDGE_PROBE_TIMEOUT
-            ):
-                _xt_debug("Native bridge probe timed out during converter detection")
-                native_available = False
-                bridge_error = "probe timed out"
-            else:
-                with self._native_bridge_probe_lock:
-                    native_available = self._native_bridge_available
-                    bridge_error = self._native_bridge_probe_error
-            if not native_available:
-                _xt_debug(f"Same-session Imaris bridge unavailable: {bridge_error}")
-        else:
-            native_available = _looks_like_imaris_application(
-                getattr(self, "imaris", None)
-            )
-
-        can_attempt_imaris_handoff = (
-            native_available or self._has_imaris_handoff_target()
-        )
+        can_attempt_imaris_handoff = self._has_imaris_converter_handoff_target()
         options = []
         omero_available = False
         if client:
@@ -8937,6 +8899,13 @@ class OMEROBrowserDialog:
         if _looks_like_imaris_application(getattr(self, "imaris", None)):
             return True
         return _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
+
+    def _has_imaris_converter_handoff_target(self):
+        """Return whether selected-image exports can be submitted to Imaris.
+
+        Inputs: none. Output: bool.
+        """
+        return _find_imaris_executable() is not None
 
     def _detect_folder_export_after_connection(self, client=None):
         """Detect folder export availability after connection.
@@ -9401,14 +9370,12 @@ class OMEROBrowserDialog:
         self,
         downloaded_file,
         require_ims=True,
-        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Open the with native bridge runner for `OMEROBrowserDialog`.
 
-        Inputs: `downloaded_file`, `require_ims`, `selected_image_export`,
-        `allow_when_disabled`. Output: `_open_file_in_imaris_with_native_bridge_runner`
-        result.
+        Inputs: `downloaded_file`, `require_ims`, `allow_when_disabled`. Output:
+        `_open_file_in_imaris_with_native_bridge_runner` result.
         """
         bridge_python = self._get_native_bridge_python_executable()
         return _open_file_in_imaris_with_native_bridge_runner(
@@ -9416,7 +9383,6 @@ class OMEROBrowserDialog:
             self.imaris_id,
             preferred_python_executable=bridge_python,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -9424,14 +9390,12 @@ class OMEROBrowserDialog:
         self,
         downloaded_files,
         require_ims=True,
-        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Open the files with native bridge runner for `OMEROBrowserDialog`.
 
-        Inputs: `downloaded_files`, `require_ims`, `selected_image_export`,
-        `allow_when_disabled`. Output: `_open_files_in_imaris_with_native_bridge_runner`
-        result.
+        Inputs: `downloaded_files`, `require_ims`, `allow_when_disabled`. Output:
+        `_open_files_in_imaris_with_native_bridge_runner` result.
         """
         bridge_python = self._get_native_bridge_python_executable()
         return _open_files_in_imaris_with_native_bridge_runner(
@@ -9439,7 +9403,6 @@ class OMEROBrowserDialog:
             self.imaris_id,
             preferred_python_executable=bridge_python,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -9499,7 +9462,12 @@ class OMEROBrowserDialog:
                 "Imaris converter: refusing to open an untracked selected-image export"
             )
             return False
-        self._set_status("Opening file in Imaris...", "#fff3cd")
+
+        if selected_image_export:
+            self._set_status("Submitting selected Image export to Imaris...", "#fff3cd")
+            return submit_selected_image_export_to_imaris_converter(downloaded_file)
+
+        self._set_status("Opening IMS in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
 
         if (
@@ -9513,7 +9481,6 @@ class OMEROBrowserDialog:
             return self._open_with_native_bridge_runner(
                 downloaded_file,
                 require_ims=require_ims,
-                selected_image_export=selected_image_export,
             )
 
         if self.imaris is None:
@@ -9531,7 +9498,6 @@ class OMEROBrowserDialog:
             if self._open_with_native_bridge_runner(
                 downloaded_file,
                 require_ims=require_ims,
-                selected_image_export=selected_image_export,
                 allow_when_disabled=not native_bridge_enabled,
             ):
                 return True
@@ -9548,10 +9514,7 @@ class OMEROBrowserDialog:
             )
 
         if self.imaris is not None:
-            if selected_image_export:
-                if open_selected_image_export_in_imaris(downloaded_file, self.imaris):
-                    return True
-            elif open_file_in_imaris(
+            if open_file_in_imaris(
                 downloaded_file,
                 self.imaris,
                 require_ims=require_ims,
@@ -9568,7 +9531,6 @@ class OMEROBrowserDialog:
         if self._open_with_native_bridge_runner(
             downloaded_file,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
         ):
             return True
 
@@ -9605,6 +9567,12 @@ class OMEROBrowserDialog:
             )
             return False
 
+        if selected_image_export:
+            self._set_status(
+                "Submitting selected Image exports to Imaris...", "#fff3cd"
+            )
+            return submit_selected_image_exports_to_imaris_converter(downloaded_files)
+
         self._set_status("Opening selected files in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
 
@@ -9620,7 +9588,6 @@ class OMEROBrowserDialog:
             return self._open_files_with_native_bridge_runner(
                 downloaded_files,
                 require_ims=require_ims,
-                selected_image_export=selected_image_export,
             )
 
         if self.imaris is None:
@@ -9638,7 +9605,6 @@ class OMEROBrowserDialog:
             if self._open_files_with_native_bridge_runner(
                 downloaded_files,
                 require_ims=require_ims,
-                selected_image_export=selected_image_export,
                 allow_when_disabled=not native_bridge_enabled,
             ):
                 return True
@@ -9651,10 +9617,7 @@ class OMEROBrowserDialog:
             )
 
         if self.imaris is not None:
-            if selected_image_export:
-                if open_selected_image_exports_in_imaris(downloaded_files, self.imaris):
-                    return True
-            elif open_files_in_imaris(
+            if open_files_in_imaris(
                 downloaded_files,
                 self.imaris,
                 require_ims=require_ims,
@@ -9671,7 +9634,6 @@ class OMEROBrowserDialog:
         if self._open_files_with_native_bridge_runner(
             downloaded_files,
             require_ims=require_ims,
-            selected_image_export=selected_image_export,
         ):
             return True
 
@@ -9939,6 +9901,20 @@ class OMEROBrowserDialog:
         _xt_debug(
             "Imaris same-session open bridge failed revalidation before export: "
             f"{bridge_error}"
+        )
+        return False
+
+    def _ensure_imaris_converter_handoff_ready_before_export(self):
+        """Return True when selected-image exports can be submitted to Imaris.
+
+        Inputs: none. Output: bool.
+        """
+        self._set_status("Checking Imaris converter handoff support...", "#fff3cd")
+        if self._has_imaris_converter_handoff_target():
+            return True
+        _xt_debug(
+            "Imaris converter handoff is unavailable before export: Imaris.exe "
+            "could not be discovered"
         )
         return False
 
@@ -11181,17 +11157,21 @@ class OMEROBrowserDialog:
             image_name = self._image_display_name(img)
             _xt_debug(f"Load worker starting image_id={image_id} converter={converter}")
             if (
-                converter in {"OMERO", "Imaris"}
+                converter == "OMERO"
                 and not self._ensure_native_open_ready_before_export()
             ):
-                blocked_action = (
-                    "Download/conversion"
-                    if converter in {"OMERO", "Imaris"}
-                    else "Download"
-                )
                 raise RuntimeError(
                     "Cannot open files in the running Imaris session because no "
-                    f"compatible Imaris bridge is available. {blocked_action} "
+                    "compatible Imaris bridge is available. Download/conversion "
+                    "was not started."
+                )
+            if (
+                converter == "Imaris"
+                and not self._ensure_imaris_converter_handoff_ready_before_export()
+            ):
+                raise RuntimeError(
+                    "Cannot submit selected Image exports to Imaris because "
+                    "Imaris.exe could not be discovered. Download/export "
                     "was not started."
                 )
 
@@ -11221,15 +11201,10 @@ class OMEROBrowserDialog:
                 )
                 require_ims = False
                 selected_image_export = True
-                success_status = (
-                    "Opened selected Image export in current Imaris session"
-                )
-                success_message = (
-                    "Selected Image export opened in the current Imaris session."
-                )
+                success_status = "Submitted selected Image export to Imaris"
+                success_message = "Selected Image export submitted to Imaris."
                 failure_message = (
-                    "Failed to open the selected Image export in the current "
-                    "Imaris session."
+                    "Failed to submit the selected Image export to Imaris."
                 )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -11259,8 +11234,8 @@ class OMEROBrowserDialog:
 
             self.temp_files.append(downloaded_file)
 
-            # Open in Imaris on the UI thread so the XT handle stays in the
-            # same thread/apartment as the original dialog.
+            # Run the final handoff on the UI thread so IMS opens keep the XT
+            # handle in the same thread/apartment as the original dialog.
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_file_in_imaris(
                     downloaded_file,
@@ -11318,10 +11293,10 @@ class OMEROBrowserDialog:
                         "was not started."
                     )
             elif converter == "Imaris":
-                if not self._ensure_native_open_ready_before_export():
+                if not self._ensure_imaris_converter_handoff_ready_before_export():
                     raise RuntimeError(
-                        "Cannot open files in the running Imaris session because no "
-                        "compatible Imaris bridge is available. Download/conversion "
+                        "Cannot submit selected Image exports to Imaris because "
+                        "Imaris.exe could not be discovered. Download/export "
                         "was not started."
                     )
             else:
@@ -11405,15 +11380,13 @@ class OMEROBrowserDialog:
                 )
                 failure_message = "Imaris did not accept the prepared IMS file batch."
             else:
-                success_status = (
-                    "Opened selected Image exports in current Imaris session"
-                )
+                success_status = "Submitted selected Image exports to Imaris"
                 success_message = (
-                    "All selected Image exports opened in Imaris "
+                    "All selected Image exports were submitted to Imaris "
                     "after every download completed."
                 )
                 failure_message = (
-                    "Imaris did not accept the selected Image export batch."
+                    "Imaris did not accept the selected Image export batch handoff."
                 )
 
             if success:
