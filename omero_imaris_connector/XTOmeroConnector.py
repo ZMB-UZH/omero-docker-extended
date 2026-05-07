@@ -40,7 +40,6 @@ import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
@@ -159,8 +158,7 @@ NATIVE_BRIDGE_REVALIDATION_TIMEOUT = 30
 NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
-LOCAL_IMARIS_CONVERT_TIMEOUT = EXPORT_TIMEOUT
-OMERO_IMS_EXPORT_CAPABILITY_FLAG = "zmb_omero_imaris_connector_v1"
+OMERO_IMS_EXPORT_CAPABILITY_FLAG = "omero_imaris_connector_v1"
 OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
 OMERO_CONNECTOR_WINDOW_WIDTH = 1180
 OMERO_CONNECTOR_WINDOW_HEIGHT = 760
@@ -379,6 +377,16 @@ def _is_ims_file(file_path):
     try:
         with open(file_path, "rb") as handle:
             return handle.read(len(HDF5_SIGNATURE)) == HDF5_SIGNATURE
+    except Exception:
+        return False
+
+
+def _is_tiff_file(file_path):
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        with open(file_path, "rb") as handle:
+            return handle.read(4) in {b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"}
     except Exception:
         return False
 
@@ -661,7 +669,12 @@ def _open_file_in_imaris(file_path, app, verification_mode="current_file"):
     return False
 
 
-def _open_files_in_imaris(file_paths, app):
+def _open_files_in_imaris(
+    file_paths,
+    app,
+    require_ims=True,
+    selected_image_export=False,
+):
     if isinstance(file_paths, (str, bytes, os.PathLike)):
         file_paths = [file_paths]
     if not isinstance(file_paths, list) or not file_paths:
@@ -677,7 +690,11 @@ def _open_files_in_imaris(file_paths, app):
             return False
         if not os.path.isfile(path_text):
             return False
-        if not _is_ims_file(path_text):
+        if require_ims and not _is_ims_file(path_text):
+            return False
+        if not require_ims and not selected_image_export:
+            return False
+        if selected_image_export and not _is_tiff_file(path_text):
             return False
         validated.append(path_text)
 
@@ -811,6 +828,8 @@ def main():
     if not file_paths:
         print("BRIDGE_RUNNER_INVALID_FILE_LIST")
         return 64
+    require_ims = payload.get("require_ims", True) is not False
+    selected_image_export = bool(payload.get("selected_image_export")) and not require_ims
     for file_path in file_paths:
         try:
             file_path = os.fspath(file_path)
@@ -823,10 +842,21 @@ def main():
         if not os.path.isfile(file_path):
             print("BRIDGE_RUNNER_MISSING_FILE")
             return 64
-        if not _is_ims_file(file_path):
+        if require_ims and not _is_ims_file(file_path):
             print("BRIDGE_RUNNER_INVALID_IMS")
             return 64
-    if not _open_files_in_imaris(file_paths, app):
+        if selected_image_export and not _is_tiff_file(file_path):
+            print("BRIDGE_RUNNER_INVALID_SELECTED_IMAGE_EXPORT")
+            return 64
+        if not require_ims and not selected_image_export:
+            print("BRIDGE_RUNNER_INVALID_FILE_LIST")
+            return 64
+    if not _open_files_in_imaris(
+        file_paths,
+        app,
+        require_ims=require_ims,
+        selected_image_export=selected_image_export,
+    ):
         print("BRIDGE_RUNNER_OPEN_UNVERIFIED")
         return 4
     print("BRIDGE_RUNNER_OPENED_MANY" if len(file_paths) > 1 else "BRIDGE_RUNNER_OPENED")
@@ -2281,627 +2311,6 @@ def is_tiff_file(file_path):
         return False
 
 
-def _positive_float_text(value):
-    """Return a stable positive float string or None.
-
-    Inputs: `value`. Output: text or None.
-    """
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(numeric) or numeric <= 0:
-        return None
-    return f"{numeric:.12g}"
-
-
-def _length_unit_factor_to_micrometers(unit):
-    """Return a length unit multiplier to micrometers.
-
-    Inputs: `unit`. Output: multiplier or None.
-    """
-    text = str(unit or "\u00b5m").strip()
-    if not text:
-        text = "\u00b5m"
-    normalized = (
-        text.replace("\u00b5", "u")
-        .replace("\u03bc", "u")
-        .replace("\u212b", "angstrom")
-        .strip()
-        .lower()
-    )
-    normalized = re.sub(r"[\s_\-]+", "", normalized)
-    return {
-        "m": 1_000_000.0,
-        "meter": 1_000_000.0,
-        "meters": 1_000_000.0,
-        "metre": 1_000_000.0,
-        "metres": 1_000_000.0,
-        "cm": 10_000.0,
-        "centimeter": 10_000.0,
-        "centimeters": 10_000.0,
-        "centimetre": 10_000.0,
-        "centimetres": 10_000.0,
-        "mm": 1_000.0,
-        "millimeter": 1_000.0,
-        "millimeters": 1_000.0,
-        "millimetre": 1_000.0,
-        "millimetres": 1_000.0,
-        "um": 1.0,
-        "microm": 1.0,
-        "micrometer": 1.0,
-        "micrometers": 1.0,
-        "micrometre": 1.0,
-        "micrometres": 1.0,
-        "micron": 1.0,
-        "microns": 1.0,
-        "nm": 0.001,
-        "nanometer": 0.001,
-        "nanometers": 0.001,
-        "nanometre": 0.001,
-        "nanometres": 0.001,
-        "pm": 0.000001,
-        "picometer": 0.000001,
-        "picometers": 0.000001,
-        "picometre": 0.000001,
-        "picometres": 0.000001,
-        "angstrom": 0.0001,
-        "angstroms": 0.0001,
-    }.get(normalized)
-
-
-def _length_quantity_to_micrometers_text(value, unit=None):
-    """Return an explicit positive length quantity in micrometers.
-
-    Inputs: `value`, optional `unit`. Output: text or None.
-    """
-    quantity = value
-    unit_value = unit
-    if isinstance(value, dict):
-        quantity = _first_present_mapping_value(
-            value,
-            (
-                "value",
-                "Value",
-                "magnitude",
-                "Magnitude",
-                "number",
-                "Number",
-            ),
-        )
-        unit_value = unit_value or _first_present_mapping_value(
-            value,
-            (
-                "unit",
-                "Unit",
-                "symbol",
-                "Symbol",
-                "unitSymbol",
-                "UnitSymbol",
-                "units",
-                "Units",
-            ),
-        )
-    try:
-        numeric = float(quantity)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(numeric) or numeric <= 0:
-        return None
-    factor = _length_unit_factor_to_micrometers(unit_value)
-    if factor is None:
-        return None
-    return _positive_float_text(numeric * factor)
-
-
-def _first_present_mapping_value(mapping, keys):
-    """Return the first present value for any key in a mapping.
-
-    Inputs: `mapping`, `keys`. Output: value or None.
-    """
-    if not isinstance(mapping, dict):
-        return None
-    for key in keys:
-        if key in mapping:
-            return mapping.get(key)
-    return None
-
-
-def _explicit_physical_sizes_from_pixels_mapping(pixels):
-    """Return explicit physical pixel sizes in micrometers from Pixels metadata.
-
-    Inputs: `pixels` mapping. Output: axis-to-size mapping.
-    """
-    if not isinstance(pixels, dict):
-        return {}
-    result = {}
-    for axis in ("X", "Y", "Z"):
-        value = _first_present_mapping_value(
-            pixels,
-            (
-                f"PhysicalSize{axis}",
-                f"physicalSize{axis}",
-                f"physical_size_{axis.lower()}",
-            ),
-        )
-        unit = _first_present_mapping_value(
-            pixels,
-            (
-                f"PhysicalSize{axis}Unit",
-                f"physicalSize{axis}Unit",
-                f"physical_size_{axis.lower()}_unit",
-            ),
-        )
-        text = _length_quantity_to_micrometers_text(value, unit)
-        if text:
-            result[axis] = text
-    return result
-
-
-def _explicit_physical_sizes_from_image_metadata(metadata):
-    """Return explicit physical pixel sizes from selected Image metadata.
-
-    Inputs: `metadata` mapping. Output: axis-to-size mapping.
-    """
-    if not isinstance(metadata, dict):
-        return {}
-    normalized = metadata.get("voxel_sizes") or metadata.get("voxelSizes")
-    sizes = _merge_explicit_voxel_size_mappings(normalized)
-    if sizes:
-        return sizes
-    pixels = (
-        metadata.get("Pixels")
-        or metadata.get("pixels")
-        or metadata.get("primaryPixels")
-        or metadata.get("PrimaryPixels")
-        or {}
-    )
-    sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
-    if sizes:
-        return sizes
-    return _explicit_physical_sizes_from_pixels_mapping(metadata)
-
-
-def _merge_explicit_voxel_size_mappings(*mappings):
-    """Merge explicit voxel size mappings without inventing missing axes.
-
-    Inputs: axis-to-size mappings. Output: merged mapping.
-    """
-    merged = {}
-    for mapping in mappings:
-        if not isinstance(mapping, dict):
-            continue
-        for axis in ("X", "Y", "Z"):
-            if axis in merged:
-                continue
-            text = _positive_float_text(mapping.get(axis))
-            if text:
-                merged[axis] = text
-    return merged
-
-
-def _voxel_size_args_from_mapping(voxel_sizes):
-    """Return ImarisConvert voxel-size arguments for explicit axes only.
-
-    Inputs: `voxel_sizes` mapping. Output: command argument list.
-    """
-    args = []
-    for axis, flag in (("X", "-vsx"), ("Y", "-vsy"), ("Z", "-vsz")):
-        text = _positive_float_text(
-            voxel_sizes.get(axis) if isinstance(voxel_sizes, dict) else None
-        )
-        if text:
-            args.extend([flag, text])
-    return args
-
-
-def _tiff_type_size(tiff_type):
-    """Return the byte width for a TIFF field type.
-
-    Inputs: `tiff_type`. Output: integer byte width.
-    """
-    return {
-        1: 1,
-        2: 1,
-        3: 2,
-        4: 4,
-        5: 8,
-        6: 1,
-        7: 1,
-        8: 2,
-        9: 4,
-        10: 8,
-        11: 4,
-        12: 8,
-        16: 8,
-        17: 8,
-        18: 8,
-    }.get(int(tiff_type), 1)
-
-
-def _read_tiff_image_description(file_path):
-    """Read TIFF ImageDescription from the first IFD.
-
-    Inputs: `file_path`. Output: string or empty string.
-    """
-    candidate = _existing_regular_file_path(file_path)
-    if candidate is None:
-        return ""
-    try:
-        with candidate.open("rb") as handle:
-            header = handle.read(16)
-            if len(header) < 8:
-                return ""
-            if header[:2] == b"II":
-                endian = "<"
-            elif header[:2] == b"MM":
-                endian = ">"
-            else:
-                return ""
-            magic = int.from_bytes(header[2:4], "little" if endian == "<" else "big")
-            if magic == 42:
-                ifd_offset = int.from_bytes(
-                    header[4:8], "little" if endian == "<" else "big"
-                )
-                count_width = 2
-                entry_width = 12
-                value_width = 4
-            elif magic == 43:
-                if len(header) < 16:
-                    return ""
-                offset_size = int.from_bytes(
-                    header[4:6], "little" if endian == "<" else "big"
-                )
-                if offset_size != 8:
-                    return ""
-                ifd_offset = int.from_bytes(
-                    header[8:16], "little" if endian == "<" else "big"
-                )
-                count_width = 8
-                entry_width = 20
-                value_width = 8
-            else:
-                return ""
-
-            handle.seek(ifd_offset)
-            raw_count = handle.read(count_width)
-            if len(raw_count) != count_width:
-                return ""
-            entry_count = int.from_bytes(
-                raw_count, "little" if endian == "<" else "big"
-            )
-            for _index in range(entry_count):
-                entry = handle.read(entry_width)
-                if len(entry) != entry_width:
-                    return ""
-                tag = int.from_bytes(entry[0:2], "little" if endian == "<" else "big")
-                if tag != 270:
-                    continue
-                field_type = int.from_bytes(
-                    entry[2:4], "little" if endian == "<" else "big"
-                )
-                if magic == 42:
-                    count = int.from_bytes(
-                        entry[4:8], "little" if endian == "<" else "big"
-                    )
-                    value_or_offset = entry[8:12]
-                else:
-                    count = int.from_bytes(
-                        entry[4:12], "little" if endian == "<" else "big"
-                    )
-                    value_or_offset = entry[12:20]
-                byte_count = _tiff_type_size(field_type) * count
-                if byte_count <= value_width:
-                    raw_value = value_or_offset[:byte_count]
-                else:
-                    value_offset = int.from_bytes(
-                        value_or_offset, "little" if endian == "<" else "big"
-                    )
-                    handle.seek(value_offset)
-                    raw_value = handle.read(byte_count)
-                return raw_value.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
-    except Exception:
-        return ""
-    return ""
-
-
-def _ome_pixels_metadata_from_tiff(file_path):
-    """Return the first OME Pixels metadata mapping from a TIFF file.
-
-    Inputs: `file_path`. Output: dict.
-    """
-    description = _read_tiff_image_description(file_path)
-    if not description or "<OME" not in description:
-        return {}
-    try:
-        root = ET.fromstring(description)
-    except ET.ParseError:
-        return {}
-    namespace = ""
-    if root.tag.startswith("{") and "}" in root.tag:
-        namespace = root.tag.split("}", 1)[0].strip("{")
-    pixels = (
-        root.find(f".//{{{namespace}}}Pixels") if namespace else root.find(".//Pixels")
-    )
-    if pixels is None:
-        return {}
-    return dict(pixels.attrib)
-
-
-def _explicit_ome_physical_size_z(file_path):
-    """Return explicit OME PhysicalSizeZ from selected-image OME-TIFF metadata.
-
-    Inputs: `file_path`. Output: positive float text or None.
-    """
-    return _explicit_ome_physical_sizes_from_tiff(file_path).get("Z")
-
-
-def _explicit_ome_physical_sizes_from_tiff(file_path):
-    """Return explicit OME physical sizes from selected-image OME-TIFF metadata.
-
-    Inputs: `file_path`. Output: axis-to-size mapping.
-    """
-    pixels = _ome_pixels_metadata_from_tiff(file_path)
-    return _explicit_physical_sizes_from_pixels_mapping(pixels)
-
-
-def _format_process_exit_code(returncode):
-    """Return a decimal and hexadecimal process exit code string.
-
-    Inputs: `returncode`. Output: formatted code string.
-    """
-    try:
-        code = int(returncode)
-    except Exception:
-        return str(returncode)
-    return f"{code} (0x{code & 0xFFFFFFFF:08X})"
-
-
-def _local_imaris_convert_error(completed, *, voxel_sizes=None):
-    """Return a bounded local Imaris converter error message.
-
-    Inputs: `completed` subprocess result, `voxel_sizes`. Output: message string.
-    """
-    parts = [
-        "Local Imaris conversion failed with exit code "
-        f"{_format_process_exit_code(getattr(completed, 'returncode', None))}."
-    ]
-    stdout = (getattr(completed, "stdout", "") or "").strip()
-    stderr = (getattr(completed, "stderr", "") or "").strip()
-    if stdout:
-        parts.append(f"stdout: {stdout[:2000]}")
-    if stderr:
-        parts.append(f"stderr: {stderr[:2000]}")
-    if "Unknown voxel size:" in f"{stdout}\n{stderr}":
-        missing_axes = [
-            axis
-            for axis in ("X", "Y", "Z")
-            if not _positive_float_text(
-                voxel_sizes.get(axis) if isinstance(voxel_sizes, dict) else None
-            )
-        ]
-        missing_text = ", ".join(missing_axes) if missing_axes else "none"
-        parts.append(
-            "The selected-image metadata does not provide explicit positive "
-            f"voxel size metadata for axis/axes: {missing_text}. The connector "
-            "will not invent missing voxel sizes."
-        )
-    return " ".join(parts)
-
-
-@contextlib.contextmanager
-def _windows_error_dialogs_suppressed():
-    """Suppress Windows process crash dialogs while a converter subprocess runs.
-
-    Inputs: none. Output: context manager.
-    """
-    if os.name != "nt":
-        yield
-        return
-    try:
-        import ctypes
-
-        kernel32 = ctypes.windll.kernel32
-        sem_failcriticalerrors = 0x0001
-        sem_nogpfaulterrorbox = 0x0002
-        sem_noopenfileerrorbox = 0x8000
-        flags = sem_failcriticalerrors | sem_nogpfaulterrorbox | sem_noopenfileerrorbox
-        previous = kernel32.SetErrorMode(flags)
-    except Exception:
-        yield
-        return
-    try:
-        yield
-    finally:
-        with contextlib.suppress(Exception):
-            kernel32.SetErrorMode(previous)
-
-
-def _imaris_convert_subprocess_kwargs():
-    """Return platform-specific subprocess options for local ImarisConvert.
-
-    Inputs: none. Output: dict.
-    """
-    if os.name != "nt":
-        return {}
-
-    kwargs = {}
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    if creationflags:
-        kwargs["creationflags"] = creationflags
-
-    startupinfo_type = getattr(subprocess, "STARTUPINFO", None)
-    startf_use_showwindow = getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
-    if startupinfo_type is not None and startf_use_showwindow:
-        startupinfo = startupinfo_type()
-        startupinfo.dwFlags |= startf_use_showwindow
-        startupinfo.wShowWindow = 0
-        kwargs["startupinfo"] = startupinfo
-    return kwargs
-
-
-def _iter_imaris_convert_commands(
-    converter,
-    source_path,
-    output_path,
-    input_format,
-    voxel_sizes=None,
-):
-    """Yield compatible ImarisConvert command forms.
-
-    Inputs: `converter`, `source_path`, `output_path`, `input_format`,
-    `voxel_sizes`. Output: yielded command lists.
-    """
-    base = [converter, "-i", str(source_path)]
-    voxel_args = _voxel_size_args_from_mapping(voxel_sizes or {})
-    if input_format:
-        yield base + ["-if", str(input_format), "-o", output_path] + voxel_args + [
-            "-l",
-            "none",
-        ]
-        yield base + ["-if", str(input_format), "-o", output_path] + voxel_args
-    yield base + ["-o", output_path] + voxel_args + [
-        "-l",
-        "none",
-    ]
-    yield base + ["-o", output_path] + voxel_args
-
-
-def convert_file_to_ims_with_local_imaris(
-    source_file,
-    output_dir,
-    fallback_name="image.ims",
-    input_format=None,
-    voxel_size_overrides=None,
-):
-    """Convert a local source image file to IMS with the local Imaris converter.
-
-    Inputs: `source_file`, `output_dir`, `fallback_name`, `input_format`,
-    `voxel_size_overrides`. Output: IMS path. Raises: RuntimeError when validation
-    or conversion fails.
-    """
-    source_path = _existing_regular_file_path(source_file)
-    if source_path is None:
-        raise RuntimeError("Selected Imaris conversion source file is missing.")
-    if is_ims_file(source_path):
-        _xt_debug(
-            "Imaris converter: local conversion skipped because source is already IMS"
-        )
-        return str(source_path)
-    if output_dir is None:
-        output_dir = os.path.dirname(str(source_path))
-    if not os.path.isdir(output_dir):
-        raise RuntimeError(
-            "Download directory does not exist. Please select or type an existing "
-            "folder that Imaris can write to."
-        )
-
-    converter = _find_imaris_convert_executable()
-    if not converter:
-        raise RuntimeError(
-            "Local Imaris converter executable was not found. Install Imaris 11 or set "
-            "IMARIS_HOME, IMARIS_EXE, or IMARIS_CONVERT_EXE."
-        )
-
-    output_name = _safe_download_filename(
-        None,
-        fallback_name,
-        default_extension=".ims",
-    )
-    output_path = _unique_download_path(output_dir, output_name)
-    _xt_debug(
-        "Imaris converter: converting selected-image export to IMS with local "
-        "ImarisConvert"
-    )
-    completed = None
-    attempted = 0
-    voxel_sizes = _merge_explicit_voxel_size_mappings(voxel_size_overrides)
-    try:
-        for cmd in _iter_imaris_convert_commands(
-            converter,
-            source_path,
-            output_path,
-            input_format,
-            voxel_sizes=voxel_sizes,
-        ):
-            attempted += 1
-            with contextlib.suppress(OSError):
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-            with _windows_error_dialogs_suppressed():
-                completed = subprocess.run(
-                    cmd,
-                    check=False,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    universal_newlines=True,
-                    timeout=LOCAL_IMARIS_CONVERT_TIMEOUT,
-                    cwd=os.path.dirname(converter) or None,
-                    **_imaris_convert_subprocess_kwargs(),
-                )
-            if completed.returncode == 0 and is_ims_file(output_path):
-                _xt_debug(
-                    "Imaris converter: local conversion produced a valid IMS file"
-                )
-                return output_path
-            _xt_debug(
-                "Imaris converter: local conversion attempt failed with exit code "
-                f"{_format_process_exit_code(completed.returncode)}"
-            )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            "Local Imaris conversion timed out while converting the selected-image "
-            "export."
-        ) from exc
-    except Exception as exc:
-        raise RuntimeError(
-            f"Local Imaris conversion could not start: {type(exc).__name__}: {exc}"
-        ) from exc
-
-    if completed is None:
-        raise RuntimeError("Local Imaris conversion did not start.")
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"{_local_imaris_convert_error(completed, voxel_sizes=voxel_sizes)} "
-            f"Attempted {attempted} compatible argument form(s)."
-        )
-    if not is_ims_file(output_path):
-        raise RuntimeError(
-            "Local Imaris conversion completed but did not produce a valid IMS file."
-        )
-    return output_path
-
-
-def convert_ome_tiff_to_ims_with_local_imaris(
-    source_file,
-    output_dir,
-    fallback_name="image.ims",
-    voxel_size_overrides=None,
-):
-    """Convert a selected-image OME-TIFF to IMS with the local Imaris converter.
-
-    Inputs: `source_file`, `output_dir`, `fallback_name`, `voxel_size_overrides`.
-    Output: IMS path. Raises: RuntimeError when validation or conversion fails.
-    """
-    source_path = _existing_regular_file_path(source_file)
-    if source_path is None:
-        raise RuntimeError("Selected-image OME-TIFF export is missing.")
-    if not is_tiff_file(source_path):
-        raise RuntimeError("Selected-image export is not a readable TIFF file.")
-    physical_sizes = _merge_explicit_voxel_size_mappings(
-        _explicit_ome_physical_sizes_from_tiff(source_path),
-        voxel_size_overrides,
-    )
-    return convert_file_to_ims_with_local_imaris(
-        source_path,
-        output_dir,
-        fallback_name=fallback_name,
-        input_format="OmeTiff",
-        voxel_size_overrides=physical_sizes,
-    )
-
-
 def _current_imaris_file_getter(imaris_app):
     """Return current imaris file getter.
 
@@ -3281,6 +2690,24 @@ def open_file_in_imaris(file_path, imaris_app, require_ims=True):
     return _open_file_in_imaris_with_mode(file_path, imaris_app, "current_file")
 
 
+def open_selected_image_export_in_imaris(file_path, imaris_app):
+    """Open a connector-downloaded selected-image export in Imaris.
+
+    Inputs: `file_path`, `imaris_app`. Output: `_open_file_in_imaris_with_mode`
+    result.
+    """
+    candidate = _existing_regular_file_path(file_path)
+    if candidate is None:
+        _xt_debug("Selected-image export open skipped: file does not exist")
+        return False
+    if not is_tiff_file(candidate):
+        _xt_debug(
+            "Selected-image export open skipped: file is not a readable TIFF file"
+        )
+        return False
+    return _open_file_in_imaris_with_mode(candidate, imaris_app, "observable_effect")
+
+
 def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
     """Open local IMS files in an existing Imaris application.
 
@@ -3321,6 +2748,41 @@ def open_files_in_imaris(file_paths, imaris_app, require_ims=True):
             imaris_app,
             require_ims=True,
         )
+    return open_files_as_imaris_image_slots(validated_paths, imaris_app)
+
+
+def open_selected_image_exports_in_imaris(file_paths, imaris_app):
+    """Open connector-downloaded selected-image exports in Imaris.
+
+    Inputs: `file_paths`, `imaris_app`. Output: bool.
+    """
+    if isinstance(file_paths, (str, bytes, os.PathLike)):
+        file_paths = [file_paths]
+    else:
+        try:
+            file_paths = list(file_paths)
+        except TypeError:
+            file_paths = []
+    if not file_paths:
+        _xt_debug("Selected-image export multi-open skipped: no files were provided")
+        return False
+
+    validated_paths = []
+    for file_path in file_paths:
+        candidate = _existing_regular_file_path(file_path)
+        if candidate is None:
+            _xt_debug("Selected-image export multi-open skipped: one file is missing")
+            return False
+        if not is_tiff_file(candidate):
+            _xt_debug(
+                "Selected-image export multi-open skipped: one file is not a "
+                "readable TIFF file"
+            )
+            return False
+        validated_paths.append(str(candidate))
+
+    if len(validated_paths) == 1:
+        return open_selected_image_export_in_imaris(validated_paths[0], imaris_app)
     return open_files_as_imaris_image_slots(validated_paths, imaris_app)
 
 
@@ -4772,64 +4234,6 @@ def _find_imaris_executable():
     return None
 
 
-def _imaris_convert_executable_name():
-    """Return the platform-specific local Imaris converter executable name.
-
-    Inputs: none. Output: executable filename string.
-    """
-    return "ImarisConvert.exe" if os.name == "nt" else "ImarisConvert"
-
-
-def _iter_path_executable_candidates(executable_name):
-    """Yield executable candidates from PATH.
-
-    Inputs: `executable_name`. Output: yielded path strings.
-    """
-    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-        if not path_dir:
-            continue
-        yield os.path.join(path_dir, executable_name)
-
-
-def _iter_imaris_convert_executable_candidates():
-    """Yield local Imaris converter executable candidates.
-
-    Inputs: none. Output: yielded normalized path strings.
-    """
-    seen: Set[str] = set()
-    executable_name = _imaris_convert_executable_name()
-    env_candidate = os.environ.get("IMARIS_CONVERT_EXE", "").strip()
-    if env_candidate:
-        yield from _iter_unique_path_candidates((env_candidate,), seen)
-
-    for install_root in _iter_imaris_install_roots():
-        yield from _iter_unique_path_candidates(
-            (os.path.join(install_root, executable_name),),
-            seen,
-        )
-
-    yield from _iter_unique_path_candidates(
-        _iter_path_executable_candidates(executable_name),
-        seen,
-    )
-
-
-def _find_imaris_convert_executable():
-    """Return the local Imaris converter executable path if present.
-
-    Inputs: none. Output: executable path string or None.
-    """
-    for candidate in _iter_imaris_convert_executable_candidates():
-        path = _existing_regular_file_path(candidate)
-        if path is None:
-            continue
-        try:
-            return str(path.resolve(strict=True))
-        except OSError:
-            return str(path)
-    return None
-
-
 def _existing_regular_file_path_list(file_paths):
     """Return existing regular file path list.
 
@@ -5002,12 +4406,17 @@ def _iter_native_bridge_python_executables():
 
 
 def _native_bridge_payload(
-    imaris_id, mode, file_path=None, file_paths=None, require_ims=True
+    imaris_id,
+    mode,
+    file_path=None,
+    file_paths=None,
+    require_ims=True,
+    selected_image_export=False,
 ):
     """Return the native bridge payload.
 
-    Inputs: `imaris_id`, `mode`, `file_path` file path, `file_paths`, `require_ims`.
-    Output: ID value.
+    Inputs: `imaris_id`, `mode`, `file_path` file path, `file_paths`,
+    `require_ims`, `selected_image_export`. Output: ID value.
     """
     app_id = _coerce_imaris_id(imaris_id)
     if app_id is None:
@@ -5025,10 +4434,16 @@ def _native_bridge_payload(
     }
     if file_path is not None:
         payload["file_path"] = str(file_path)
-        payload["require_ims"] = True
+        payload["require_ims"] = bool(require_ims)
+        payload["selected_image_export"] = bool(
+            selected_image_export and not require_ims
+        )
     if file_paths is not None:
         payload["file_paths"] = [str(path) for path in file_paths]
-        payload["require_ims"] = True
+        payload["require_ims"] = bool(require_ims)
+        payload["selected_image_export"] = bool(
+            selected_image_export and not require_ims
+        )
     return payload
 
 
@@ -5066,6 +4481,10 @@ def _native_bridge_open_action(stdout, payload):
 
     Inputs: `stdout`, `payload` payload. Output: `str`.
     """
+    if isinstance(payload, dict) and payload.get("selected_image_export"):
+        return (
+            "completed selected-image export open request in the current Imaris session"
+        )
     return "completed IMS open request in the current Imaris session"
 
 
@@ -5097,6 +4516,7 @@ def _log_native_bridge_stdout(stdout, context, payload):
         "BRIDGE_RUNNER_INVALID_FILE_LIST",
         "BRIDGE_RUNNER_MISSING_FILE",
         "BRIDGE_RUNNER_INVALID_IMS",
+        "BRIDGE_RUNNER_INVALID_SELECTED_IMAGE_EXPORT",
         "BRIDGE_RUNNER_OPEN_FAILED",
         "BRIDGE_RUNNER_OPEN_UNVERIFIED",
     }:
@@ -5196,17 +4616,25 @@ def _run_native_bridge_probe_helper(python_executable, imaris_id):
 
 
 def _run_native_bridge_open_helper(
-    python_executable, file_path, imaris_id, require_ims=True
+    python_executable,
+    file_path,
+    imaris_id,
+    require_ims=True,
+    selected_image_export=False,
 ):
     """Run the native bridge open helper.
 
-    Inputs: `python_executable`, `file_path` file path, `imaris_id`, `require_ims`.
-    Output: `_run_native_bridge_helper` result.
+    Inputs: `python_executable`, `file_path` file path, `imaris_id`, `require_ims`,
+    `selected_image_export`. Output: `_run_native_bridge_helper` result.
     """
     candidate = _existing_regular_file_path(file_path)
     if candidate is None:
         return False
-    if not is_ims_file(candidate):
+    if require_ims and not is_ims_file(candidate):
+        return False
+    if not require_ims and not selected_image_export:
+        return False
+    if selected_image_export and not is_tiff_file(candidate):
         return False
     return _run_native_bridge_helper(
         python_executable,
@@ -5214,7 +4642,8 @@ def _run_native_bridge_open_helper(
             imaris_id,
             "open",
             file_path=candidate,
-            require_ims=True,
+            require_ims=bool(require_ims),
+            selected_image_export=bool(selected_image_export and not require_ims),
         ),
         "open",
         NATIVE_BRIDGE_RUNNER_TIMEOUT,
@@ -5222,17 +4651,27 @@ def _run_native_bridge_open_helper(
 
 
 def _run_native_bridge_open_many_helper(
-    python_executable, file_paths, imaris_id, require_ims=True
+    python_executable,
+    file_paths,
+    imaris_id,
+    require_ims=True,
+    selected_image_export=False,
 ):
     """Run the native bridge open many helper.
 
-    Inputs: `python_executable`, `file_paths`, `imaris_id`, `require_ims`. Output:
-    `_run_native_bridge_helper` result.
+    Inputs: `python_executable`, `file_paths`, `imaris_id`, `require_ims`,
+    `selected_image_export`. Output: `_run_native_bridge_helper` result.
     """
     candidates = _existing_regular_file_path_list(file_paths)
     if candidates is None:
         return False
-    if any(not is_ims_file(candidate) for candidate in candidates):
+    if require_ims and any(not is_ims_file(candidate) for candidate in candidates):
+        return False
+    if not require_ims and not selected_image_export:
+        return False
+    if selected_image_export and any(
+        not is_tiff_file(candidate) for candidate in candidates
+    ):
         return False
     return _run_native_bridge_helper(
         python_executable,
@@ -5240,7 +4679,8 @@ def _run_native_bridge_open_many_helper(
             imaris_id,
             "open",
             file_paths=candidates,
-            require_ims=True,
+            require_ims=bool(require_ims),
+            selected_image_export=bool(selected_image_export and not require_ims),
         ),
         "open_many",
         NATIVE_BRIDGE_RUNNER_TIMEOUT,
@@ -5267,12 +4707,13 @@ def _open_file_in_imaris_with_native_bridge_runner(
     imaris_id,
     preferred_python_executable=None,
     require_ims=True,
+    selected_image_export=False,
     allow_when_disabled=False,
 ):
     """Try compatible installed Python runtimes while staying on Imaris file-open APIs.
 
     Inputs: `file_path`, `imaris_id`, `preferred_python_executable`, `require_ims`,
-    `allow_when_disabled`. Output: bool.
+    `selected_image_export`, `allow_when_disabled`. Output: bool.
     """
     if not allow_when_disabled and not _native_imaris_bridge_enabled():
         return False
@@ -5303,6 +4744,7 @@ def _open_file_in_imaris_with_native_bridge_runner(
             file_path,
             imaris_id,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
         ):
             return True
     if not attempted:
@@ -5315,12 +4757,13 @@ def _open_files_in_imaris_with_native_bridge_runner(
     imaris_id,
     preferred_python_executable=None,
     require_ims=True,
+    selected_image_export=False,
     allow_when_disabled=False,
 ):
     """Try compatible installed Python runtimes while staying on Imaris file-open APIs.
 
     Inputs: `file_paths`, `imaris_id`, `preferred_python_executable`, `require_ims`,
-    `allow_when_disabled`. Output: `bool`.
+    `selected_image_export`, `allow_when_disabled`. Output: `bool`.
     """
     if not allow_when_disabled and not _native_imaris_bridge_enabled():
         return False
@@ -5339,6 +4782,7 @@ def _open_files_in_imaris_with_native_bridge_runner(
             imaris_id,
             preferred_python_executable=preferred_python_executable,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -5363,6 +4807,7 @@ def _open_files_in_imaris_with_native_bridge_runner(
             candidates,
             imaris_id,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
         ):
             return True
     if not attempted:
@@ -6451,18 +5896,6 @@ class OMEROWebClient:
             "id": image_id,
             "name": data.get("Name") or data.get("name") or "",
         }
-        pixels = data.get("Pixels") or data.get("pixels") or {}
-        physical_sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
-        if physical_sizes:
-            result["voxel_sizes"] = physical_sizes
-            for axis, key in (
-                ("X", "physicalSizeX"),
-                ("Y", "physicalSizeY"),
-                ("Z", "physicalSizeZ"),
-            ):
-                if axis in physical_sizes:
-                    result[key] = physical_sizes[axis]
-
         return result
 
     def list_scripts(self):
@@ -6985,16 +6418,6 @@ class OMEROWebClient:
                 "sizeC": pixels.get("SizeC", pixels.get("sizeC", 1)),
                 "sizeT": pixels.get("SizeT", pixels.get("sizeT", 1)),
             }
-            physical_sizes = _explicit_physical_sizes_from_pixels_mapping(pixels)
-            if physical_sizes:
-                item["voxel_sizes"] = physical_sizes
-                for axis, key in (
-                    ("X", "physicalSizeX"),
-                    ("Y", "physicalSizeY"),
-                    ("Z", "physicalSizeZ"),
-                ):
-                    if axis in physical_sizes:
-                        item[key] = physical_sizes[axis]
             out.append(item)
         return out
 
@@ -7443,6 +6866,7 @@ class OMEROBrowserDialog:
         self.datasets_data = []
         self.images_data = []
         self.temp_files = []
+        self._selected_image_export_files = set()
         self._pid = None
         self._did = None
         self._refresh_generation = 0
@@ -9494,18 +8918,13 @@ class OMEROBrowserDialog:
         can_attempt_imaris_handoff = (
             native_available or self._has_imaris_handoff_target()
         )
-        local_imaris_converter = _find_imaris_convert_executable()
-        if not local_imaris_converter:
-            _xt_debug(
-                "Imaris converter unavailable: ImarisConvert executable not found"
-            )
         options = []
         omero_available = False
         if client:
             omero_available = client.has_omero_ims_export_capability()
         if omero_available:
             options.append("OMERO")
-        if can_attempt_imaris_handoff and local_imaris_converter:
+        if can_attempt_imaris_handoff:
             options.append("Imaris")
         _xt_debug(f"Detected converter options after connection: {options}")
         return options
@@ -9982,12 +9401,14 @@ class OMEROBrowserDialog:
         self,
         downloaded_file,
         require_ims=True,
+        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Open the with native bridge runner for `OMEROBrowserDialog`.
 
-        Inputs: `downloaded_file`, `require_ims`, `allow_when_disabled`. Output:
-        `_open_file_in_imaris_with_native_bridge_runner` result.
+        Inputs: `downloaded_file`, `require_ims`, `selected_image_export`,
+        `allow_when_disabled`. Output: `_open_file_in_imaris_with_native_bridge_runner`
+        result.
         """
         bridge_python = self._get_native_bridge_python_executable()
         return _open_file_in_imaris_with_native_bridge_runner(
@@ -9995,6 +9416,7 @@ class OMEROBrowserDialog:
             self.imaris_id,
             preferred_python_executable=bridge_python,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -10002,12 +9424,14 @@ class OMEROBrowserDialog:
         self,
         downloaded_files,
         require_ims=True,
+        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Open the files with native bridge runner for `OMEROBrowserDialog`.
 
-        Inputs: `downloaded_files`, `require_ims`, `allow_when_disabled`. Output:
-        `_open_files_in_imaris_with_native_bridge_runner` result.
+        Inputs: `downloaded_files`, `require_ims`, `selected_image_export`,
+        `allow_when_disabled`. Output: `_open_files_in_imaris_with_native_bridge_runner`
+        result.
         """
         bridge_python = self._get_native_bridge_python_executable()
         return _open_files_in_imaris_with_native_bridge_runner(
@@ -10015,6 +9439,7 @@ class OMEROBrowserDialog:
             self.imaris_id,
             preferred_python_executable=bridge_python,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
             allow_when_disabled=allow_when_disabled,
         )
 
@@ -10056,11 +9481,24 @@ class OMEROBrowserDialog:
             return bool(invoker(_resolve_on_current_thread))
         return _resolve_on_current_thread()
 
-    def _open_downloaded_file_in_imaris(self, downloaded_file, require_ims=True):
-        """Open one downloaded IMS file in the connected Imaris application.
+    def _open_downloaded_file_in_imaris(
+        self,
+        downloaded_file,
+        require_ims=True,
+        selected_image_export=False,
+    ):
+        """Open one downloaded connector file in the connected Imaris application.
 
-        Inputs: `downloaded_file`, `require_ims`. Output: `bool`.
+        Inputs: `downloaded_file`, `require_ims`, `selected_image_export`. Output:
+        `bool`.
         """
+        if selected_image_export and not self._is_tracked_selected_image_export_file(
+            downloaded_file
+        ):
+            _xt_debug(
+                "Imaris converter: refusing to open an untracked selected-image export"
+            )
+            return False
         self._set_status("Opening file in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
 
@@ -10075,6 +9513,7 @@ class OMEROBrowserDialog:
             return self._open_with_native_bridge_runner(
                 downloaded_file,
                 require_ims=require_ims,
+                selected_image_export=selected_image_export,
             )
 
         if self.imaris is None:
@@ -10092,6 +9531,7 @@ class OMEROBrowserDialog:
             if self._open_with_native_bridge_runner(
                 downloaded_file,
                 require_ims=require_ims,
+                selected_image_export=selected_image_export,
                 allow_when_disabled=not native_bridge_enabled,
             ):
                 return True
@@ -10107,12 +9547,16 @@ class OMEROBrowserDialog:
                 f"Using Imaris handle type={type(self.imaris).__name__} for file open"
             )
 
-        if self.imaris is not None and open_file_in_imaris(
-            downloaded_file,
-            self.imaris,
-            require_ims=require_ims,
-        ):
-            return True
+        if self.imaris is not None:
+            if selected_image_export:
+                if open_selected_image_export_in_imaris(downloaded_file, self.imaris):
+                    return True
+            elif open_file_in_imaris(
+                downloaded_file,
+                self.imaris,
+                require_ims=require_ims,
+            ):
+                return True
 
         if not native_bridge_enabled:
             return False
@@ -10124,16 +9568,23 @@ class OMEROBrowserDialog:
         if self._open_with_native_bridge_runner(
             downloaded_file,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
         ):
             return True
 
         _xt_debug("Native bridge runner did not open the file in the live XT session")
         return False
 
-    def _open_downloaded_files_in_imaris(self, downloaded_files, require_ims=True):
-        """Open downloaded IMS files in the connected Imaris application.
+    def _open_downloaded_files_in_imaris(
+        self,
+        downloaded_files,
+        require_ims=True,
+        selected_image_export=False,
+    ):
+        """Open downloaded connector files in the connected Imaris application.
 
-        Inputs: `downloaded_files`, `require_ims`. Output: `bool`.
+        Inputs: `downloaded_files`, `require_ims`, `selected_image_export`. Output:
+        `bool`.
         """
         downloaded_files = list(downloaded_files or [])
         if not downloaded_files:
@@ -10142,7 +9593,17 @@ class OMEROBrowserDialog:
             return self._open_downloaded_file_in_imaris(
                 downloaded_files[0],
                 require_ims=require_ims,
+                selected_image_export=selected_image_export,
             )
+        if selected_image_export and any(
+            not self._is_tracked_selected_image_export_file(path)
+            for path in downloaded_files
+        ):
+            _xt_debug(
+                "Imaris converter: refusing to open an untracked selected-image "
+                "export batch"
+            )
+            return False
 
         self._set_status("Opening selected files in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
@@ -10159,6 +9620,7 @@ class OMEROBrowserDialog:
             return self._open_files_with_native_bridge_runner(
                 downloaded_files,
                 require_ims=require_ims,
+                selected_image_export=selected_image_export,
             )
 
         if self.imaris is None:
@@ -10176,6 +9638,7 @@ class OMEROBrowserDialog:
             if self._open_files_with_native_bridge_runner(
                 downloaded_files,
                 require_ims=require_ims,
+                selected_image_export=selected_image_export,
                 allow_when_disabled=not native_bridge_enabled,
             ):
                 return True
@@ -10187,12 +9650,16 @@ class OMEROBrowserDialog:
                 "application id is available for batch handoff"
             )
 
-        if self.imaris is not None and open_files_in_imaris(
-            downloaded_files,
-            self.imaris,
-            require_ims=require_ims,
-        ):
-            return True
+        if self.imaris is not None:
+            if selected_image_export:
+                if open_selected_image_exports_in_imaris(downloaded_files, self.imaris):
+                    return True
+            elif open_files_in_imaris(
+                downloaded_files,
+                self.imaris,
+                require_ims=require_ims,
+            ):
+                return True
 
         if not native_bridge_enabled:
             return False
@@ -10204,6 +9671,7 @@ class OMEROBrowserDialog:
         if self._open_files_with_native_bridge_runner(
             downloaded_files,
             require_ims=require_ims,
+            selected_image_export=selected_image_export,
         ):
             return True
 
@@ -11523,29 +10991,54 @@ class OMEROBrowserDialog:
                 return f"Image {image_id}"
         return "selected image"
 
+    def _selected_image_export_key(self, file_path):
+        """Return a stable key for a tracked selected-image export path.
+
+        Inputs: `file_path`. Output: key string or empty string.
+        """
+        path = _coerce_path(file_path)
+        if path is None:
+            return ""
+        try:
+            return os.path.normcase(os.path.abspath(os.fspath(path)))
+        except (OSError, ValueError):
+            return os.path.normcase(os.path.normpath(os.fspath(path)))
+
+    def _mark_selected_image_export_file(self, file_path):
+        """Track a selected-image export downloaded by this dialog.
+
+        Inputs: `file_path`. Output: normalized path string.
+        """
+        candidate = _existing_regular_file_path(file_path)
+        if candidate is None:
+            raise RuntimeError("Selected-image export is missing after download.")
+        if not is_tiff_file(candidate):
+            raise RuntimeError("Selected-image export is not a readable TIFF file.")
+        tracked = getattr(self, "_selected_image_export_files", None)
+        if not isinstance(tracked, set):
+            tracked = set()
+            self._selected_image_export_files = tracked
+        tracked.add(self._selected_image_export_key(candidate))
+        return str(candidate)
+
+    def _is_tracked_selected_image_export_file(self, file_path):
+        """Return whether `file_path` is a selected-image export from this dialog.
+
+        Inputs: `file_path`. Output: bool.
+        """
+        tracked = getattr(self, "_selected_image_export_files", set())
+        key = self._selected_image_export_key(file_path)
+        return bool(key and key in tracked and is_tiff_file(file_path))
+
     def _download_selected_image_with_imaris_converter(
         self,
         image_id,
-        image_name,
         download_dir,
-        image_metadata=None,
     ):
-        """Export one OMERO Image ID and convert it with local Imaris.
+        """Export one OMERO Image ID for direct Imaris handoff.
 
-        Inputs: `image_id`, `image_name`, `download_dir`, `image_metadata`. Output:
-        IMS path.
+        Inputs: `image_id`, `download_dir`. Output: selected-image export path.
         """
-        metadata = _merge_explicit_voxel_size_mappings(
-            _explicit_physical_sizes_from_image_metadata(image_metadata)
-        )
-        if set(metadata) != {"X", "Y", "Z"}:
-            get_image_metadata = getattr(self.client, "get_image_metadata", None)
-            if callable(get_image_metadata):
-                detail_metadata = get_image_metadata(image_id)
-                metadata = _merge_explicit_voxel_size_mappings(
-                    metadata,
-                    _explicit_physical_sizes_from_image_metadata(detail_metadata),
-                )
         self._set_status(
             f"Imaris converter: exporting selected Image {image_id} as OME-TIFF...",
             "#fff3cd",
@@ -11555,22 +11048,12 @@ class OMEROBrowserDialog:
             download_dir,
             fallback_name=f"{self._image_cache_subdir(image_id)}.ome.tif",
         )
-        self.temp_files.append(ome_tiff_file)
-        self._set_status(
-            f"Imaris converter: converting selected Image {image_id} to IMS locally...",
-            "#fff3cd",
-        )
-        ims_file = convert_ome_tiff_to_ims_with_local_imaris(
-            ome_tiff_file,
-            download_dir,
-            fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
-            voxel_size_overrides=metadata,
-        )
+        selected_export = self._mark_selected_image_export_file(ome_tiff_file)
         _xt_debug(
             "Imaris converter: selected Image ID exported via standard OMERO.web "
-            "and converted with local ImarisConvert"
+            "for direct Imaris handoff"
         )
-        return ims_file
+        return selected_export
 
     def _selected_images(self):
         """Return the selected images for `OMEROBrowserDialog`.
@@ -11726,12 +11209,27 @@ class OMEROBrowserDialog:
                     download_dir,
                     fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                 )
+                require_ims = True
+                selected_image_export = False
+                success_status = "Opened IMS in current Imaris session"
+                success_message = "IMS file opened in the current Imaris session."
+                failure_message = "Failed to open IMS in the current Imaris session."
             elif converter == "Imaris":
                 downloaded_file = self._download_selected_image_with_imaris_converter(
                     image_id,
-                    image_name,
                     download_dir,
-                    image_metadata=img,
+                )
+                require_ims = False
+                selected_image_export = True
+                success_status = (
+                    "Opened selected Image export in current Imaris session"
+                )
+                success_message = (
+                    "Selected Image export opened in the current Imaris session."
+                )
+                failure_message = (
+                    "Failed to open the selected Image export in the current "
+                    "Imaris session."
                 )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
@@ -11739,11 +11237,19 @@ class OMEROBrowserDialog:
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download file from OMERO.")
 
-            if not is_ims_file(downloaded_file):
+            if require_ims and not is_ims_file(downloaded_file):
                 raise RuntimeError(
                     "Downloaded file is not a valid IMS (HDF5) file. "
                     "Refusing to open the invalid export in Imaris. "
                     "Please verify that the conversion completed successfully."
+                )
+            if (
+                selected_image_export
+                and not self._is_tracked_selected_image_export_file(downloaded_file)
+            ):
+                raise RuntimeError(
+                    "Downloaded selected Image export is not a readable TIFF file. "
+                    "Refusing to open it in Imaris."
                 )
 
             self._set_status(
@@ -11758,13 +11264,11 @@ class OMEROBrowserDialog:
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_file_in_imaris(
                     downloaded_file,
-                    require_ims=True,
+                    require_ims=require_ims,
+                    selected_image_export=selected_image_export,
                 )
             )
-            success_status = "Opened IMS in current Imaris session"
             success_title = "Success"
-            success_message = "IMS file opened in the current Imaris session."
-            failure_message = "Failed to open IMS in the current Imaris session."
 
             if success:
                 self._set_status(success_status, "#d4edda")
@@ -11824,6 +11328,8 @@ class OMEROBrowserDialog:
                 raise RuntimeError(f"Unsupported converter: {converter}")
 
             downloaded_files = []
+            require_ims = converter == "OMERO"
+            selected_image_export = converter == "Imaris"
             for index, img in enumerate(selected_images, start=1):
                 image_id = img.get("id")
                 if image_id is None:
@@ -11850,9 +11356,7 @@ class OMEROBrowserDialog:
                     downloaded_file = (
                         self._download_selected_image_with_imaris_converter(
                             image_id,
-                            image_name,
                             download_dir,
-                            image_metadata=img,
                         )
                     )
 
@@ -11860,10 +11364,18 @@ class OMEROBrowserDialog:
                     raise RuntimeError(
                         "Failed to download one selected file from OMERO."
                     )
-                if not is_ims_file(downloaded_file):
+                if require_ims and not is_ims_file(downloaded_file):
                     raise RuntimeError(
                         "A downloaded file is not a valid IMS (HDF5) file. "
                         "Refusing to open the selected batch."
+                    )
+                if (
+                    selected_image_export
+                    and not self._is_tracked_selected_image_export_file(downloaded_file)
+                ):
+                    raise RuntimeError(
+                        "A downloaded selected Image export is not a readable TIFF "
+                        "file. Refusing to open the selected batch."
                     )
 
                 downloaded_files.append(downloaded_file)
@@ -11880,16 +11392,29 @@ class OMEROBrowserDialog:
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_files_in_imaris(
                     downloaded_files,
-                    require_ims=True,
+                    require_ims=require_ims,
+                    selected_image_export=selected_image_export,
                 )
             )
-            success_status = "Opened selected IMS files in current Imaris session"
             success_title = "Success"
-            success_message = (
-                "All selected IMS files opened in Imaris "
-                "after every download completed."
-            )
-            failure_message = "Imaris did not accept the prepared IMS file batch."
+            if require_ims:
+                success_status = "Opened selected IMS files in current Imaris session"
+                success_message = (
+                    "All selected IMS files opened in Imaris "
+                    "after every download completed."
+                )
+                failure_message = "Imaris did not accept the prepared IMS file batch."
+            else:
+                success_status = (
+                    "Opened selected Image exports in current Imaris session"
+                )
+                success_message = (
+                    "All selected Image exports opened in Imaris "
+                    "after every download completed."
+                )
+                failure_message = (
+                    "Imaris did not accept the selected Image export batch."
+                )
 
             if success:
                 self._set_status(success_status, "#d4edda")

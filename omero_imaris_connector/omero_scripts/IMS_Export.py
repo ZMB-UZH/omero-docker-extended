@@ -857,7 +857,7 @@ def run_script():
         namespaces=["omero.export"],
         version="1.0.0",
         authors=["Efstratios Mitridis"],
-        institutions=["ZMB/UZH"],
+        institutions=["OMERO Imaris Connector"],
         contact="mitridisefstratios@gmail.com",
     )
     try:

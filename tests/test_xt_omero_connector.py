@@ -43,49 +43,6 @@ def _load_xt_module():
     return module
 
 
-def _write_minimal_ome_tiff(path, pixels_attributes):
-    """Write a minimal TIFF carrying OME XML in ImageDescription.
-
-    Inputs: `path`, `pixels_attributes`. Output: None.
-    """
-    attrs = {
-        "ID": "Pixels:0",
-        "DimensionOrder": "XYZCT",
-        "Type": "uint8",
-        "SizeX": "1",
-        "SizeY": "1",
-        "SizeZ": "1",
-        "SizeC": "1",
-        "SizeT": "1",
-    }
-    attrs.update({str(key): str(value) for key, value in pixels_attributes.items()})
-    attrs_text = " ".join(f'{key}="{value}"' for key, value in attrs.items())
-    xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">'
-        f'<Image ID="Image:0"><Pixels {attrs_text}>'
-        '<TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>'
-    )
-    description = xml.encode("utf-8") + b"\x00"
-    ifd_offset = 8
-    ifd_count = 1
-    description_offset = ifd_offset + 2 + (12 * ifd_count) + 4
-    entry = (
-        (270).to_bytes(2, "big")
-        + (2).to_bytes(2, "big")
-        + len(description).to_bytes(4, "big")
-        + description_offset.to_bytes(4, "big")
-    )
-    path.write_bytes(
-        b"MM\x00*"
-        + ifd_offset.to_bytes(4, "big")
-        + ifd_count.to_bytes(2, "big")
-        + entry
-        + (0).to_bytes(4, "big")
-        + description
-    )
-
-
 def _enable_native_bridge(module, monkeypatch):
     """Enable the opt-in IcePy-backed native bridge for tests that cover it.
 
@@ -457,7 +414,7 @@ def _make_refresh_dialog(module):
     dialog.refresh_btn = _FakeButton()
     dialog.load_btn = _FakeButton()
     dialog.converter_var = _FakeVar("OMERO")
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(Path.cwd()))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog.status_updates = []
@@ -620,7 +577,7 @@ def test_client_detects_omero_ims_export_capability():
                 (
                     '{"omero_ims_export": true, '
                     '"omero_ims_export_capability": '
-                    '"zmb_omero_imaris_connector_v1", '
+                    '"omero_imaris_connector_v1", '
                     '"converters": {"OMERO": true}}'
                 ).encode("utf-8")
             )
@@ -741,7 +698,7 @@ def test_client_rejects_capability_payload_with_false_converter_flag():
                 (
                     '{"omero_ims_export": true, '
                     '"omero_ims_export_capability": '
-                    '"zmb_omero_imaris_connector_v1", '
+                    '"omero_imaris_connector_v1", '
                     '"converters": {"OMERO": false}}'
                 ).encode("utf-8")
             )
@@ -1692,7 +1649,7 @@ def test_open_file_in_imaris_accepts_visible_dataset_when_current_file_stays_sta
 
             Inputs: none. Output: stale path.
             """
-            return "C:\\old\\previous.ims"
+            return str(tmp_path / "old" / "previous.ims")
 
         def GetDataSet(self):
             """Return the loaded dataset.
@@ -2082,19 +2039,20 @@ def test_open_files_in_imaris_uses_image_slots_for_multiple_files(tmp_path):
     }
 
 
-def test_imaris_open_snapshot_changed_covers_observable_effects():
+def test_imaris_open_snapshot_changed_covers_observable_effects(tmp_path):
     """Verify Imaris open snapshot comparison covers every success signal.
 
     Inputs: repository fixtures. Output: fails on observable-effect comparison regressions.
     """
     module = _load_xt_module()
     before = ("", 1, None)
+    demo_path = str(tmp_path / "demo.ims")
 
     assert (
         module._imaris_open_snapshot_changed(
             before,
-            ("C:\\data\\demo.ims", 1, None),
-            "C:\\data\\demo.ims",
+            (demo_path, 1, None),
+            demo_path,
         )
         is True
     )
@@ -2141,12 +2099,14 @@ def test_is_filesystem_root_detects_windows_and_posix_roots():
     Inputs: repository fixtures. Output: fails on regressions in is filesystem root detects windows and posix roots.
     """
     module = _load_xt_module()
+    drive_root = Path.cwd().anchor or "/"
+    non_root = str(Path.cwd())
 
     assert module._is_filesystem_root("/") is True
-    assert module._is_filesystem_root(r"C:\\") is True
+    assert module._is_filesystem_root(drive_root) is True
     assert module._is_filesystem_root(r"\\server\share") is True
     assert module._is_filesystem_root(r"\\server\share\\") is True
-    assert module._is_filesystem_root(r"C:\\Users\\alice") is False
+    assert module._is_filesystem_root(non_root) is False
     assert module._is_filesystem_root(r"\\server\share\folder") is False
 
 
@@ -2157,11 +2117,10 @@ def test_structural_folder_path_validation_accepts_absolute_paths(tmp_path):
     """
     module = _load_xt_module()
 
-    assert module._is_structurally_valid_folder_path(r"C:\exports") is True
-    assert module._is_structurally_valid_folder_path(r"C:/exports") is True
-    assert module._is_structurally_valid_folder_path(r"\\server\share\folder") is True
-    assert module._is_structurally_valid_folder_path(r"\\?\C:\long\exports") is True
     assert module._is_structurally_valid_folder_path(tmp_path) is True
+    assert module._is_structurally_valid_folder_path(str(tmp_path)) is True
+    assert module._is_structurally_valid_folder_path(r"\\server\share\folder") is True
+    assert module._is_structurally_valid_folder_path(f"\\\\?\\{tmp_path}") is True
 
 
 def test_structural_folder_path_validation_rejects_malformed_windows_paths():
@@ -2171,17 +2130,18 @@ def test_structural_folder_path_validation_rejects_malformed_windows_paths():
     """
     module = _load_xt_module()
 
+    drive = Path.cwd().drive or "C:"
     rejected_paths = [
         "",
         "   ",
         r"C:exports",
         r"\exports",
-        r"C:\bad<name",
-        r"C:\exports\CON",
-        r"C:\exports\child ",
-        r"C:\exports\child.",
-        r"C:\exports\..\child",
-        r"C:\bad" + "\x00" + "path",
+        rf"{drive}\bad<name",
+        rf"{drive}\exports\CON",
+        rf"{drive}\exports\child ",
+        rf"{drive}\exports\child.",
+        rf"{drive}\exports\..\child",
+        rf"{drive}\bad" + "\x00" + "path",
         r"\\.\GLOBALROOT\Device\HarddiskVolumeShadowCopy1",
         r"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1",
     ]
@@ -2390,7 +2350,7 @@ def test_select_folder_reports_write_error_immediately_and_disables_load(
     ]
 
 
-def test_load_button_requires_connection_and_structural_folder_path():
+def test_load_button_requires_connection_and_structural_folder_path(tmp_path):
     """Verify Load stays gated by connection, converter, path, and image selection.
 
     Inputs: repository fixtures. Output: fails on Load button gating regressions.
@@ -2403,7 +2363,7 @@ def test_load_button_requires_connection_and_structural_folder_path():
     dialog._folder_export_in_progress = False
     dialog._connected = False
     dialog.client = None
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog.images_data = [{"id": 1, "name": "selected"}]
@@ -2418,7 +2378,7 @@ def test_load_button_requires_connection_and_structural_folder_path():
     module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
     assert dialog.load_btn.state == "disabled"
 
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_write_state = "unchecked"
     dialog.ilist.selection_clear(0)
     module.OMEROBrowserDialog._set_load_button_for_converter(dialog)
@@ -2433,7 +2393,9 @@ def test_load_button_requires_connection_and_structural_folder_path():
     assert dialog.load_btn.state == "disabled"
 
 
-def test_path_change_reenables_load_after_reconnect_when_converter_is_available():
+def test_path_change_reenables_load_after_reconnect_when_converter_is_available(
+    tmp_path,
+):
     """Verify typed path changes recompute Load state after reconnect.
 
     Inputs: repository fixtures. Output: fails on reconnect/path state regressions.
@@ -2446,7 +2408,7 @@ def test_path_change_reenables_load_after_reconnect_when_converter_is_available(
     dialog._folder_export_in_progress = False
     dialog._connected = True
     dialog.client = object()
-    dialog.folder_path_var = _FakeVar(r"C:\valid-export")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_trace_suppressed = False
     dialog._folder_path_write_state = "empty"
@@ -2524,6 +2486,7 @@ def test_folder_path_write_check_rejects_malformed_path_before_probe(monkeypatch
     Inputs: pytest provides `monkeypatch`. Output: fails on write-check regressions.
     """
     module = _load_xt_module()
+    drive = Path.cwd().drive or "C:"
 
     monkeypatch.setattr(
         module.os,
@@ -2534,7 +2497,7 @@ def test_folder_path_write_check_rejects_malformed_path_before_probe(monkeypatch
     )
 
     assert (
-        module._folder_path_write_error(r"C:\bad<name")
+        module._folder_path_write_error(rf"{drive}\bad<name")
         == module.LOCAL_PATH_WRITE_ERROR_MESSAGE
     )
 
@@ -2583,7 +2546,7 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
         module.CONNECTOR_SETTINGS_PORT_KEY: "443",
         module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
         module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
-        module.CONNECTOR_SETTINGS_PATH_KEY: r"C:\Exports\A folder",
+        module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path / "Exports" / "A folder"),
         module.CONNECTOR_SETTINGS_CONVERTER_KEY: "Imaris",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "false",
@@ -2603,7 +2566,9 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
     assert sensitive_value not in content
     assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
     assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
-    assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == r"C:\Exports\A folder"
+    assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == str(
+        tmp_path / "Exports" / "A folder"
+    )
     assert loaded[module.CONNECTOR_SETTINGS_CONVERTER_KEY] == "Imaris"
     assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "false"
     assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "true"
@@ -4347,11 +4312,6 @@ def test_converter_detection_resets_stale_native_probe_before_waiting(monkeypatc
         _reset_native_bridge_probe_for_converter_detection
     )
     dialog._start_native_bridge_probe = _start_native_bridge_probe
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     options = module.OMEROBrowserDialog._detect_converter_options_after_connection(
         dialog
@@ -4381,11 +4341,6 @@ def test_converter_detection_keeps_selector_when_probe_failed_but_imaris_id_exis
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
@@ -4408,11 +4363,6 @@ def test_converter_detection_keeps_imaris_choice_without_server_converter(monkey
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
 
@@ -5276,12 +5226,13 @@ def test_export_folder_to_omero_starts_folder_worker_after_confirmation(
     ]
 
 
-def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
+def test_export_folder_to_omero_rejects_filesystem_root(tmp_path, monkeypatch):
     """Confirm export to OMERO rejects filesystem root at the boundary.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in export to OMERO rejects filesystem root.
     """
     module = _load_xt_module()
+    filesystem_root = Path(tmp_path.anchor or Path.cwd().anchor)
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
     dialog._refresh_in_progress = False
@@ -5290,7 +5241,7 @@ def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
-    dialog.folder_path_var = _FakeVar(r"C:\\")
+    dialog.folder_path_var = _FakeVar(str(filesystem_root))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_dir_check_value = ""
     dialog._folder_path_dir_check_is_dir = False
@@ -5313,7 +5264,7 @@ def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: r"C:\\",
+        lambda **_kwargs: str(filesystem_root),
         raising=False,
     )
 
@@ -5327,12 +5278,13 @@ def test_export_folder_to_omero_rejects_filesystem_root(monkeypatch):
     ]
 
 
-def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
+def test_export_folder_to_omero_requires_existing_selector_path(tmp_path, monkeypatch):
     """Verify export rejects missing selector paths before worker startup.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on export validation regressions.
     """
     module = _load_xt_module()
+    missing_folder = tmp_path / "missing-folder"
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
     dialog._refresh_in_progress = False
@@ -5341,7 +5293,7 @@ def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
-    dialog.folder_path_var = _FakeVar(r"C:\missing-folder")
+    dialog.folder_path_var = _FakeVar(str(missing_folder))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_dir_check_value = ""
     dialog._folder_path_dir_check_is_dir = False
@@ -5364,7 +5316,7 @@ def test_export_folder_to_omero_requires_existing_selector_path(monkeypatch):
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: r"C:\missing-folder",
+        lambda **_kwargs: str(missing_folder),
         raising=False,
     )
 
@@ -5384,6 +5336,7 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on export validation regressions.
     """
     module = _load_xt_module()
+    malformed_path = f"{Path.cwd().drive or 'C:'}\\bad\x00path"
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._folder_export_in_progress = False
     dialog._refresh_in_progress = False
@@ -5392,7 +5345,7 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
     dialog._folder_export_available = True
     dialog._folder_export_reason = ""
     dialog.root = object()
-    dialog.folder_path_var = _FakeVar("C:\\bad\x00path")
+    dialog.folder_path_var = _FakeVar(malformed_path)
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_dir_check_value = ""
     dialog._folder_path_dir_check_is_dir = False
@@ -5422,7 +5375,7 @@ def test_export_folder_to_omero_rejects_malformed_selector_path(monkeypatch):
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: "C:\\bad\x00path",
+        lambda **_kwargs: malformed_path,
         raising=False,
     )
 
@@ -5723,7 +5676,7 @@ def test_images_panel_click_sets_focus_for_native_border_highlight():
     assert dialog._image_selection_anchor == 1
 
 
-def test_image_selection_updates_load_button_enabled_state():
+def test_image_selection_updates_load_button_enabled_state(tmp_path):
     """Verify Load enables only while at least one image is selected.
 
     Inputs: repository fixtures. Output: fails on image-selection load gating regressions.
@@ -5733,7 +5686,7 @@ def test_image_selection_updates_load_button_enabled_state():
     dialog._connected = True
     dialog.client = object()
     dialog.converter_var = _FakeVar("OMERO")
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog._load_in_progress = False
@@ -5828,24 +5781,32 @@ def test_direct_imaris_resolution_does_not_import_native_bridge_in_process():
     assert 'sys.modules.get("ImarisLib")' in source
 
 
-def test_parse_python_launcher_paths_handles_windows_launcher_output():
+def test_parse_python_launcher_paths_handles_windows_launcher_output(tmp_path):
     """Verify parse python launcher paths handles windows launcher output.
 
     Inputs: repository fixtures. Output: fails on regressions in parse python launcher paths handles windows launcher output.
     """
     module = _load_xt_module()
-    output = """Installed Pythons found by C:\\Windows\\py.exe Launcher for Windows
- -3.9-64        C:\\Program Files\\Python39\\python.exe *
- -3.11-64       C:\\ProgramData\\anaconda3\\python.exe
-"""
+    current_python = tmp_path / "Python39" / "python.exe"
+    alternate_python = tmp_path / "anaconda3" / "python.exe"
+    current_python.parent.mkdir()
+    alternate_python.parent.mkdir()
+    current_python.write_text("", encoding="utf-8")
+    alternate_python.write_text("", encoding="utf-8")
+    output = (
+        f"Installed Pythons found by {tmp_path / 'py.exe'} Launcher for Windows\n"
+        f" -3.9-64        {current_python} *\n"
+        f" -3.11-64       {alternate_python}\n"
+    )
 
     assert module._parse_python_launcher_paths(output) == [
-        r"C:\Program Files\Python39\python.exe",
-        r"C:\ProgramData\anaconda3\python.exe",
+        str(current_python),
+        str(alternate_python),
     ]
 
 
 def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_current(
+    tmp_path,
     monkeypatch,
 ):
     """Verify iter native bridge python executables uses py launcher and skips current.
@@ -5853,18 +5814,24 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in iter native bridge python executables uses py launcher and skips current.
     """
     module = _load_xt_module()
+    current_python = tmp_path / "Python39" / "python.exe"
+    alternate_python = tmp_path / "anaconda3" / "python.exe"
+    launcher = tmp_path / "py.exe"
+    current_python.parent.mkdir()
+    alternate_python.parent.mkdir()
+    current_python.write_text("", encoding="utf-8")
+    alternate_python.write_text("", encoding="utf-8")
+    launcher.write_text("", encoding="utf-8")
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
-    monkeypatch.setattr(
-        module.sys, "executable", r"C:\Program Files\Python39\python.exe"
-    )
+    monkeypatch.setattr(module.sys, "executable", str(current_python))
     monkeypatch.setattr(
         module,
         "_iter_windows_python_launchers",
-        lambda: iter([r"C:\Windows\py.exe"]),
+        lambda: iter([str(launcher)]),
     )
     resolved = {
-        r"C:\Program Files\Python39\python.exe": r"C:\Program Files\Python39\python.exe",
-        r"C:\ProgramData\anaconda3\python.exe": r"C:\ProgramData\anaconda3\python.exe",
+        str(current_python): str(current_python),
+        str(alternate_python): str(alternate_python),
     }
     monkeypatch.setattr(
         module,
@@ -5877,14 +5844,14 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
 
         Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
-        assert cmd == [r"C:\Windows\py.exe", "-0p"]
+        assert cmd == [str(launcher), "-0p"]
         assert kwargs["check"] is False
         assert kwargs["stdin"] is subprocess.DEVNULL
         return types.SimpleNamespace(
             returncode=0,
             stdout=(
-                " -3.9-64        C:\\Program Files\\Python39\\python.exe *\n"
-                " -3.11-64       C:\\ProgramData\\anaconda3\\python.exe\n"
+                f" -3.9-64        {current_python} *\n"
+                f" -3.11-64       {alternate_python}\n"
             ),
             stderr="",
         )
@@ -5892,7 +5859,7 @@ def test_iter_native_bridge_python_executables_uses_py_launcher_and_skips_curren
     monkeypatch.setattr(subprocess, "run", _fake_run)
 
     assert list(module._iter_native_bridge_python_executables()) == [
-        r"C:\ProgramData\anaconda3\python.exe"
+        str(alternate_python)
     ]
 
 
@@ -5906,16 +5873,19 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
     module = _load_xt_module()
     ims_path = tmp_path / "demo.ims"
     ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
-    python_exe = r"C:\ProgramData\anaconda3\python.exe"
+    python_exe = tmp_path / "python.exe"
+    python_exe.write_text("", encoding="utf-8")
+    install_root = tmp_path / "Imaris 11.0.0"
+    install_root.mkdir()
     monkeypatch.setattr(
         module,
         "_resolve_python_executable_candidate",
-        lambda path: python_exe if path == python_exe else None,
+        lambda path: str(python_exe) if os.fspath(path) == str(python_exe) else None,
     )
     monkeypatch.setattr(
         module,
         "_iter_imaris_install_roots",
-        lambda: [r"C:\Program Files\Bitplane\Imaris 11.0.0"],
+        lambda: [str(install_root)],
     )
     calls = []
 
@@ -5926,7 +5896,7 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
         """
         calls.append((cmd, kwargs))
         payload = json.loads(kwargs["input"])
-        assert cmd[0] == python_exe
+        assert cmd[0] == str(python_exe)
         assert len(cmd) == 2
         assert "-c" not in cmd
         assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
@@ -5941,7 +5911,7 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
         assert payload["file_path"] == str(ims_path)
         assert payload["require_ims"] is True
         assert payload["app_id"] == 17
-        assert payload["install_roots"] == [r"C:\Program Files\Bitplane\Imaris 11.0.0"]
+        assert payload["install_roots"] == [str(install_root)]
         return types.SimpleNamespace(
             returncode=0,
             stdout="BRIDGE_RUNNER_OPENED\n",
@@ -5950,7 +5920,9 @@ def test_native_bridge_runner_uses_fixed_python_command_and_json_payload(
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
 
-    assert module._run_native_bridge_open_helper(python_exe, ims_path, "17") is True
+    assert (
+        module._run_native_bridge_open_helper(str(python_exe), ims_path, "17") is True
+    )
     assert len(calls) == 1
     assert not Path(calls[0][0][1]).exists()
 
@@ -5965,16 +5937,19 @@ def test_native_bridge_runner_rejects_original_file_when_ims_not_required(
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
     original_path.write_bytes(b"native input")
-    python_exe = r"C:\ProgramData\anaconda3\python.exe"
+    python_exe = tmp_path / "python.exe"
+    python_exe.write_text("", encoding="utf-8")
+    install_root = tmp_path / "Imaris 11.0.0"
+    install_root.mkdir()
     monkeypatch.setattr(
         module,
         "_resolve_python_executable_candidate",
-        lambda path: python_exe if path == python_exe else None,
+        lambda path: str(python_exe) if os.fspath(path) == str(python_exe) else None,
     )
     monkeypatch.setattr(
         module,
         "_iter_imaris_install_roots",
-        lambda: [r"C:\Program Files\Bitplane\Imaris 11.0.0"],
+        lambda: [str(install_root)],
     )
     calls = []
 
@@ -6004,22 +5979,28 @@ def test_native_bridge_runner_rejects_original_file_when_ims_not_required(
     assert calls == []
 
 
-def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch):
+def test_native_bridge_probe_helper_checks_bridge_without_file_open(
+    tmp_path,
+    monkeypatch,
+):
     """Verify native bridge probe helper checks bridge without file open.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge probe helper checks bridge without file open.
     """
     module = _load_xt_module()
-    python_exe = r"C:\ProgramData\anaconda3\python.exe"
+    python_exe = tmp_path / "python.exe"
+    python_exe.write_text("", encoding="utf-8")
+    install_root = tmp_path / "Imaris 11.0.0"
+    install_root.mkdir()
     monkeypatch.setattr(
         module,
         "_resolve_python_executable_candidate",
-        lambda path: python_exe if path == python_exe else None,
+        lambda path: str(python_exe) if os.fspath(path) == str(python_exe) else None,
     )
     monkeypatch.setattr(
         module,
         "_iter_imaris_install_roots",
-        lambda: [r"C:\Program Files\Bitplane\Imaris 11.0.0"],
+        lambda: [str(install_root)],
     )
 
     def _fake_run(cmd, **kwargs):
@@ -6028,7 +6009,7 @@ def test_native_bridge_probe_helper_checks_bridge_without_file_open(monkeypatch)
         Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace` result.
         """
         payload = json.loads(kwargs["input"])
-        assert cmd[0] == python_exe
+        assert cmd[0] == str(python_exe)
         assert len(cmd) == 2
         assert "-c" not in cmd
         assert module._NATIVE_BRIDGE_OPEN_HELPER not in cmd
@@ -6302,7 +6283,7 @@ def test_native_bridge_helper_rejects_original_before_fileopen(tmp_path):
     )
 
     assert completed.returncode == 64
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_FILE_LIST"
     assert not calls_path.exists()
 
 
@@ -6372,7 +6353,7 @@ def test_native_bridge_helper_rejects_original_before_options_retry(
     )
 
     assert completed.returncode == 64
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_FILE_LIST"
     assert not calls_path.exists()
 
 
@@ -6439,7 +6420,7 @@ def test_native_bridge_helper_rejects_original_submission_without_dataset_change
     )
 
     assert completed.returncode == 64
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_FILE_LIST"
     assert not calls_path.exists()
 
 
@@ -6763,7 +6744,9 @@ def test_xt_connector_imaris_load_path_does_not_download_archived_originals():
 
     assert "download_original_file" not in source
     assert "download_selected_image_ome_tiff" in source
-    assert "convert_ome_tiff_to_ims_with_local_imaris" in source
+    removed_converter_name = "convert_ome_tiff" "_to_ims_with_local_imaris"
+    assert removed_converter_name not in source
+    assert "_mark_selected_image_export_file" in source
 
 
 def test_client_download_selected_image_ome_tiff_uses_standard_export_endpoint(
@@ -6848,346 +6831,6 @@ def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
     assert "archived_files" not in opened_urls[0]
 
 
-def test_client_extracts_explicit_voxel_sizes_from_image_list_metadata():
-    """Verify selected-image list metadata carries explicit voxel sizes.
-
-    Inputs: repository fixtures. Output: fails on OMERO metadata parsing regressions.
-    """
-    module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
-    client.session_id = "session-123"
-    opened_urls = []
-
-    class _FakeOpener:
-        """Test double for fake opener."""
-
-        @staticmethod
-        def open(request, timeout):
-            """Return a dataset image list with explicit Pixels metadata.
-
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
-            """
-            opened_urls.append((request.full_url, timeout))
-            return _FakeHTTPResponse(
-                json.dumps(
-                    {
-                        "data": [
-                            {
-                                "id": 63,
-                                "Name": "selected image",
-                                "Pixels": {
-                                    "SizeX": 2048,
-                                    "SizeY": 2048,
-                                    "SizeZ": 3,
-                                    "SizeC": 2,
-                                    "SizeT": 1,
-                                    "PhysicalSizeX": 0.647934,
-                                    "PhysicalSizeY": {
-                                        "value": 647.934,
-                                        "unit": "nm",
-                                    },
-                                    "PhysicalSizeZ": 2.5,
-                                },
-                            }
-                        ]
-                    }
-                ).encode("utf-8")
-            )
-
-    client.opener = _FakeOpener()
-
-    images = client.list_images(9)
-
-    assert opened_urls == [(f"{client.api_url}/m/datasets/9/images/?group=-1", 30)]
-    assert images == [
-        {
-            "id": 63,
-            "name": "selected image",
-            "sizeX": 2048,
-            "sizeY": 2048,
-            "sizeZ": 3,
-            "sizeC": 2,
-            "sizeT": 1,
-            "voxel_sizes": {"X": "0.647934", "Y": "0.647934", "Z": "2.5"},
-            "physicalSizeX": "0.647934",
-            "physicalSizeY": "0.647934",
-            "physicalSizeZ": "2.5",
-        }
-    ]
-
-
-def test_client_get_image_metadata_extracts_detail_voxel_sizes_without_original_use():
-    """Verify image detail metadata exposes voxel sizes without selecting originals.
-
-    Inputs: repository fixtures. Output: fails on selected Image detail parsing
-    regressions.
-    """
-    module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
-    client.session_id = "session-123"
-    opened_urls = []
-
-    class _FakeOpener:
-        """Test double for fake opener."""
-
-        @staticmethod
-        def open(request, timeout):
-            """Return image detail metadata for one selected Image ID.
-
-            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
-            """
-            opened_urls.append((request.full_url, timeout))
-            return _FakeHTTPResponse(
-                json.dumps(
-                    {
-                        "id": 63,
-                        "Name": "selected image",
-                        "Pixels": {
-                            "PhysicalSizeX": {"value": 0.5, "unit": "um"},
-                            "PhysicalSizeY": {"value": 500, "unit": "nm"},
-                            "PhysicalSizeZ": {"value": 0.002, "unit": "mm"},
-                        },
-                        "Fileset": {
-                            "Files": [
-                                {
-                                    "Name": "source container must be ignored",
-                                }
-                            ]
-                        },
-                    }
-                ).encode("utf-8")
-            )
-
-    client.opener = _FakeOpener()
-
-    metadata = client.get_image_metadata(63)
-
-    assert opened_urls == [(f"{client.api_url}/m/images/63/?group=-1", 30)]
-    assert metadata["voxel_sizes"] == {"X": "0.5", "Y": "0.5", "Z": "2"}
-    assert metadata["physicalSizeX"] == "0.5"
-    assert metadata["physicalSizeY"] == "0.5"
-    assert metadata["physicalSizeZ"] == "2"
-    assert "original_file" not in metadata
-
-
-def test_convert_ome_tiff_to_ims_with_local_imaris_runs_imarisconvert(
-    tmp_path,
-    monkeypatch,
-):
-    """Verify local Imaris conversion invokes ImarisConvert and validates IMS output.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in local conversion command construction.
-    """
-    module = _load_xt_module()
-    converter = tmp_path / "ImarisConvert.exe"
-    converter.write_text("fake", encoding="utf-8")
-    source_file = tmp_path / "source.ome.tif"
-    source_file.write_bytes(b"II*\x00selected-image")
-    calls = []
-
-    def _run(cmd, **kwargs):
-        """Record subprocess invocation and create a fake IMS output.
-
-        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
-        """
-        calls.append((cmd, kwargs))
-        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
-        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: str(converter)
-    )
-    monkeypatch.setattr(module.subprocess, "run", _run)
-
-    ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
-        source_file,
-        tmp_path,
-        fallback_name="converted.ims",
-    )
-
-    assert module.is_ims_file(ims_path) is True
-    assert len(calls) == 1
-    cmd, kwargs = calls[0]
-    assert cmd[:2] == [str(converter), "-i"]
-    assert cmd[2] == str(source_file)
-    assert cmd[3:5] == ["-if", "OmeTiff"]
-    assert cmd[5] == "-o"
-    assert cmd[7:] == ["-l", "none"]
-    assert kwargs["cwd"] == str(tmp_path)
-    assert kwargs["timeout"] == module.LOCAL_IMARIS_CONVERT_TIMEOUT
-
-
-def test_convert_ome_tiff_to_ims_retries_without_log_argument(tmp_path, monkeypatch):
-    """Verify local Imaris conversion retries another compatible command form.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in
-    local Imaris converter argument compatibility.
-    """
-    module = _load_xt_module()
-    converter = tmp_path / "ImarisConvert.exe"
-    converter.write_text("fake", encoding="utf-8")
-    source_file = tmp_path / "source.ome.tif"
-    source_file.write_bytes(b"II*\x00selected-image")
-    calls = []
-
-    def _run(cmd, **kwargs):
-        """Fail the first argument form and succeed the second.
-
-        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
-        """
-        calls.append((cmd, kwargs))
-        if len(calls) == 1:
-            return types.SimpleNamespace(returncode=2, stdout="", stderr="bad args")
-        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
-        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: str(converter)
-    )
-    monkeypatch.setattr(module.subprocess, "run", _run)
-
-    ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
-        source_file,
-        tmp_path,
-    )
-
-    assert module.is_ims_file(ims_path) is True
-    assert len(calls) == 2
-    assert calls[0][0][-2:] == ["-l", "none"]
-    assert calls[1][0][-2:] != ["-l", "none"]
-    assert calls[1][0][3:5] == ["-if", "OmeTiff"]
-
-
-def test_convert_ome_tiff_to_ims_passes_explicit_ome_voxel_sizes(
-    tmp_path,
-    monkeypatch,
-):
-    """Verify explicit OME voxel sizes are passed to local ImarisConvert.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
-    propagation regressions.
-    """
-    module = _load_xt_module()
-    converter = tmp_path / "ImarisConvert.exe"
-    converter.write_text("fake", encoding="utf-8")
-    source_file = tmp_path / "source.ome.tif"
-    _write_minimal_ome_tiff(
-        source_file,
-        {
-            "PhysicalSizeX": "0.5",
-            "PhysicalSizeY": "750",
-            "PhysicalSizeYUnit": "nm",
-            "PhysicalSizeZ": "2.5",
-        },
-    )
-    calls = []
-
-    def _run(cmd, **kwargs):
-        """Record subprocess invocation and create a fake IMS output.
-
-        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
-        """
-        calls.append((cmd, kwargs))
-        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"\x89HDF\r\n\x1a\npayload")
-        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: str(converter)
-    )
-    monkeypatch.setattr(module.subprocess, "run", _run)
-
-    ims_path = module.convert_ome_tiff_to_ims_with_local_imaris(
-        source_file,
-        tmp_path,
-        fallback_name="converted.ims",
-    )
-
-    assert module.is_ims_file(ims_path) is True
-    assert len(calls) == 1
-    cmd = calls[0][0]
-    assert cmd[3:7] == ["-if", "OmeTiff", "-o", str(tmp_path / "converted.ims")]
-    assert cmd[cmd.index("-vsx") + 1] == "0.5"
-    assert cmd[cmd.index("-vsy") + 1] == "0.75"
-    assert cmd[cmd.index("-vsz") + 1] == "2.5"
-
-
-def test_convert_ome_tiff_to_ims_does_not_invent_missing_z_voxel_size(
-    tmp_path,
-    monkeypatch,
-):
-    """Verify missing explicit Z metadata is not guessed for local ImarisConvert.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on no-assumption
-    voxel-size regressions.
-    """
-    module = _load_xt_module()
-    converter = tmp_path / "ImarisConvert.exe"
-    converter.write_text("fake", encoding="utf-8")
-    source_file = tmp_path / "source.ome.tif"
-    _write_minimal_ome_tiff(
-        source_file,
-        {
-            "PhysicalSizeX": "0.647934",
-            "PhysicalSizeY": "0.647934",
-        },
-    )
-    calls = []
-
-    def _run(cmd, **kwargs):
-        """Return the real ImarisConvert missing-Z failure shape.
-
-        Inputs: `cmd`, `**kwargs`. Output: fake completed process.
-        """
-        calls.append((cmd, kwargs))
-        return types.SimpleNamespace(
-            returncode=2,
-            stdout="ERROR Unknown voxel size: 0.647934,0.647934,0.",
-            stderr="",
-        )
-
-    monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: str(converter)
-    )
-    monkeypatch.setattr(module.subprocess, "run", _run)
-
-    with pytest.raises(RuntimeError) as excinfo:
-        module.convert_ome_tiff_to_ims_with_local_imaris(source_file, tmp_path)
-
-    message = str(excinfo.value)
-    assert "axis/axes: Z" in message
-    assert "will not invent missing voxel sizes" in message
-    assert len(calls) == 4
-    assert all("-vsx" in cmd and "-vsy" in cmd for cmd, _kwargs in calls)
-    assert all("-vsz" not in cmd for cmd, _kwargs in calls)
-
-
-def test_convert_ome_tiff_to_ims_reports_breakpoint_exit_code(tmp_path, monkeypatch):
-    """Verify local converter errors expose decimal and hexadecimal exit codes.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on breakpoint diagnostics regressions.
-    """
-    module = _load_xt_module()
-    converter = tmp_path / "ImarisConvert.exe"
-    converter.write_text("fake", encoding="utf-8")
-    source_file = tmp_path / "source.ome.tif"
-    source_file.write_bytes(b"II*\x00selected-image")
-    monkeypatch.setattr(
-        module, "_find_imaris_convert_executable", lambda: str(converter)
-    )
-    monkeypatch.setattr(
-        module.subprocess,
-        "run",
-        lambda *_args, **_kwargs: types.SimpleNamespace(
-            returncode=0x80000003,
-            stdout="",
-            stderr="breakpoint",
-        ),
-    )
-
-    with pytest.raises(RuntimeError, match="0x80000003"):
-        module.convert_ome_tiff_to_ims_with_local_imaris(source_file, tmp_path)
-
-
 def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkeypatch):
     """Confirm native bridge runner rejects non IMS before subprocess is rejected at the boundary.
 
@@ -7201,7 +6844,7 @@ def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkey
 
     assert (
         module._run_native_bridge_open_helper(
-            r"C:\ProgramData\anaconda3\python.exe",
+            str(tmp_path / "python.exe"),
             plain_path,
             "17",
         )
@@ -7222,7 +6865,7 @@ def test_native_bridge_helper_source_has_no_undefined_logger_reference():
     assert '"LoadFile"' in module._NATIVE_BRIDGE_OPEN_HELPER
 
 
-def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
+def test_native_bridge_runner_requires_numeric_imaris_id(tmp_path, monkeypatch):
     """Verify native bridge runner requires numeric imaris ID.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner requires numeric imaris ID.
@@ -7231,10 +6874,12 @@ def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
     _enable_native_bridge(module, monkeypatch)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     attempts = []
+    python_exe = tmp_path / "python.exe"
+    python_exe.write_text("", encoding="utf-8")
     monkeypatch.setattr(
         module,
         "_iter_native_bridge_python_executables",
-        lambda: iter([r"C:\ProgramData\anaconda3\python.exe"]),
+        lambda: iter([str(python_exe)]),
     )
     monkeypatch.setattr(
         module,
@@ -7248,49 +6893,66 @@ def test_native_bridge_runner_requires_numeric_imaris_id(monkeypatch):
     assert attempts == []
 
 
-def test_native_bridge_runner_tries_discovered_python_until_success(monkeypatch):
+def test_native_bridge_runner_tries_discovered_python_until_success(
+    tmp_path,
+    monkeypatch,
+):
     """Verify native bridge runner tries discovered python until success.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in native bridge runner tries discovered python until success.
     """
     module = _load_xt_module()
     _enable_native_bridge(module, monkeypatch)
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    first_python = tmp_path / "Python39" / "python.exe"
+    second_python = tmp_path / "anaconda3" / "python.exe"
+    first_python.parent.mkdir()
+    second_python.parent.mkdir()
+    first_python.write_text("", encoding="utf-8")
+    second_python.write_text("", encoding="utf-8")
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         module,
         "_iter_native_bridge_python_executables",
-        lambda: iter(
-            [
-                r"C:\Program Files\Python39\python.exe",
-                r"C:\ProgramData\anaconda3\python.exe",
-            ]
-        ),
+        lambda: iter([str(first_python), str(second_python)]),
     )
     monkeypatch.setattr(
         module, "_resolve_python_executable_candidate", lambda path: path
     )
     attempts = []
 
-    def _fake_helper(python_executable, file_path, imaris_id, require_ims=True):
+    def _fake_helper(
+        python_executable,
+        file_path,
+        imaris_id,
+        require_ims=True,
+        selected_image_export=False,
+    ):
         """Return the fake helper.
 
-        Inputs: `python_executable`, `file_path` file path, `imaris_id`, `require_ims`.
-        Output: `endswith` result.
+        Inputs: native bridge open arguments. Output: success for second Python.
         """
-        attempts.append((python_executable, file_path, imaris_id, require_ims))
-        return python_executable.endswith(r"anaconda3\python.exe")
+        attempts.append(
+            (
+                python_executable,
+                file_path,
+                imaris_id,
+                require_ims,
+                selected_image_export,
+            )
+        )
+        return python_executable == str(second_python)
 
     monkeypatch.setattr(module, "_run_native_bridge_open_helper", _fake_helper)
 
     assert (
-        module._open_file_in_imaris_with_native_bridge_runner(
-            r"C:\exports\demo.ims", "17"
-        )
+        module._open_file_in_imaris_with_native_bridge_runner(str(ims_path), "17")
         is True
     )
     assert attempts == [
-        (r"C:\Program Files\Python39\python.exe", r"C:\exports\demo.ims", "17", True),
-        (r"C:\ProgramData\anaconda3\python.exe", r"C:\exports\demo.ims", "17", True),
+        (str(first_python), str(ims_path), "17", True, False),
+        (str(second_python), str(ims_path), "17", True, False),
     ]
 
 
@@ -7388,7 +7050,7 @@ def test_pre_export_readiness_still_rejects_missing_handoff_target(monkeypatch):
     ("converter", "filename", "expected_download"),
     [
         ("OMERO", "sample.ims", "ims"),
-        ("Imaris", "sample.ims", "imaris"),
+        ("Imaris", "sample.ome.tif", "imaris"),
     ],
 )
 def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
@@ -7405,7 +7067,10 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     module = _load_xt_module()
     monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
     local_file = tmp_path / filename
-    local_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    if converter == "OMERO":
+        local_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    else:
+        local_file.write_bytes(b"II*\x00selected-image")
     downloads = []
     opened = []
     errors = []
@@ -7453,20 +7118,13 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         downloads.append(("ims", image_id, Path(download_dir), fallback_name))
         return str(local_file)
 
-    def _download_with_imaris_converter(
-        image_id,
-        image_name,
-        download_dir,
-        image_metadata=None,
-    ):
-        """Record selected-image local Imaris conversion.
+    def _download_with_imaris_converter(image_id, download_dir):
+        """Record selected-image export for direct Imaris handoff.
 
-        Inputs: OMERO image id, image name, target directory, image metadata. Output:
-        local file path.
+        Inputs: OMERO image id, target directory. Output: local file path.
         """
-        downloads.append(
-            ("imaris", image_id, image_name, Path(download_dir), image_metadata)
-        )
+        downloads.append(("imaris", image_id, Path(download_dir)))
+        dialog._mark_selected_image_export_file(local_file)
         return str(local_file)
 
     monkeypatch.setattr(
@@ -7506,9 +7164,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     if converter == "OMERO":
         assert downloads == [(expected_download, 7, tmp_path, "img_7.ims")]
     else:
-        assert downloads == [
-            (expected_download, 7, filename, tmp_path, {"id": 7, "name": filename})
-        ]
+        assert downloads == [(expected_download, 7, tmp_path)]
     assert opened == [str(local_file)]
     assert dialog.temp_files == [str(local_file)]
     assert dialog.imaris is not None
@@ -7606,6 +7262,7 @@ def test_open_downloaded_file_uses_lazy_bridge_runner_when_probe_disabled(
         imaris_id,
         preferred_python_executable=None,
         require_ims=True,
+        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Record lazy native runner handoff.
@@ -7618,6 +7275,7 @@ def test_open_downloaded_file_uses_lazy_bridge_runner_when_probe_disabled(
                 imaris_id,
                 preferred_python_executable,
                 require_ims,
+                selected_image_export,
                 allow_when_disabled,
             )
         )
@@ -7631,7 +7289,7 @@ def test_open_downloaded_file_uses_lazy_bridge_runner_when_probe_disabled(
 
     assert dialog._open_downloaded_file_in_imaris(str(ims_path), require_ims=True)
     assert direct_calls == []
-    assert attempts == [(str(ims_path), "17", None, True, True)]
+    assert attempts == [(str(ims_path), "17", None, True, False, True)]
 
 
 def test_open_downloaded_files_use_lazy_bridge_runner_when_probe_disabled(
@@ -7672,6 +7330,7 @@ def test_open_downloaded_files_use_lazy_bridge_runner_when_probe_disabled(
         imaris_id,
         preferred_python_executable=None,
         require_ims=True,
+        selected_image_export=False,
         allow_when_disabled=False,
     ):
         """Record lazy native batch runner handoff.
@@ -7684,6 +7343,7 @@ def test_open_downloaded_files_use_lazy_bridge_runner_when_probe_disabled(
                 imaris_id,
                 preferred_python_executable,
                 require_ims,
+                selected_image_export,
                 allow_when_disabled,
             )
         )
@@ -7697,7 +7357,7 @@ def test_open_downloaded_files_use_lazy_bridge_runner_when_probe_disabled(
 
     assert dialog._open_downloaded_files_in_imaris([str(first), str(second)])
     assert direct_calls == []
-    assert attempts == [([str(first), str(second)], "17", None, True, True)]
+    assert attempts == [([str(first), str(second)], "17", None, True, False, True)]
 
 
 def test_dialog_native_bridge_probe_runs_before_export_and_blocks_when_unavailable(
@@ -7866,18 +7526,22 @@ def test_dialog_native_bridge_probe_skips_recent_revalidation(tmp_path, monkeypa
     assert dialog._ensure_native_open_ready_before_export() is True
 
 
-def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
+def test_dialog_native_bridge_probe_uses_cached_python_for_open(tmp_path, monkeypatch):
     """Verify dialog native bridge probe uses cached python for open.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in dialog native bridge probe uses cached python for open.
     """
     module = _load_xt_module()
     _enable_native_bridge(module, monkeypatch)
+    ims_path = tmp_path / "demo.ims"
+    ims_path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    python_exe = tmp_path / "python.exe"
+    python_exe.write_text("", encoding="utf-8")
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.imaris = None
     dialog.imaris_id = "17"
     dialog._native_bridge_probe_lock = module.threading.Lock()
-    dialog._native_bridge_python_executable = r"C:\ProgramData\anaconda3\python.exe"
+    dialog._native_bridge_python_executable = str(python_exe)
     dialog._set_status = lambda *_args, **_kwargs: None
     attempts = []
     monkeypatch.setattr(
@@ -7897,21 +7561,30 @@ def test_dialog_native_bridge_probe_uses_cached_python_for_open(monkeypatch):
     monkeypatch.setattr(
         module,
         "_open_file_in_imaris_with_native_bridge_runner",
-        lambda file_path, imaris_id, preferred_python_executable=None, require_ims=True, allow_when_disabled=False: (
+        lambda file_path, imaris_id, preferred_python_executable=None, require_ims=True, selected_image_export=False, allow_when_disabled=False: (
             attempts.append(
-                (file_path, imaris_id, preferred_python_executable, require_ims)
+                (
+                    file_path,
+                    imaris_id,
+                    preferred_python_executable,
+                    require_ims,
+                    selected_image_export,
+                    allow_when_disabled,
+                )
             )
             or True
         ),
     )
 
-    assert dialog._open_downloaded_file_in_imaris(r"C:\exports\demo.ims") is True
+    assert dialog._open_downloaded_file_in_imaris(str(ims_path)) is True
     assert attempts == [
         (
-            r"C:\exports\demo.ims",
+            str(ims_path),
             "17",
-            r"C:\ProgramData\anaconda3\python.exe",
+            str(python_exe),
             True,
+            False,
+            False,
         )
     ]
 
@@ -7933,11 +7606,6 @@ def test_detect_converter_options_defaults_omero_when_server_supports_it(monkeyp
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
@@ -7959,19 +7627,17 @@ def test_detect_converter_options_hides_omero_without_server_capability(monkeypa
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
 
 
-def test_detect_converter_options_hides_imaris_without_local_converter(monkeypatch):
-    """Verify Imaris option requires a local Imaris conversion executable.
+def test_detect_converter_options_keeps_imaris_without_local_converter_probe(
+    monkeypatch,
+):
+    """Verify Imaris option is not gated on a local conversion executable.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in Imaris converter availability detection.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in
+    Imaris converter availability detection.
     """
     module = _load_xt_module()
     _enable_native_bridge(module, monkeypatch)
@@ -7985,9 +7651,8 @@ def test_detect_converter_options_hides_imaris_without_local_converter(monkeypat
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
-    monkeypatch.setattr(module, "_find_imaris_convert_executable", lambda: None)
 
-    assert dialog._detect_converter_options_after_connection() == ["OMERO"]
+    assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
 
 def test_detect_converter_options_keeps_omero_when_native_open_unavailable(
@@ -8009,11 +7674,6 @@ def test_detect_converter_options_keeps_omero_when_native_open_unavailable(
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO"]
 
@@ -8043,11 +7703,6 @@ def test_detect_converter_options_is_quiet_when_native_bridge_flag_is_disabled(
     )
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
     monkeypatch.setattr(module, "_xt_debug", logs.append)
-    monkeypatch.setattr(
-        module,
-        "_find_imaris_convert_executable",
-        lambda: r"C:\Imaris\ImarisConvert.exe",
-    )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
     assert not any("bridge" in message.lower() for message in logs)
@@ -8145,7 +7800,7 @@ def test_set_converter_options_hides_dropdown_and_disables_load():
     assert dialog.refresh_btn.state == "disabled"
 
 
-def test_set_converter_options_populates_dropdown_without_blank_entry():
+def test_set_converter_options_populates_dropdown_without_blank_entry(tmp_path):
     """Verify set converter options populates dropdown without blank entry.
 
     Inputs: repository fixtures. Output: fails on regressions in set converter options populates menu without blank entry.
@@ -8229,7 +7884,7 @@ def test_set_converter_options_populates_dropdown_without_blank_entry():
     dialog.refresh_btn = DummyButton()
     dialog._connected = True
     dialog.client = object()
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog.images_data = [{"id": 1, "name": "selected"}]
@@ -8253,7 +7908,7 @@ def test_set_converter_options_populates_dropdown_without_blank_entry():
     assert dialog.converter_var.value == "Imaris"
 
 
-def test_set_converter_options_restores_saved_converter_when_available():
+def test_set_converter_options_restores_saved_converter_when_available(tmp_path):
     """Verify saved converter selection is restored after capability detection.
 
     Inputs: repository fixtures. Output: fails on saved converter selection regressions.
@@ -8295,7 +7950,7 @@ def test_set_converter_options_restores_saved_converter_when_available():
     dialog.refresh_btn = _FakeButton()
     dialog._connected = True
     dialog.client = object()
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog._preferred_converter_setting = ""
@@ -8307,7 +7962,7 @@ def test_set_converter_options_restores_saved_converter_when_available():
     assert dialog._preferred_converter_setting == "Imaris"
 
 
-def test_set_converter_options_ignores_stale_saved_omero_when_unavailable():
+def test_set_converter_options_ignores_stale_saved_omero_when_unavailable(tmp_path):
     """Verify stale saved OMERO cannot select an unavailable converter option.
 
     Inputs: repository fixtures. Output: fails on stale converter restoration regressions.
@@ -8349,7 +8004,7 @@ def test_set_converter_options_ignores_stale_saved_omero_when_unavailable():
     dialog.refresh_btn = _FakeButton()
     dialog._connected = True
     dialog.client = object()
-    dialog.folder_path_var = _FakeVar(r"C:\exports")
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog._folder_path_write_state = "unchecked"
     dialog._preferred_converter_setting = ""
@@ -9117,53 +8772,24 @@ def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
     ]
 
 
-def test_load_worker_imaris_converter_exports_selected_image_then_converts_locally(
+def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly(
     tmp_path,
     monkeypatch,
 ):
-    """Verify Imaris converter exports one selected Image ID and converts locally.
+    """Verify Imaris converter exports one selected Image ID and opens it directly.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in Imaris converter load flow.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on Imaris
+    converter load-flow regressions.
     """
     module = _load_xt_module()
     ome_tiff_file = tmp_path / "img_7.ome.tif"
     ome_tiff_file.write_bytes(b"II*\x00selected-image")
-    ims_file = tmp_path / "img_7.ims"
-    ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
     calls = []
     opened = []
     statuses = []
     info_messages = []
     logs = []
     monkeypatch.setattr(module, "_xt_debug", logs.append)
-
-    def _convert_ome_tiff_to_ims(
-        source_file,
-        download_dir,
-        fallback_name,
-        voxel_size_overrides=None,
-    ):
-        """Record local Imaris conversion.
-
-        Inputs: `source_file`, `download_dir`, `fallback_name`,
-        `voxel_size_overrides`. Output: IMS path.
-        """
-        calls.append(
-            (
-                "convert",
-                Path(source_file),
-                Path(download_dir),
-                fallback_name,
-                voxel_size_overrides,
-            )
-        )
-        return str(ims_file)
-
-    monkeypatch.setattr(
-        module,
-        "convert_ome_tiff_to_ims_with_local_imaris",
-        _convert_ome_tiff_to_ims,
-    )
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.export_dir = str(tmp_path)
@@ -9188,8 +8814,10 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
     dialog._invoke_on_ui_thread = lambda callback, wait=True: (
         None if not wait else callback()
     )
-    dialog._open_downloaded_file_in_imaris = lambda path, require_ims=True: (
-        opened.append((path, require_ims)) or True
+    dialog._open_downloaded_file_in_imaris = (
+        lambda path, require_ims=True, selected_image_export=False: (
+            opened.append((path, require_ims, selected_image_export)) or True
+        )
     )
 
     module.OMEROBrowserDialog._load_worker(
@@ -9198,16 +8826,12 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
         "Imaris",
     )
 
-    assert calls == [
-        ("ome-tiff", 7, tmp_path, "img_7.ome.tif"),
-        ("convert", ome_tiff_file, tmp_path, "img_7.ims", {}),
-    ]
-    assert opened == [(str(ims_file), True)]
-    assert dialog.temp_files == [str(ome_tiff_file), str(ims_file)]
-    assert not (tmp_path / "img_7").exists()
-    assert statuses[-1][0] == "Opened IMS in current Imaris session"
+    assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif")]
+    assert opened == [(str(ome_tiff_file), False, True)]
+    assert dialog.temp_files == [str(ome_tiff_file)]
+    assert statuses[-1][0] == "Opened selected Image export in current Imaris session"
     assert info_messages == [
-        ("Success", "IMS file opened in the current Imaris session.")
+        ("Success", "Selected Image export opened in the current Imaris session.")
     ]
     assert all("original" not in status[0].lower() for status in statuses)
     joined_logs = "\n".join(logs)
@@ -9216,49 +8840,19 @@ def test_load_worker_imaris_converter_exports_selected_image_then_converts_local
     assert "Imaris converter:" in joined_logs
 
 
-def test_imaris_converter_merges_selected_image_and_detail_voxel_metadata(
+def test_imaris_converter_marks_selected_export_without_detail_or_conversion(
     tmp_path,
-    monkeypatch,
 ):
-    """Verify Imaris converter passes only explicit selected-image voxel metadata.
+    """Verify Imaris converter does not query metadata or run local conversion.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
-    propagation regressions in the local Imaris path.
+    Inputs: pytest provides `tmp_path`. Output: fails on selected Image boundary
+    regressions.
     """
     module = _load_xt_module()
     ome_tiff_file = tmp_path / "img_7.ome.tif"
     ome_tiff_file.write_bytes(b"II*\x00selected-image")
-    ims_file = tmp_path / "img_7.ims"
-    ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
     calls = []
     statuses = []
-
-    def _convert_ome_tiff_to_ims(
-        source_file,
-        download_dir,
-        fallback_name,
-        voxel_size_overrides=None,
-    ):
-        """Record local Imaris conversion metadata.
-
-        Inputs: conversion arguments. Output: IMS path.
-        """
-        calls.append(
-            (
-                "convert",
-                Path(source_file),
-                Path(download_dir),
-                fallback_name,
-                voxel_size_overrides,
-            )
-        )
-        return str(ims_file)
-
-    monkeypatch.setattr(
-        module,
-        "convert_ome_tiff_to_ims_with_local_imaris",
-        _convert_ome_tiff_to_ims,
-    )
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.temp_files = []
@@ -9268,15 +8862,6 @@ def test_imaris_converter_merges_selected_image_and_detail_voxel_metadata(
             calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
             or str(ome_tiff_file)
         ),
-        get_image_metadata=lambda image_id: (
-            calls.append(("detail", image_id))
-            or {
-                "Pixels": {
-                    "PhysicalSizeY": {"value": 750, "unit": "nm"},
-                    "PhysicalSizeZ": {"value": 2.5, "unit": "um"},
-                }
-            }
-        ),
         download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("archived original download must not run")
         ),
@@ -9285,101 +8870,76 @@ def test_imaris_converter_merges_selected_image_and_detail_voxel_metadata(
     result = module.OMEROBrowserDialog._download_selected_image_with_imaris_converter(
         dialog,
         7,
-        "selected image",
         tmp_path,
-        image_metadata={
-            "Pixels": {
-                "PhysicalSizeX": 0.5,
-                "PhysicalSizeY": {"value": 500, "unit": "nm"},
-            }
-        },
     )
 
-    assert result == str(ims_file)
-    assert calls == [
-        ("detail", 7),
-        ("ome-tiff", 7, tmp_path, "img_7.ome.tif"),
-        (
-            "convert",
-            ome_tiff_file,
-            tmp_path,
-            "img_7.ims",
-            {"X": "0.5", "Y": "0.5", "Z": "2.5"},
-        ),
-    ]
-    assert dialog.temp_files == [str(ome_tiff_file)]
+    assert result == str(ome_tiff_file)
+    assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif")]
+    assert dialog.temp_files == []
+    assert dialog._is_tracked_selected_image_export_file(ome_tiff_file) is True
     assert (
         statuses[0][0] == "Imaris converter: exporting selected Image 7 as OME-TIFF..."
     )
 
 
-def test_imaris_converter_does_not_query_detail_when_selected_metadata_is_complete(
+def test_open_downloaded_file_refuses_untracked_selected_image_export(tmp_path):
+    """Verify direct Imaris open refuses untracked selected-image exports.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on selected export tracking
+    regressions.
+    """
+    module = _load_xt_module()
+    ome_tiff_file = tmp_path / "untracked.ome.tif"
+    ome_tiff_file.write_bytes(b"II*\x00selected-image")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._selected_image_export_files = set()
+
+    assert (
+        dialog._open_downloaded_file_in_imaris(
+            str(ome_tiff_file),
+            require_ims=False,
+            selected_image_export=True,
+        )
+        is False
+    )
+
+
+def test_open_downloaded_file_opens_tracked_selected_image_export_with_direct_handle(
     tmp_path,
     monkeypatch,
 ):
-    """Verify complete selected-image metadata avoids extra detail requests.
+    """Verify tracked selected-image export opens through the direct XT handle.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on metadata
-    request-boundary regressions.
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on direct
+    selected-image handoff regressions.
     """
     module = _load_xt_module()
-    ome_tiff_file = tmp_path / "img_8.ome.tif"
+    monkeypatch.delenv(module.ENABLE_NATIVE_IMARIS_BRIDGE_ENV, raising=False)
+    ome_tiff_file = tmp_path / "tracked.ome.tif"
     ome_tiff_file.write_bytes(b"II*\x00selected-image")
-    ims_file = tmp_path / "img_8.ims"
-    ims_file.write_bytes(b"\x89HDF\r\n\x1a\npayload")
-    calls = []
-
+    opened = []
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.imaris = types.SimpleNamespace(FileOpen=lambda *_args: None)
+    dialog.imaris_id = None
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._mark_selected_image_export_file(ome_tiff_file)
     monkeypatch.setattr(
         module,
-        "convert_ome_tiff_to_ims_with_local_imaris",
-        lambda source_file, download_dir, fallback_name, voxel_size_overrides=None: (
-            calls.append(
-                (
-                    "convert",
-                    Path(source_file),
-                    Path(download_dir),
-                    fallback_name,
-                    voxel_size_overrides,
-                )
-            )
-            or str(ims_file)
+        "open_selected_image_export_in_imaris",
+        lambda file_path, imaris_app: (
+            opened.append((Path(file_path), imaris_app is dialog.imaris)) or True
         ),
     )
 
-    dialog = object.__new__(module.OMEROBrowserDialog)
-    dialog.temp_files = []
-    dialog._set_status = lambda *_args, **_kwargs: None
-    dialog.client = types.SimpleNamespace(
-        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name: (
-            calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
-            or str(ome_tiff_file)
-        ),
-        get_image_metadata=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("image detail request must not run")
-        ),
+    assert (
+        dialog._open_downloaded_file_in_imaris(
+            str(ome_tiff_file),
+            require_ims=False,
+            selected_image_export=True,
+        )
+        is True
     )
-
-    result = module.OMEROBrowserDialog._download_selected_image_with_imaris_converter(
-        dialog,
-        8,
-        "selected image",
-        tmp_path,
-        image_metadata={
-            "voxel_sizes": {"X": "0.25", "Y": "0.25", "Z": "1.5"},
-        },
-    )
-
-    assert result == str(ims_file)
-    assert calls == [
-        ("ome-tiff", 8, tmp_path, "img_8.ome.tif"),
-        (
-            "convert",
-            ome_tiff_file,
-            tmp_path,
-            "img_8.ims",
-            {"X": "0.25", "Y": "0.25", "Z": "1.5"},
-        ),
-    ]
+    assert opened == [(ome_tiff_file, True)]
 
 
 def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
@@ -9418,8 +8978,10 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
         None if not wait else callback()
     )
     opened = []
-    dialog._open_downloaded_file_in_imaris = lambda path, require_ims=True: (
-        opened.append((path, require_ims)) or True
+    dialog._open_downloaded_file_in_imaris = (
+        lambda path, require_ims=True, selected_image_export=False: (
+            opened.append((path, require_ims, selected_image_export)) or True
+        )
     )
 
     module.OMEROBrowserDialog._load_worker(
@@ -9429,7 +8991,7 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
     )
 
     assert calls == [("ims", 8, tmp_path, "img_8.ims")]
-    assert opened == [(str(ims_file), True)]
+    assert opened == [(str(ims_file), True, False)]
     assert dialog.temp_files == [str(ims_file)]
     assert not (tmp_path / "img_8").exists()
     joined_logs = "\n".join(logs)
@@ -9479,12 +9041,16 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
         None if not wait else callback()
     )
 
-    def _open_downloaded_files(paths, require_ims=True):
+    def _open_downloaded_files(
+        paths,
+        require_ims=True,
+        selected_image_export=False,
+    ):
         """Open the downloaded files.
 
-        Inputs: `paths`, `require_ims`. Output: `bool`.
+        Inputs: `paths`, `require_ims`, `selected_image_export`. Output: `bool`.
         """
-        events.append(("open", tuple(paths), require_ims))
+        events.append(("open", tuple(paths), require_ims, selected_image_export))
         assert [event[0] for event in events] == ["download", "download", "open"]
         return True
 
@@ -9499,46 +9065,40 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     assert events == [
         ("download", 11, tmp_path, "img_11.ims"),
         ("download", 12, tmp_path, "img_12.ims"),
-        ("open", (str(first_ims), str(second_ims)), True),
+        ("open", (str(first_ims), str(second_ims)), True, False),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
     assert "after every download completed" in info_messages[0]
 
 
-def test_load_multiple_worker_imaris_converts_selected_images_before_opening(
+def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
     tmp_path,
 ):
-    """Verify multi-image Imaris conversion completes before opening any IMS file.
+    """Verify multi-image Imaris exports complete before opening in Imaris.
 
     Inputs: pytest provides `tmp_path`. Output: fails on regressions in multi-image Imaris converter flow.
     """
     module = _load_xt_module()
-    first_ims = tmp_path / "first.ims"
-    second_ims = tmp_path / "second.ims"
-    first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
-    second_ims.write_bytes(b"\x89HDF\r\n\x1a\nsecond")
-    files_by_id = {21: str(first_ims), 22: str(second_ims)}
+    first_export = tmp_path / "first.ome.tif"
+    second_export = tmp_path / "second.ome.tif"
+    first_export.write_bytes(b"II*\x00first")
+    second_export.write_bytes(b"II*\x00second")
+    files_by_id = {21: str(first_export), 22: str(second_export)}
     events = []
     opened = []
     statuses = []
     info_messages = []
 
-    def _download_with_imaris_converter(
-        image_id,
-        image_name,
-        download_dir,
-        image_metadata=None,
-    ):
-        """Convert one selected image through the local Imaris converter.
+    def _download_with_imaris_converter(image_id, download_dir):
+        """Export one selected image through standard OMERO.web.
 
-        Inputs: `image_id`, `image_name`, `download_dir`, `image_metadata`. Output:
-        IMS path.
+        Inputs: `image_id`, `download_dir`. Output: selected-image export path.
         """
         assert not opened
-        events.append(
-            ("convert", image_id, image_name, Path(download_dir), image_metadata)
-        )
-        return files_by_id[image_id]
+        events.append(("selected-export", image_id, Path(download_dir)))
+        file_path = files_by_id[image_id]
+        dialog._mark_selected_image_export_file(file_path)
+        return file_path
 
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog.export_dir = str(tmp_path)
@@ -9562,8 +9122,10 @@ def test_load_multiple_worker_imaris_converts_selected_images_before_opening(
     dialog._invoke_on_ui_thread = lambda callback, wait=True: (
         None if not wait else callback()
     )
-    dialog._open_downloaded_files_in_imaris = lambda paths, require_ims=True: (
-        opened.append((list(paths), require_ims)) or True
+    dialog._open_downloaded_files_in_imaris = (
+        lambda paths, require_ims=True, selected_image_export=False: (
+            opened.append((list(paths), require_ims, selected_image_export)) or True
+        )
     )
 
     module.OMEROBrowserDialog._load_multiple_worker(
@@ -9577,23 +9139,19 @@ def test_load_multiple_worker_imaris_converts_selected_images_before_opening(
 
     assert events == [
         (
-            "convert",
+            "selected-export",
             21,
-            "well A01 field 1",
             tmp_path,
-            {"id": 21, "name": "well A01 field 1"},
         ),
         (
-            "convert",
+            "selected-export",
             22,
-            "well A01 field 2",
             tmp_path,
-            {"id": 22, "name": "well A01 field 2"},
         ),
     ]
-    assert opened == [([str(first_ims), str(second_ims)], True)]
-    assert dialog.temp_files == [str(first_ims), str(second_ims)]
-    assert statuses[-1][0] == "Opened selected IMS files in current Imaris session"
+    assert opened == [([str(first_export), str(second_export)], False, True)]
+    assert dialog.temp_files == [str(first_export), str(second_export)]
+    assert statuses[-1][0] == "Opened selected Image exports in current Imaris session"
     assert info_messages[0][0] == "Success"
     assert "opened in Imaris" in info_messages[0][1]
 
@@ -11115,39 +10673,47 @@ def test_disconnect_preserves_password_only_when_requested():
     assert dialog.pass_entry.value == ""
 
 
-def test_find_imaris_executable_prefers_env_override(monkeypatch):
+def test_find_imaris_executable_prefers_env_override(tmp_path, monkeypatch):
     """Verify find imaris executable prefers env override.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in find imaris executable prefers env override.
     """
     module = _load_xt_module()
-    imaris_exe = r"C:\Apps\Imaris 11.0.0\Imaris.exe"
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
-    monkeypatch.setenv("IMARIS_EXE", imaris_exe)
-    monkeypatch.setattr(module.os.path, "isfile", lambda path: path == imaris_exe)
+    monkeypatch.setenv("IMARIS_EXE", str(imaris_exe))
 
-    assert module._find_imaris_executable() == imaris_exe
+    assert module._find_imaris_executable() == str(imaris_exe)
 
 
-def test_imaris_version_gate_allows_11_and_future_but_rejects_older_or_unknown():
+def test_imaris_version_gate_allows_11_and_future_but_rejects_older_or_unknown(
+    tmp_path,
+):
     """Confirm imaris version gate allows 11 and future but rejects older or unknown is rejected at the boundary.
 
     Inputs: repository fixtures. Output: fails on regressions in imaris version gate allows 11 and future but rejects older or unknown.
     """
     module = _load_xt_module()
+    old_root = tmp_path / "Imaris 10.2.0"
+    compact_root = tmp_path / "Imaris11"
+    major_root = tmp_path / "Imaris 11"
+    current_root = tmp_path / "Imaris 11.0.0"
+    long_root = tmp_path / "Imaris 11.0.0.0.0.0"
+    future_root = tmp_path / "Imaris 12.1.0"
+    custom_root = tmp_path / "CustomImaris"
 
-    assert module._is_supported_imaris_install_path(r"C:\Apps\Imaris 10.2.0") is False
-    assert module._is_supported_imaris_install_path(r"C:\Apps\Imaris11") is True
-    assert module._is_supported_imaris_install_path(r"C:\Apps\Imaris 11") is True
-    assert module._is_supported_imaris_install_path(r"C:\Apps\Imaris 11.0.0") is True
-    assert (
-        module._is_supported_imaris_install_path(r"C:\Apps\Imaris 11.0.0.0.0.0") is True
-    )
-    assert module._is_supported_imaris_install_path(r"C:\Apps\Imaris 12.1.0") is True
-    assert module._is_supported_imaris_install_path(r"C:\Apps\CustomImaris") is False
+    assert module._is_supported_imaris_install_path(str(old_root)) is False
+    assert module._is_supported_imaris_install_path(str(compact_root)) is True
+    assert module._is_supported_imaris_install_path(str(major_root)) is True
+    assert module._is_supported_imaris_install_path(str(current_root)) is True
+    assert module._is_supported_imaris_install_path(str(long_root)) is True
+    assert module._is_supported_imaris_install_path(str(future_root)) is True
+    assert module._is_supported_imaris_install_path(str(custom_root)) is False
 
 
-def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
+def test_prepare_imaris_xt_environment_adds_bundled_paths(tmp_path, monkeypatch):
     """Verify prepare imaris XT environment adds bundled paths.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in prepare imaris XT environment adds bundled paths.
@@ -11155,20 +10721,24 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
     module = _load_xt_module()
     original_sys_path = list(module.sys.path)
     original_os_path = module.os.path
+    imaris_root = tmp_path / "Imaris 11.0.0"
+    candidate_paths = [
+        imaris_root,
+        imaris_root / "XT",
+        imaris_root / "XT" / "python3",
+        imaris_root / "XT" / "python3" / "DLLs",
+        imaris_root / "XT" / "python3" / "Lib",
+        imaris_root / "XT" / "python3" / "private",
+        imaris_root / "XT" / "python3" / "private" / "Ice",
+    ]
+    for candidate_path in candidate_paths:
+        candidate_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(module.os, "path", ntpath, raising=False)
-    monkeypatch.setenv("IMARIS_HOME", r"C:\Program Files\Bitplane\Imaris 11.0.0")
-    monkeypatch.setenv("PATH", r"C:\Windows\System32")
+    monkeypatch.setenv("IMARIS_HOME", str(imaris_root))
+    monkeypatch.setenv("PATH", str(tmp_path / "System32"))
 
-    existing_dirs = {
-        r"C:\Program Files\Bitplane\Imaris 11.0.0",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\Lib",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private",
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice",
-    }
+    existing_dirs = {module.os.path.normpath(str(path)) for path in candidate_paths}
     monkeypatch.setattr(
         module.os.path,
         "isdir",
@@ -11187,27 +10757,19 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
     prepared = module._prepare_imaris_xt_environment()
     added_paths = prepared["paths"]
 
-    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in added_paths
+    assert str(imaris_root / "XT" / "python3") in added_paths
     assert module.sys.path[0] in added_paths
-    assert (
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3"
-        in module.os.environ["PATH"]
-    )
-    assert (
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs"
-        in prepared["dll_dirs"]
-    )
-    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private" in added_paths
-    assert (
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice"
-        in added_dll_dirs
-    )
-    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs" in added_dll_dirs
+    assert str(imaris_root / "XT" / "python3") in module.os.environ["PATH"]
+    assert str(imaris_root / "XT" / "python3" / "DLLs") in prepared["dll_dirs"]
+    assert str(imaris_root / "XT" / "python3" / "private") in added_paths
+    assert str(imaris_root / "XT" / "python3" / "private" / "Ice") in added_dll_dirs
+    assert str(imaris_root / "XT" / "python3" / "DLLs") in added_dll_dirs
     module.sys.path[:] = original_sys_path
     monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
 
 
 def test_collect_imaris_xt_diagnostics_skips_unloaded_native_bridge_imports(
+    tmp_path,
     monkeypatch,
 ):
     """Verify diagnostics do not import unloaded native bridge modules.
@@ -11217,16 +10779,22 @@ def test_collect_imaris_xt_diagnostics_skips_unloaded_native_bridge_imports(
     """
     module = _load_xt_module()
     _enable_native_bridge(module, monkeypatch)
+    imaris_root = tmp_path / "Imaris 11.0.0"
+    imaris_executable = imaris_root / "Imaris.exe"
+    private_path = imaris_root / "XT" / "python3" / "private"
+    ice_path = private_path / "Ice"
+    ice_path.mkdir(parents=True)
+    imaris_executable.write_text("", encoding="utf-8")
     monkeypatch.setattr(module.os, "path", ntpath, raising=False)
     monkeypatch.setattr(
         module,
         "_find_imaris_executable",
-        lambda: r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe",
+        lambda: str(imaris_executable),
     )
     monkeypatch.setattr(
         module,
         "_iter_imaris_install_roots",
-        lambda: [r"C:\Program Files\Bitplane\Imaris 11.0.0"],
+        lambda: [str(imaris_root)],
     )
     monkeypatch.setattr(
         module,
@@ -11254,14 +10822,8 @@ def test_collect_imaris_xt_diagnostics_skips_unloaded_native_bridge_imports(
     assert diagnostics["python_version_short"]
     assert diagnostics["imaris_executable_exists"] is True
     assert "has_add_dll_directory" in diagnostics
-    assert (
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private"
-        in diagnostic_paths
-    )
-    assert (
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\private\Ice"
-        in diagnostic_paths
-    )
+    assert str(private_path) in diagnostic_paths
+    assert str(ice_path) in diagnostic_paths
     assert diagnostics["imarislib_import"]["ok"] is False
     assert "in-process import skipped" in diagnostics["imarislib_import"]["error"]
     assert diagnostics["icepy_import"]["ok"] is False
@@ -11293,7 +10855,6 @@ def test_no_imaris_install_detection_is_non_blocking_when_absent(monkeypatch):
 
     assert module._find_imaris_executable() is None
     assert list(module._iter_imaris_install_roots()) == []
-    assert module._find_imaris_convert_executable() is None
 
 
 def test_live_imaris_install_detection_is_mandatory_when_present(monkeypatch):
@@ -11331,23 +10892,6 @@ def test_live_imaris_install_detection_is_mandatory_when_present(monkeypatch):
     assert diagnostics["icepy_import"] == {"ok": False, "error": ""}
 
 
-def test_live_imaris_converter_detection_is_mandatory_when_imaris_present():
-    """Verify Imaris converter executable discovery on hosts with Imaris.
-
-    Inputs: repository and host fixtures. Output: skips when no supported Imaris
-    exists, otherwise fails if the local Imaris conversion executable is missing.
-    """
-    module = _load_xt_module()
-    _require_live_imaris_install(module)
-
-    converter_executable = module._find_imaris_convert_executable()
-
-    assert converter_executable, "Imaris is installed but ImarisConvert was not found."
-    converter_path = Path(converter_executable)
-    assert converter_path.is_file()
-    assert converter_path.name.lower() in {"imarisconvert.exe", "imarisconvert"}
-
-
 def test_live_omero_selected_image_converter_boundaries(tmp_path):
     """Verify live OMERO selected-image boundaries when credentials are supplied.
 
@@ -11377,17 +10921,6 @@ def test_live_omero_selected_image_converter_boundaries(tmp_path):
     if client.has_omero_ims_export_capability():
         ims_path = client.download_ims_export(config["image_id"], tmp_path)
         assert module.is_ims_file(ims_path) is True
-
-    if _test_env_flag("IMARIS_OMERO_RUN_LIVE_IMARIS_CONVERSION"):
-        _require_live_imaris_install(module)
-        converted_path = module.convert_ome_tiff_to_ims_with_local_imaris(
-            ome_tiff_path,
-            tmp_path,
-            voxel_size_overrides=module._explicit_physical_sizes_from_image_metadata(
-                image_metadata
-            ),
-        )
-        assert module.is_ims_file(converted_path) is True
 
 
 def test_resolve_imaris_application_returns_direct_handle():
