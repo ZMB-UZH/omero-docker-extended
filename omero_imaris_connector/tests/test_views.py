@@ -27,7 +27,7 @@ def _import_views():
 
     Inputs: none. Output: `views`.
     """
-    from omeroweb_imaris_connector import views
+    from omero_imaris_connector import views
 
     return views
 
@@ -38,7 +38,7 @@ def test_imaris_export_hides_invalid_base_url_exception_text(monkeypatch) -> Non
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides invalid base URL exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1", "base_url": "://bad"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -56,7 +56,7 @@ def test_imaris_export_hides_invalid_port_exception_text(monkeypatch) -> None:
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides invalid port exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1", "omero_port": "bad-port"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -78,7 +78,7 @@ def test_imaris_export_capabilities_reports_omero_when_script_is_available(
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export capabilities reports OMERO when script is available integration.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"capabilities": "1"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -92,6 +92,7 @@ def test_imaris_export_capabilities_reports_omero_when_script_is_available(
 
     assert response.status_code == 200
     assert payload == {
+        "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": True, "Imaris": True},
         "omero_ims_export": True,
     }
@@ -103,7 +104,7 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export capabilities hides OMERO without script integration.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"capabilities": "1"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -117,6 +118,7 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
 
     assert response.status_code == 200
     assert payload == {
+        "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": False, "Imaris": True},
         "omero_ims_export": False,
     }
@@ -128,7 +130,7 @@ def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) 
     Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export capabilities hides probe exceptions.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"capabilities": "1"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -147,6 +149,7 @@ def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) 
 
     assert response.status_code == 200
     assert payload == {
+        "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": False, "Imaris": True},
         "omero_ims_export": False,
     }
@@ -159,7 +162,7 @@ def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in imaris export hides job failure details.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -198,7 +201,7 @@ def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None
     public_error = "Could not prepare source image for IMS conversion"
 
     status_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job-public"},
     )
     status_request.session = SimpleNamespace(session_key=None)
@@ -235,7 +238,7 @@ def test_imaris_export_returns_public_task_failure_messages(monkeypatch) -> None
     assert status_payload["error"] == public_error
 
     start_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1"},
     )
     start_request.session = SimpleNamespace(session_key=None)
@@ -256,7 +259,7 @@ def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions when imaris export hides internal exception text stops reporting the expected error.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -285,7 +288,7 @@ def test_imaris_export_status_logs_escape_user_controlled_values(
     Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export status logs escape user controlled values.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job\nforged"},
         HTTP_X_FORWARDED_FOR="203.0.113.5\nspoofed",
     )
@@ -317,7 +320,7 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(
     Inputs: pytest provides `monkeypatch`, `caplog`. Output: fails on regressions in imaris export start logs escape wait and ip values.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1", "async": "1", "wait": "0\nline"},
         HTTP_X_FORWARDED_FOR="198.51.100.8\nspoofed",
     )
@@ -347,7 +350,7 @@ def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
     Inputs: Imaris and OMERO fakes. Output: fails on regressions in imaris view helpers cover URL ip port and session resolution.
     """
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         HTTP_X_FORWARDED_FOR="203.0.113.5, 198.51.100.1",
     )
     request.session = SimpleNamespace(session_key=None)
@@ -359,10 +362,10 @@ def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
     assert (
         views._build_absolute_url(
             request,
-            "/omeroweb_imaris_connector/export/?job=1",
+            "/omero_imaris_connector/export/?job=1",
             base_url_override="https://omero.example.org:4080",
         )
-        == "https://omero.example.org:4080/omeroweb_imaris_connector/export/?job=1"
+        == "https://omero.example.org:4080/omero_imaris_connector/export/?job=1"
     )
     assert views._get_client_ip(request) == "203.0.113.5"
     assert views._parse_port_param(" 4064 ") == 4064
@@ -405,14 +408,14 @@ def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
         views._parse_base_url("https://omero.example.org/app")
 
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "job-7"},
     )
     request.session = SimpleNamespace(session_key=None)
     assert views.imaris_export(request, conn=None).status_code == 400
 
     running_download_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job-7", "download": "1"},
     )
     running_download_request.session = SimpleNamespace(session_key=None)
@@ -425,7 +428,7 @@ def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
     assert running_download.status_code == 409
 
     timeout_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job-8"},
     )
     timeout_request.session = SimpleNamespace(session_key=None)
@@ -456,7 +459,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
     views = _import_views()
 
     missing_script_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7"},
     )
     missing_script_request.session = SimpleNamespace(session_key=None)
@@ -467,7 +470,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
     assert b"script not found" in missing_script.content
 
     wait_override_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7", "async": "1", "wait": "1"},
     )
     wait_override_request.session = SimpleNamespace(session_key=None)
@@ -491,7 +494,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
     assert wait_override.content.decode("utf-8") == "missing"
 
     unknown_state_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7"},
     )
     unknown_state_request.session = SimpleNamespace(session_key=None)
@@ -683,7 +686,7 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     assert views._resolve_omero_secure(SimpleNamespace(secure=None)) is True
 
     request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7"},
     )
     request.session = SimpleNamespace(session_key=None)
@@ -700,7 +703,7 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     assert b"Could not determine IMS export job status" in unknown_status.content
 
     failing_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "8"},
     )
     failing_request.session = SimpleNamespace(session_key=None)
@@ -756,7 +759,7 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     views = _import_views()
 
     async_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7", "async": "1", "base_url": "https://omero.example.org"},
     )
     async_request.session = SimpleNamespace(session_key=None)
@@ -769,11 +772,11 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     async_payload = json.loads(async_response.content)
     assert async_payload == {
         "job_id": "celery-job-7",
-        "status_url": "https://omero.example.org/omeroweb_imaris_connector/export/?job=celery-job-7&base_url=https%3A%2F%2Fomero.example.org",
+        "status_url": "https://omero.example.org/omero_imaris_connector/export/?job=celery-job-7&base_url=https%3A%2F%2Fomero.example.org",
     }
 
     status_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job-7", "base_url": "https://omero.example.org"},
     )
     status_request.session = SimpleNamespace(session_key=None)
@@ -792,11 +795,11 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     assert status_payload["finished"] is True
     assert status_payload["status"] == "complete"
     assert status_payload["download_url"] == (
-        "https://omero.example.org/omeroweb_imaris_connector/export/?job=celery-job-7&download=1"
+        "https://omero.example.org/omero_imaris_connector/export/?job=celery-job-7&download=1"
     )
 
     download_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"job": "celery-job-7", "download": "1"},
     )
     download_request.session = SimpleNamespace(session_key=None)
@@ -809,7 +812,7 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     assert download_response.content.decode("utf-8") == "downloaded"
 
     sync_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "7"},
     )
     sync_request.session = SimpleNamespace(session_key=None)
@@ -846,19 +849,19 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
     """
     views = _import_views()
 
-    missing_request = RequestFactory().get("/omeroweb_imaris_connector/export/")
+    missing_request = RequestFactory().get("/omero_imaris_connector/export/")
     missing_request.session = SimpleNamespace(session_key=None)
     assert views.imaris_export(missing_request, conn=None).status_code == 400
 
     invalid_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "bad"},
     )
     invalid_request.session = SimpleNamespace(session_key=None)
     assert views.imaris_export(invalid_request, conn=None).status_code == 400
 
     no_celery_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1"},
     )
     no_celery_request.session = SimpleNamespace(session_key=None)
@@ -869,7 +872,7 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
     )
 
     timeout_request = RequestFactory().get(
-        "/omeroweb_imaris_connector/export/",
+        "/omero_imaris_connector/export/",
         data={"image": "1"},
     )
     timeout_request.session = SimpleNamespace(session_key=None)

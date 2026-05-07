@@ -97,7 +97,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         """
         expected_checks = {
             "omero-web": "CONFIG_omero_web_application__server_port",
-            "omero-celery-worker": "/opt/venv/bin/python -c 'import celery, omeroweb_imaris_connector, omero_plugin_common' || exit 1",
+            "omero-celery-worker": "/opt/venv/bin/python -c 'import celery, omero_imaris_connector, omero_plugin_common' || exit 1",
             "pg-maintenance": "pgrep -x cron >/dev/null || exit 1",
             "crowdsec": "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1",
             "firewall-bouncer": "test -x /usr/local/bin/custom-entrypoint.sh || exit 1",

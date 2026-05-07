@@ -58,8 +58,8 @@ def _import_imaris_service(monkeypatch: pytest.MonkeyPatch):
     Inputs: `monkeypatch`. Output: `imaris_service`.
     """
     _set_required_env(monkeypatch)
-    sys.modules.pop("omeroweb_imaris_connector.imaris_service", None)
-    from omeroweb_imaris_connector import imaris_service
+    sys.modules.pop("omero_imaris_connector.imaris_service", None)
+    from omero_imaris_connector import imaris_service
 
     return imaris_service
 

@@ -1175,11 +1175,9 @@ def _sanitize_filename(filename, fallback="export.ims"):
     """
     if not filename:
         return fallback
-    safe_name = os.path.basename(str(filename))
+    safe_name = str(filename).rsplit("/", 1)[-1]
     safe_name = re.sub(r"[\x00-\x1f\x7f]+", "", safe_name)
-    safe_name = safe_name.replace(os.sep, "_")
-    if os.altsep:
-        safe_name = safe_name.replace(os.altsep, "_")
+    safe_name = safe_name.replace("/", "_").replace("\\", "_")
     safe_name = safe_name.strip().strip(". ")
     if not safe_name:
         return fallback

@@ -1,4 +1,4 @@
-from omeroweb_imaris_connector import apps, urls
+from omero_imaris_connector import apps, urls
 
 
 def test_imaris_module_contracts_cover_ready_hook_and_route(monkeypatch):

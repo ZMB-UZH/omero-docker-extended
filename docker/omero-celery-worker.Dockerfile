@@ -74,18 +74,18 @@ RUN set -euo pipefail; \
     useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin celery
 
 # Install your in-tree python packages into the venv site-packages
-COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
+COPY omero_imaris_connector /tmp/omero_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
 
 RUN set -euo pipefail; \
     SITE_PACKAGES="$("$VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')"; \
-    rm -rf "${SITE_PACKAGES}/omeroweb_imaris_connector" "${SITE_PACKAGES}/omero_plugin_common"; \
-    cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
+    rm -rf "${SITE_PACKAGES}/omero_imaris_connector" "${SITE_PACKAGES}/omero_plugin_common"; \
+    cp -a /tmp/omero_imaris_connector "${SITE_PACKAGES}/omero_imaris_connector"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
     chown -R celery:celery \
-        "${SITE_PACKAGES}/omeroweb_imaris_connector" \
+        "${SITE_PACKAGES}/omero_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common"; \
-    rm -rf /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common
+    rm -rf /tmp/omero_imaris_connector /tmp/omero_plugin_common
 
 # Optional (off by default): curated compatibility-safe Python hardening
 # ----------------------------------------------------------
@@ -105,4 +105,4 @@ ENV PATH="/opt/venv/bin:${PATH}"
 # This image is primarily reused by standalone smoke/debug runs, so the
 # healthcheck validates that the packaged worker environment is importable.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD /opt/venv/bin/python -c 'import celery, omeroweb_imaris_connector, omero_plugin_common' || exit 1
+    CMD /opt/venv/bin/python -c 'import celery, omero_imaris_connector, omero_plugin_common' || exit 1

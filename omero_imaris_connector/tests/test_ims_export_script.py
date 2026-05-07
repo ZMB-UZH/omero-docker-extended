@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 import pathlib
 import runpy
 import subprocess
@@ -272,6 +273,71 @@ def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
         module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, "relative")
     with pytest.raises(RuntimeError, match="invalid characters"):
         module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, "/bad\x00path")
+
+    class _BrokenStr:
+        """Test double for a config value that cannot be stringified."""
+
+        def __str__(self):
+            """Raise while stringifying the fake config value.
+
+            Inputs: none. Output: none. Raises: RuntimeError.
+            """
+            raise RuntimeError("bad config value")
+
+    with pytest.raises(RuntimeError, match="is invalid"):
+        module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, _BrokenStr())
+
+    class _UnresolvableExportRoot:
+        """Test double for an export root path that cannot be resolved."""
+
+        def __init__(self, value):
+            """Create `_UnresolvableExportRoot` with `value`.
+
+            Inputs: `value`. Output: None.
+            """
+            self.value = value
+
+        def resolve(self, strict=False):
+            """Raise path resolution failure.
+
+            Inputs: `strict`. Output: none. Raises: OSError.
+            """
+            raise OSError("resolve failed")
+
+    monkeypatch.setattr(module, "Path", _UnresolvableExportRoot)
+    with pytest.raises(RuntimeError, match="could not be resolved"):
+        module._export_root_from_value(module._CONFIG_IMS_EXPORT_DIR, export_root)
+    monkeypatch.setattr(module, "Path", pathlib.Path)
+
+    lookup_failing_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                getConfigService=lambda: (_ for _ in ()).throw(RuntimeError("lookup"))
+            )
+        )
+    )
+    with pytest.raises(RuntimeError, match="configuration lookup failed"):
+        module._get_export_root(lookup_failing_conn)
+
+    no_service_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(sf=types.SimpleNamespace(getConfigService=lambda: None))
+    )
+    with pytest.raises(RuntimeError, match="service is unavailable"):
+        module._get_export_root(no_service_conn)
+
+    value_failing_conn = types.SimpleNamespace(
+        c=types.SimpleNamespace(
+            sf=types.SimpleNamespace(
+                getConfigService=lambda: types.SimpleNamespace(
+                    getConfigValue=lambda key: (_ for _ in ()).throw(
+                        RuntimeError("value lookup")
+                    )
+                )
+            )
+        )
+    )
+    with pytest.raises(RuntimeError, match="directory lookup failed"):
+        module._get_export_root(value_failing_conn)
 
     monkeypatch.setattr(module.os, "altsep", "\\", raising=False)
     assert (
@@ -750,7 +816,9 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
             raise OSError("resolve failed")
 
     monkeypatch.setattr(module, "Path", _UnresolvablePath)
+    monkeypatch.setattr(module.os, "name", "posix")
     assert module._managed_repository_root_from_value("env", "/managed") is None
+    monkeypatch.setattr(module.os, "name", os.name)
     monkeypatch.setattr(module, "Path", real_path)
 
     managed_root = tmp_path / "ManagedRepository"
@@ -762,7 +830,54 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         module._managed_original_file_path(managed_root, "user/demo", "../image.tif")
         is None
     )
+    assert (
+        module._managed_original_file_path(managed_root, "C:/demo", "image.tif")
+        is None
+    )
+    assert (
+        module._managed_original_file_path(
+            managed_root, "user/demo", "folder/image.tif"
+        )
+        is None
+    )
+
+    class _EscapingManagedRoot:
+        """Test double for a managed root whose joined path escapes containment."""
+
+        def __truediv__(self, _part):
+            """Return an escaping candidate for any joined path part.
+
+            Inputs: `_part`. Output: `_EscapingCandidate`.
+            """
+            return _EscapingCandidate()
+
+    class _EscapingCandidate:
+        """Test double for a candidate path that rejects containment checks."""
+
+        def __truediv__(self, _part):
+            """Return self for chained path joins.
+
+            Inputs: `_part`. Output: `self`.
+            """
+            return self
+
+        def relative_to(self, _root):
+            """Raise containment failure.
+
+            Inputs: `_root`. Output: none. Raises: ValueError.
+            """
+            raise ValueError("escapes")
+
+    assert (
+        module._managed_original_file_path(
+            _EscapingManagedRoot(), "user/demo", "image.tif"
+        )
+        is None
+    )
     assert module._absolute_original_file_path("/data\x00source", "image.tif") is None
+    assert (
+        module._absolute_original_file_path("/data/source", "folder/image.tif") is None
+    )
 
     class _BrokenAbsolutePath:
         """Test double for absolute path whose resolution fails behavior in this module."""

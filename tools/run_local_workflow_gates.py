@@ -421,8 +421,8 @@ def run_tests(context: GateContext) -> None:
         ),
         (
             ".coverage.imaris",
-            "omeroweb_imaris_connector/tests/",
-            "omeroweb_imaris_connector/tests/",
+            "omero_imaris_connector/tests/",
+            "omero_imaris_connector/tests/",
         ),
         (
             ".coverage.admin",

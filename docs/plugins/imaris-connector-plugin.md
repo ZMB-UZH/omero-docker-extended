@@ -1,4 +1,4 @@
-# Imaris Connector Plugin Guide (`omeroweb_imaris_connector`)
+# Imaris Connector Plugin Guide (`omero_imaris_connector`)
 
 ## Purpose
 
@@ -34,10 +34,10 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 Client request
     │
     ▼
-omeroweb_imaris_connector/views.py   (HTTP endpoint)
+omero_imaris_connector/views.py   (HTTP endpoint)
     │
     ▼
-omeroweb_imaris_connector/tasks.py   (Celery task: run_ims_export_task)
+omero_imaris_connector/tasks.py   (Celery task: run_ims_export_task)
     │
     ├─► _open_session_connection()    (join user's OMERO session)
     │   or _open_job_service_connection() (dedicated service account)

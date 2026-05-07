@@ -39,7 +39,7 @@ def _plugin_suite_fallback() -> int:
             "error",
             "tests/test_admin_tools_security_regressions.py",
             "omeroweb_admin_tools/tests/test_log_query.py",
-            "omeroweb_imaris_connector/tests/test_security_regressions.py",
+            "omero_imaris_connector/tests/test_security_regressions.py",
         ]
     ]
     for command in smoke_commands:

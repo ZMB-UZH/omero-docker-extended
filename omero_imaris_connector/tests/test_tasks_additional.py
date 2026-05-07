@@ -131,13 +131,13 @@ def _import_tasks(monkeypatch: pytest.MonkeyPatch):
     _install_omero_stubs()
     _install_celery_stubs()
     for module_name in [
-        "omeroweb_imaris_connector.config",
-        "omeroweb_imaris_connector.celery_app",
-        "omeroweb_imaris_connector.imaris_service",
-        "omeroweb_imaris_connector.tasks",
+        "omero_imaris_connector.config",
+        "omero_imaris_connector.celery_app",
+        "omero_imaris_connector.imaris_service",
+        "omero_imaris_connector.tasks",
     ]:
         sys.modules.pop(module_name, None)
-    from omeroweb_imaris_connector import tasks
+    from omero_imaris_connector import tasks
 
     return tasks
 

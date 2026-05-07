@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from omeroweb_imaris_connector import config
+from omero_imaris_connector import config
 
 TEST_AUTH_WEB = "web-fixture-auth"
 TEST_AUTH_SERVER = "server-fixture-auth"

@@ -7,7 +7,7 @@ import re
 import shutil
 import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import omero.rtypes
 from omero import scripts
@@ -363,14 +363,53 @@ def _managed_repository_root_from_value(source, value):
     if "\x00" in managed_root:
         print(f"Error reading {source}: value contains invalid characters")
         return None
-    if not os.path.isabs(managed_root):
+    path_class = _path_class_for_server_path(managed_root)
+    if path_class is None:
         print(f"Error reading {source}: value must be absolute")
         return None
+    if path_class is PurePosixPath and os.name != "nt":
+        path_class = Path
     try:
-        return Path(managed_root).resolve(strict=False)
+        root_path = path_class(managed_root)
+        if isinstance(root_path, Path):
+            return root_path.resolve(strict=False)
+        return root_path
     except OSError:
         print(f"Error reading {source}: value could not be resolved")
         return None
+
+
+def _path_class_for_server_path(path_text):
+    """Return the path class that matches an OMERO server path string.
+
+    Inputs: `path_text`. Output: pathlib path class or None.
+    """
+    if re.match(r"^[A-Za-z]:[\\/]", path_text) or path_text.startswith("\\\\"):
+        return PureWindowsPath
+    if path_text.startswith("/"):
+        return PurePosixPath
+    return None
+
+
+def _safe_relative_path_parts(value, allow_empty):
+    """Return safe relative path parts split across Windows and POSIX separators.
+
+    Inputs: `value`, `allow_empty`. Output: list of parts or None.
+    """
+    text = str(value or "").strip().strip("/\\")
+    if "\x00" in text:
+        print("Error getting original file path: value contains invalid characters")
+        return None
+    if not text:
+        return [] if allow_empty else None
+    parts = [part for part in re.split(r"[\\/]+", text) if part]
+    if any(part in {"", ".", ".."} for part in parts):
+        print("Error getting original file path: managed file path is invalid")
+        return None
+    if any(re.match(r"^[A-Za-z]:$", part) for part in parts):
+        print("Error getting original file path: managed file path is invalid")
+        return None
+    return parts
 
 
 def _get_managed_repository_root(conn):
@@ -406,17 +445,16 @@ def _managed_original_file_path(managed_root, file_path, file_name):
 
     Inputs: `managed_root`, `file_path` file path, `file_name`. Output: `str`.
     """
-    relative_dir = str(file_path or "").strip().strip("/\\")
-    relative_name = str(file_name or "").strip().strip("/\\")
-    if "\x00" in relative_dir or "\x00" in relative_name:
-        print("Error getting original file path: value contains invalid characters")
+    relative_dir_parts = _safe_relative_path_parts(file_path, allow_empty=True)
+    relative_name_parts = _safe_relative_path_parts(file_name, allow_empty=False)
+    if relative_dir_parts is None or relative_name_parts is None:
         return None
-    if not relative_name:
-        return None
-    if Path(relative_name).is_absolute() or ".." in Path(relative_name).parts:
+    if len(relative_name_parts) != 1:
         print("Error getting original file path: file name is invalid")
         return None
-    candidate = (managed_root / relative_dir / relative_name).resolve(strict=False)
+    candidate = managed_root
+    for part in [*relative_dir_parts, relative_name_parts[0]]:
+        candidate = candidate / part
     try:
         candidate.relative_to(managed_root)
     except ValueError:
@@ -435,16 +473,24 @@ def _absolute_original_file_path(file_path, file_name):
     if "\x00" in path_text or "\x00" in name_text:
         print("Error getting original file path: value contains invalid characters")
         return None
-    if not path_text or not os.path.isabs(path_text):
+    path_class = _path_class_for_server_path(path_text)
+    if path_class is None:
         return None
-    if name_text and (Path(name_text).is_absolute() or ".." in Path(name_text).parts):
+    name_parts = _safe_relative_path_parts(name_text, allow_empty=True)
+    if name_parts is None:
+        return None
+    if len(name_parts) > 1:
         print("Error getting original file path: file name is invalid")
         return None
-    candidate = Path(path_text)
-    if name_text:
-        candidate = candidate / name_text
+    if path_class is PurePosixPath and os.name != "nt":
+        path_class = Path
+    candidate = path_class(path_text)
+    if name_parts:
+        candidate = candidate / name_parts[0]
     try:
-        return str(candidate.resolve(strict=False))
+        if isinstance(candidate, Path):
+            return str(candidate.resolve(strict=False))
+        return str(candidate)
     except OSError:
         print("Error getting original file path: absolute path could not be resolved")
         return None

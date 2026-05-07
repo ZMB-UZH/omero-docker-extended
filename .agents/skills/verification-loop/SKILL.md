@@ -47,7 +47,7 @@ Never run all suites in a single pytest process. Run only the relevant suites, e
 ```bash
 python3 -m pytest tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omero_imaris_connector/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error

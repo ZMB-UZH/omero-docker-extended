@@ -7,7 +7,7 @@ repository. Use it before attempting speculative code changes.
 
 | Symptom | Likely class of failure | First check |
 | --- | --- | --- |
-| Imaris login loops back to `/webclient/login/` after POST | OMERO.web auth/session handling bug in the standalone connector | Inspect [`XTOmeroConnector.py`](../../XTOmeroConnector.py) and verify the client is not overriding the `Cookie` header |
+| Imaris login loops back to `/webclient/login/` after POST | OMERO.web auth/session handling bug in the standalone connector | Inspect [`XTOmeroConnector.py`](../../omero_imaris_connector/XTOmeroConnector.py) and verify the client is not overriding the `Cookie` header |
 | Export job stays in `RUNNING` with `status=waiting_for_processor` | OMERO.server `Processor-0` missing, failed, or blocked | Run `omero admin diagnostics` in the server container |
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
@@ -36,7 +36,7 @@ Root cause:
 
 Fix:
 
-- remove manual `Cookie` header injection from [`XTOmeroConnector.py`](../../XTOmeroConnector.py),
+- remove manual `Cookie` header injection from [`XTOmeroConnector.py`](../../omero_imaris_connector/XTOmeroConnector.py),
 - keep normal session/cookie-jar handling,
 - keep CSRF and referer handling intact.
 
@@ -96,7 +96,7 @@ Root cause:
 
 Fix:
 
-- [`omeroweb_imaris_connector/tasks.py`](../../omeroweb_imaris_connector/tasks.py)
+- [`omero_imaris_connector/tasks.py`](../../omero_imaris_connector/tasks.py)
   now launches exports through `omero script launch` as the primary execution
   path,
 - the previous `runScript()` fallback path is no longer used by the Celery
@@ -173,13 +173,14 @@ Operational rule:
 - IcePy-backed native bridge probing is disabled by default. When
   `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is unset or false, startup does not run
   standalone `IcePy` diagnostics, native bridge probing, alternate-Python
-  discovery, or fresh-session bridge launch. The normal Imaris-launched XT path
-  still resolves the live application id through `ImarisLib`; if that direct
-  handle is not ready at startup, the connector retries the same direct XT
-  handle path before download/conversion and before the final file handoff. If
-  the handle remains unavailable, the log reports only that the direct handle
-  could not be resolved and suppresses disabled optional-bridge dependency
-  details,
+  discovery, or fresh-session bridge launch. Direct in-process `ImarisLib`
+  access is used only when Imaris has already loaded that module into the XT
+  Python process; the connector does not import Bitplane's native IcePy stack
+  into an arbitrary Python process. If the direct handle is unavailable, the
+  connector uses the bounded helper-runner path for the numeric XT application
+  id before download/conversion and before the final file handoff. If the handle
+  remains unavailable, the log reports only that the direct handle could not be
+  resolved and suppresses disabled optional-bridge dependency details,
 - when `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` is explicitly set to `1`, `true`,
   `yes`, or `on`, native Imaris bridge compatibility is probed in the background
   as the dialog opens, and the connector must not start server-side conversion
@@ -358,7 +359,7 @@ Expected signs:
 
 If login loops:
 
-- inspect [`XTOmeroConnector.py`](../../XTOmeroConnector.py),
+- inspect [`XTOmeroConnector.py`](../../omero_imaris_connector/XTOmeroConnector.py),
 - verify the connector is not forcing its own `Cookie` header,
 - verify CSRF token extraction and referer handling are still present.
 

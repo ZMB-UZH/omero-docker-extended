@@ -156,7 +156,7 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omeroweb_import" \
         "${SITE_PACKAGES}/omeroweb_tools" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
-        "${SITE_PACKAGES}/omeroweb_imaris_connector" \
+        "${SITE_PACKAGES}/omero_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common"
 
 # Copy the plugins into the container
@@ -165,7 +165,7 @@ COPY omeroweb_omp_plugin /tmp/omeroweb_omp_plugin
 COPY omeroweb_import /tmp/omeroweb_import
 COPY omeroweb_tools /tmp/omeroweb_tools
 COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
-COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
+COPY omero_imaris_connector /tmp/omero_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
 COPY omero_web_zarr /tmp/omero_web_zarr
 COPY docs/help /tmp/omero_plugin_help_docs
@@ -190,7 +190,7 @@ RUN set -euo pipefail; \
     cp -a /tmp/omeroweb_import "${SITE_PACKAGES}/omeroweb_import"; \
     cp -a /tmp/omeroweb_tools "${SITE_PACKAGES}/omeroweb_tools"; \
     cp -a /tmp/omeroweb_admin_tools "${SITE_PACKAGES}/omeroweb_admin_tools"; \
-    cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
+    cp -a /tmp/omero_imaris_connector "${SITE_PACKAGES}/omero_imaris_connector"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
@@ -215,10 +215,10 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omeroweb_import" \
         "${SITE_PACKAGES}/omeroweb_tools" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
-        "${SITE_PACKAGES}/omeroweb_imaris_connector" \
+        "${SITE_PACKAGES}/omero_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
-    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_tools /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_tools /tmp/omeroweb_admin_tools /tmp/omero_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
 
 RUN set -euo pipefail; \
     archive="/tmp/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip"; \
@@ -274,7 +274,7 @@ RUN set -euo pipefail; \
         /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin \
         /opt/omero/web/OMERO.web/var/static/omeroweb_import \
         /opt/omero/web/OMERO.web/var/static/omeroweb_admin_tools \
-        /opt/omero/web/OMERO.web/var/static/omeroweb_imaris_connector \
+        /opt/omero/web/OMERO.web/var/static/omero_imaris_connector \
         /opt/omero/web/OMERO.web/var/static/omero_web_zarr; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 

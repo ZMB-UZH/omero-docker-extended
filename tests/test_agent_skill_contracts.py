@@ -21,7 +21,7 @@ ALLOWED_OPTIONAL_REPO_REFERENCES: frozenset[str] = frozenset(
 EXPECTED_SPLIT_TEST_SUITES: tuple[str, ...] = (
     "tests/",
     "omero_plugin_common/tests/",
-    "omeroweb_imaris_connector/tests/",
+    "omero_imaris_connector/tests/",
     "omeroweb_admin_tools/tests/",
     "omeroweb_omp_plugin/tests/",
     "omeroweb_import/tests/",
@@ -69,7 +69,7 @@ KNOWN_EXACT_REPO_REFERENCES: frozenset[str] = frozenset(
         "github_pull_project_bash_example",
         "supervisord.conf",
         "omero-web.config",
-        "XTOmeroConnector.py",
+        "omero_imaris_connector/XTOmeroConnector.py",
     }
 )
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
@@ -289,7 +289,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
             "omeroweb_tools/tests/test_tools_module_contracts.py",
             "omeroweb_omp_plugin/tests/test_log_sanitization.py",
             "omeroweb_admin_tools/tests/test_log_query.py",
-            "omeroweb_imaris_connector/tests/test_security_regressions.py",
+            "omero_imaris_connector/tests/test_security_regressions.py",
         ),
         covers=frozenset(
             {

@@ -15,7 +15,7 @@ BACKEND_URL = get_celery_backend_url()
 RESULT_EXPIRES = get_celery_result_expires()
 TASK_TIME_LIMIT = get_celery_time_limit()
 
-app = Celery("omeroweb_imaris_connector", broker=BROKER_URL, backend=BACKEND_URL)
+app = Celery("omero_imaris_connector", broker=BROKER_URL, backend=BACKEND_URL)
 
 app.conf.update(
     task_serializer="json",
@@ -32,7 +32,7 @@ app.conf.update(
 )
 
 # autodiscover_tasks handles the import properly without circular dependency
-app.autodiscover_tasks(["omeroweb_imaris_connector"], force=True)
+app.autodiscover_tasks(["omero_imaris_connector"], force=True)
 
 # REMOVED: The explicit import that caused the circular dependency
 # The autodiscover_tasks call above is sufficient to register the task

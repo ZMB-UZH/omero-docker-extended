@@ -138,7 +138,7 @@ Base: `/omeroweb_admin_tools/`
 
 ### Imaris Connector
 
-Base: `/omeroweb_imaris_connector/`
+Base: `/omero_imaris_connector/`
 
 | Route | Purpose |
 | --- | --- |

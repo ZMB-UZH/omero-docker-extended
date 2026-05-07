@@ -55,11 +55,11 @@ def _import_imaris_service(monkeypatch: pytest.MonkeyPatch):
     Inputs: `monkeypatch`. Output: `imaris_service`.
     """
     _set_required_env(monkeypatch)
-    sys.modules.pop("omeroweb_imaris_connector.imaris_service", None)
-    package = sys.modules.get("omeroweb_imaris_connector")
+    sys.modules.pop("omero_imaris_connector.imaris_service", None)
+    package = sys.modules.get("omero_imaris_connector")
     if package is not None and hasattr(package, "imaris_service"):
         delattr(package, "imaris_service")
-    imaris_service = importlib.import_module("omeroweb_imaris_connector.imaris_service")
+    imaris_service = importlib.import_module("omero_imaris_connector.imaris_service")
     imaris_service._PROCESSOR_CONFIG_CACHE["value"] = None
     imaris_service._PROCESSOR_CONFIG_CACHE["checked_at"] = 0.0
 

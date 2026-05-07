@@ -6,8 +6,8 @@ from omero_plugin_common.logging_utils import configure_omero_gateway_logging
 class ImarisConnectorConfig(AppConfig):
     """Django application configuration for imaris connector config."""
 
-    name = "omeroweb_imaris_connector"
-    label = "omeroweb_imaris_connector"
+    name = "omero_imaris_connector"
+    label = "omero_imaris_connector"
 
     @staticmethod
     def ready() -> None:

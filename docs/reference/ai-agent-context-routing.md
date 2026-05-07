@@ -44,7 +44,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 | Admin Tools logs, Grafana/Prometheus proxy, quotas, diagnostics | `docs/plugins/admin-tools-plugin.md`, `docs/plugins/admin-tools-workflow.md`, `docs/operations/monitoring.md` | `omeroweb_admin_tools/` | `django-patterns`, `django-security`, `omero-runtime-verifier` | `omeroweb_admin_tools/tests/` |
 | Tools and Enhanced search plugin | `docs/plugins/tools-plugin.md`, `docs/reference/plugin-help-page-style-guide.md` | `omeroweb_tools/` | `django-patterns`, `django-security`, `frontend-preview`, `plugin-regression-triager` | `omeroweb_tools/tests/` |
 | Plugin user help pages, screenshots, and help-page collapse behavior | `docs/reference/plugin-help-page-style-guide.md`, nearest `docs/plugins/*.md` | plugin `templates/`, plugin `static/`, `docs/help/` | `frontend-preview`, `docs-knowledge-maintainer`, `django-verification` | focused plugin contract tests plus browser preview tests |
-| Imaris export task flow and scripts | `docs/plugins/imaris-connector-plugin.md`, `docs/plugins/imaris-connector-workflow.md` | `omeroweb_imaris_connector/` | `python-patterns`, `omero-runtime-verifier`, `plugin-regression-triager` | `omeroweb_imaris_connector/tests/` |
+| Imaris export task flow and scripts | `docs/plugins/imaris-connector-plugin.md`, `docs/plugins/imaris-connector-workflow.md` | `omero_imaris_connector/` | `python-patterns`, `omero-runtime-verifier`, `plugin-regression-triager` | `omero_imaris_connector/tests/` |
 | OMERO.web Zarr rendering and store-backed integration | `docs/plugins/omero-web-zarr-plugin.md`, `docs/plugins/omero-web-zarr-workflow.md` | `omero_web_zarr/` | `django-patterns`, `django-verification`, `python-testing` | `omero_web_zarr/tests/` |
 | Docs and agent surfaces | `docs/index.md`, `docs/reference/ai-agent-integrations.md` | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/`, `.cursor/` | `context-budget`, `docs-knowledge-maintainer`, `search-first` | `tests/test_lint_docs_structure.py`, AI-surface tests |
 | Agent skills and reusable workflows | `docs/reference/ai-agent-skills.md`, `docs/reference/ai-agent-integrations.md` | `.agents/skills/`, `tools/lint_docs_structure.py` | `cocoindex-code-search`, `docs-knowledge-maintainer`, `verification-loop` | skill catalog and contract tests |
@@ -55,7 +55,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 
 - `tests/`: repo-wide contracts, workflows, docs, scanners, shared integration checks
 - `omero_plugin_common/tests/`: shared helper modules and env utilities
-- `omeroweb_imaris_connector/tests/`: Celery task flow, IMS export script contracts
+- `omero_imaris_connector/tests/`: Celery task flow, IMS export script contracts
 - `omeroweb_admin_tools/tests/`: quotas, monitoring, logs, Grafana/Prometheus proxy
 - `omeroweb_omp_plugin/tests/`: OMP views, annotation services, AI credential handling
 - `omeroweb_import/tests/`: upload pipeline, import planning, dataset routing, SEM-EDX, native Zarr import

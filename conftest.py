@@ -354,7 +354,7 @@ _ISOLATED_MODULE_PREFIXES = (
     "omero",
     "omero_plugin_common",
     "omeroweb",
-    "omeroweb_imaris_connector",
+    "omero_imaris_connector",
     "omeroweb_import",
     "omeroweb_omp_plugin",
     "omeroweb_tools",

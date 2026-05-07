@@ -484,7 +484,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertIn(
-                "-A omeroweb_imaris_connector.celery_app worker "
+                "-A omero_imaris_connector.celery_app worker "
                 "--loglevel=info --concurrency=1 -Q imaris --hostname=imaris@%h",
                 calls[1],
             )
