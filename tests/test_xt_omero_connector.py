@@ -3291,13 +3291,46 @@ def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
             client.session_key = "session-id"
 
     monkeypatch.setattr(module.urllib.request, "build_opener", lambda *_args: opener)
-    monkeypatch.setattr(module.urllib.request, "install_opener", lambda *_args: None)
+    monkeypatch.setattr(
+        module.urllib.request,
+        "install_opener",
+        lambda *_args: pytest.fail("connect() must not install a global opener"),
+    )
     client._extract_cookies_from_jar = _extract_cookies_from_jar
 
     assert client.connect() is True
     password_attr = "pass" + "word"
     assert getattr(client, password_attr) == str()
     assert len(opener.calls) == 3
+
+
+def test_omero_web_client_builds_direct_opener_for_configured_host(monkeypatch):
+    """Verify OMERO.web traffic does not inherit host proxy variables.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on proxy leakage regressions.
+    """
+    module = _load_xt_module()
+    captured_handlers = []
+    sentinel_opener = object()
+
+    def _fake_build_opener(*handlers):
+        """Capture opener handlers and return a sentinel opener.
+
+        Inputs: `handlers`. Output: `sentinel_opener`.
+        """
+        captured_handlers.extend(handlers)
+        return sentinel_opener
+
+    monkeypatch.setattr(module.urllib.request, "build_opener", _fake_build_opener)
+    cookie_jar = module.http.cookiejar.CookieJar()
+
+    opener = module.OMEROWebClient._build_direct_opener(cookie_jar)
+
+    assert opener is sentinel_opener
+    assert len(captured_handlers) == 2
+    assert isinstance(captured_handlers[0], module.urllib.request.ProxyHandler)
+    assert captured_handlers[0].proxies == {}
+    assert isinstance(captured_handlers[1], module.urllib.request.HTTPCookieProcessor)
 
 
 def test_password_reveal_is_timed_and_clear_cancels_pending_timer():
@@ -4221,8 +4254,235 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert 'metadata_label_font = ("Arial", 9, "bold")' in info_source
     assert "font=metadata_label_font" in info_source
     assert "row=4, column=2" in info_source
+    assert "def _close_info_window():" in info_source
+    assert "info_window.grab_release()" in info_source
+    assert "command=_close_info_window" in info_source
+    assert 'info_window.protocol("WM_DELETE_WINDOW", _close_info_window)' in info_source
+    assert "self._run_blocking_modal(_show_modal)" not in info_source
     assert "info_window.grab_set()" in source
     assert "self.root.wait_window(info_window)" in source
+
+
+def test_connector_info_close_button_destroys_only_child_window(monkeypatch):
+    """Verify info-window close cannot route through the main window close path.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on child-window close regressions.
+    """
+    module = _load_xt_module()
+    captured = {"button_command": None}
+    windows = []
+
+    class _Root:
+        """Fake connector root that records accidental destroy calls."""
+
+        def __init__(self):
+            """Create root state.
+
+            Inputs: none. Output: initializes root state.
+            """
+            self.destroyed = False
+
+        @staticmethod
+        def winfo_rootx():
+            """Return fake root x position.
+
+            Inputs: none. Output: int.
+            """
+            return 10
+
+        @staticmethod
+        def winfo_rooty():
+            """Return fake root y position.
+
+            Inputs: none. Output: int.
+            """
+            return 20
+
+        @staticmethod
+        def winfo_width():
+            """Return fake root width.
+
+            Inputs: none. Output: int.
+            """
+            return 500
+
+        @staticmethod
+        def winfo_height():
+            """Return fake root height.
+
+            Inputs: none. Output: int.
+            """
+            return 300
+
+        def wait_window(self, window):
+            """Simulate clicking the info child close button while waiting.
+
+            Inputs: `window`. Output: None.
+            """
+            assert window.grabbed is True
+            assert captured["button_command"] is not None
+            captured["button_command"]()
+
+        def destroy(self):
+            """Record unexpected main-root destruction.
+
+            Inputs: none. Output: None.
+            """
+            self.destroyed = True
+
+    class _Window:
+        """Fake child Toplevel used by the info dialog."""
+
+        def __init__(self, root):
+            """Create child-window state.
+
+            Inputs: `root`. Output: initializes child-window state.
+            """
+            self.root = root
+            self.destroyed = False
+            self.grabbed = False
+            self.grab_released = False
+            self.close_protocol = None
+            windows.append(self)
+
+        @staticmethod
+        def title(_text):
+            """Accept title updates.
+
+            Inputs: `_text`. Output: None.
+            """
+
+        @staticmethod
+        def resizable(_width, _height):
+            """Accept resizable updates.
+
+            Inputs: `_width`, `_height`. Output: None.
+            """
+
+        @staticmethod
+        def transient(_root):
+            """Accept transient updates.
+
+            Inputs: `_root`. Output: None.
+            """
+
+        @staticmethod
+        def configure(**_kwargs):
+            """Accept configuration updates.
+
+            Inputs: `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def update_idletasks():
+            """Accept idle-task updates.
+
+            Inputs: none. Output: None.
+            """
+
+        @staticmethod
+        def winfo_reqwidth():
+            """Return fake requested width.
+
+            Inputs: none. Output: int.
+            """
+            return 240
+
+        @staticmethod
+        def winfo_reqheight():
+            """Return fake requested height.
+
+            Inputs: none. Output: int.
+            """
+            return 120
+
+        @staticmethod
+        def geometry(_geometry):
+            """Accept geometry updates.
+
+            Inputs: `_geometry`. Output: None.
+            """
+
+        def protocol(self, name, command):
+            """Capture close protocol callback.
+
+            Inputs: `name`, `command`. Output: None.
+            """
+            assert name == "WM_DELETE_WINDOW"
+            self.close_protocol = command
+
+        def grab_set(self):
+            """Record child modal grab.
+
+            Inputs: none. Output: None.
+            """
+            self.grabbed = True
+
+        def grab_release(self):
+            """Record child modal grab release.
+
+            Inputs: none. Output: None.
+            """
+            self.grab_released = True
+
+        def destroy(self):
+            """Record child destruction.
+
+            Inputs: none. Output: None.
+            """
+            self.destroyed = True
+
+    class _Widget:
+        """Fake Tk widget for labels, frames, and buttons."""
+
+        def __init__(self, *_args, **kwargs):
+            """Capture optional button command.
+
+            Inputs: `_args`, `kwargs`. Output: initializes widget state.
+            """
+            command = kwargs.get("command")
+            if command is not None:
+                captured["button_command"] = command
+
+        @staticmethod
+        def grid(*_args, **_kwargs):
+            """Accept grid placement.
+
+            Inputs: `_args`, `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def grid_columnconfigure(*_args, **_kwargs):
+            """Accept grid column configuration.
+
+            Inputs: `_args`, `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def focus_set():
+            """Accept focus request.
+
+            Inputs: none. Output: None.
+            """
+
+    for constant in ("NSEW", "EW", "W", "LEFT", "SE"):
+        monkeypatch.setattr(module.tk, constant, constant.lower(), raising=False)
+    monkeypatch.setattr(module.tk, "Toplevel", _Window, raising=False)
+    monkeypatch.setattr(module.tk, "Frame", _Widget, raising=False)
+    monkeypatch.setattr(module.tk, "Label", _Widget, raising=False)
+    monkeypatch.setattr(module.tk, "Button", _Widget, raising=False)
+
+    root = _Root()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = root
+
+    module.OMEROBrowserDialog._show_connector_info(dialog)
+
+    assert len(windows) == 1
+    assert windows[0].close_protocol is captured["button_command"]
+    assert windows[0].grab_released is True
+    assert windows[0].destroyed is True
+    assert root.destroyed is False
 
 
 def test_blocking_messagebox_locks_background_window_and_cursors(monkeypatch):
