@@ -30,7 +30,7 @@ INVALID_OMERO_PORT_MESSAGE = "Invalid OMERO port parameter."
 IMS_EXPORT_FAILED_MESSAGE = "IMS export failed."
 IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
 TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
-OMERO_IMS_EXPORT_CAPABILITY_FLAG = "zmb_omero_imaris_connector_v1"
+OMERO_IMS_EXPORT_CAPABILITY_FLAG = "omero_imaris_connector_v1"
 OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
 
 

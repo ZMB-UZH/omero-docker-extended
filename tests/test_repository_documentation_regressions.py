@@ -154,6 +154,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ],
             cwd=self.repo_root,
             text=True,
+            encoding="utf-8",
         )
         forbidden_emails = {
             "ai-" + "agent@users.noreply.github.com",
@@ -165,9 +166,14 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         for record in output.split("\0END\n"):
             if not record.strip():
                 continue
-            commit, author_name, author_email, committer_name, committer_email, body = (
-                record.lstrip("\n").split("\0", maxsplit=5)
-            )
+            (
+                commit,
+                author_name,
+                author_email,
+                committer_name,
+                committer_email,
+                body,
+            ) = record.lstrip("\n").split("\0", maxsplit=5)
             identities = (
                 ("author", author_name, author_email),
                 ("committer", committer_name, committer_email),

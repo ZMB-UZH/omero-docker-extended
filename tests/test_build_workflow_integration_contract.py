@@ -7,6 +7,7 @@ from iter_test_helpers import next_or_fail
 import unittest
 from pathlib import Path
 import re
+import subprocess
 
 
 class BuildWorkflowIntegrationContractTests(unittest.TestCase):
@@ -836,7 +837,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 script_path = self.repo_root / relative_path
                 script_text = script_path.read_text(encoding="utf-8")
-                self.assertTrue(script_path.stat().st_mode & 0o111)
+                git_mode = subprocess.check_output(
+                    ["git", "ls-files", "-s", relative_path],
+                    cwd=self.repo_root,
+                    text=True,
+                    encoding="utf-8",
+                ).split(maxsplit=1)[0]
+                self.assertEqual("100755", git_mode)
                 self.assertIn("set -eu", script_text)
                 self.assertIn("Missing required environment variable", script_text)
 
