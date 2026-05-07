@@ -4050,6 +4050,11 @@ def test_converter_detection_resets_stale_native_probe_before_waiting(monkeypatc
         _reset_native_bridge_probe_for_converter_detection
     )
     dialog._start_native_bridge_probe = _start_native_bridge_probe
+    monkeypatch.setattr(
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
+    )
 
     options = module.OMEROBrowserDialog._detect_converter_options_after_connection(
         dialog
@@ -5710,10 +5715,11 @@ def test_native_bridge_helper_opens_ims_with_visible_dataset_without_current_fil
     assert visible_path.read_text(encoding="utf-8") == "visible"
 
 
-def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_path):
-    """Verify native bridge helper prefers one argument fileopen for originals.
+def test_native_bridge_helper_rejects_original_before_fileopen(tmp_path):
+    """Verify native bridge helper rejects original files before FileOpen.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper prefers one argument fileopen for originals.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions that allow
+    raw/original files through the native bridge helper.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -5771,17 +5777,18 @@ def test_native_bridge_helper_prefers_one_argument_fileopen_for_originals(tmp_pa
         timeout=10,
     )
 
-    assert completed.returncode == 0
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
-    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1"]
+    assert completed.returncode == 64
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert not calls_path.exists()
 
 
-def test_native_bridge_helper_retries_with_options_after_typeerror_for_originals(
+def test_native_bridge_helper_rejects_original_before_options_retry(
     tmp_path,
 ):
-    """Verify native bridge helper retries with options after typeerror for originals.
+    """Verify native bridge helper rejects originals before options retry.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper retries with options after typeerror for originals.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions that retry
+    raw/original file handoff through Imaris FileOpen.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -5840,17 +5847,18 @@ def test_native_bridge_helper_retries_with_options_after_typeerror_for_originals
         timeout=10,
     )
 
-    assert completed.returncode == 0
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
-    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1", "2"]
+    assert completed.returncode == 64
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert not calls_path.exists()
 
 
-def test_native_bridge_helper_accepts_original_submission_without_dataset_change(
+def test_native_bridge_helper_rejects_original_submission_without_dataset_change(
     tmp_path,
 ):
-    """Verify native bridge helper accepts original submission without dataset change.
+    """Verify native bridge helper rejects original submission-only handoff.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in native bridge helper accepts original submission without dataset change.
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions that accept
+    unverified raw/original file submissions.
     """
     module = _load_xt_module()
     original_path = tmp_path / "demo.lif"
@@ -5906,9 +5914,9 @@ def test_native_bridge_helper_accepts_original_submission_without_dataset_change
         timeout=15,
     )
 
-    assert completed.returncode == 0
-    assert completed.stdout.strip() == "BRIDGE_RUNNER_OPENED"
-    assert calls_path.read_text(encoding="utf-8").splitlines() == ["1"]
+    assert completed.returncode == 64
+    assert completed.stdout.strip() == "BRIDGE_RUNNER_INVALID_IMS"
+    assert not calls_path.exists()
 
 
 def test_native_bridge_runner_suppresses_plural_ice_shutdown_warning(
@@ -7124,6 +7132,11 @@ def test_detect_converter_options_defaults_omero_when_server_supports_it(monkeyp
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: True)
+    monkeypatch.setattr(
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
+    )
 
     assert dialog._detect_converter_options_after_connection() == ["OMERO", "Imaris"]
 
@@ -7145,6 +7158,11 @@ def test_detect_converter_options_hides_omero_without_server_capability(monkeypa
     dialog._reset_native_bridge_probe = _noop
     dialog._start_native_bridge_probe = _noop
     dialog.client = types.SimpleNamespace(has_omero_ims_export_capability=lambda: False)
+    monkeypatch.setattr(
+        module,
+        "_find_imaris_convert_executable",
+        lambda: r"C:\Imaris\ImarisConvert.exe",
+    )
 
     assert dialog._detect_converter_options_after_connection() == ["Imaris"]
 
