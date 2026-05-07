@@ -4,14 +4,16 @@ This document describes the complete control flow for the OMERO-to-Imaris
 connector. It covers the Imaris XT client
 (`omero_imaris_connector/XTOmeroConnector.py`), the custom
 `omero_imaris_connector` server endpoint, converter detection, selected Image
-export behavior, same-session Imaris handoff, and the main failure boundaries.
+export behavior, IMS same-session handoff, selected-image executable handoff,
+and the main failure boundaries.
 
 The connector exposes two user-facing converter choices when the relevant
 capabilities are present:
 
 - `OMERO`: a custom server-side IMS export provided by this repository.
-- `Imaris`: a standard OMERO.web selected Image export opened directly in the
-  current Imaris session.
+- `Imaris`: a standard OMERO.web selected Image export submitted to the
+  installed Imaris executable, matching a user dropping the exported file onto
+  the Imaris application icon.
 
 `OMERO` is intentionally hidden unless the connected OMERO.web instance returns
 the repository capability flag `omero_imaris_connector_v1`. `Imaris` is
@@ -23,7 +25,7 @@ standard OMERO.web installations that can export the selected OMERO Image ID.
 ```mermaid
 flowchart TD
     A[Start Imaris XT extension] --> B[Load connector settings.env]
-    B --> C[Discover same-session Imaris handoff support]
+    B --> C[Discover local Imaris executable and optional IMS bridge support]
     C --> D[User connects to OMERO.web]
     D --> E[Authenticate with OMERO.web session cookies]
     E --> F[Load projects, datasets, and images through OMERO.web API]
@@ -45,7 +47,7 @@ flowchart TD
     R --> T[Validate IMS file signature]
     S --> U[Validate tracked selected Image TIFF export]
     T --> V[Open IMS in current Imaris session]
-    U --> W[Open selected Image export in current Imaris session]
+    U --> W[Submit selected Image export to installed Imaris]
 ```
 
 ## Capability detection
@@ -64,8 +66,8 @@ flowchart TD
     F -->|No| D
     F -->|Yes| G[OMERO option available]
 
-    A --> H[Probe local Imaris handoff target]
-    H --> I{Live Imaris handle or numeric XT app id?}
+    A --> H[Discover installed Imaris executable]
+    H --> I{Imaris.exe found?}
     I -->|No| J[Imaris option unavailable]
     I -->|Yes| K[Imaris option available]
 
@@ -87,9 +89,10 @@ converter. A standard, non-custom OMERO.web host therefore hides `OMERO`; this
 is expected until the server-side connector endpoint has been installed or
 updated.
 
-The `Imaris` converter is not gated on the custom server endpoint and is not
-gated on a local conversion executable. It only requires a same-session Imaris
-handoff target and the standard selected Image export endpoint from OMERO.web.
+The `Imaris` converter is not gated on the custom server endpoint and does not
+run `ImarisConvert.exe` or any client-side conversion CLI. It requires a
+discoverable installed `Imaris.exe` and the standard selected Image export
+endpoint from OMERO.web.
 
 ## Saved converter settings
 
@@ -166,11 +169,11 @@ absence of the custom server-side OMERO converter must not leak into this path.
 
 ```mermaid
 flowchart TD
-    A[User selects Imaris converter] --> B[Verify same-session Imaris handoff target]
+    A[User selects Imaris converter] --> B[Verify installed Imaris executable]
     B --> C[Export selected OMERO Image ID through OMERO.web]
     C --> D[Validate downloaded file is TIFF or BigTIFF]
     D --> E[Track file as connector-owned selected Image export]
-    E --> F[Open selected Image export in the current Imaris session]
+    E --> F[Submit selected Image export to Imaris.exe]
 ```
 
 The selected Image export uses the OMERO.web image export endpoint for the
@@ -179,12 +182,15 @@ envelope for the selected Image pixels; it is not a source-filetype decision and
 it is not a download of the archived original container. The client does not use
 `webgateway/archived_files/download/`. If the selected Image export is
 unavailable, the connector fails explicitly instead of falling back to
-original-file download.
+original-file download. The final handoff uses the discovered `Imaris.exe` with
+the tracked downloaded export as its file argument; it does not use
+`ImarisLib.FileOpen`, `OpenFile`, `LoadFile`, Windows file associations, or a
+source-filetype-specific parser for this path.
 
-## Imaris same-session handoff
+## OMERO IMS same-session handoff
 
-After a converter prepares its verified file, the XT client opens it in the
-current Imaris session.
+After the `OMERO` converter prepares a verified IMS file, the XT client opens it
+in the current Imaris session.
 
 ```mermaid
 flowchart TD
@@ -200,10 +206,11 @@ flowchart TD
     H --> K
 ```
 
-The load workers validate converter-specific outputs before any Imaris open
-request is made. The `OMERO` path requires IMS/HDF5. The `Imaris` path requires a
-TIFF/BigTIFF file that was downloaded and tracked by the same dialog instance as
-a selected Image export.
+The load workers validate converter-specific outputs before any handoff request
+is made. The `OMERO` path requires IMS/HDF5 and uses the same-session bridge.
+The `Imaris` path requires a TIFF/BigTIFF file that was downloaded and tracked
+by the same dialog instance as a selected Image export, then submits that file
+to the installed Imaris executable.
 
 ## Multi-image loading
 
@@ -233,12 +240,15 @@ download or export fails.
   converter is hidden.
 - Stale saved converter value: the stale option is ignored and cannot start a
   load.
-- No same-session Imaris handoff target: no download or export is started.
+- No same-session Imaris handoff target for `OMERO`: no server-side IMS export
+  is started.
+- No discoverable `Imaris.exe` for `Imaris`: no selected Image export is
+  started.
 - Selected Image export endpoint unavailable: the `Imaris` path fails without
   downloading archived originals.
 - Selected Image export is not TIFF/BigTIFF: the `Imaris` path rejects the file
   before any Imaris handoff.
-- Untracked selected Image export: the `Imaris` path refuses to open it.
+- Untracked selected Image export: the `Imaris` path refuses to submit it.
 - Server-side IMS download is not IMS/HDF5: the `OMERO` path rejects the file
   before any Imaris handoff.
 - Multi-image preparation failure: no batch handoff is attempted.
@@ -250,12 +260,13 @@ The regression suite covers the critical contracts:
 - `OMERO` converter requires the custom capability flag.
 - Legacy custom-endpoint responses do not enable `OMERO`.
 - `Imaris` converter does not require custom OMERO server support.
-- `Imaris` converter does not require a local conversion executable.
+- `Imaris` converter does not require `ImarisConvert.exe` or any local
+  client-side conversion CLI.
 - Stale `settings.env` converter values are ignored.
 - The `Imaris` path uses selected Image ID export.
 - The `Imaris` path does not call archived original download.
 - The `Imaris` path does not query Image detail metadata for conversion hints.
-- The `Imaris` path opens only tracked selected Image exports.
+- The `Imaris` path submits only tracked selected Image exports to `Imaris.exe`.
 - The `OMERO` path rejects non-HDF5 IMS download responses.
 - Single-image and multi-image load workers require converter-specific valid
   outputs before Imaris handoff.
