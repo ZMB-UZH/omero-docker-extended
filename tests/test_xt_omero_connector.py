@@ -288,6 +288,8 @@ class _FakeEntry:
         self.configs = []
         self.options = {}
         self.bindings = {}
+        self.focused = False
+        self.cursor_index = None
 
     def get(self):
         """Return the stored entry value.
@@ -317,6 +319,20 @@ class _FakeEntry:
         Inputs: `sequence`, `callback`. Output: None.
         """
         self.bindings[sequence] = callback
+
+    def focus_set(self):
+        """Record focus assignment.
+
+        Inputs: none. Output: None.
+        """
+        self.focused = True
+
+    def icursor(self, index):
+        """Record cursor placement.
+
+        Inputs: `index`. Output: None.
+        """
+        self.cursor_index = index
 
 
 class _FakeButton:
@@ -3497,6 +3513,55 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
     monkeypatch.setattr(module.threading, "Thread", _ImmediateThread)
     monkeypatch.setattr(module, "OMEROWebClient", FakeClient)
     errors = []
+    focus_events = []
+
+    class _Root:
+        """Fake root that records modal and focus recovery state."""
+
+        def __init__(self):
+            """Create fake root.
+
+            Inputs: none. Output: initializes state.
+            """
+            self.disabled = False
+
+        def update_idletasks(self):
+            """Accept idle flush.
+
+            Inputs: none. Output: None.
+            """
+
+        def after(self, _delay, callback):
+            """Run scheduled callbacks immediately.
+
+            Inputs: `_delay`, `callback`. Output: callback return value.
+            """
+            focus_events.append("after")
+            return callback()
+
+        def attributes(self, option, value):
+            """Record disabled-window state.
+
+            Inputs: `option`, `value`. Output: None.
+            """
+            assert option == "-disabled"
+            self.disabled = bool(value)
+            focus_events.append(("disabled", self.disabled))
+
+        def lift(self):
+            """Record window raise.
+
+            Inputs: none. Output: None.
+            """
+            focus_events.append("lift")
+
+        def focus_force(self):
+            """Record forced focus restoration.
+
+            Inputs: none. Output: None.
+            """
+            focus_events.append("focus_force")
+
     dialog = object.__new__(module.OMEROBrowserDialog)
     dialog._connected = False
     dialog._connection_in_progress = False
@@ -3508,7 +3573,7 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
     dialog.https_var = _FakeVar(True)
     dialog.connect_btn = _FakeButton()
     dialog.autosave_settings_check = _FakeButton()
-    dialog.root = types.SimpleNamespace(update_idletasks=lambda: None)
+    dialog.root = _Root()
     dialog._set_converter_options = _noop
     dialog._set_folder_export_capability = _noop
     dialog._set_status = _noop
@@ -3517,20 +3582,29 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
     monkeypatch.setattr(
         module.messagebox,
         "showerror",
-        lambda title, message: errors.append((title, message)),
+        lambda title, message, parent=None: errors.append(
+            (title, message, parent is dialog.root, dialog.root.disabled)
+        ),
         raising=False,
     )
 
     module.OMEROBrowserDialog._connect(dialog)
 
     assert dialog.pass_entry.value == "typed-secret"
+    assert dialog.pass_entry.focused is True
+    assert dialog.pass_entry.cursor_index == module._tk_constant("END", "end")
+    assert dialog.root.disabled is False
     assert dialog.client is None
     assert errors == [
         (
             "Connection Failed",
             "Cannot connect to OMERO server.\nPlease check your credentials.",
+            True,
+            True,
         )
     ]
+    assert ("disabled", False) in focus_events
+    assert "focus_force" in focus_events
 
 
 def test_stale_connect_success_completion_clears_new_client_without_ui_mutation():
@@ -4077,6 +4151,17 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     assert "command=self._on_autosave_settings_changed" in source
     assert "command=self._on_show_log_changed" in source
     assert "command=self._on_search_function_changed" in source
+    assert "self.append_observed_folders_var = tk.BooleanVar(value=False)" in source
+    assert "self.append_observed_folders_check = tk.Checkbutton(" in source
+    append_source = source[
+        source.index(
+            "self.append_observed_folders_check = tk.Checkbutton("
+        ) : source.index("self.converter_frame = tk.Frame(self.converter_slot)")
+    ]
+    assert 'text="Append to observed folders"' in append_source
+    assert "variable=self.append_observed_folders_var" in append_source
+    assert "command=" not in append_source
+    assert "self.append_observed_folders_check.pack(side=tk.LEFT)" in source
     assert "bg=FOLDER_PATH_SELECT_BG" in source
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
@@ -4091,6 +4176,15 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     )
     assert "configure(height=entry_height)" in source
     assert 'text="Export folder to OMERO"' in source
+    assert 'self._build_browser_search_entry(p_frame, "projects", "Projects")' in source
+    assert 'self._build_browser_search_entry(d_frame, "datasets", "Datasets")' in source
+    assert 'self._build_browser_search_entry(i_frame, "images", "Images")' in source
+    assert "@staticmethod\n    def _build_browser_search_entry" not in source
+    assert 'return f"Type to search {label}"' in source
+    assert "search_entry.grid(row=0, column=0, sticky=tk.EW, ipady=4)" in source
+    assert "search_frame.grid_columnconfigure(1, weight=1)" in source
+    assert "self._set_browser_search_visible(self._search_function_enabled())" in source
+    assert 'grid_remove = getattr(frame, "grid_remove", None)' in source
     init_marker = source.index("def __init__(self, imaris, imaris_id=None):")
     settings_prepare = source.index(
         "_prepare_connector_settings_for_current_version(self._settings_file_path)",
@@ -5122,9 +5216,9 @@ def test_browser_panels_use_draggable_splitters_with_fraction_limits():
     assert "p_frame.grid(row=0, column=0, sticky=tk.NSEW)" in source
     assert "d_frame.grid(row=0, column=2, sticky=tk.NSEW)" in source
     assert "i_frame.grid(row=0, column=4, sticky=tk.NSEW)" in source
-    assert "listbox.grid(row=0, column=0, sticky=tk.NSEW)" in source
-    assert "y_scroll.grid(row=0, column=1, sticky=tk.NS)" in source
-    assert "x_scroll.grid(row=1, column=0, sticky=tk.EW)" in source
+    assert "listbox.grid(row=row, column=0, sticky=tk.NSEW)" in source
+    assert "y_scroll.grid(row=row, column=1, sticky=tk.NS)" in source
+    assert "x_scroll.grid(row=row + 1, column=0, sticky=tk.EW)" in source
     assert "layout_widths = tuple(widths)" in source
     assert "p_frame.pack(side=tk.LEFT" not in source
     assert "d_frame.pack(side=tk.LEFT" not in source
@@ -5866,6 +5960,73 @@ def test_image_selection_updates_load_button_enabled_state(tmp_path):
     assert result == "break"
     assert dialog.ilist.selection == set()
     assert dialog.load_btn.state == "disabled"
+
+
+def test_browser_search_filters_loaded_entities_by_partial_match():
+    """Verify browser search filters existing lists without server calls.
+
+    Inputs: repository fixtures. Output: fails on browser search regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._browser_search_vars = {
+        "projects": _FakeVar("pha"),
+        "datasets": _FakeVar("dose"),
+        "images": _FakeVar("nuc"),
+    }
+    dialog._browser_search_placeholder_visible = {
+        "projects": False,
+        "datasets": False,
+        "images": False,
+    }
+    dialog._browser_search_trace_suppressed = set()
+    dialog._all_projects_data = [
+        {"id": "p1", "name": "Alpha Project"},
+        {"id": "p2", "name": "Beta Project"},
+    ]
+    dialog._all_datasets_data = [
+        {"id": "d1", "name": "Dose Response"},
+        {"id": "d2", "name": "Control"},
+    ]
+    dialog._all_images_data = [
+        {
+            "id": "i1",
+            "name": "Nucleus channel",
+            "sizeX": 64,
+            "sizeY": 64,
+            "sizeZ": 8,
+        },
+        {
+            "id": "i2",
+            "name": "Membrane channel",
+            "sizeX": 64,
+            "sizeY": 64,
+            "sizeZ": 8,
+        },
+    ]
+    dialog.projects_data = list(dialog._all_projects_data)
+    dialog.datasets_data = list(dialog._all_datasets_data)
+    dialog.images_data = list(dialog._all_images_data)
+    dialog.plist = _FakeListbox(["Alpha Project", "Beta Project"], selection={0})
+    dialog.dlist = _FakeListbox(["Dose Response", "Control"], selection={0})
+    dialog.ilist = _FakeListbox(
+        ["Nucleus channel [64×64×8]", "Membrane channel [64×64×8]"],
+        selection={0, 1},
+    )
+    dialog._image_selection_anchor = 0
+    refresh_calls = []
+    dialog._refresh_load_button_text = lambda: refresh_calls.append("refresh")
+
+    module.OMEROBrowserDialog._apply_all_browser_search_filters(dialog)
+
+    assert dialog.projects_data == [{"id": "p1", "name": "Alpha Project"}]
+    assert dialog.datasets_data == [{"id": "d1", "name": "Dose Response"}]
+    assert [image["id"] for image in dialog.images_data] == ["i1"]
+    assert dialog.plist.items == ["Alpha Project"]
+    assert dialog.dlist.items == ["Dose Response"]
+    assert dialog.ilist.items == ["Nucleus channel [64×64×8]"]
+    assert dialog.ilist.selection == {0}
+    assert refresh_calls
 
 
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):

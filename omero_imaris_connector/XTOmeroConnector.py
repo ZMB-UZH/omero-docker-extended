@@ -214,6 +214,8 @@ FOLDER_PATH_SELECT_ACTIVE_BG = "#60738a"
 FOLDER_PATH_PLACEHOLDER = "Type or select local path..."
 FOLDER_PATH_PLACEHOLDER_FG = "#9ca3af"
 FOLDER_PATH_TEXT_FG = "#111827"
+BROWSER_SEARCH_PLACEHOLDER_FG = "#9ca3af"
+BROWSER_SEARCH_TEXT_FG = "#111827"
 LOCAL_PATH_WRITE_ERROR_TITLE = "Path Not Writable"
 LOCAL_PATH_WRITE_ERROR_MESSAGE = (
     "Please select or type an existing folder that Imaris can write to."
@@ -7052,6 +7054,9 @@ class OMEROBrowserDialog:
         self.imaris = imaris
         self.imaris_id = imaris_id
         self.client: Any = None
+        self._all_projects_data = []
+        self._all_datasets_data = []
+        self._all_images_data = []
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
@@ -7100,6 +7105,13 @@ class OMEROBrowserDialog:
         self.show_log_check: Any
         self.search_function_var: Any
         self.search_function_check: Any
+        self.append_observed_folders_var: Any
+        self.append_observed_folders_check: Any
+        self._browser_search_frames = {}
+        self._browser_search_entries = {}
+        self._browser_search_vars = {}
+        self._browser_search_placeholder_visible = {}
+        self._browser_search_trace_suppressed = set()
         self._modal_background_lock_depth = 0
         self._modal_background_cursor_restore = []
         self._modal_background_window_disabled = False
@@ -7373,6 +7385,13 @@ class OMEROBrowserDialog:
         )
         self.converter_slot.grid_propagate(False)
         self.converter_slot.pack_propagate(False)
+        self.append_observed_folders_var = tk.BooleanVar(value=False)
+        self.append_observed_folders_check = tk.Checkbutton(
+            self.converter_slot,
+            text="Append to observed folders",
+            variable=self.append_observed_folders_var,
+        )
+        self.append_observed_folders_check.pack(side=tk.LEFT)
         self.converter_frame = tk.Frame(self.converter_slot)
         self.converter_text_offset_spacer = tk.Frame(self.converter_frame, width=0)
         self.converter_text_offset_spacer.pack(side=tk.LEFT, fill=tk.Y)
@@ -7404,7 +7423,12 @@ class OMEROBrowserDialog:
             compact_height=True,
         )
         self.refresh_btn.pack(side=tk.RIGHT)
-        self.converter_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.converter_frame.pack(
+            side=tk.LEFT,
+            fill=tk.BOTH,
+            expand=True,
+            padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
+        )
         self.converter_frame.pack_forget()
         conn_frame.grid_columnconfigure(7, weight=1)
 
@@ -7505,7 +7529,8 @@ class OMEROBrowserDialog:
         # Projects
         p_frame = tk.LabelFrame(browser, text="Projects")
         p_frame.grid(row=0, column=0, sticky=tk.NSEW)
-        self.plist = self._build_scrolled_listbox(p_frame)
+        self._build_browser_search_entry(p_frame, "projects", "Projects")
+        self.plist = self._build_scrolled_listbox(p_frame, row=1)
         self.plist.bind("<<ListboxSelect>>", lambda e: self._sel_proj())
 
         self.browser_sash_1 = self._build_browser_sash(browser, 0)
@@ -7514,7 +7539,8 @@ class OMEROBrowserDialog:
         # Datasets
         d_frame = tk.LabelFrame(browser, text="Datasets")
         d_frame.grid(row=0, column=2, sticky=tk.NSEW)
-        self.dlist = self._build_scrolled_listbox(d_frame)
+        self._build_browser_search_entry(d_frame, "datasets", "Datasets")
+        self.dlist = self._build_scrolled_listbox(d_frame, row=1)
         self.dlist.bind("<<ListboxSelect>>", lambda e: self._sel_ds())
 
         self.browser_sash_2 = self._build_browser_sash(browser, 1)
@@ -7523,9 +7549,11 @@ class OMEROBrowserDialog:
         # Images
         i_frame = tk.LabelFrame(browser, text="Images")
         i_frame.grid(row=0, column=4, sticky=tk.NSEW)
+        self._build_browser_search_entry(i_frame, "images", "Images")
         self.ilist = self._build_scrolled_listbox(
             i_frame,
             selectmode=_tk_constant("EXTENDED", "extended"),
+            row=1,
         )
         self._configure_image_selection_bindings()
         self._apply_browser_panel_layout()
@@ -7619,6 +7647,7 @@ class OMEROBrowserDialog:
         )
         self._draw_connection_indicator("disconnected")
         self.root.bind("<Button-1>", self._clear_text_focus_on_non_input_click, add="+")
+        self._set_browser_search_visible(self._search_function_enabled())
         self._align_path_row_control_heights()
 
     def _clear_text_focus_on_non_input_click(self, event):
@@ -7634,11 +7663,55 @@ class OMEROBrowserDialog:
         if _widget_or_ancestor_is_text_input(focused_widget):
             self.root.focus_set()
 
+    def _build_browser_search_entry(self, parent, key, label):
+        """Build a browser-panel search entry.
+
+        Inputs: `parent`, `key`, `label`. Output: Tk frame containing the entry.
+        """
+        search_frame = tk.Frame(parent)
+        search_frame.grid(row=0, column=0, columnspan=2, sticky=tk.EW, padx=3, pady=3)
+        search_frame.grid_columnconfigure(0, weight=1)
+        search_frame.grid_columnconfigure(1, weight=1)
+        search_var = tk.StringVar(value="")
+        search_entry = tk.Entry(
+            search_frame,
+            textvariable=search_var,
+            font=("Arial", 10),
+            width=1,
+        )
+        search_entry.grid(row=0, column=0, sticky=tk.EW, ipady=4)
+        search_entry.bind(
+            "<FocusIn>",
+            lambda _event, search_key=key: self._hide_browser_search_placeholder(
+                search_key
+            ),
+        )
+        search_entry.bind(
+            "<FocusOut>",
+            lambda _event, search_key=key: self._show_browser_search_placeholder(
+                search_key
+            ),
+        )
+        trace_add = getattr(search_var, "trace_add", None)
+        if callable(trace_add):
+            trace_add(
+                "write",
+                lambda *_args, search_key=key: self._on_browser_search_changed(
+                    search_key
+                ),
+            )
+
+        self._browser_search_frames[key] = search_frame
+        self._browser_search_entries[key] = search_entry
+        self._browser_search_vars[key] = search_var
+        self._browser_search_placeholder_visible[key] = False
+        return search_frame
+
     @staticmethod
-    def _build_scrolled_listbox(parent, selectmode=None):
+    def _build_scrolled_listbox(parent, selectmode=None, row=0):
         """Build the scrolled listbox for `OMEROBrowserDialog`.
 
-        Inputs: `parent`, `selectmode`. Output: `listbox`.
+        Inputs: `parent`, `selectmode`, `row`. Output: `listbox`.
         """
         y_scroll = tk.Scrollbar(parent, orient=_tk_constant("VERTICAL", "vertical"))
         x_scroll = tk.Scrollbar(parent, orient=_tk_constant("HORIZONTAL", "horizontal"))
@@ -7651,11 +7724,11 @@ class OMEROBrowserDialog:
         )
         if selectmode is not None:
             listbox.config(selectmode=selectmode)
-        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(row, weight=1)
         parent.grid_columnconfigure(0, weight=1)
-        listbox.grid(row=0, column=0, sticky=tk.NSEW)
-        y_scroll.grid(row=0, column=1, sticky=tk.NS)
-        x_scroll.grid(row=1, column=0, sticky=tk.EW)
+        listbox.grid(row=row, column=0, sticky=tk.NSEW)
+        y_scroll.grid(row=row, column=1, sticky=tk.NS)
+        x_scroll.grid(row=row + 1, column=0, sticky=tk.EW)
         y_scroll.config(command=listbox.yview)
         x_scroll.config(command=listbox.xview)
         return listbox
@@ -8012,6 +8085,210 @@ class OMEROBrowserDialog:
         variable = getattr(self, "search_function_var", None)
         getter: Any = getattr(variable, "get", None)
         return bool(getter() if callable(getter) else False)
+
+    def _browser_search_placeholder(self, key):
+        """Return placeholder text for a browser search entry.
+
+        Inputs: `key`. Output: placeholder text.
+        """
+        label = {
+            "projects": "Projects",
+            "datasets": "Datasets",
+            "images": "Images",
+        }.get(key, "items")
+        return f"Type to search {label}"
+
+    def _set_browser_search_var_safely(self, key, value):
+        """Set a browser search variable without triggering filtering side effects.
+
+        Inputs: `key`, `value`. Output: None.
+        """
+        variable = getattr(self, "_browser_search_vars", {}).get(key)
+        setter = getattr(variable, "set", None)
+        if not callable(setter):
+            return
+        suppressed: Set[str] = getattr(
+            self,
+            "_browser_search_trace_suppressed",
+            set(),
+        )
+        suppressed.add(key)
+        self._browser_search_trace_suppressed = suppressed
+        try:
+            setter(value)
+        finally:
+            self._browser_search_trace_suppressed.discard(key)
+
+    def _show_browser_search_placeholder(self, key):
+        """Show search placeholder text when a search box is empty.
+
+        Inputs: `key`. Output: None.
+        """
+        if not self._search_function_enabled():
+            return
+        variable = getattr(self, "_browser_search_vars", {}).get(key)
+        getter = getattr(variable, "get", None)
+        current = str(getter() if callable(getter) else "")
+        if current:
+            return
+        self._set_browser_search_var_safely(
+            key,
+            self._browser_search_placeholder(key),
+        )
+        getattr(self, "_browser_search_placeholder_visible", {})[key] = True
+        entry = getattr(self, "_browser_search_entries", {}).get(key)
+        configure = getattr(entry, "config", None)
+        if callable(configure):
+            configure(fg=BROWSER_SEARCH_PLACEHOLDER_FG)
+
+    def _hide_browser_search_placeholder(self, key):
+        """Hide search placeholder text before user editing.
+
+        Inputs: `key`. Output: None.
+        """
+        if getattr(self, "_browser_search_placeholder_visible", {}).get(key, False):
+            self._set_browser_search_var_safely(key, "")
+        getattr(self, "_browser_search_placeholder_visible", {})[key] = False
+        entry = getattr(self, "_browser_search_entries", {}).get(key)
+        configure = getattr(entry, "config", None)
+        if callable(configure):
+            configure(fg=BROWSER_SEARCH_TEXT_FG)
+
+    def _browser_search_query(self, key):
+        """Return the active browser search query for a panel.
+
+        Inputs: `key`. Output: query text.
+        """
+        if getattr(self, "_browser_search_placeholder_visible", {}).get(key, False):
+            return ""
+        variable = getattr(self, "_browser_search_vars", {}).get(key)
+        getter = getattr(variable, "get", None)
+        return str(getter() if callable(getter) else "").strip()
+
+    @staticmethod
+    def _filter_entities_by_label(entities, labeler, query):
+        """Filter already-loaded entities by a case-insensitive partial label match.
+
+        Inputs: `entities`, `labeler`, `query`. Output: filtered entity list.
+        """
+        rows = list(entities or [])
+        query_text = str(query or "").strip().casefold()
+        if not query_text:
+            return rows
+        return [
+            entity
+            for entity in rows
+            if query_text in str(labeler(entity) or "").casefold()
+        ]
+
+    def _set_browser_search_visible(self, visible):
+        """Show or hide browser search boxes without changing the window size.
+
+        Inputs: `visible`. Output: None.
+        """
+        visible = bool(visible)
+        for key, frame in getattr(self, "_browser_search_frames", {}).items():
+            if visible:
+                grid = getattr(frame, "grid", None)
+                if callable(grid):
+                    grid()
+                self._show_browser_search_placeholder(key)
+            else:
+                getattr(self, "_browser_search_placeholder_visible", {})[key] = False
+                self._set_browser_search_var_safely(key, "")
+                grid_remove = getattr(frame, "grid_remove", None)
+                if callable(grid_remove):
+                    grid_remove()
+        self._apply_all_browser_search_filters()
+
+    def _on_browser_search_changed(self, key):
+        """Filter one browser panel after its search query changes.
+
+        Inputs: `key`. Output: None.
+        """
+        if key in getattr(self, "_browser_search_trace_suppressed", set()):
+            return
+        if getattr(self, "_browser_search_placeholder_visible", {}).get(key, False):
+            return
+        self._apply_browser_search_filter(key)
+
+    def _apply_all_browser_search_filters(self):
+        """Refresh all browser panels from current search queries.
+
+        Inputs: none. Output: None.
+        """
+        for key in ("projects", "datasets", "images"):
+            self._apply_browser_search_filter(key)
+
+    def _apply_browser_search_filter(self, key):
+        """Apply the current search filter to one already-loaded browser panel.
+
+        Inputs: `key`. Output: None.
+        """
+        if key == "projects":
+            if not hasattr(self, "plist"):
+                return
+            selected_id = self._current_selected_project_id()
+            self.projects_data = self._filter_entities_by_label(
+                getattr(self, "_all_projects_data", []),
+                self._project_list_label,
+                self._browser_search_query("projects"),
+            )
+            self._replace_listbox_items(
+                self.plist,
+                [self._project_list_label(project) for project in self.projects_data],
+            )
+            self._select_listbox_index(
+                self.plist,
+                self._find_entity_index(self.projects_data, selected_id),
+            )
+            return
+        if key == "datasets":
+            if not hasattr(self, "dlist"):
+                return
+            selected_id = self._current_selected_dataset_id()
+            self.datasets_data = self._filter_entities_by_label(
+                getattr(self, "_all_datasets_data", []),
+                self._dataset_list_label,
+                self._browser_search_query("datasets"),
+            )
+            self._replace_listbox_items(
+                self.dlist,
+                [self._dataset_list_label(dataset) for dataset in self.datasets_data],
+            )
+            self._select_listbox_index(
+                self.dlist,
+                self._find_entity_index(self.datasets_data, selected_id),
+            )
+            return
+        if key == "images":
+            if not hasattr(self, "ilist"):
+                return
+            selected_ids = {
+                self._entity_id(image)
+                for image in self._selected_images()
+                if self._entity_id(image) is not None
+            }
+            self.images_data = self._filter_entities_by_label(
+                getattr(self, "_all_images_data", []),
+                self._image_list_label,
+                self._browser_search_query("images"),
+            )
+            self._replace_listbox_items(
+                self.ilist,
+                [self._image_list_label(image) for image in self.images_data],
+            )
+            self._clear_listbox_selection(self.ilist)
+            first_selected_index = None
+            for index, image in enumerate(self.images_data):
+                if self._entity_id(image) in selected_ids:
+                    self.ilist.selection_set(index)
+                    if first_selected_index is None:
+                        first_selected_index = index
+            self._image_selection_anchor = first_selected_index
+            if first_selected_index is not None:
+                self._set_listbox_anchor(self.ilist, first_selected_index)
+            self._refresh_load_button_text()
 
     def _iter_modal_background_widgets(self):
         """Yield main-window widgets whose cursors must be neutral during modals.
@@ -8399,10 +8676,11 @@ class OMEROBrowserDialog:
             self._show_autosave_settings_error()
 
     def _on_search_function_changed(self):
-        """Persist the placeholder search-function setting immediately.
+        """Show or hide browser search boxes and persist the setting.
 
         Inputs: none. Output: None.
         """
+        self._set_browser_search_visible(self._search_function_enabled())
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
 
@@ -9001,7 +9279,12 @@ class OMEROBrowserDialog:
         self._align_path_row_control_heights()
         pack = getattr(self.converter_frame, "pack", None)
         if callable(pack):
-            pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            pack(
+                side=tk.LEFT,
+                fill=tk.BOTH,
+                expand=True,
+                padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
+            )
             return
         grid = getattr(self.converter_frame, "grid", None)
         if callable(grid):
@@ -9086,6 +9369,9 @@ class OMEROBrowserDialog:
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
+        self._all_projects_data = []
+        self._all_datasets_data = []
+        self._all_images_data = []
         self._image_selection_anchor = None
         self._set_folder_export_capability(False, "Connect to OMERO first.")
         self.plist.delete(0, _tk_constant("END", "end"))
@@ -10313,10 +10599,71 @@ class OMEROBrowserDialog:
         self._set_status("Connection failed", "#f8d7da")
         self._set_connection_indicator("error")
         self._connection_in_progress = False
-        self._show_error_dialog(
-            "Connection Failed",
-            "Cannot connect to OMERO server.\nPlease check your credentials.",
-        )
+        try:
+            self._show_error_dialog(
+                "Connection Failed",
+                "Cannot connect to OMERO server.\nPlease check your credentials.",
+            )
+        finally:
+            self._queue_connection_retry_focus()
+
+    def _queue_connection_retry_focus(self):
+        """Restore password-entry focus after a failed connection dialog.
+
+        Inputs: no caller arguments. Output: schedules or performs focus recovery.
+        """
+
+        def restore_focus():
+            """Restore main-window and password-entry focus for immediate retry.
+
+            Inputs: no caller arguments. Output: None.
+            """
+            self._set_main_window_disabled(False)
+            self._modal_background_lock_depth = 0
+            self._modal_background_window_disabled = False
+            root = getattr(self, "root", None)
+            for method_name in ("lift", "focus_force"):
+                method = getattr(root, method_name, None)
+                if callable(method):
+                    try:
+                        method()
+                    except Exception as exc:
+                        logger.debug(
+                            "Suppressed non-fatal exception in XTOmeroConnector.py",
+                            exc_info=exc,
+                        )
+            entry = getattr(self, "pass_entry", None)
+            focus_set = getattr(entry, "focus_set", None)
+            if callable(focus_set):
+                try:
+                    focus_set()
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
+            icursor = getattr(entry, "icursor", None)
+            if callable(icursor):
+                try:
+                    icursor(_tk_constant("END", "end"))
+                except Exception as exc:
+                    logger.debug(
+                        "Suppressed non-fatal exception in XTOmeroConnector.py",
+                        exc_info=exc,
+                    )
+
+        root = getattr(self, "root", None)
+        after = getattr(root, "after", None)
+        if callable(after):
+            try:
+                after(0, restore_focus)
+                return
+            except Exception as exc:
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
+        restore_focus()
 
     def _load_projects(self):
         """Load the projects for `OMEROBrowserDialog`.
@@ -10330,17 +10677,18 @@ class OMEROBrowserDialog:
 
         Inputs: `projects`. Output: updates browser lists.
         """
-        self.plist.delete(0, _tk_constant("END", "end"))
-        self.projects_data = list(projects or [])
+        self._all_projects_data = list(projects or [])
+        self.projects_data = list(self._all_projects_data)
         self._pid = None
         self._did = None
+        self._all_datasets_data = []
+        self._all_images_data = []
         self.datasets_data = []
         self.images_data = []
         self._image_selection_anchor = None
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
-        for p in self.projects_data:
-            self.plist.insert(_tk_constant("END", "end"), self._project_list_label(p))
+        self._apply_all_browser_search_filters()
 
     def _sel_proj(self):
         """Select the active project in the browser UI state.
@@ -10380,10 +10728,12 @@ class OMEROBrowserDialog:
         self.dlist.delete(0, _tk_constant("END", "end"))
         self.ilist.delete(0, _tk_constant("END", "end"))
         self._did = None
+        self._all_images_data = []
         self.images_data = []
-        self.datasets_data = self.client.list_datasets(self._pid)
-        for d in self.datasets_data:
-            self.dlist.insert(_tk_constant("END", "end"), self._dataset_list_label(d))
+        self._all_datasets_data = self.client.list_datasets(self._pid)
+        self.datasets_data = list(self._all_datasets_data)
+        self._apply_browser_search_filter("datasets")
+        self._apply_browser_search_filter("images")
         self._refresh_load_button_text()
 
     def _load_imgs(self, did):
@@ -10393,10 +10743,10 @@ class OMEROBrowserDialog:
         """
         self.ilist.delete(0, _tk_constant("END", "end"))
         self._did = did
-        self.images_data = self.client.list_images(did)
+        self._all_images_data = self.client.list_images(did)
+        self.images_data = list(self._all_images_data)
         self._image_selection_anchor = None
-        for img in self.images_data:
-            self.ilist.insert(_tk_constant("END", "end"), self._image_list_label(img))
+        self._apply_browser_search_filter("images")
         self._refresh_load_button_text()
 
     @classmethod
@@ -11077,15 +11427,15 @@ class OMEROBrowserDialog:
         datasets = list(datasets or [])
         images = list(images or [])
 
-        self.projects_data = projects
-        self._replace_listbox_items(
-            self.plist,
-            [self._project_list_label(project) for project in projects],
-        )
+        self._all_projects_data = projects
+        self.projects_data = list(projects)
+        self._apply_browser_search_filter("projects")
 
         if project_index is None:
             self._pid = None
             self._did = None
+            self._all_datasets_data = []
+            self._all_images_data = []
             self.datasets_data = []
             self.images_data = []
             self._image_selection_anchor = None
@@ -11104,16 +11454,19 @@ class OMEROBrowserDialog:
             self._restore_idle_connection_indicator()
             return
 
-        self._pid = self._entity_id(projects[project_index])
-        self._select_listbox_index(self.plist, project_index)
-        self.datasets_data = datasets
-        self._replace_listbox_items(
-            self.dlist,
-            [self._dataset_list_label(dataset) for dataset in datasets],
+        selected_project_id = self._entity_id(projects[project_index])
+        self._pid = selected_project_id
+        self._select_listbox_index(
+            self.plist,
+            self._find_entity_index(self.projects_data, selected_project_id),
         )
+        self._all_datasets_data = datasets
+        self.datasets_data = list(datasets)
+        self._apply_browser_search_filter("datasets")
 
         if dataset_index is None:
             self._did = None
+            self._all_images_data = []
             self.images_data = []
             self._image_selection_anchor = None
             self._replace_listbox_items(self.ilist, [])
@@ -11130,15 +11483,18 @@ class OMEROBrowserDialog:
             self._restore_idle_connection_indicator()
             return
 
-        self._did = self._entity_id(datasets[dataset_index])
-        self._select_listbox_index(self.dlist, dataset_index)
-        self.images_data = images
-        self._image_selection_anchor = None
-        self._replace_listbox_items(
-            self.ilist,
-            [self._image_list_label(img) for img in images],
+        selected_dataset_id = self._entity_id(datasets[dataset_index])
+        self._did = selected_dataset_id
+        self._select_listbox_index(
+            self.dlist,
+            self._find_entity_index(self.datasets_data, selected_dataset_id),
         )
+        self._all_images_data = images
+        self.images_data = list(images)
+        self._image_selection_anchor = None
+        self._apply_browser_search_filter("images")
         self._clear_listbox_selection(self.ilist)
+        self._image_selection_anchor = None
         self._refresh_load_button_text()
         self._set_status("OMERO browser refreshed", "#d4edda")
         self._finish_refresh_buttons()
