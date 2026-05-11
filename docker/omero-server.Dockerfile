@@ -646,9 +646,8 @@ RUN set -euo pipefail; \
             -exec rm -rf {} + 2>/dev/null || true; \
         find "${VENV_DIR}" -type f -name "*.pyc" -delete 2>/dev/null || true; \
     done; \
-    echo "=== Final security hardening: stripping shared libraries ==="; \
-    find /usr/lib64 /usr/lib -type f -name "*.so*" \
-        -exec sh -c 'strip --strip-unneeded "$1" 2>/dev/null || true' _ {} \; || true
+    echo "=== Final security hardening: preserving shared libraries ==="; \
+    echo "Skipping blanket shared-library stripping because it can corrupt critical runtime libraries."
 
 # Default the image to the application user. Compose explicitly requests root
 # only for managed startup bootstrap, then the entrypoint drops privileges.

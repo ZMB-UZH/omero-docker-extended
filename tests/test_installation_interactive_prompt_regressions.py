@@ -334,7 +334,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             compose_log = compose_log_path.read_text(encoding="utf-8").strip()
             docker_log = docker_log_path.read_text(encoding="utf-8")
             self.assertIn(
-                "build --progress plain --no-cache --provenance false",
+                "--progress plain build --no-cache --provenance false",
                 compose_log,
             )
             self.assertIn("builder prune --help", docker_log)

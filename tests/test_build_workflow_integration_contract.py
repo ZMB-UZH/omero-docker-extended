@@ -54,10 +54,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"', script_text
         )
         self.assertIn(
-            'local -a compose_build_args=(build --progress "${DOCKER_BUILD_PROGRESS:-plain}")',
+            'local -a compose_build_args=(--progress "${DOCKER_BUILD_PROGRESS:-plain}" build)',
             script_text,
         )
         self.assertNotIn("DOCKER_BUILD_SQUASH", script_text)
+
+    def test_installation_script_prints_global_progress_markers(self) -> None:
+        """Verify installer progress markers expose the global workflow position.
+
+        Inputs: repository fixtures. Output: fails on regressions in the global
+        installation progress indicator.
+        """
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'INSTALLATION_PROGRESS_TOTAL="${INSTALLATION_PROGRESS_TOTAL:-17}"',
+            script_text,
+        )
+        self.assertIn("installation_step()", script_text)
+        self.assertIn(
+            'echo "Installation step ${INSTALLATION_PROGRESS_CURRENT}/${INSTALLATION_PROGRESS_TOTAL}: ${label}"',
+            script_text,
+        )
+        self.assertEqual(script_text.count('installation_step "'), 17)
+        self.assertIn('installation_step "Collect operator choices"', script_text)
+        self.assertIn('installation_step "Build Docker images"', script_text)
+        self.assertIn('installation_step "Install optional tmp cleaner"', script_text)
+        self.assertIn(
+            'installation_step "Handle container startup and OMERO runtime bootstrap"',
+            script_text,
+        )
+        self.assertIn('installation_step "Clean build helper containers"', script_text)
 
     def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
         self,

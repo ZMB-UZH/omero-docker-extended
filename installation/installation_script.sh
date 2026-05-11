@@ -10,6 +10,8 @@ USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx 
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
 DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}" # plain progress is stable across terminal resize/reflow
+INSTALLATION_PROGRESS_TOTAL="${INSTALLATION_PROGRESS_TOTAL:-17}"
+INSTALLATION_PROGRESS_CURRENT=0
 APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}" # set to 0/1 to override the prompt; empty defaults the prompt to yes
 ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
@@ -125,6 +127,23 @@ is_positive_integer() {
         *[1-9]*) return 0 ;;
         *) return 1 ;;
     esac
+}
+
+
+# Print a global installation step marker. Inputs: label text. Output: stdout progress line.
+installation_step() {
+    local label="${1:?BUG: installation_step requires a label}"
+
+    if ! is_non_negative_integer "${INSTALLATION_PROGRESS_CURRENT:-}"; then
+        INSTALLATION_PROGRESS_CURRENT=0
+    fi
+    if ! is_positive_integer "${INSTALLATION_PROGRESS_TOTAL:-}"; then
+        INSTALLATION_PROGRESS_TOTAL=17
+    fi
+
+    INSTALLATION_PROGRESS_CURRENT=$((INSTALLATION_PROGRESS_CURRENT + 1))
+    echo ""
+    echo "Installation step ${INSTALLATION_PROGRESS_CURRENT}/${INSTALLATION_PROGRESS_TOTAL}: ${label}"
 }
 
 
@@ -621,7 +640,7 @@ run_image_build() {
         echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
         echo "  Vuln scan      : ${ENABLE_VULNERABILITY_SCAN}"
 
-        local -a compose_build_args=(build --progress "${DOCKER_BUILD_PROGRESS:-plain}")
+        local -a compose_build_args=(--progress "${DOCKER_BUILD_PROGRESS:-plain}" build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
             compose_build_args+=(--no-cache)
         fi
@@ -2898,6 +2917,8 @@ resolve_start_containers_choice() {
     return 0
 }
 
+installation_step "Collect operator choices"
+
 if ! resolve_delete_images_choice; then
     exit 1
 fi
@@ -2947,6 +2968,8 @@ fi
 # Export for the buildx compressed build script (reads APPLY_SECURITY_HARDENING env var)
 export APPLY_SECURITY_HARDENING
 
+installation_step "Resolve installation paths"
+
 DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
@@ -2995,6 +3018,8 @@ if declare -F install_transcript_publish_final_path_if_needed >/dev/null 2>&1; t
         "${SCRIPT_ENV_FILE}" \
         "${OMERO_DATA_PATH}"
 fi
+
+installation_step "Validate runtime environment configuration"
 
 if ! export_compose_interpolation_env; then
     exit 1
@@ -3130,6 +3155,8 @@ if ! validate_installation_path "${OMERO_TMP_PATH}"; then
     exit 1
 fi
 
+installation_step "Prepare installation and data directories"
+
 echo "Using installation paths from ${SCRIPT_ENV_FILE}"
 echo "Using docker compose .env file: ${OMERO_INSTALLATION_PATH%/}/.env"
 echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
@@ -3165,6 +3192,8 @@ if is_crowdsec_enabled; then
     if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
 fi
 
+installation_step "Persist Compose environment contracts"
+
 OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
@@ -3191,6 +3220,8 @@ if [ "${DEFAULT_OMERO_INSTALLATION_PATH%/}" != "${OMERO_INSTALLATION_PATH%/}" ];
         "${DEFAULT_OMERO_DATA_DIR}" \
         "${KEEP_IMAGES}"
 fi
+
+installation_step "Stop existing containers and remove selected images"
 
 echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
@@ -3230,6 +3261,8 @@ log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after dock
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
+
+installation_step "Clean stale locks and build caches"
 
 echo "Removing stale OMERO repository lock files from OMERO user data path..."
 if [ -d "${OMERO_USER_DATA_PATH}" ]; then
@@ -3418,10 +3451,14 @@ run_docker_scout_baseline_scan() {
     echo ""
 }
 
+installation_step "Run optional pre-build vulnerability baseline"
+
 # Phase 1: Pull and scan upstream base images for baseline (only when cache disabled).
 if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
     run_docker_scout_baseline_scan
 fi
+
+installation_step "Build Docker images"
 
 if ! run_image_build; then
     exit 1
@@ -3662,9 +3699,13 @@ run_docker_scout_summary() {
     # they will be used by docker compose up when containers start.
 }
 
+installation_step "Run optional post-build vulnerability report"
+
 if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
     run_docker_scout_summary
 fi
+
+installation_step "Discover image UID/GID values"
 
 echo ""
 echo "============================================"
@@ -4092,6 +4133,8 @@ else
 fi
 echo ""
 
+installation_step "Fix host bind-mount ownership"
+
 echo "========================================================"
 echo "Fixing host bind-mount ownership based on actual UID/GID"
 echo "========================================================"
@@ -4338,7 +4381,11 @@ install_quota_enforcer_if_supported() {
     return 0
 }
 
+installation_step "Install optional quota enforcer"
+
 install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
+
+installation_step "Prepare Admin Tools writable state"
 
 # Ensure .admin-tools directory exists and is writable by omeroweb container.
 # The quota enforcer installer creates this as root; the omeroweb container
@@ -4435,12 +4482,15 @@ print_binary_repository_cleanse_notice() {
     return 0
 }
 
+installation_step "Install optional tmp cleaner"
 install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
 
 prepare_crowdsec_install_bootstrap_enrollment
 print_crowdsec_install_bootstrap_status
+
+installation_step "Handle container startup and OMERO runtime bootstrap"
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     if [ "${CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}" = "1" ]; then
@@ -4493,6 +4543,8 @@ else
     echo ""
     print_binary_repository_cleanse_notice "deferred"
 fi
+
+installation_step "Clean build helper containers"
 
 # Cleanup build containers
 bash "${SCRIPT_DIR}/cleanup_build_containers.sh"
