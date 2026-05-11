@@ -113,7 +113,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             compose_log = log_path.read_text(encoding="utf-8").strip()
             self.assertIn(
-                "build --progress plain --no-cache --provenance false",
+                "--progress plain build --no-cache --provenance false",
                 compose_log,
             )
 

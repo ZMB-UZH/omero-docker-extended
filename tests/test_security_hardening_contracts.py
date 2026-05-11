@@ -42,13 +42,14 @@ class SecurityHardeningContractTests(unittest.TestCase):
             self.server_dockerfile,
         )
         self.assertIn(
-            'find /usr/lib64 /usr/lib -type f -name "*.so*" \\',
+            'echo "=== Final security hardening: preserving shared libraries ==="; \\',
             self.server_dockerfile,
         )
         self.assertIn(
-            "-exec sh -c 'strip --strip-unneeded \"$1\" 2>/dev/null || true' _ {} \\; || true",
+            "Skipping blanket shared-library stripping because it can corrupt critical runtime libraries.",
             self.server_dockerfile,
         )
+        self.assertNotIn("strip --strip-unneeded", self.server_dockerfile)
 
     def test_security_hardening_prompt_defaults_yes_while_scout_stays_opt_in(self):
         """Verify the security hardening prompt defaults yes while scout stays opt in safety boundary.

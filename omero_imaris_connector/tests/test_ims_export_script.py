@@ -931,6 +931,30 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     assert module._absolute_original_file_path("/data/source", "image.tif") is None
 
 
+def test_original_file_path_helpers_accept_windows_server_paths() -> None:
+    """Verify Windows server paths are preserved without POSIX resolution.
+
+    Inputs: repository script fixture. Output: fails on regressions in Windows
+    path handling for OMERO servers running on Windows.
+    """
+    module = _load_script_module()
+
+    managed_root = module._managed_repository_root_from_value(
+        "env", r"C:\OMERO\ManagedRepository"
+    )
+
+    assert isinstance(managed_root, module.PureWindowsPath)
+    assert str(managed_root) == r"C:\OMERO\ManagedRepository"
+    assert (
+        module._path_class_for_server_path(r"\\omero-server\ManagedRepository")
+        is module.PureWindowsPath
+    )
+    assert (
+        module._absolute_original_file_path(r"C:\data\source", "image.tif")
+        == r"C:\data\source\image.tif"
+    )
+
+
 def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
     monkeypatch, tmp_path
 ) -> None:

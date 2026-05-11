@@ -32,7 +32,7 @@ _PUBLIC_SCRIPT_MESSAGES = {
 }
 _CLI_OUTPUT_KEYS = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
 _CLI_OUTPUT_LINE_RE = re.compile(
-    r"^\s*(?:\*)?\s*(Message|Export_Path|Export_Name|File_Annotation_Id)"
+    r"^\s*(?:\*)?\s*([A-Za-z_][A-Za-z0-9_]*)"
     r"\s*(?:=|:|\t+|\s{2,})\s*(.*?)\s*$"
 )
 
