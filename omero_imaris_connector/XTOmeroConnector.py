@@ -4357,10 +4357,50 @@ def _folder_path_identity(path_value):
         return ""
 
 
-def _iter_imaris_arena_tree_state_tokens(tree_state):
-    """Yield `(token_name, value)` pairs from an Imaris Arena tree state string.
+def _expand_windows_environment_variables(path_value):
+    """Expand Windows-style environment variables in a local path string.
 
-    Inputs: `tree_state`. Output: yielded token tuples.
+    Inputs: `path_value`. Output: expanded path text.
+    """
+    try:
+        path_text = os.fspath(path_value)
+    except TypeError:
+        return ""
+    if isinstance(path_text, bytes):
+        return ""
+    path_text = str(path_text or "").strip()
+    if not path_text:
+        return ""
+
+    def replace_percent_var(match):
+        """Return the environment replacement for a `%VAR%` match.
+
+        Inputs: `match`. Output: replacement path fragment.
+        """
+        name = match.group(1)
+        for env_name, env_value in os.environ.items():
+            if env_name.upper() == name.upper():
+                return env_value
+        return match.group(0)
+
+    expanded = re.sub(r"%([^%]+)%", replace_percent_var, path_text)
+    return os.path.expanduser(os.path.expandvars(expanded))
+
+
+def _normalize_imaris_arena_folder_path(path_value):
+    """Return the folder path text written to Imaris Arena settings.
+
+    Inputs: `path_value`. Output: normalized folder path text.
+    """
+    expanded = _expand_windows_environment_variables(path_value)
+    normalizer = ntpath if _looks_like_windows_path(expanded) else os.path
+    return normalizer.normpath(expanded)
+
+
+def _iter_imaris_arena_tree_state_tokens(tree_state):
+    """Yield `(node_name, value)` pairs from an Imaris Arena tree state string.
+
+    Inputs: `tree_state`. Output: yielded Arena node tuples.
     """
     text = str(tree_state or "")
     matches = list(re.finditer(r"\[(Observed|Selected)\]", text))
@@ -4380,10 +4420,10 @@ def _imaris_arena_tree_state_has_observed_folder(tree_state, folder_path):
     target = _folder_path_identity(folder_path)
     if not target:
         return False
-    for token_name, token_value in _iter_imaris_arena_tree_state_tokens(tree_state):
-        if token_name != "Observed":
+    for node_name, node_value in _iter_imaris_arena_tree_state_tokens(tree_state):
+        if node_name != "Observed":
             continue
-        if _folder_path_identity(token_value) == target:
+        if _folder_path_identity(node_value) == target:
             return True
     return False
 
@@ -4462,12 +4502,13 @@ def _append_imaris_arena_observed_folder(
         if os.name != "nt":
             _xt_debug("Imaris Arena observed-folder append skipped: not Windows")
             return False
-        if not _is_structurally_valid_folder_path(folder_path):
+        folder_text = _normalize_imaris_arena_folder_path(folder_path)
+        if not _is_structurally_valid_folder_path(folder_text):
             _xt_debug(
                 "Imaris Arena observed-folder append skipped: invalid folder path"
             )
             return False
-        if not _safe_is_directory(folder_path):
+        if not _safe_is_directory(folder_text):
             _xt_debug(
                 "Imaris Arena observed-folder append skipped: folder does not exist"
             )
@@ -4487,7 +4528,6 @@ def _append_imaris_arena_observed_folder(
             _xt_debug("Imaris Arena observed-folder append skipped: no registry key")
             return False
 
-        folder_text = os.path.normpath(str(folder_path))
         last_error = None
         access = getattr(winreg_module, "KEY_READ", 0) | getattr(
             winreg_module, "KEY_WRITE", 0
@@ -4544,11 +4584,27 @@ def _append_imaris_arena_observed_folder(
                         value_type,
                         new_folder_list,
                     )
-                _xt_debug(
-                    "Imaris Arena observed-folder setting contains selected path: "
-                    f"{folder_text}"
+                verified_tree_state = _query_registry_string_value(
+                    winreg_module,
+                    key,
+                    IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE,
                 )
-                return True
+                verified_folder_list = _query_registry_string_value(
+                    winreg_module,
+                    key,
+                    IMARIS_ARENA_OBSERVED_FOLDERS_VALUE,
+                )
+                if _imaris_arena_tree_state_has_observed_folder(
+                    verified_tree_state, folder_text
+                ) or _imaris_arena_folder_list_has_folder(
+                    verified_folder_list, folder_text
+                ):
+                    _xt_debug(
+                        "Imaris Arena observed-folder setting contains selected path: "
+                        f"{folder_text}"
+                    )
+                    return True
+                last_error = OSError("registry write did not persist")
             except OSError as exc:
                 last_error = exc
             finally:
@@ -6608,7 +6664,7 @@ class OMEROWebClient:
         converter_available = (
             isinstance(converters, dict) and converters.get("OMERO") is True
         )
-        available = bool(payload.get("omero_ims_export") and converter_available)
+        available = payload.get("omero_ims_export") is True and converter_available
         if available:
             _xt_debug("OMERO converter: custom server-side IMS export is available")
         elif log_unavailable:

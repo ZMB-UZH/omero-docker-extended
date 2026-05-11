@@ -90,6 +90,10 @@ Notes:
 - By default, build targets are auto-discovered from the active rendered `docker compose config` output (services with a `build:` block in the currently enabled profile set).
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
+- `DOCKER_BUILD_PROGRESS` defaults to `plain` for both `docker compose build`
+  and Buildx helper paths. This keeps installer transcripts line-oriented and
+  stable when terminals are resized. Set it to another Docker-supported
+  progress mode only when you explicitly need interactive TTY progress.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
 - OMERO.web and OMERO.server image builds now harden Rocky package retrieval by
   default: retry transient `dnf` metadata/package fetch failures (for example

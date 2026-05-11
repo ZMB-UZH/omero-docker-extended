@@ -1387,9 +1387,24 @@ reset_runtime_if_requested() {
 # Configure script python. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_script_python() {
     local venv_py
+    local export_root
+    local wrapper_path
+    local wrapper_tmp
     venv_py="$(resolve_server_venv_python)"
-    run_omero config set omero.scripts.python "${venv_py}"
-    log "Configured omero.scripts.python=${venv_py}"
+    export_root="$(expected_ims_export_root)" || exit 1
+    wrapper_path="${SERVER_HOME%/}/bin/omero-scripts-python"
+    wrapper_tmp="${wrapper_path}.tmp"
+    mkdir -p "$(dirname "${wrapper_path}")"
+    {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'set -euo pipefail'
+        printf 'export OMERO_IMS_EXPORT_DIR=%q\n' "${export_root}"
+        printf 'exec %q "$@"\n' "${venv_py}"
+    } > "${wrapper_tmp}"
+    chmod 0755 "${wrapper_tmp}"
+    mv "${wrapper_tmp}" "${wrapper_path}"
+    run_omero config set omero.scripts.python "${wrapper_path}"
+    log "Configured omero.scripts.python=${wrapper_path}"
 }
 
 # Configure import runtime paths. Inputs: shell arguments and environment. Output: command status and side effects.

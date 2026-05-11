@@ -112,7 +112,10 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             compose_log = log_path.read_text(encoding="utf-8").strip()
-            self.assertIn("build --no-cache --provenance false", compose_log)
+            self.assertIn(
+                "build --progress plain --no-cache --provenance false",
+                compose_log,
+            )
 
     def test_dockerignore_excludes_live_runtime_data_from_build_context(
         self,

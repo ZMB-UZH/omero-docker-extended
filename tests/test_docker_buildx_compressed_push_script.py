@@ -257,6 +257,7 @@ exit 0
             )
 
             joined_bake_lines = "\n".join(bake_lines)
+            self.assertIn("--progress plain", joined_bake_lines)
             self.assertIn("omeroserver", joined_bake_lines)
             self.assertIn("omeroweb", joined_bake_lines)
             self.assertIn(
@@ -344,7 +345,7 @@ exit 0
                 joined_log,
             )
             self.assertIn(
-                "build --provenance false --file",
+                "build --progress plain --provenance false --file",
                 joined_log,
             )
             self.assertIn(
@@ -460,7 +461,9 @@ exit 0
                 "image tag omeroserver:custom omeroserver:custom__flatten_source_",
                 joined_log,
             )
-            self.assertIn("build --provenance false --file", joined_log)
+            self.assertIn(
+                "build --progress plain --provenance false --file", joined_log
+            )
             self.assertIn("image import", joined_log)
 
     def test_script_fails_when_flatten_metadata_inspect_fails(self) -> None:
@@ -511,7 +514,9 @@ exit 0
                 result.stderr,
             )
             joined_log = fake_log_path.read_text(encoding="utf-8")
-            self.assertIn("build --provenance false --file", joined_log)
+            self.assertIn(
+                "build --progress plain --provenance false --file", joined_log
+            )
             self.assertNotIn("container create --name flatten-omeroserver-", joined_log)
             self.assertNotIn("image import", joined_log)
 

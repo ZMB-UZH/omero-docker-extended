@@ -50,6 +50,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('DOCKER_BUILD_FLATTEN_ONLY="1"', script_text)
         self.assertIn("resolve_build_provenance_setting()", script_text)
         self.assertIn('--provenance "${provenance_setting}"', script_text)
+        self.assertIn(
+            'DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"', script_text
+        )
+        self.assertIn(
+            'local -a compose_build_args=(build --progress "${DOCKER_BUILD_PROGRESS:-plain}")',
+            script_text,
+        )
         self.assertNotIn("DOCKER_BUILD_SQUASH", script_text)
 
     def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
@@ -69,6 +76,41 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: docker compose build workflow failed.", script_text)
         self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
+
+    def test_installation_script_uses_line_oriented_compose_progress_and_single_user_probe(
+        self,
+    ) -> None:
+        """Verify installer output and image-user probing stay deterministic.
+
+        Inputs: repository fixtures. Output: fails on regressions in compose
+        progress mode and duplicate user-probe calls.
+        """
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-${DOCKER_BUILD_PROGRESS:-plain}}"',
+            script_text,
+        )
+        self.assertIn(
+            'BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-${DOCKER_BUILD_PROGRESS:-plain}}"',
+            script_text,
+        )
+        self.assertIn(
+            'local probe_name="omero-install-probe-user-$RANDOM"', script_text
+        )
+        self.assertIn(
+            'sh -c \'getent passwd "$1" >/dev/null 2>&1\' sh "${candidate}"',
+            script_text,
+        )
+        self.assertIn('sh -c \'id "$1" "$2"\' sh "${id_flag}"', script_text)
+        self.assertNotIn(
+            "getent passwd '${candidate}' >/dev/null 2>&1\" || true",
+            script_text,
+        )
+        self.assertNotIn("getent passwd '${candidate}'", script_text)
+        self.assertNotIn("id ${id_flag} '${user_name}'", script_text)
+        self.assertNotIn("omero-install-probe-user-*", script_text)
 
     def test_installation_script_runs_env_contract_check_before_workflow(self) -> None:
         """Verify the installation script runs env contract check before workflow execution contract.
@@ -1278,6 +1320,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("expected_ims_export_root()", script_text)
         self.assertIn("validate_ims_export_configuration", script_text)
         self.assertIn("configure_ims_export_runtime_paths", script_text)
+        self.assertIn(
+            'wrapper_path="${SERVER_HOME%/}/bin/omero-scripts-python"',
+            script_text,
+        )
+        self.assertIn("export OMERO_IMS_EXPORT_DIR=%q", script_text)
+        self.assertIn(
+            'run_omero config set omero.scripts.python "${wrapper_path}"',
+            script_text,
+        )
         self.assertIn(
             'run_omero config set "${OMERO_IMS_EXPORT_CONFIG_KEY}" "${export_root}"',
             script_text,

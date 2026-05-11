@@ -9,6 +9,7 @@ SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
+DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}" # plain progress is stable across terminal resize/reflow
 APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}" # set to 0/1 to override the prompt; empty defaults the prompt to yes
 ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
@@ -620,7 +621,7 @@ run_image_build() {
         echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
         echo "  Vuln scan      : ${ENABLE_VULNERABILITY_SCAN}"
 
-        local -a compose_build_args=(build)
+        local -a compose_build_args=(build --progress "${DOCKER_BUILD_PROGRESS:-plain}")
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
             compose_build_args+=(--no-cache)
         fi
@@ -758,6 +759,8 @@ compose_with_installation_env() {
     local compose_file="$1"
     shift
 
+    COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-${DOCKER_BUILD_PROGRESS:-plain}}" \
+    BUILDKIT_PROGRESS="${BUILDKIT_PROGRESS:-${DOCKER_BUILD_PROGRESS:-plain}}" \
     docker compose \
         --project-directory "${OMERO_INSTALLATION_PATH%/}" \
         -f "${compose_file}" \
@@ -3679,15 +3682,12 @@ discover_first_existing_user_or_die() {
 
     for candidate in "$@"; do
         [ -z "${candidate}" ] && continue
-        if docker run --rm --name "omero-install-probe-user-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1" || true; then
-            # We must verify if it successfully found it, wait, the previous line ignores exit codes via || true if not careful.
-            # Actually, `docker run ... || true` will always succeed. Let's fix this.
-            if docker run --rm --name "omero-install-probe-user-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
-                found="${candidate}"
-                break
-            fi
+        local probe_name="omero-install-probe-user-$RANDOM"
+        if docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c 'getent passwd "$1" >/dev/null 2>&1' sh "${candidate}"; then
+            found="${candidate}"
+            break
         fi
-        docker rm -fv "omero-install-probe-user-*" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
     done
 
     if [ -z "${found}" ]; then
@@ -3715,11 +3715,11 @@ discover_uid_gid_or_die() {
 
     local out=""
 
-    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
+    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c 'id "$1" "$2"' sh "${id_flag}" "${user_name}" 2>/dev/null)"; then
         docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
         local pass_probe="omero-install-probe-passwd-$RANDOM"
-        docker run --rm --name "${pass_probe}" --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
+        docker run --rm --name "${pass_probe}" --entrypoint "" "${image}" sh -c 'getent passwd "$1" || true' sh "${user_name}" >&2 || true
         docker rm -fv "${pass_probe}" >/dev/null 2>&1 || true
         return 1
     fi
