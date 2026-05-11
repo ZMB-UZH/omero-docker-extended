@@ -337,8 +337,8 @@ Verified diagnosis pattern:
 - The failure happens earlier, while OMERO tries to create the managed-repository directory tree for the import.
 - In the confirmed failing case on March 11, 2026:
   - the top-level repository directory object for `users_ldap` was `OriginalFile:227`
-  - that object was owned by `j.mateos`
-  - the failing uploader was `e.mitridis`
+  - that object was owned by `owner.user`
+  - the failing uploader was `import.user`
 - In the working comparison, the top-level directory object for the working private group was owned by the same user who was importing.
 
 Cause:

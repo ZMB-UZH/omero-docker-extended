@@ -381,7 +381,7 @@ def test_classify_import_failure_detects_parent_directory_write_denial():
     Inputs: import-job fakes. Output: fails on regressions in classify import failure detects parent directory write denial.
     """
     stderr = """
-    Joined session for e.mitridis@omeroserver:4064. Idle timeout: 10 min. Current group: users_ldap
+    Joined session for import.user@omeroserver:4064. Idle timeout: 10 min. Current group: users_ldap
     Error on import: No annotate access for parent directory: 227
     omero.SecurityViolation: null
     """
