@@ -2120,7 +2120,7 @@ def test_structural_folder_path_validation_accepts_absolute_paths(tmp_path):
     assert module._is_structurally_valid_folder_path(tmp_path) is True
     assert module._is_structurally_valid_folder_path(str(tmp_path)) is True
     assert module._is_structurally_valid_folder_path(r"\\server\share\folder") is True
-    assert module._is_structurally_valid_folder_path(f"\\\\?\\{tmp_path}") is True
+    assert module._is_structurally_valid_folder_path(r"\\?\C:\Data\folder") is True
 
 
 def test_structural_folder_path_validation_rejects_malformed_windows_paths():
@@ -7294,6 +7294,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         module, "_resolve_imaris_application", _resolve_imaris_application
     )
     if converter == "Imaris":
+        monkeypatch.setattr(module.os, "name", "nt", raising=False)
         imaris_root = tmp_path / "Imaris 11.0.0"
         imaris_root.mkdir()
         imaris_executable = imaris_root / "Imaris.exe"
@@ -7328,6 +7329,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     dialog._download_selected_image_with_imaris_converter = (
         _download_with_imaris_converter
     )
+    dialog._ensure_imaris_converter_handoff_ready_before_export = lambda: True
     dialog._set_status = _noop
     dialog._show_info = _noop
     dialog._show_error = lambda _title, message: errors.append(message)
@@ -7348,7 +7350,10 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         assert resolution_results == []
         assert launched == []
     else:
-        assert downloads == [(expected_download, 7, tmp_path)]
+        assert len(downloads) == 1
+        assert downloads[0][0] == expected_download
+        assert downloads[0][1] == 7
+        assert str(downloads[0][2]).replace("\\", "/") == str(tmp_path)
         assert opened == []
         assert dialog.imaris is None
         assert len(resolution_results) == 2
@@ -8967,6 +8972,87 @@ def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
     ]
 
 
+def test_load_omero_multi_selection_warns_only_first_image_opens(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify OMERO multi-selection confirmation explains first-image handoff.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on
+    regressions in the Imaris 11 OMERO converter multi-selection notice.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    first = {"id": 1, "name": "first"}
+    second = {"id": 2, "name": "second"}
+    dialog.images_data = [first, second]
+    dialog.ilist = types.SimpleNamespace(curselection=lambda: (0, 1))
+    dialog.converter_var = types.SimpleNamespace(get=lambda: "OMERO")
+    dialog._available_converter_options = ("OMERO",)
+    dialog.load_btn = types.SimpleNamespace(config=lambda **_kwargs: None)
+    dialog._connected = True
+    dialog.client = object()
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+    dialog._load_worker = lambda *_args: None
+    dialog._load_multiple_worker = lambda *_args: None
+    confirmations = []
+    threads = []
+    monkeypatch.setattr(
+        module.messagebox,
+        "askyesno",
+        lambda title, message: confirmations.append((title, message)) or True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showwarning",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.messagebox,
+        "showerror",
+        lambda *_args, **_kwargs: None,
+        raising=False,
+    )
+
+    class _FakeThread:
+        """Test double for fake thread."""
+
+        def __init__(self, target, args, daemon):
+            """Create `_FakeThread` with `target`, `args`, and `daemon`.
+
+            Inputs: `target`, `args`, `daemon`. Output: None.
+            """
+            threads.append({"target": target, "args": args, "daemon": daemon})
+
+        @staticmethod
+        def start():
+            """Start `_FakeThread`'s fake operation.
+
+            Inputs: caller provides no extra arguments. Output: records the fake side effect.
+            """
+            return None
+
+    monkeypatch.setattr(module.threading, "Thread", _FakeThread)
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert "Only the first selected image will be opened" in confirmations[0][1]
+    assert "selected folder" in confirmations[0][1]
+    assert str(tmp_path) in confirmations[0][1]
+    assert "Imaris 11 Workflow/Batch processing pipeline" in confirmations[0][1]
+    assert threads == [
+        {
+            "target": dialog._load_multiple_worker,
+            "args": ([first, second], "OMERO"),
+            "daemon": True,
+        }
+    ]
+
+
 def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly(
     tmp_path,
     monkeypatch,
@@ -9002,6 +9088,7 @@ def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly
         ),
     )
     dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._ensure_imaris_converter_handoff_ready_before_export = lambda: True
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog._show_info = lambda title, message: info_messages.append((title, message))
     dialog._show_error = lambda *_args, **_kwargs: None
@@ -9098,6 +9185,7 @@ def test_submit_selected_image_export_uses_discovered_imaris_file_converter(
     file_converter_executable = imaris_root / "ImarisFileConverter.exe"
     file_converter_executable.write_text("", encoding="utf-8")
     calls = []
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         module, "_find_imaris_executable", lambda: str(imaris_executable)
     )
@@ -9165,6 +9253,7 @@ def test_submit_selected_image_exports_uses_one_file_converter_batch(
     file_converter_executable = imaris_root / "ImarisFileConverter.exe"
     file_converter_executable.write_text("", encoding="utf-8")
     calls = []
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         module, "_find_imaris_executable", lambda: str(imaris_executable)
     )
@@ -9436,10 +9525,12 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     assert events == [
         ("download", 11, tmp_path, "img_11.ims"),
         ("download", 12, tmp_path, "img_12.ims"),
-        ("open", (str(first_ims), str(second_ims)), True, False),
+        ("open", (str(first_ims),), True, False),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
-    assert "after every download completed" in info_messages[0]
+    assert "Only the first selected image was opened" in info_messages[0]
+    assert str(tmp_path) in info_messages[0]
+    assert "Imaris 11 Workflow/Batch processing pipeline" in info_messages[0]
 
 
 def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
@@ -9486,6 +9577,7 @@ def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
         _download_with_imaris_converter
     )
     dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._ensure_imaris_converter_handoff_ready_before_export = lambda: True
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog._show_info = lambda title, message: info_messages.append((title, message))
     dialog._show_error = lambda *_args, **_kwargs: None
@@ -11140,14 +11232,22 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(tmp_path, monkeypatch)
 
     prepared = module._prepare_imaris_xt_environment()
     added_paths = prepared["paths"]
+    python3_path = module.os.path.normpath(str(imaris_root / "XT" / "python3"))
+    dlls_path = module.os.path.normpath(str(imaris_root / "XT" / "python3" / "DLLs"))
+    private_path = module.os.path.normpath(
+        str(imaris_root / "XT" / "python3" / "private")
+    )
+    ice_path = module.os.path.normpath(
+        str(imaris_root / "XT" / "python3" / "private" / "Ice")
+    )
 
-    assert str(imaris_root / "XT" / "python3") in added_paths
+    assert python3_path in added_paths
     assert module.sys.path[0] in added_paths
-    assert str(imaris_root / "XT" / "python3") in module.os.environ["PATH"]
-    assert str(imaris_root / "XT" / "python3" / "DLLs") in prepared["dll_dirs"]
-    assert str(imaris_root / "XT" / "python3" / "private") in added_paths
-    assert str(imaris_root / "XT" / "python3" / "private" / "Ice") in added_dll_dirs
-    assert str(imaris_root / "XT" / "python3" / "DLLs") in added_dll_dirs
+    assert python3_path in module.os.environ["PATH"]
+    assert dlls_path in prepared["dll_dirs"]
+    assert private_path in added_paths
+    assert ice_path in added_dll_dirs
+    assert dlls_path in added_dll_dirs
     module.sys.path[:] = original_sys_path
     monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
 
@@ -11202,12 +11302,14 @@ def test_collect_imaris_xt_diagnostics_skips_unloaded_native_bridge_imports(
 
     diagnostics = module._collect_imaris_xt_diagnostics()
     diagnostic_paths = {entry["path"] for entry in diagnostics["xt_candidate_paths"]}
+    private_path_text = module.os.path.normpath(str(private_path))
+    ice_path_text = module.os.path.normpath(str(ice_path))
 
     assert diagnostics["python_version_short"]
     assert diagnostics["imaris_executable_exists"] is True
     assert "has_add_dll_directory" in diagnostics
-    assert str(private_path) in diagnostic_paths
-    assert str(ice_path) in diagnostic_paths
+    assert private_path_text in diagnostic_paths
+    assert ice_path_text in diagnostic_paths
     assert diagnostics["imarislib_import"]["ok"] is False
     assert "in-process import skipped" in diagnostics["imarislib_import"]["error"]
     assert diagnostics["icepy_import"]["ok"] is False

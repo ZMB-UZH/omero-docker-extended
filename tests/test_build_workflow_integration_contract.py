@@ -7,6 +7,7 @@ from iter_test_helpers import next_or_fail
 import unittest
 from pathlib import Path
 import re
+import shutil
 import subprocess
 
 
@@ -837,8 +838,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 script_path = self.repo_root / relative_path
                 script_text = script_path.read_text(encoding="utf-8")
+                git_executable = shutil.which("git")
+                self.assertIsNotNone(
+                    git_executable,
+                    "git executable is required to check tracked file modes.",
+                )
                 git_mode = subprocess.check_output(
-                    ["git", "ls-files", "-s", relative_path],
+                    [git_executable, "ls-files", "-s", relative_path],
                     cwd=self.repo_root,
                     text=True,
                     encoding="utf-8",
