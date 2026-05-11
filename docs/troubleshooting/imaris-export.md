@@ -276,9 +276,13 @@ Operational rule:
   the OMERO login succeeds. `Show log` defaults to enabled for new users, is
   immediately written when toggled, and controls whether normal command-window
   log output is shown on the next startup. `Search function` defaults to
-  disabled for new users and is persisted immediately when toggled; its runtime
-  behavior is reserved for a later connector iteration. After a verified
-  connection, the connector writes `.imaris_omero_connector/settings.env` under
+  disabled for new users and is persisted immediately when toggled. When enabled
+  it shows local search fields for Projects, Datasets, and Images, each filtering
+  the already-loaded panel by case-insensitive partial text without issuing
+  additional OMERO requests. The path-row `Append to observed folders` checkbox
+  is visible but intentionally not connected to any runtime behavior until the
+  observed-folder integration is implemented. After a verified connection, the
+  connector writes `.imaris_omero_connector/settings.env` under
   the detected user home with only host, port, username, HTTPS state, local
   path, selected converter, autosave state, show-log state, search-function
   state, the cached `IMARIS_EXE` path when discovered, and the connector

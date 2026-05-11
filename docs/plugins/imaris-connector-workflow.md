@@ -219,6 +219,14 @@ The `Imaris` path requires a TIFF/BigTIFF file that was downloaded and tracked
 by the same dialog instance as a selected Image export, then submits that file
 to the installed Imaris File Converter.
 
+## Browser search
+
+When `Search function` is enabled, the XT dialog shows search fields directly
+above the Projects, Datasets, and Images lists. The fields filter only the data
+already loaded into each panel, using case-insensitive partial text matching, so
+typing does not trigger additional OMERO.web requests or background conversion
+work. Clearing a search restores the full loaded list for that panel.
+
 ## Multi-image loading
 
 Multi-image loading uses the same converter-specific preparation as single-image
@@ -292,6 +300,8 @@ The regression suite covers the critical contracts:
   `ImarisFileConverter.exe`.
 - Multi-image `Imaris` loads submit all selected Image exports in one File
   Converter batch.
+- Browser search filters already-loaded Projects, Datasets, and Images by
+  partial text without additional server calls.
 - The `OMERO` path rejects non-HDF5 IMS download responses.
 - Single-image and multi-image load workers require converter-specific valid
   outputs before Imaris handoff.
