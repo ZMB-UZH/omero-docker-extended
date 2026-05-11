@@ -218,12 +218,21 @@ class _FakeListbox:
         """
         return tuple(sorted(self.selection))
 
-    def selection_clear(self, *_args):
+    def selection_clear(self, *args):
         """Record the selection clear call on `_FakeListbox` for later assertions.
 
-        Inputs: `*_args`. Output: None.
+        Inputs: `*args`. Output: None.
         """
-        self.selection.clear()
+        if not args:
+            self.selection.clear()
+            return
+        start = int(args[0])
+        end = args[1] if len(args) > 1 else start
+        if end in {"end", "END"}:
+            end = len(self.items) - 1
+        end = int(end)
+        for index in range(start, end + 1):
+            self.selection.discard(index)
 
     def selection_set(self, index):
         """Record the selection set call on `_FakeListbox` for later assertions.
@@ -407,6 +416,170 @@ class _ImmediateThread:
         Inputs: none. Output: target return value.
         """
         return self.target(*self.args, **self.kwargs)
+
+
+class _FakeRegistryKey:
+    """Registry key test double."""
+
+    def __init__(self, path):
+        """Create fake registry key.
+
+        Inputs: `path`. Output: initialized fake key.
+        """
+        self.path = path
+        self.closed = False
+
+    def Close(self):
+        """Record key close.
+
+        Inputs: none. Output: None.
+        """
+        self.closed = True
+
+    def __enter__(self):
+        """Enter a context-managed fake key.
+
+        Inputs: none. Output: `self`.
+        """
+        return self
+
+    def __exit__(self, *_args):
+        """Exit a context-managed fake key.
+
+        Inputs: ignored. Output: bool.
+        """
+        self.Close()
+        return False
+
+
+class _FakeArenaWinreg:
+    """Small winreg fake for Imaris Arena observed-folder registry tests."""
+
+    HKEY_CURRENT_USER = "HKCU"
+    KEY_READ = 1
+    KEY_WRITE = 2
+    REG_SZ = 1
+
+    def __init__(
+        self,
+        root_path,
+        *,
+        subkeys=(),
+        existing_paths=(),
+        values=None,
+        open_errors=None,
+        set_error=None,
+    ):
+        """Create fake registry storage.
+
+        Inputs: registry root, subkeys, existing paths, values, error controls.
+        Output: initialized fake winreg module.
+        """
+        self.root_path = root_path
+        self.subkeys = list(subkeys)
+        self.existing_paths = set(existing_paths)
+        self.values = dict(values or {})
+        self.open_errors = dict(open_errors or {})
+        self.set_error = set_error
+        self.open_calls = []
+        self.writes = []
+        self.create_calls = []
+
+    def OpenKey(self, root, key_path, _reserved=0, access=0):
+        """Open an existing fake key.
+
+        Inputs: registry open arguments. Output: `_FakeRegistryKey`.
+        """
+        self.open_calls.append((root, key_path, access))
+        if key_path in self.open_errors:
+            raise self.open_errors[key_path]
+        if root != self.HKEY_CURRENT_USER:
+            raise OSError(key_path)
+        if key_path == self.root_path:
+            return _FakeRegistryKey(key_path)
+        if key_path in self.existing_paths:
+            return _FakeRegistryKey(key_path)
+        raise OSError(key_path)
+
+    def CreateKeyEx(self, *args):
+        """Fail if production code tries to create Arena keys in tests.
+
+        Inputs: registry create arguments. Output: never returns.
+        """
+        self.create_calls.append(args)
+        raise AssertionError("Arena append must not create registry keys")
+
+    def EnumKey(self, key, index):
+        """Return a fake subkey by index.
+
+        Inputs: `key`, `index`. Output: subkey name.
+        """
+        if key.path != self.root_path:
+            raise OSError(key.path)
+        try:
+            return self.subkeys[index]
+        except IndexError as exc:
+            raise OSError(index) from exc
+
+    def QueryValueEx(self, key, value_name):
+        """Return a fake registry value or raise when absent.
+
+        Inputs: `key`, `value_name`. Output: `(value, type)`.
+        """
+        try:
+            return self.values[(key.path, value_name)], self.REG_SZ
+        except KeyError as exc:
+            raise OSError(value_name) from exc
+
+    def SetValueEx(self, key, value_name, _reserved, value_type, value):
+        """Store a fake registry value.
+
+        Inputs: registry value arguments. Output: None.
+        """
+        if self.set_error is not None:
+            raise self.set_error
+        self.writes.append((key.path, value_name, value_type, value))
+        self.values[(key.path, value_name)] = value
+
+
+def _allow_fake_arena_folder_on_any_host(module, monkeypatch):
+    """Permit fake Arena registry tests to use pytest temp folders.
+
+    Inputs: XT `module`, pytest `monkeypatch`. Output: None.
+    """
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        module, "_is_structurally_valid_folder_path", lambda _path: True
+    )
+    monkeypatch.setattr(module, "_safe_is_directory", lambda _path: True)
+
+
+def _make_load_dialog(module, folder_path, *, append_enabled=True, converter="OMERO"):
+    """Create a minimal dialog that can execute `_load` without a Tk root.
+
+    Inputs: XT `module`, `folder_path`, options. Output: dialog object.
+    """
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    image = {"id": 1, "name": "single"}
+    dialog._connected = True
+    dialog.client = object()
+    dialog._refresh_in_progress = False
+    dialog.images_data = [image]
+    dialog.ilist = _FakeListbox(["single"], selection={0})
+    dialog.converter_var = _FakeVar(converter)
+    dialog._available_converter_options = (converter,)
+    dialog.folder_path_var = _FakeVar(str(folder_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog._folder_path_write_state = "unchecked"
+    dialog.load_btn = _FakeButton()
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog.append_observed_folders_var = _FakeVar(append_enabled)
+    dialog._saved_settings = {}
+    dialog._show_warning_dialog = _noop
+    dialog._show_error_dialog = _noop
+    dialog._set_converter_options = _noop
+    return dialog
 
 
 def _make_refresh_dialog(module):
@@ -2214,6 +2387,46 @@ def test_select_local_folder_replaces_typed_path_after_native_selection(
     ]
 
 
+def test_select_local_folder_does_not_append_to_arena_before_load(
+    tmp_path, monkeypatch
+):
+    """Ensure browsing waits for Load before changing Arena state.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: asserts folder
+    selection leaves Arena untouched before the user starts loading images.
+    """
+    module = _load_xt_module()
+    selected_folder = tmp_path / "selected"
+    selected_folder.mkdir()
+    appended = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = object()
+    dialog.folder_path_var = _FakeVar("")
+    dialog.append_observed_folders_var = _FakeVar(True)
+    dialog._folder_path_placeholder_visible = False
+    dialog._saved_settings = {}
+    dialog._connected = False
+
+    monkeypatch.setattr(
+        module.filedialog,
+        "askdirectory",
+        lambda **_kwargs: str(selected_folder),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda folder_path, imaris_executable=None: (
+            appended.append((folder_path, imaris_executable)) or True
+        ),
+    )
+
+    module.OMEROBrowserDialog._select_local_folder(dialog)
+
+    assert appended == []
+
+
 def test_select_local_folder_cancel_preserves_typed_path(tmp_path, monkeypatch):
     """Verify cancelling native folder selection preserves the typed path.
 
@@ -2481,6 +2694,178 @@ def test_load_checks_typed_path_write_permission_before_confirmation(
     ]
     assert confirmations == []
     assert dialog.load_btn.state == "disabled"
+
+
+def test_load_appends_observed_folder_after_confirmation_before_worker(
+    tmp_path, monkeypatch
+):
+    """Ensure Load triggers Arena append before worker startup.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts load-time
+    side-effect ordering remains stable.
+    """
+    module = _load_xt_module()
+    events = []
+    dialog = _make_load_dialog(module, tmp_path, append_enabled=True)
+    dialog._ask_yes_no_dialog = lambda title, _message: (
+        events.append(("confirm", title)) or True
+    )
+    dialog._set_actions_busy_for_load = lambda active: events.append(("busy", active))
+
+    class _RecordingThread:
+        """Thread fake that records creation and start without running target."""
+
+        def __init__(self, target, args=(), kwargs=None, daemon=None):
+            """Create recording thread.
+
+            Inputs: thread constructor arguments. Output: initialized fake thread.
+            """
+            events.append(("thread", target.__name__, args, daemon))
+
+        def start(self):
+            """Record thread start.
+
+            Inputs: none. Output: None.
+            """
+            events.append(("thread_start",))
+
+    monkeypatch.setattr(module.threading, "Thread", _RecordingThread)
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda folder_path, imaris_executable=None: (
+            events.append(("append", folder_path, imaris_executable)) or True
+        ),
+    )
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert events[0] == ("confirm", "Confirm Load")
+    assert events[1] == ("append", str(tmp_path), None)
+    assert events[2] == ("busy", True)
+    assert events[3][0:2] == ("thread", "_load_worker")
+    assert events[4] == ("thread_start",)
+
+
+def test_load_cancel_does_not_append_observed_folder(tmp_path, monkeypatch):
+    """Ensure cancelled Load leaves Arena and workers untouched.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts cancelled
+    loads do not produce side effects.
+    """
+    module = _load_xt_module()
+    events = []
+    dialog = _make_load_dialog(module, tmp_path, append_enabled=True)
+    dialog._ask_yes_no_dialog = lambda title, _message: (
+        events.append(("confirm", title)) and False
+    )
+    dialog._set_actions_busy_for_load = lambda active: events.append(("busy", active))
+
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("cancelled Load must not append Arena folders")
+        ),
+    )
+    monkeypatch.setattr(
+        module.threading,
+        "Thread",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("cancelled Load must not start workers")
+        ),
+    )
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert events == [("confirm", "Confirm Load")]
+
+
+def test_load_with_append_disabled_does_not_touch_arena(tmp_path, monkeypatch):
+    """Ensure disabled append setting suppresses Load-time Arena writes.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts disabled
+    settings do not reach registry append.
+    """
+    module = _load_xt_module()
+    events = []
+    dialog = _make_load_dialog(module, tmp_path, append_enabled=False)
+    dialog._ask_yes_no_dialog = lambda *_args: True
+    dialog._set_actions_busy_for_load = lambda active: events.append(("busy", active))
+
+    class _RecordingThread:
+        """Thread fake that records start without running worker."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Create fake thread.
+
+            Inputs: ignored. Output: None.
+            """
+
+        def start(self):
+            """Record start.
+
+            Inputs: none. Output: None.
+            """
+            events.append(("thread_start",))
+
+    monkeypatch.setattr(module.threading, "Thread", _RecordingThread)
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("disabled append must not touch Arena")
+        ),
+    )
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert events == [("busy", True), ("thread_start",)]
+
+
+def test_load_observed_folder_append_failure_logs_and_continues(tmp_path, monkeypatch):
+    """Ensure Arena append failures never block image loading.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts append
+    failures are contained and worker startup continues.
+    """
+    module = _load_xt_module()
+    events = []
+    logs = []
+    dialog = _make_load_dialog(module, tmp_path, append_enabled=True)
+    dialog._ask_yes_no_dialog = lambda *_args: True
+    dialog._set_actions_busy_for_load = lambda active: events.append(("busy", active))
+
+    class _RecordingThread:
+        """Thread fake that records start without running worker."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Create fake thread.
+
+            Inputs: ignored. Output: None.
+            """
+
+        def start(self):
+            """Record start.
+
+            Inputs: none. Output: None.
+            """
+            events.append(("thread_start",))
+
+    monkeypatch.setattr(module.threading, "Thread", _RecordingThread)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    module.OMEROBrowserDialog._load(dialog)
+
+    assert events == [("busy", True), ("thread_start",)]
+    assert logs == [
+        "Imaris Arena observed-folder append failed while loading: RuntimeError: boom"
+    ]
 
 
 def test_folder_path_write_check_rejects_missing_directory(tmp_path):
@@ -2766,6 +3151,7 @@ def test_connector_settings_version_prepare_creates_new_file_with_defaults(tmp_p
     assert loaded[module.CONNECTOR_SETTINGS_AUTOSAVE_KEY] == "true"
     assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "true"
     assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "false"
+    assert loaded[module.CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY] == "false"
 
 
 def test_connector_first_boot_records_discovered_imaris_exe_in_settings(
@@ -2920,6 +3306,7 @@ def test_connector_settings_version_prepare_preserves_same_version_settings(tmp_
     assert "# keep operator comments" in content
     assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
     assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "false"
+    assert loaded[module.CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY] == "false"
     assert (
         loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
     )
@@ -3111,6 +3498,7 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
         module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        module.CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: "false",
         module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: "",
         module.CONNECTOR_SETTINGS_VERSION_KEY: module.CONNECTOR_INFO_VERSION,
     }
@@ -3255,6 +3643,347 @@ def test_search_function_toggle_updates_settings_immediately_without_password(
     assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
     assert "PASSWORD" not in content
     assert "super-secret" not in content
+
+
+def test_append_observed_folders_toggle_updates_settings_only(
+    tmp_path,
+    monkeypatch,
+):
+    """Ensure the observed-folders toggle only updates connector settings.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: asserts the
+    toggle leaves Arena untouched before the user starts loading images.
+    """
+    module = _load_xt_module()
+    export_folder = tmp_path / "exports"
+    export_folder.mkdir()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
+    fake_winreg = _FakeArenaWinreg(module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT)
+    settings_path = module._connector_settings_env_path(tmp_path / "home")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: str(imaris_exe)}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
+    dialog.append_observed_folders_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(export_folder))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog._show_autosave_settings_error = _noop
+
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(module, "_import_winreg_module", lambda: fake_winreg)
+
+    monkeypatch.setattr(
+        module,
+        "_append_imaris_arena_observed_folder",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("toggle must not touch Imaris Arena")
+        ),
+    )
+
+    module.OMEROBrowserDialog._on_append_observed_folders_changed(dialog)
+    content = settings_path.read_text(encoding="utf-8")
+    assert module.CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY + '="true"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+    assert fake_winreg.values == {}
+    assert fake_winreg.writes == []
+    assert fake_winreg.create_calls == []
+
+
+def test_imaris_arena_observed_folder_tree_state_appends_once():
+    """Verify Arena tree-state helper appends without changing the selected item.
+
+    Inputs: repository fixtures. Output: fails on tree-state serialization
+    regressions.
+    """
+    module = _load_xt_module()
+    current = r"[Observed]C:\old[Selected]C:\old"
+
+    updated = module._append_imaris_arena_tree_state_observed_folder(
+        current,
+        r"C:\new",
+    )
+    duplicate = module._append_imaris_arena_tree_state_observed_folder(
+        updated,
+        r"C:\new\\",
+    )
+
+    assert updated == r"[Observed]C:\old[Observed]C:\new[Selected]C:\old"
+    assert duplicate == updated
+
+
+def test_imaris_arena_observed_folder_appends_to_existing_key_only(
+    tmp_path, monkeypatch
+):
+    """Verify Arena append writes both known values through an existing key.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on registry
+    write-shape regressions.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "custom" / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir(parents=True)
+    imaris_exe.write_text("", encoding="utf-8")
+    key_path = module._imaris_arena_registry_key_from_executable(str(imaris_exe))
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE): "",
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): "",
+        },
+    )
+    logs = []
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: None)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is True
+    assert fake_winreg.create_calls == []
+    assert (
+        fake_winreg.values[
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE)
+        ]
+        == f"[Observed]{tmp_path}[Selected]{tmp_path}"
+    )
+    assert fake_winreg.values[
+        (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE)
+    ] == str(tmp_path)
+    assert len(fake_winreg.writes) == 2
+    assert logs[-1].startswith(
+        "Imaris Arena observed-folder setting contains selected path:"
+    )
+
+
+def test_imaris_arena_observed_folder_existing_tree_state_does_not_write(
+    tmp_path, monkeypatch
+):
+    """Ensure existing tree-state entries prevent duplicate registry writes.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts duplicate
+    observed-folder writes are not attempted.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
+    key_path = module._imaris_arena_registry_key_from_executable(str(imaris_exe))
+    tree_state = f"[Observed]{tmp_path}\\[Selected]{tmp_path}\\"
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (
+                key_path,
+                module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE,
+            ): tree_state,
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): "",
+        },
+    )
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is True
+    assert fake_winreg.writes == []
+    assert fake_winreg.create_calls == []
+
+
+def test_imaris_arena_observed_folder_existing_list_value_does_not_write(
+    tmp_path, monkeypatch
+):
+    """Ensure existing list entries are not duplicated or rewritten.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts an existing
+    observed folder causes no extra writes.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
+    key_path = module._imaris_arena_registry_key_from_executable(str(imaris_exe))
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE): "",
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): (
+                f"C:\\old;{tmp_path}\\"
+            ),
+        },
+    )
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is True
+    assert fake_winreg.writes == []
+    assert fake_winreg.create_calls == []
+
+
+def test_imaris_arena_observed_folder_missing_key_logs_without_create(
+    tmp_path, monkeypatch
+):
+    """Ensure missing Arena registry keys only log and return false.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts missing
+    registry state creates no keys and raises no errors.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
+    fake_winreg = _FakeArenaWinreg(module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT)
+    logs = []
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: None)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is False
+    assert fake_winreg.create_calls == []
+    assert fake_winreg.writes == []
+    assert logs[-1].startswith("Imaris Arena observed-folder append failed:")
+
+
+def test_imaris_arena_observed_folder_write_failure_logs_without_raising(
+    tmp_path, monkeypatch
+):
+    """Ensure registry write errors are logged without raising.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts write
+    failures stay inside the append helper.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir()
+    imaris_exe.write_text("", encoding="utf-8")
+    key_path = module._imaris_arena_registry_key_from_executable(str(imaris_exe))
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE): "",
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): "",
+        },
+        set_error=OSError("denied"),
+    )
+    logs = []
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is False
+    assert fake_winreg.create_calls == []
+    assert logs[-1].startswith("Imaris Arena observed-folder append failed:")
+
+
+def test_imaris_arena_observed_folder_invalid_or_missing_path_skips_registry(
+    tmp_path, monkeypatch
+):
+    """Ensure invalid or missing folders never open the registry.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts invalid
+    paths do not reach registry handling.
+    """
+    module = _load_xt_module()
+    fake_winreg = _FakeArenaWinreg(module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT)
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+
+    invalid_result = module._append_imaris_arena_observed_folder(
+        "relative-folder",
+        imaris_executable=r"C:\Imaris 11.0.0\Imaris.exe",
+        winreg_module=fake_winreg,
+    )
+    missing_result = module._append_imaris_arena_observed_folder(
+        str(tmp_path / "missing"),
+        imaris_executable=r"C:\Imaris 11.0.0\Imaris.exe",
+        winreg_module=fake_winreg,
+    )
+
+    assert invalid_result is False
+    assert missing_result is False
+    assert fake_winreg.open_calls == []
+    assert fake_winreg.writes == []
+    assert fake_winreg.create_calls == []
+
+
+def test_imaris_arena_registry_fallback_requires_unambiguous_existing_key(
+    tmp_path, monkeypatch
+):
+    """Ensure fallback registry selection refuses ambiguous versions.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: asserts ambiguous
+    version fallback writes to no assumed Arena key.
+    """
+    module = _load_xt_module()
+    key_10 = (
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT
+        + r"\Imaris x64 10.1\DataManagementSystem"
+    )
+    key_11 = (
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT
+        + r"\Imaris x64 11.0\DataManagementSystem"
+    )
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 10.1", "Imaris x64 11.0"),
+        existing_paths={key_10, key_11},
+    )
+    logs = []
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: None)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=None,
+        winreg_module=fake_winreg,
+    )
+
+    assert result is False
+    assert fake_winreg.writes == []
+    assert fake_winreg.create_calls == []
+    assert any("ambiguous registry version" in message for message in logs)
 
 
 def test_autosave_write_failure_logs_and_keeps_dialog_usable(tmp_path, monkeypatch):
@@ -4145,28 +4874,47 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     )
     assert 'text="Autosave settings"' in source
     assert 'text="Show log"' in source
-    assert 'text="Search function"' in source
+    assert 'text="Search"' in source
+    assert 'text="Search function"' not in source
     assert 'text="Save settings"' not in source
     assert 'state=_tk_constant("DISABLED", "disabled")' in source
     assert "command=self._on_autosave_settings_changed" in source
     assert "command=self._on_show_log_changed" in source
     assert "command=self._on_search_function_changed" in source
-    assert "self.append_observed_folders_var = tk.BooleanVar(value=False)" in source
+    assert "default_append_observed_folders = _connector_settings_bool(" in source
+    assert (
+        "self.append_observed_folders_var = tk.BooleanVar(\n"
+        "            value=default_append_observed_folders\n"
+        "        )" in source
+    )
     assert "self.append_observed_folders_check = tk.Checkbutton(" in source
     append_source = source[
         source.index(
             "self.append_observed_folders_check = tk.Checkbutton("
         ) : source.index("self.converter_frame = tk.Frame(self.converter_slot)")
     ]
-    assert 'text="Append to observed folders"' in append_source
+    assert 'text="Append to Observed Folders"' in append_source
     assert "variable=self.append_observed_folders_var" in append_source
-    assert "command=" not in append_source
+    assert "command=self._on_append_observed_folders_changed" in append_source
     assert "self.append_observed_folders_check.pack(side=tk.LEFT)" in source
+    assert 'text="Append to observed folders"' not in source
     assert "bg=FOLDER_PATH_SELECT_BG" in source
     assert "activebackground=FOLDER_PATH_SELECT_ACTIVE_BG" in source
     assert "width=96" in source
     assert "height=38" in source
     assert "compact_height=True" in source
+    assert 'selectmode=_tk_constant("MULTIPLE", "multiple")' in source
+    assert 'selectmode=_tk_constant("EXTENDED", "extended")' not in source
+    assert (
+        'self.ilist.bind("<B1-Motion>", self._block_image_listbox_native_selection)'
+        in source
+    )
+    assert (
+        "self.ilist.bind(\n"
+        '            "<ButtonRelease-1>",\n'
+        "            self._block_image_listbox_native_selection,\n"
+        "        )" in source
+    )
     assert "def _align_path_row_control_heights(self):" in source
     assert 'getattr(self, "folder_path_entry", None), "winfo_height"' in source
     assert (
@@ -5060,7 +5808,7 @@ def test_autosave_settings_is_pinned_separately_from_right_aligned_icons():
     assert "self.autosave_settings_check.pack(side=tk.LEFT)" in source
     assert 'text="Show log"' in source
     assert "command=self._on_show_log_changed" in source
-    assert 'text="Search function"' in source
+    assert 'text="Search"' in source
     assert "command=self._on_search_function_changed" in source
     assert "padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0)" in source
     assert "self.converter_text_offset_spacer.pack(side=tk.LEFT, fill=tk.Y)" in source
@@ -5900,6 +6648,59 @@ def test_images_ctrl_click_toggles_single_selection_and_updates_anchor():
     assert result == "break"
     assert dialog.ilist.selection == {0, 2}
     assert dialog._image_selection_anchor == 2
+
+
+def test_images_ctrl_deselect_keeps_other_selected_items_stable():
+    """Ensure ctrl-deselect removes only the clicked image.
+
+    Inputs: repository fixtures. Output: asserts image selection keeps every
+    non-clicked selected row during a deselect gesture.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.ilist = _FakeListbox(items=["a", "b", "c", "d"], selection={0, 1, 2})
+    dialog._image_selection_anchor = 1
+
+    result = dialog._on_image_listbox_click(
+        types.SimpleNamespace(widget=dialog.ilist, y=1, state=0x0004)
+    )
+    motion_result = dialog._block_image_listbox_native_selection(
+        types.SimpleNamespace(widget=dialog.ilist)
+    )
+    release_result = dialog._block_image_listbox_native_selection(
+        types.SimpleNamespace(widget=dialog.ilist)
+    )
+
+    assert result == "break"
+    assert motion_result == "break"
+    assert release_result == "break"
+    assert dialog.ilist.selection == {0, 2}
+    assert dialog._image_selection_anchor == 1
+
+
+def test_image_selection_native_followup_events_block_only_image_listbox():
+    """Ensure native selection blocking is scoped to the Images listbox.
+
+    Inputs: repository fixtures. Output: asserts event blocking stays limited to
+    image selections.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.ilist = _FakeListbox(items=["a"], selection={0})
+    other_widget = object()
+
+    assert (
+        dialog._block_image_listbox_native_selection(
+            types.SimpleNamespace(widget=dialog.ilist)
+        )
+        == "break"
+    )
+    assert (
+        dialog._block_image_listbox_native_selection(
+            types.SimpleNamespace(widget=other_widget)
+        )
+        is None
+    )
 
 
 def test_images_panel_click_sets_focus_for_native_border_highlight():
@@ -7514,7 +8315,9 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         assert len(downloads) == 1
         assert downloads[0][0] == expected_download
         assert downloads[0][1] == 7
-        assert str(downloads[0][2]).replace("\\", "/") == str(tmp_path)
+        assert str(downloads[0][2]).replace("\\", "/") == str(tmp_path).replace(
+            "\\", "/"
+        )
         assert opened == []
         assert dialog.imaris is None
         assert len(resolution_results) == 2

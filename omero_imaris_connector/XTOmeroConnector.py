@@ -263,8 +263,16 @@ CONNECTOR_SETTINGS_SHOW_LOG_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "SHOW_LOG"
 CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY = (
     CONNECTOR_SETTINGS_KEY_PREFIX + "SEARCH_FUNCTION"
 )
+CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY = (
+    CONNECTOR_SETTINGS_KEY_PREFIX + "APPEND_OBSERVED_FOLDERS"
+)
 CONNECTOR_SETTINGS_IMARIS_EXE_KEY = "IMARIS_EXE"
 CONNECTOR_SETTINGS_VERSION_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "VERSION"
+IMARIS_ARENA_DATA_MANAGEMENT_SUBKEY = "DataManagementSystem"
+IMARIS_ARENA_VENDOR_REGISTRY_ROOT = r"Software\Bitplane"
+IMARIS_ARENA_OBSERVED_FOLDERS_LIST_NAME = "Observed Folders"
+IMARIS_ARENA_OBSERVED_FOLDERS_VALUE = IMARIS_ARENA_OBSERVED_FOLDERS_LIST_NAME
+IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE = "Observed Folders_TreeState"
 CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_HOST_KEY,
     CONNECTOR_SETTINGS_PORT_KEY,
@@ -275,6 +283,7 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
     CONNECTOR_SETTINGS_SHOW_LOG_KEY,
     CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY,
+    CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY,
     CONNECTOR_SETTINGS_IMARIS_EXE_KEY,
     CONNECTOR_SETTINGS_VERSION_KEY,
 )
@@ -1519,6 +1528,7 @@ def _default_connector_settings_for_current_version():
         CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
         CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: "false",
     }
 
 
@@ -1679,6 +1689,7 @@ def _prepare_connector_settings_for_current_version(settings_path=None):
             )
             return True
 
+        settings.setdefault(CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY, "false")
         _atomic_write_connector_settings(settings, target)
         return True
     except (OSError, TypeError, ValueError) as exc:
@@ -4164,6 +4175,402 @@ def _import_winreg_module():
     except ImportError:
         return None
     return winreg_module
+
+
+def _imaris_arena_registry_version_from_executable(imaris_executable):
+    """Return the major.minor Imaris registry version for an executable path.
+
+    Inputs: `imaris_executable`. Output: version text or None.
+    """
+    candidate = _coerce_path(imaris_executable)
+    if candidate is None:
+        return None
+    path_parts = []
+    with contextlib.suppress(Exception):
+        path_parts.append(candidate.parent.name)
+    with contextlib.suppress(Exception):
+        path_parts.append(candidate.parent.parent.name)
+    for path_part in path_parts:
+        match = re.search(
+            r"\bImaris(?:\s+x64)?\s*(\d+)(?:\.(\d+))?",
+            str(path_part or ""),
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return f"{match.group(1)}.{match.group(2) or '0'}"
+    return None
+
+
+def _imaris_arena_registry_key_from_executable(imaris_executable):
+    """Return the HKCU Imaris Arena DataManagementSystem registry key path.
+
+    Inputs: `imaris_executable`. Output: registry key path or None.
+    """
+    version = _imaris_arena_registry_version_from_executable(imaris_executable)
+    if not version:
+        return None
+    return (
+        rf"{IMARIS_ARENA_VENDOR_REGISTRY_ROOT}\Imaris x64 {version}"
+        rf"\{IMARIS_ARENA_DATA_MANAGEMENT_SUBKEY}"
+    )
+
+
+def _imaris_arena_registry_version_tuple(version_text):
+    """Return a sortable version tuple from an Imaris registry version string.
+
+    Inputs: `version_text`. Output: version tuple or None.
+    """
+    match = re.match(r"^\s*(\d+)(?:\.(\d+))?\s*$", str(version_text or ""))
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2) or 0)
+
+
+def _imaris_arena_registry_version_from_key_name(key_name):
+    """Return the Imaris major.minor registry version from a subkey name.
+
+    Inputs: `key_name`. Output: version text or None.
+    """
+    match = re.match(
+        r"^Imaris(?:\s+x64)?(?:\s+(\d+)(?:\.(\d+))?)?$",
+        str(key_name or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match or not match.group(1):
+        return None
+    return f"{match.group(1)}.{match.group(2) or '0'}"
+
+
+def _imaris_arena_close_registry_key(key):
+    """Close a registry key object when it exposes a close method.
+
+    Inputs: `key`. Output: None.
+    """
+    close = getattr(key, "Close", None)
+    if callable(close):
+        with contextlib.suppress(Exception):
+            close()
+
+
+def _iter_existing_imaris_arena_registry_key_paths(winreg_module):
+    """Yield existing HKCU Imaris Arena DataManagementSystem registry keys.
+
+    Inputs: `winreg_module`. Output: yielded `(version_tuple, key_path)` values.
+    """
+    if winreg_module is None:
+        return
+    root_key = None
+    try:
+        root_key = winreg_module.OpenKey(
+            winreg_module.HKEY_CURRENT_USER,
+            IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+            0,
+            getattr(winreg_module, "KEY_READ", 0),
+        )
+        index = 0
+        while True:
+            try:
+                subkey_name = winreg_module.EnumKey(root_key, index)
+            except OSError:
+                break
+            index += 1
+            version = _imaris_arena_registry_version_from_key_name(subkey_name)
+            version_tuple = _imaris_arena_registry_version_tuple(version)
+            if version_tuple is None:
+                continue
+            key_path = (
+                rf"{IMARIS_ARENA_VENDOR_REGISTRY_ROOT}\{subkey_name}"
+                rf"\{IMARIS_ARENA_DATA_MANAGEMENT_SUBKEY}"
+            )
+            arena_key = None
+            try:
+                arena_key = winreg_module.OpenKey(
+                    winreg_module.HKEY_CURRENT_USER,
+                    key_path,
+                    0,
+                    getattr(winreg_module, "KEY_READ", 0),
+                )
+            except OSError:
+                continue
+            finally:
+                _imaris_arena_close_registry_key(arena_key)
+            yield version_tuple, key_path
+    except OSError:
+        return
+    finally:
+        _imaris_arena_close_registry_key(root_key)
+
+
+def _imaris_arena_registry_key_candidates(imaris_executable, winreg_module):
+    """Return candidate HKCU Arena registry key paths for the current Imaris.
+
+    Inputs: optional `imaris_executable`, `winreg_module`. Output: tuple of paths.
+    """
+    expected_version = _imaris_arena_registry_version_from_executable(imaris_executable)
+    candidates = []
+    expected_path = _imaris_arena_registry_key_from_executable(imaris_executable)
+    if expected_path:
+        candidates.append(expected_path)
+
+    existing_paths = tuple(
+        _iter_existing_imaris_arena_registry_key_paths(winreg_module)
+    )
+    if expected_version:
+        expected_tuple = _imaris_arena_registry_version_tuple(expected_version)
+        for version_tuple, key_path in existing_paths:
+            if version_tuple == expected_tuple:
+                candidates.append(key_path)
+    elif len(existing_paths) == 1:
+        candidates.append(existing_paths[0][1])
+    elif len(existing_paths) > 1:
+        _xt_debug(
+            "Imaris Arena observed-folder append skipped: ambiguous registry version"
+        )
+
+    unique_candidates = []
+    seen = set()
+    for key_path in candidates:
+        if key_path and key_path not in seen:
+            seen.add(key_path)
+            unique_candidates.append(key_path)
+    return tuple(unique_candidates)
+
+
+def _folder_path_identity(path_value):
+    """Return a normalized identity for folder path comparisons.
+
+    Inputs: `path_value`. Output: normalized path text or empty string.
+    """
+    try:
+        path_text = os.fspath(path_value)
+    except TypeError:
+        return ""
+    if isinstance(path_text, bytes):
+        return ""
+    path_text = str(path_text or "").strip()
+    if not path_text:
+        return ""
+    normalizer = ntpath if _looks_like_windows_path(path_text) else os.path
+    try:
+        return normalizer.normcase(normalizer.normpath(path_text))
+    except (TypeError, ValueError):
+        return ""
+
+
+def _iter_imaris_arena_tree_state_tokens(tree_state):
+    """Yield `(token_name, value)` pairs from an Imaris Arena tree state string.
+
+    Inputs: `tree_state`. Output: yielded token tuples.
+    """
+    text = str(tree_state or "")
+    matches = list(re.finditer(r"\[(Observed|Selected)\]", text))
+    for index, match in enumerate(matches):
+        value_start = match.end()
+        value_end = (
+            matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        )
+        yield match.group(1), text[value_start:value_end]
+
+
+def _imaris_arena_tree_state_has_observed_folder(tree_state, folder_path):
+    """Return whether a tree state already observes `folder_path`.
+
+    Inputs: `tree_state`, `folder_path`. Output: bool.
+    """
+    target = _folder_path_identity(folder_path)
+    if not target:
+        return False
+    for token_name, token_value in _iter_imaris_arena_tree_state_tokens(tree_state):
+        if token_name != "Observed":
+            continue
+        if _folder_path_identity(token_value) == target:
+            return True
+    return False
+
+
+def _append_imaris_arena_tree_state_observed_folder(tree_state, folder_path):
+    """Return tree state text with `folder_path` present as an observed folder.
+
+    Inputs: `tree_state`, `folder_path`. Output: updated tree state text.
+    """
+    text = str(tree_state or "")
+    folder_text = str(folder_path or "").strip()
+    if not folder_text:
+        return text
+    if _imaris_arena_tree_state_has_observed_folder(text, folder_text):
+        return text
+    observed_token = f"[Observed]{folder_text}"
+    if not text:
+        return f"{observed_token}[Selected]{folder_text}"
+    selected_index = text.find("[Selected]")
+    if selected_index >= 0:
+        return text[:selected_index] + observed_token + text[selected_index:]
+    return text + observed_token
+
+
+def _imaris_arena_folder_list_has_folder(folder_list, folder_path):
+    """Return whether an Arena folder list value already contains `folder_path`.
+
+    Inputs: `folder_list`, `folder_path`. Output: bool.
+    """
+    target = _folder_path_identity(folder_path)
+    if not target:
+        return False
+    parts = re.split(r"[;\r\n]+", str(folder_list or ""))
+    return any(_folder_path_identity(part) == target for part in parts if part.strip())
+
+
+def _append_imaris_arena_folder_list_value(folder_list, folder_path):
+    """Return an Arena folder-list value with `folder_path` appended once.
+
+    Inputs: `folder_list`, `folder_path`. Output: updated folder-list text.
+    """
+    text = str(folder_list or "")
+    folder_text = str(folder_path or "").strip()
+    if not folder_text:
+        return text
+    if _imaris_arena_folder_list_has_folder(text, folder_text):
+        return text
+    if not text:
+        return folder_text
+    separator = "\n" if "\n" in text and ";" not in text else ";"
+    return text.rstrip() + separator + folder_text
+
+
+def _query_registry_string_value(winreg_module, key, value_name):
+    """Return a registry string value or empty string when absent.
+
+    Inputs: `winreg_module`, opened `key`, `value_name`. Output: string value.
+    """
+    try:
+        value, _value_type = winreg_module.QueryValueEx(key, value_name)
+    except OSError:
+        return ""
+    return str(value or "")
+
+
+def _append_imaris_arena_observed_folder(
+    folder_path, imaris_executable=None, winreg_module=None
+):
+    """Append an existing folder to Imaris Arena observed folders.
+
+    Inputs: `folder_path`, optional `imaris_executable`, optional `winreg_module`.
+    Output: bool indicating whether the folder is present or was written.
+    """
+    key = None
+    try:
+        if os.name != "nt":
+            _xt_debug("Imaris Arena observed-folder append skipped: not Windows")
+            return False
+        if not _is_structurally_valid_folder_path(folder_path):
+            _xt_debug(
+                "Imaris Arena observed-folder append skipped: invalid folder path"
+            )
+            return False
+        if not _safe_is_directory(folder_path):
+            _xt_debug(
+                "Imaris Arena observed-folder append skipped: folder does not exist"
+            )
+            return False
+
+        winreg_module = winreg_module or _import_winreg_module()
+        if winreg_module is None:
+            _xt_debug("Imaris Arena observed-folder append skipped: winreg unavailable")
+            return False
+
+        imaris_executable = imaris_executable or _find_imaris_executable()
+        key_paths = _imaris_arena_registry_key_candidates(
+            imaris_executable,
+            winreg_module,
+        )
+        if not key_paths:
+            _xt_debug("Imaris Arena observed-folder append skipped: no registry key")
+            return False
+
+        folder_text = os.path.normpath(str(folder_path))
+        last_error = None
+        access = getattr(winreg_module, "KEY_READ", 0) | getattr(
+            winreg_module, "KEY_WRITE", 0
+        )
+        for key_path in key_paths:
+            key = None
+            try:
+                key = winreg_module.OpenKey(
+                    winreg_module.HKEY_CURRENT_USER,
+                    key_path,
+                    0,
+                    access,
+                )
+                tree_state = _query_registry_string_value(
+                    winreg_module,
+                    key,
+                    IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE,
+                )
+                folder_list = _query_registry_string_value(
+                    winreg_module,
+                    key,
+                    IMARIS_ARENA_OBSERVED_FOLDERS_VALUE,
+                )
+                if _imaris_arena_tree_state_has_observed_folder(
+                    tree_state, folder_text
+                ) or _imaris_arena_folder_list_has_folder(folder_list, folder_text):
+                    _xt_debug(
+                        "Imaris Arena observed-folder setting already contains "
+                        f"selected path; no registry write needed: {folder_text}"
+                    )
+                    return True
+                new_tree_state = _append_imaris_arena_tree_state_observed_folder(
+                    tree_state,
+                    folder_text,
+                )
+                new_folder_list = _append_imaris_arena_folder_list_value(
+                    folder_list,
+                    folder_text,
+                )
+                value_type = getattr(winreg_module, "REG_SZ", 1)
+                if new_tree_state != tree_state:
+                    winreg_module.SetValueEx(
+                        key,
+                        IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE,
+                        0,
+                        value_type,
+                        new_tree_state,
+                    )
+                if new_folder_list != folder_list:
+                    winreg_module.SetValueEx(
+                        key,
+                        IMARIS_ARENA_OBSERVED_FOLDERS_VALUE,
+                        0,
+                        value_type,
+                        new_folder_list,
+                    )
+                _xt_debug(
+                    "Imaris Arena observed-folder setting contains selected path: "
+                    f"{folder_text}"
+                )
+                return True
+            except OSError as exc:
+                last_error = exc
+            finally:
+                _imaris_arena_close_registry_key(key)
+        if last_error is not None:
+            _xt_debug(
+                "Imaris Arena observed-folder append failed: "
+                f"{type(last_error).__name__}: {last_error}"
+            )
+        else:
+            _xt_debug("Imaris Arena observed-folder append failed: no key opened")
+        return False
+    except OSError as exc:
+        _xt_debug(
+            f"Imaris Arena observed-folder append failed: {type(exc).__name__}: {exc}"
+        )
+        return False
+    except Exception as exc:
+        _xt_debug(
+            f"Imaris Arena observed-folder append failed: {type(exc).__name__}: {exc}"
+        )
+        return False
 
 
 def _imaris_registry_locations(winreg_module):
@@ -7228,6 +7635,10 @@ class OMEROBrowserDialog:
         default_search_function = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY), False
         )
+        default_append_observed_folders = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY),
+            False,
+        )
 
         self.host_label = self._connection_label(conn_frame, "Host:")
         self.host_label.grid(
@@ -7359,7 +7770,7 @@ class OMEROBrowserDialog:
         )
         self.search_function_check = tk.Checkbutton(
             self.autosave_settings_frame,
-            text="Search function",
+            text="Search",
             variable=self.search_function_var,
             command=self._on_search_function_changed,
         )
@@ -7385,11 +7796,14 @@ class OMEROBrowserDialog:
         )
         self.converter_slot.grid_propagate(False)
         self.converter_slot.pack_propagate(False)
-        self.append_observed_folders_var = tk.BooleanVar(value=False)
+        self.append_observed_folders_var = tk.BooleanVar(
+            value=default_append_observed_folders
+        )
         self.append_observed_folders_check = tk.Checkbutton(
             self.converter_slot,
-            text="Append to observed folders",
+            text="Append to Observed Folders",
             variable=self.append_observed_folders_var,
+            command=self._on_append_observed_folders_changed,
         )
         self.append_observed_folders_check.pack(side=tk.LEFT)
         self.converter_frame = tk.Frame(self.converter_slot)
@@ -7552,7 +7966,7 @@ class OMEROBrowserDialog:
         self._build_browser_search_entry(i_frame, "images", "Images")
         self.ilist = self._build_scrolled_listbox(
             i_frame,
-            selectmode=_tk_constant("EXTENDED", "extended"),
+            selectmode=_tk_constant("MULTIPLE", "multiple"),
             row=1,
         )
         self._configure_image_selection_bindings()
@@ -8078,13 +8492,50 @@ class OMEROBrowserDialog:
         return bool(getter() if callable(getter) else True)
 
     def _search_function_enabled(self):
-        """Return whether the placeholder search option is selected.
+        """Return whether the browser search option is selected.
 
         Inputs: none. Output: bool.
         """
         variable = getattr(self, "search_function_var", None)
         getter: Any = getattr(variable, "get", None)
         return bool(getter() if callable(getter) else False)
+
+    def _append_observed_folders_enabled(self):
+        """Return whether selected paths should be appended to Imaris Arena.
+
+        Inputs: none. Output: bool.
+        """
+        variable = getattr(self, "append_observed_folders_var", None)
+        getter: Any = getattr(variable, "get", None)
+        return bool(getter() if callable(getter) else False)
+
+    def _append_current_path_to_imaris_arena_if_enabled(self):
+        """Append the current local folder path to Imaris Arena when enabled.
+
+        Inputs: none. Output: bool.
+        """
+        if not self._append_observed_folders_enabled():
+            return False
+        folder_path = self._current_local_folder_path()
+        if not _is_structurally_valid_folder_path(folder_path):
+            return False
+        if not _safe_is_directory(folder_path):
+            return False
+        imaris_executable = _filled_connector_setting(
+            getattr(self, "_saved_settings", {}),
+            CONNECTOR_SETTINGS_IMARIS_EXE_KEY,
+        )
+        try:
+            return _append_imaris_arena_observed_folder(
+                folder_path,
+                imaris_executable=imaris_executable or None,
+            )
+        except Exception as exc:
+            _xt_debug(
+                "Imaris Arena observed-folder append failed while loading: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return False
 
     def _browser_search_placeholder(self, key):
         """Return placeholder text for a browser search entry.
@@ -8521,6 +8972,9 @@ class OMEROBrowserDialog:
             CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: _connector_settings_bool_text(
                 self._search_function_enabled()
             ),
+            CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: _connector_settings_bool_text(
+                self._append_observed_folders_enabled()
+            ),
             CONNECTOR_SETTINGS_IMARIS_EXE_KEY: imaris_executable,
             CONNECTOR_SETTINGS_VERSION_KEY: _current_connector_settings_version(),
         }
@@ -8684,6 +9138,14 @@ class OMEROBrowserDialog:
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
 
+    def _on_append_observed_folders_changed(self):
+        """Persist the Imaris Arena observed-folder append setting.
+
+        Inputs: none. Output: None.
+        """
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+
     def _enable_autosave_after_verified_connection(self):
         """Enable autosave controls and persist verified connection settings.
 
@@ -8813,12 +9275,13 @@ class OMEROBrowserDialog:
             )
             if error:
                 self._show_folder_path_write_error()
-            elif (
-                getattr(self, "_connected", False)
-                and self._autosave_settings_enabled()
-                and not self._write_autosave_settings()
-            ):
-                self._show_autosave_settings_error()
+            else:
+                if (
+                    getattr(self, "_connected", False)
+                    and self._autosave_settings_enabled()
+                    and not self._write_autosave_settings()
+                ):
+                    self._show_autosave_settings_error()
 
     def _folder_export_dialog_initialdir(self):
         """Return the export-folder chooser initial directory for this session.
@@ -10875,8 +11338,23 @@ class OMEROBrowserDialog:
             self._on_image_listbox_click,
             add="+",
         )
+        self.ilist.bind("<B1-Motion>", self._block_image_listbox_native_selection)
+        self.ilist.bind(
+            "<ButtonRelease-1>",
+            self._block_image_listbox_native_selection,
+        )
         self.ilist.bind("<Control-a>", self._on_images_select_all)
         self.ilist.bind("<Control-A>", self._on_images_select_all)
+
+    def _block_image_listbox_native_selection(self, event):
+        """Prevent native Tk bindings from mutating custom image selections.
+
+        Inputs: `event`. Output: 'break' or None.
+        """
+        listbox = getattr(event, "widget", None)
+        if listbox is not getattr(self, "ilist", None):
+            return None
+        return "break"
 
     @staticmethod
     def _listbox_size(listbox):
@@ -11732,6 +12210,7 @@ class OMEROBrowserDialog:
         ):
             return
 
+        self._append_current_path_to_imaris_arena_if_enabled()
         self._set_actions_busy_for_load(True)
         threading.Thread(
             target=worker_target,
