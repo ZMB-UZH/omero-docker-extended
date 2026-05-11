@@ -469,6 +469,7 @@ class _FakeArenaWinreg:
         values=None,
         open_errors=None,
         set_error=None,
+        persist_writes=True,
     ):
         """Create fake registry storage.
 
@@ -481,6 +482,7 @@ class _FakeArenaWinreg:
         self.values = dict(values or {})
         self.open_errors = dict(open_errors or {})
         self.set_error = set_error
+        self.persist_writes = persist_writes
         self.open_calls = []
         self.writes = []
         self.create_calls = []
@@ -539,7 +541,8 @@ class _FakeArenaWinreg:
         if self.set_error is not None:
             raise self.set_error
         self.writes.append((key.path, value_name, value_type, value))
-        self.values[(key.path, value_name)] = value
+        if self.persist_writes:
+            self.values[(key.path, value_name)] = value
 
 
 def _allow_fake_arena_folder_on_any_host(module, monkeypatch):
@@ -889,6 +892,39 @@ def test_client_rejects_capability_payload_with_false_converter_flag():
                     '"omero_ims_export_capability": '
                     '"omero_imaris_connector_v1", '
                     '"converters": {"OMERO": false}}'
+                ).encode("utf-8")
+            )
+
+    client.opener = _FakeOpener()
+
+    assert client.has_omero_ims_export_capability() is False
+
+
+def test_client_rejects_string_false_omero_export_capability():
+    """Verify OMERO converter detection requires a real boolean capability.
+
+    Inputs: repository fixtures. Output: asserts standard servers cannot enable
+    the OMERO converter through truthy string values.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(_request, _timeout):
+            """Return a string-valued capability payload.
+
+            Inputs: `_request`, `_timeout`. Output: `_FakeHTTPResponse` result.
+            """
+            return _FakeHTTPResponse(
+                (
+                    '{"omero_ims_export": "false", '
+                    '"omero_ims_export_capability": '
+                    '"omero_imaris_connector_v1", '
+                    '"converters": {"OMERO": true}}'
                 ).encode("utf-8")
             )
 
@@ -3758,19 +3794,107 @@ def test_imaris_arena_observed_folder_appends_to_existing_key_only(
 
     assert result is True
     assert fake_winreg.create_calls == []
+    expected_folder = module._normalize_imaris_arena_folder_path(str(tmp_path))
     assert (
         fake_winreg.values[
             (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE)
         ]
-        == f"[Observed]{tmp_path}[Selected]{tmp_path}"
+        == f"[Observed]{expected_folder}[Selected]{expected_folder}"
     )
-    assert fake_winreg.values[
-        (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE)
-    ] == str(tmp_path)
+    assert (
+        fake_winreg.values[(key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE)]
+        == expected_folder
+    )
     assert len(fake_winreg.writes) == 2
     assert logs[-1].startswith(
         "Imaris Arena observed-folder setting contains selected path:"
     )
+
+
+def test_imaris_arena_observed_folder_expands_userprofile_before_registry_write(
+    monkeypatch,
+):
+    """Verify Arena append writes expanded Windows environment paths.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts expanded paths replace
+    literal `%USERPROFILE%` paths in Imaris Arena settings.
+    """
+    module = _load_xt_module()
+    imaris_exe = r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe"
+    key_path = (
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT
+        + r"\Imaris x64 11.0\DataManagementSystem"
+    )
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE): "",
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): "",
+        },
+    )
+    expanded = r"C:\Users\Alice\Desktop\omero-test"
+    monkeypatch.setenv("USERPROFILE", r"C:\Users\Alice")
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        module, "_is_structurally_valid_folder_path", lambda path: path == expanded
+    )
+    monkeypatch.setattr(module, "_safe_is_directory", lambda path: path == expanded)
+
+    result = module._append_imaris_arena_observed_folder(
+        r"%USERPROFILE%\Desktop\omero-test",
+        imaris_executable=imaris_exe,
+        winreg_module=fake_winreg,
+    )
+
+    assert result is True
+    assert (
+        fake_winreg.values[
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE)
+        ]
+        == f"[Observed]{expanded}[Selected]{expanded}"
+    )
+    assert (
+        fake_winreg.values[(key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE)]
+        == expanded
+    )
+
+
+def test_imaris_arena_observed_folder_requires_registry_readback(tmp_path, monkeypatch):
+    """Verify Arena append reports failure when registry writes do not persist.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: verifies failure is
+    returned when no readback evidence confirms the write.
+    """
+    module = _load_xt_module()
+    imaris_exe = tmp_path / "custom" / "Imaris 11.0.0" / "Imaris.exe"
+    imaris_exe.parent.mkdir(parents=True)
+    imaris_exe.write_text("", encoding="utf-8")
+    key_path = module._imaris_arena_registry_key_from_executable(str(imaris_exe))
+    fake_winreg = _FakeArenaWinreg(
+        module.IMARIS_ARENA_VENDOR_REGISTRY_ROOT,
+        subkeys=("Imaris x64 11.0",),
+        existing_paths={key_path},
+        values={
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_TREE_STATE_VALUE): "",
+            (key_path, module.IMARIS_ARENA_OBSERVED_FOLDERS_VALUE): "",
+        },
+        persist_writes=False,
+    )
+    logs = []
+    _allow_fake_arena_folder_on_any_host(module, monkeypatch)
+    monkeypatch.setattr(module, "_xt_debug", logs.append)
+
+    result = module._append_imaris_arena_observed_folder(
+        str(tmp_path),
+        imaris_executable=str(imaris_exe),
+        winreg_module=fake_winreg,
+    )
+
+    assert result is False
+    assert len(fake_winreg.writes) == 2
+    assert logs[-1].startswith("Imaris Arena observed-folder append failed:")
 
 
 def test_imaris_arena_observed_folder_existing_tree_state_does_not_write(

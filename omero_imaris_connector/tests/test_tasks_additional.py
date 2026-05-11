@@ -175,6 +175,22 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
         "Export_Path": str(export_path),
         "File_Annotation_Id": "44",
     }
+    assert tasks._extract_cli_outputs(
+        "\n".join(
+            [
+                "\t*** out parameters ***",
+                "\t* Message=done",
+                f"\t* Export_Path={export_path}",
+                "Export_Name: demo.ims",
+                "File_Annotation_Id    44",
+            ]
+        )
+    ) == {
+        "Message": "done",
+        "Export_Path": str(export_path),
+        "Export_Name": "demo.ims",
+        "File_Annotation_Id": "44",
+    }
     assert (
         tasks._get_connection_session_key(
             types.SimpleNamespace(getSessionId=lambda: "session-1")

@@ -233,6 +233,7 @@ def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
     """
     module = _load_script_module()
     export_root = str(tmp_path / "exports")
+    monkeypatch.delenv("OMERO_IMS_EXPORT_DIR", raising=False)
 
     class _ConfigService:
         """Test double for export root config service."""
@@ -261,6 +262,13 @@ def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
     )
     assert module._get_export_root(conn) == export_root
     assert config_service.calls == [module._CONFIG_IMS_EXPORT_DIR]
+
+    env_export_root = str(tmp_path / "env-exports")
+    monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", env_export_root)
+    config_service.calls.clear()
+    assert module._get_export_root(conn) == env_export_root
+    assert config_service.calls == []
+    monkeypatch.delenv("OMERO_IMS_EXPORT_DIR", raising=False)
 
     missing_config = types.SimpleNamespace(
         c=types.SimpleNamespace(

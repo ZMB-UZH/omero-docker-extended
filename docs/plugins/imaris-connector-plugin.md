@@ -93,13 +93,16 @@ Defined in `env/omeroserver.env`:
 | `BIOFORMATS_VERSION`   | Bio-Formats release version for `bioformats_package.jar` | `8.5.0`                |
 | `OMERO_IMS_EXPORT_DIR` | IMS export output directory                              | `/OMERO/ImarisExports` |
 
-`OMERO_IMS_EXPORT_DIR` is required at runtime. The OMERO.server export script
-reads the startup-persisted `omero.ims.export.dir` server configuration because
-OMERO Processor does not pass arbitrary Compose environment variables into
-script subprocesses. Startup validates `OMERO_IMS_EXPORT_DIR`, ensures the
-directory is service-user writable, and writes that OMERO config key before the
-server starts. Missing or invalid configuration fails fast instead of silently
-writing IMS files to a hard-coded fallback directory.
+`OMERO_IMS_EXPORT_DIR` is required at runtime. OMERO Processor does not pass
+arbitrary Compose environment variables into script subprocesses, so startup
+installs a trusted `omero.scripts.python` wrapper that exports
+`OMERO_IMS_EXPORT_DIR` before running the real server virtualenv Python. The
+script reads that trusted process environment first and keeps the
+startup-persisted `omero.ims.export.dir` key as an admin-readable diagnostic
+fallback. Startup validates `OMERO_IMS_EXPORT_DIR`, ensures the directory is
+service-user writable, and writes that OMERO config key before the server
+starts. Missing or invalid configuration fails fast instead of silently writing
+IMS files to a hard-coded fallback directory.
 
 The OMERO.web Celery task resolves the `omero` CLI from explicit overrides
 (`OMERO_WEB_OMERO_BIN`, then `OMERO_BIN`), then from the configured

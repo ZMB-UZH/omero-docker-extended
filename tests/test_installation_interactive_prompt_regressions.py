@@ -333,7 +333,10 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertIn("Removed docker builder cache.", output)
             compose_log = compose_log_path.read_text(encoding="utf-8").strip()
             docker_log = docker_log_path.read_text(encoding="utf-8")
-            self.assertIn("build --no-cache --provenance false", compose_log)
+            self.assertIn(
+                "build --progress plain --no-cache --provenance false",
+                compose_log,
+            )
             self.assertIn("builder prune --help", docker_log)
             self.assertIn("builder prune -a -f", docker_log)
 

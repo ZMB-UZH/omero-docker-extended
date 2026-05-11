@@ -78,11 +78,17 @@ def _export_root_from_value(source, value):
 
 
 def _get_export_root(conn):
-    """Return export root from OMERO server configuration.
+    """Return export root from trusted server runtime configuration.
 
     Inputs: `conn` OMERO gateway connection. Output: export root string. Raises:
-    RuntimeError when the startup-persisted OMERO config contract is missing.
+    RuntimeError when startup did not provide a valid export root.
     """
+    env_export_root = _export_root_from_value(
+        "OMERO_IMS_EXPORT_DIR", os.environ.get("OMERO_IMS_EXPORT_DIR")
+    )
+    if env_export_root is not None:
+        return env_export_root
+
     try:
         config_service = conn.c.sf.getConfigService()
     except Exception as exc:
@@ -99,7 +105,7 @@ def _get_export_root(conn):
     if export_root is None:
         raise RuntimeError(
             "OMERO IMS export directory is not configured. Set OMERO_IMS_EXPORT_DIR "
-            f"in env/omeroserver.env so startup can persist {_CONFIG_IMS_EXPORT_DIR}."
+            "in env/omeroserver.env so startup can expose it to script subprocesses."
         )
     return export_root
 

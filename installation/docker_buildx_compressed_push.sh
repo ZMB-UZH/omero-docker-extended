@@ -17,6 +17,7 @@ DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
 DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
 DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}"
+DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"
 DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
 DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
@@ -130,6 +131,17 @@ validate_serial_mode() {
     esac
 }
 
+# Validate build progress mode. Inputs: shell arguments and environment. Output: command status and side effects.
+validate_build_progress() {
+    case "${DOCKER_BUILD_PROGRESS}" in
+        auto|none|plain|quiet|rawjson|tty) return 0 ;;
+        *)
+            echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_PROGRESS must be one of: auto, none, plain, quiet, rawjson, tty. Got: ${DOCKER_BUILD_PROGRESS}" >&2
+            return 1
+            ;;
+    esac
+}
+
 # Validate buildx driver. Inputs: shell arguments and environment. Output: command status and side effects.
 validate_buildx_driver() {
     case "${DOCKER_BUILDX_DRIVER}" in
@@ -199,6 +211,7 @@ run_buildx_bake_with_retries() {
         set +e
         docker buildx bake \
             --file "${COMPOSE_FILE}" \
+            --progress "${DOCKER_BUILD_PROGRESS}" \
             --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
             "${build_targets[@]}" \
             "${TARGET_OVERRIDES[@]}" 2>&1 | tee "${output_file}"
@@ -856,6 +869,7 @@ flatten_target_image() {
 
     echo "INFO (${SCRIPT_NAME}): Flattening '${target}' into single-layer image '${final_image_name}'." >&2
     if ! docker build \
+        --progress "${DOCKER_BUILD_PROGRESS}" \
         --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
         --file "${flatten_dockerfile}" \
         --tag "${flatten_filesystem_image_name}" \
@@ -1278,6 +1292,7 @@ main() {
     validate_build_targets
     validate_compression_type
     validate_compression_level
+    validate_build_progress
     validate_toggle "DOCKER_BUILD_USE_OCI_MEDIATYPES" "${DOCKER_BUILD_USE_OCI_MEDIATYPES}"
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"

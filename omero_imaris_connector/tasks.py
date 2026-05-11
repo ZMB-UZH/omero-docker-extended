@@ -30,6 +30,11 @@ _PUBLIC_SCRIPT_MESSAGES = {
     "Could not get original file path",
     "Could not prepare source image for IMS conversion",
 }
+_CLI_OUTPUT_KEYS = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
+_CLI_OUTPUT_LINE_RE = re.compile(
+    r"^\s*(?:\*)?\s*(Message|Export_Path|Export_Name|File_Annotation_Id)"
+    r"\s*(?:=|:|\t+|\s{2,})\s*(.*?)\s*$"
+)
 
 
 class IMSExportTaskError(RuntimeError):
@@ -190,14 +195,13 @@ def _extract_cli_outputs(text: str) -> dict[str, str]:
 
     Inputs: `text`. Output: `dict[str, str]`.
     """
-    allowed = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
     outputs: dict[str, str] = {}
     for line in text.splitlines():
-        match = re.match(r"^\s*\*\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$", line)
+        match = _CLI_OUTPUT_LINE_RE.match(line)
         if not match:
             continue
         key = match.group(1).strip()
-        if key not in allowed:
+        if key not in _CLI_OUTPUT_KEYS:
             continue
         value = match.group(2).strip()
         if key:
