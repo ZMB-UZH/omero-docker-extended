@@ -369,6 +369,14 @@ leaf for the configured `OMERO_CLI_USER`. That repair is leaf-only and exists to
 make fresh bind mounts and upgrades converge without recursively changing
 repository payload ownership.
 
+The Imaris IMS export script also uses `CONFIG_omero_managed_dir` when it maps
+OMERO OriginalFile paths back to managed-repository files. OMERO Processor
+copies only an explicit environment allowlist into script subprocesses, so the
+server image build keeps this non-secret path variable in that allowlist
+alongside `OMERO_IMS_EXPORT_DIR`. Do not replace this with a user-session read
+of private OMERO config keys; normal script execution should use the trusted
+runtime environment.
+
 OMERO expands supported terms automatically when written with surrounding `%`
 characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).
 

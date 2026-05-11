@@ -509,6 +509,18 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server "${SITE_PACKAGES}/omero_plugin_common"; \
     rm -rf /tmp/omero_plugin_common
 
+# Permit the environment-driven IMS export directory to reach Processor scripts.
+# OMERO's Processor copies only an explicit environment allowlist into script
+# subprocesses, so Compose-provided variables otherwise disappear before
+# IMS_Export.py starts.
+COPY docker/patch_omero_processor_env.py /tmp/patch_omero_processor_env.py
+RUN set -euo pipefail; \
+    VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    "${VENV_DIR}/bin/python" /tmp/patch_omero_processor_env.py "${SITE_PACKAGES}/omero/processor.py"; \
+    rm -f /tmp/patch_omero_processor_env.py
+
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
 # --------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
