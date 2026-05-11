@@ -59,33 +59,24 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertNotIn("DOCKER_BUILD_SQUASH", script_text)
 
-    def test_installation_script_prints_global_progress_markers(self) -> None:
-        """Verify installer progress markers expose the global workflow position.
+    def test_installation_script_keeps_prompts_grouped_without_step_markers(
+        self,
+    ) -> None:
+        """Verify installer prompts keep the grouped pre-build appearance.
 
-        Inputs: repository fixtures. Output: fails on regressions in the global
-        installation progress indicator.
+        Inputs: repository fixtures. Output: fails on regressions that add
+        installation-step labels before or during operator prompts.
         """
         script_text = (
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn(
-            'INSTALLATION_PROGRESS_TOTAL="${INSTALLATION_PROGRESS_TOTAL:-17}"',
-            script_text,
-        )
-        self.assertIn("installation_step()", script_text)
-        self.assertIn(
-            'echo "Installation step ${INSTALLATION_PROGRESS_CURRENT}/${INSTALLATION_PROGRESS_TOTAL}: ${label}"',
-            script_text,
-        )
-        self.assertEqual(script_text.count('installation_step "'), 17)
-        self.assertIn('installation_step "Collect operator choices"', script_text)
-        self.assertIn('installation_step "Build Docker images"', script_text)
-        self.assertIn('installation_step "Install optional tmp cleaner"', script_text)
-        self.assertIn(
-            'installation_step "Handle container startup and OMERO runtime bootstrap"',
-            script_text,
-        )
-        self.assertIn('installation_step "Clean build helper containers"', script_text)
+        self.assertNotIn("INSTALLATION_PROGRESS_TOTAL", script_text)
+        self.assertNotIn("INSTALLATION_PROGRESS_CURRENT", script_text)
+        self.assertNotIn("installation_step()", script_text)
+        self.assertNotIn('installation_step "', script_text)
+        self.assertNotIn("Installation step", script_text)
+        self.assertIn("Delete all container images?", script_text)
+        self.assertIn("Start containers after build?", script_text)
 
     def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
         self,
@@ -1343,11 +1334,21 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         celery_env_text = (
             self.repo_root / "env" / "omero-celery_example.env"
         ).read_text(encoding="utf-8")
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
+        processor_patch_text = (
+            self.repo_root / "docker" / "patch_omero_processor_env.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn('OMERO_IMS_EXPORT_CONFIG_KEY="omero.ims.export.dir"', script_text)
         self.assertIn("expected_ims_export_root()", script_text)
         self.assertIn("validate_ims_export_configuration", script_text)
         self.assertIn("configure_ims_export_runtime_paths", script_text)
+        self.assertIn("patch_omero_processor_env.py", dockerfile_text)
+        self.assertIn("OMERO_IMS_EXPORT_DIR", processor_patch_text)
+        self.assertIn("CONFIG_omero_managed_dir", processor_patch_text)
+        self.assertIn("environment allowlist", processor_patch_text)
         self.assertIn(
             'wrapper_path="${SERVER_HOME%/}/bin/omero-scripts-python"',
             script_text,

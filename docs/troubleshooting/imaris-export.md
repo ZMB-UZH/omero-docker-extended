@@ -10,6 +10,7 @@ repository. Use it before attempting speculative code changes.
 | Imaris login loops back to `/webclient/login/` after POST | OMERO.web auth/session handling bug in the standalone connector | Inspect [`XTOmeroConnector.py`](../../omero_imaris_connector/XTOmeroConnector.py) and verify the client is not overriding the `Cookie` header |
 | Export job stays in `RUNNING` with `status=waiting_for_processor` | OMERO.server `Processor-0` missing, failed, or blocked | Run `omero admin diagnostics` in the server container |
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
+| OMERO converter job fails and Blitz logs `Cannot read configuration: omero.ims.export.dir` | Processor script subprocess did not receive the trusted IMS export environment | Verify the running `omero/processor.py` allowlist contains `OMERO_IMS_EXPORT_DIR` and `CONFIG_omero_managed_dir` |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
 | IMS export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final IMS handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
@@ -18,8 +19,8 @@ repository. Use it before attempting speculative code changes.
 
 ## Failure History Captured Here
 
-These failures all occurred during real debugging on 2026-03-11 and should be
-treated as known incident patterns, not hypotheticals.
+These failures occurred during real debugging on 2026-03-11 and 2026-05-11 and
+should be treated as known incident patterns, not hypotheticals.
 
 ### 1. OMERO.web authentication regression
 
@@ -346,6 +347,61 @@ Operational rule:
   directory when no explicit directory is supplied by a caller outside the GUI.
   The HTTP download buffer is bounded for memory safety and can be tuned with
   `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` without changing file-format behavior.
+
+### 7. OMERO converter failed after private config lookup replaced env handoff
+
+Observed behavior:
+
+- the standalone connector authenticated successfully, detected the `OMERO`
+  converter, and started an IMS export job,
+- the job switched from `RUNNING` to `FAILED`,
+- Blitz logs showed `SecurityViolation: Cannot read configuration:
+  omero.ims.export.dir`,
+- Processor logs showed scripts launching with the server virtualenv Python,
+  not the configured `omero.scripts.python` wrapper.
+
+Root cause:
+
+- the export script originally worked because it read the IMS export directory
+  from process environment,
+- a later hardening change moved the primary lookup to the private OMERO config
+  key `omero.ims.export.dir`,
+- user script sessions cannot read that private config key,
+- the first attempted fix set `omero.scripts.python` to a wrapper that exported
+  `OMERO_IMS_EXPORT_DIR`, but OMERO Processor's `find_launcher()` still used
+  the raw server virtualenv Python in this runtime,
+- OMERO Processor also copies only an explicit environment allowlist into script
+  subprocesses, so `OMERO_IMS_EXPORT_DIR` and `CONFIG_omero_managed_dir` were
+  stripped before `IMS_Export.py` ran.
+
+Fix:
+
+- [`docker/patch_omero_processor_env.py`](../../docker/patch_omero_processor_env.py)
+  patches the installed OMERO Processor environment allowlist during the server
+  image build,
+- the allowlist now passes only the trusted, non-secret path variables required
+  by the IMS export script: `OMERO_IMS_EXPORT_DIR` and
+  `CONFIG_omero_managed_dir`,
+- `IMS_Export.py` reads those environment values first and keeps
+  `omero.ims.export.dir` only as an admin-readable diagnostic fallback,
+- there is no hard-coded export directory fallback.
+
+Verification:
+
+```bash
+docker compose exec omeroserver bash -lc \
+  'grep -n "OMERO_IMS_EXPORT_DIR\\|CONFIG_omero_managed_dir" \
+  /opt/omero/server/venv-*/lib/python*/site-packages/omero/processor.py \
+  /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py'
+```
+
+Then run the standalone connector with converter `OMERO` and watch
+`Processor-0.log` and `Blitz-0.log`. Healthy jobs log `Successfully exported
+IMS` and must not log `Cannot read configuration: omero.ims.export.dir` for
+that job. If `Cannot read configuration: omero.managed.dir` appears during an
+otherwise successful job, the Processor allowlist is still missing
+`CONFIG_omero_managed_dir` or the server was not recreated from the rebuilt
+image.
 
 ## Standard Diagnostic Flow
 
