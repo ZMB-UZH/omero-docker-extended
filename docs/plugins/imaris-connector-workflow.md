@@ -223,7 +223,15 @@ to the installed Imaris File Converter.
 
 Multi-image loading uses the same converter-specific preparation as single-image
 loading, but it waits until every selected image has produced a valid output
-before submitting any file to Imaris.
+before any Imaris handoff. The `OMERO` converter opens only the first prepared
+IMS file in the current Imaris 11 session and leaves the remaining IMS exports
+in the selected folder. This avoids a confusing sequential XT file-open handoff
+where additional images can be difficult to find or select in the Imaris 11
+interface. Users can open the saved IMS files from that folder or use them as
+inputs for an Imaris 11 Workflow/Batch processing pipeline.
+
+The `Imaris` converter path is different: all selected Image exports are passed
+to one `ImarisFileConverter.exe` launch after the full batch is ready.
 
 ```mermaid
 flowchart TD
@@ -233,13 +241,16 @@ flowchart TD
     C -->|Yes| E{More images?}
     E -->|Yes| F[Prepare next selected image]
     F --> C
-    E -->|No| G[Submit all prepared files to Imaris in one batch]
+    E -->|No| G{Converter}
+    G -->|OMERO| H[Open first IMS file in current Imaris session]
+    G -->|Imaris| I[Submit all selected Image exports to File Converter]
 ```
 
 This prevents partial handoff where the first files open in Imaris and a later
 download or export fails. For the `Imaris` converter, all tracked selected Image
 exports are passed to one `ImarisFileConverter.exe` launch rather than separate
-per-file launches.
+per-file launches. For the `OMERO` converter, all tracked IMS exports remain in
+the selected folder even though only the first one is opened automatically.
 
 ## Failure boundaries
 

@@ -46,6 +46,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
+_NATIVE_PATH_CLASS = type(Path.cwd())
 
 
 class _DeferredTkImport:
@@ -867,7 +868,19 @@ def _coerce_path(value):
         return None
     if not path_text or "\x00" in path_text:
         return None
-    return Path(path_text)
+    try:
+        return _NATIVE_PATH_CLASS(path_text)
+    except (OSError, TypeError, ValueError, RuntimeError):
+        return None
+
+
+def _native_path_is_absolute(value):
+    """Return whether `value` is absolute on the host platform.
+
+    Inputs: `value`. Output: bool.
+    """
+    candidate = _coerce_path(value)
+    return bool(candidate is not None and candidate.is_absolute())
 
 
 def _existing_regular_file_path(file_path):
@@ -1307,7 +1320,7 @@ def _is_structurally_valid_folder_path(path_value):
 
     if not os.path.isabs(path_text):
         return False
-    return all(part not in {".", ".."} for part in Path(path_text).parts)
+    return all(part not in {".", ".."} for part in candidate.parts)
 
 
 def _normalize_extended_windows_path_for_validation(path_text):
@@ -1424,24 +1437,53 @@ def _connector_user_home():
     if os.name == "nt":
         userprofile = os.environ.get("USERPROFILE", "").strip()
         if userprofile:
-            candidates.append(userprofile)
+            candidates.append((userprofile, ntpath.isabs))
         home_drive = os.environ.get("HOMEDRIVE", "").strip()
         home_path = os.environ.get("HOMEPATH", "").strip()
         if home_drive and home_path:
-            candidates.append(home_drive + home_path)
+            candidates.append((home_drive + home_path, ntpath.isabs))
     with contextlib.suppress(RuntimeError, OSError):
-        candidates.append(os.fspath(Path.home()))
+        candidates.append(
+            (os.fspath(_NATIVE_PATH_CLASS.home()), _native_path_is_absolute)
+        )
+    if sys.platform != "win32":
+        native_home = os.environ.get("HOME", "").strip()
+        if native_home:
+            candidates.append((native_home, _native_path_is_absolute))
 
-    for candidate in candidates:
+    for candidate, is_absolute_path in candidates:
         home_text = str(candidate or "").strip()
         if not home_text:
             continue
-        is_absolute = (
-            ntpath.isabs(home_text) if os.name == "nt" else os.path.isabs(home_text)
-        )
-        if is_absolute:
-            return Path(home_text)
+        if is_absolute_path(home_text):
+            return _NATIVE_PATH_CLASS(home_text)
     raise OSError("Unable to detect an absolute user home directory")
+
+
+def _omero_multi_handoff_notice(download_dir, remaining_count, *, completed=False):
+    """Return the OMERO multi-selection handoff notice for Imaris 11.
+
+    Inputs: `download_dir`, `remaining_count`, optional `completed`. Output:
+    user-facing notice text.
+    """
+    folder_text = os.fspath(download_dir)
+    first_verb = "was" if completed else "will be"
+    remaining_verb = "was" if remaining_count == 1 else "were"
+    if not completed:
+        remaining_verb = "will be"
+    remaining_label = (
+        "the other selected IMS export"
+        if remaining_count == 1
+        else f"the other {remaining_count} selected IMS exports"
+    )
+    return (
+        f"Only the first selected image {first_verb} opened in the current "
+        f"Imaris 11 session.\n\n"
+        f"{remaining_label} {remaining_verb} saved in the selected folder:\n"
+        f"{folder_text}\n\n"
+        "Open the saved IMS files from that folder when you need them, or use "
+        "them as inputs for an Imaris 11 Workflow/Batch processing pipeline."
+    )
 
 
 def _connector_settings_env_path(home_path=None):
@@ -1449,7 +1491,9 @@ def _connector_settings_env_path(home_path=None):
 
     Inputs: optional `home_path`. Output: `Path`.
     """
-    home = Path(home_path) if home_path is not None else _connector_user_home()
+    home = _coerce_path(home_path) if home_path is not None else _connector_user_home()
+    if home is None:
+        raise OSError("Connector settings home path is invalid")
     return home / AUTOSAVE_SETTINGS_DIR_NAME / AUTOSAVE_SETTINGS_FILE_NAME
 
 
@@ -1492,7 +1536,10 @@ def _path_kind_without_follow(path):
     Inputs: `path`. Output: path kind string.
     """
     try:
-        mode = Path(path).lstat().st_mode
+        candidate = _coerce_path(path)
+        if candidate is None:
+            return "error"
+        mode = candidate.lstat().st_mode
     except FileNotFoundError:
         return "missing"
     except (OSError, TypeError, ValueError):
@@ -1512,8 +1559,10 @@ def _connector_settings_target_safety_error(target, allow_missing_file=True):
     Inputs: `target`, `allow_missing_file`. Output: `str` or empty.
     """
     try:
-        target = Path(target)
+        target = _coerce_path(target)
     except TypeError:
+        return "Connector settings path is invalid"
+    if target is None:
         return "Connector settings path is invalid"
     if not target.is_absolute():
         return "Connector settings path is not absolute"
@@ -1543,7 +1592,9 @@ def _connector_settings_backup_path(target, backup_index):
     if index < 1:
         raise ValueError("Connector settings backup index must be positive")
     suffix = ".old" if index == 1 else f".old{index}"
-    target = Path(target)
+    target = _coerce_path(target)
+    if target is None:
+        raise ValueError("Connector settings backup target is invalid")
     return target.with_name(target.name + suffix)
 
 
@@ -1586,7 +1637,10 @@ def _rotate_connector_settings_backups(target):
     first_backup_path = _connector_settings_backup_path(target, 1)
     if _path_kind_without_follow(first_backup_path) != "missing":
         raise OSError("Connector settings backup destination already exists")
-    Path(target).rename(first_backup_path)
+    target_path = _coerce_path(target)
+    if target_path is None:
+        raise OSError("Connector settings path is invalid")
+    target_path.rename(first_backup_path)
 
 
 def _prepare_connector_settings_for_current_version(settings_path=None):
@@ -1596,10 +1650,12 @@ def _prepare_connector_settings_for_current_version(settings_path=None):
     """
     try:
         target = (
-            Path(settings_path)
+            _coerce_path(settings_path)
             if settings_path is not None
             else _connector_settings_env_path()
         )
+        if target is None:
+            raise OSError("Connector settings path is invalid")
         safety_error = _connector_settings_target_safety_error(target)
         if safety_error:
             raise OSError(safety_error)
@@ -1704,10 +1760,12 @@ def _load_connector_settings(settings_path=None):
     Inputs: optional `settings_path`. Output: dict with allowlisted keys only.
     """
     path = (
-        Path(settings_path)
+        _coerce_path(settings_path)
         if settings_path is not None
         else _connector_settings_env_path()
     )
+    if path is None:
+        return {}
     try:
         safety_error = _connector_settings_target_safety_error(path)
         if safety_error:
@@ -1771,10 +1829,12 @@ def _load_connector_show_log_preference(settings_path=None):
     """
     try:
         path = (
-            Path(settings_path)
+            _coerce_path(settings_path)
             if settings_path is not None
             else _connector_settings_env_path()
         )
+        if path is None:
+            return True
         if _connector_settings_target_safety_error(path) or not path.is_file():
             return True
         with path.open("r", encoding="utf-8") as handle:
@@ -1833,10 +1893,12 @@ def _ensure_connector_settings_imaris_executable(settings_path=None):
     Inputs: optional `settings_path`. Output: path text or empty string.
     """
     path = (
-        Path(settings_path)
+        _coerce_path(settings_path)
         if settings_path is not None
         else _connector_settings_env_path()
     )
+    if path is None:
+        return ""
     cached = _connector_settings_imaris_executable_candidate(path)
     if cached:
         return cached
@@ -1898,10 +1960,12 @@ def _atomic_write_connector_settings(settings, settings_path=None):
     temp_path: Optional[Path] = None
     try:
         target = (
-            Path(settings_path)
+            _coerce_path(settings_path)
             if settings_path is not None
             else _connector_settings_env_path()
         )
+        if target is None:
+            raise OSError("Connector settings path is invalid")
         target_dir = target.parent
         safety_error = _connector_settings_target_safety_error(target)
         if safety_error:
@@ -2034,7 +2098,7 @@ def _collect_local_folder_entries(folder_path):
     root = _coerce_path(folder_path)
     if root is None:
         raise RuntimeError("The selected folder path is invalid.")
-    root_path = Path(root)
+    root_path = root
     if not root_path.exists():
         raise RuntimeError("The selected folder no longer exists.")
     if not root_path.is_dir():
@@ -2065,7 +2129,10 @@ def _collect_local_folder_entries(folder_path):
                     f"Failed to inspect a selected file or folder: {type(exc).__name__}"
                 ) from exc
 
-            relative_path = Path(item.path).relative_to(root_path).as_posix()
+            item_path = _coerce_path(item.path)
+            if item_path is None:
+                raise RuntimeError("A selected file or folder path is invalid.")
+            relative_path = item_path.relative_to(root_path).as_posix()
             if item.is_symlink() or _is_windows_reparse_point(item_stat):
                 raise RuntimeError(
                     "Selected folders must not contain symbolic links or reparse-point entries. "
@@ -2073,7 +2140,7 @@ def _collect_local_folder_entries(folder_path):
                 )
 
             if item.is_dir(follow_symlinks=False):
-                child_dirs.append(Path(item.path))
+                child_dirs.append(item_path)
                 continue
             if not item.is_file(follow_symlinks=False):
                 raise RuntimeError(
@@ -2083,7 +2150,7 @@ def _collect_local_folder_entries(folder_path):
 
             entries.append(
                 {
-                    "absolute_path": str(Path(item.path)),
+                    "absolute_path": str(item_path),
                     "relative_path": relative_path,
                     "size": int(getattr(item_stat, "st_size", 0) or 0),
                 }
@@ -8143,7 +8210,9 @@ class OMEROBrowserDialog:
             settings_file_path = getattr(self, "_settings_file_path", None)
             try:
                 settings_target = (
-                    Path(settings_file_path) if settings_file_path is not None else None
+                    _coerce_path(settings_file_path)
+                    if settings_file_path is not None
+                    else None
                 )
             except TypeError:
                 settings_target = None
@@ -11282,11 +11351,22 @@ class OMEROBrowserDialog:
             worker_args = (img, converter)
             worker_target = self._load_worker
         else:
-            confirmation = (
-                f"Download {len(selected_images)} selected images and hand them "
-                "to Imaris after all files are ready?\n\n"
-                f"Converter: {converter}"
-            )
+            if converter == "OMERO":
+                confirmation = (
+                    f"Download {len(selected_images)} selected images with the "
+                    "OMERO converter?\n\n"
+                    + _omero_multi_handoff_notice(
+                        self.export_dir,
+                        len(selected_images) - 1,
+                    )
+                    + f"\n\nConverter: {converter}"
+                )
+            else:
+                confirmation = (
+                    f"Download {len(selected_images)} selected images and hand them "
+                    "to Imaris after all files are ready?\n\n"
+                    f"Converter: {converter}"
+                )
             worker_args = (selected_images, converter)
             worker_target = self._load_multiple_worker
 
@@ -11483,12 +11563,12 @@ class OMEROBrowserDialog:
             downloaded_files = []
             require_ims = converter == "OMERO"
             selected_image_export = converter == "Imaris"
+            download_dir = self.export_dir
             for index, img in enumerate(selected_images, start=1):
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
                 image_name = self._image_display_name(img)
-                download_dir = self.export_dir
 
                 if converter == "OMERO":
                     self._set_status(
@@ -11534,29 +11614,41 @@ class OMEROBrowserDialog:
                 downloaded_files.append(downloaded_file)
                 self.temp_files.append(downloaded_file)
 
-            self._set_status(
-                "All selected files are ready; submitting them to Imaris...",
-                "#fff3cd",
-            )
+            if require_ims:
+                handoff_files = downloaded_files[:1]
+                self._set_status(
+                    "All selected IMS files are ready; opening the first one in "
+                    "Imaris...",
+                    "#fff3cd",
+                )
+            else:
+                handoff_files = downloaded_files
+                self._set_status(
+                    "All selected files are ready; submitting them to Imaris...",
+                    "#fff3cd",
+                )
             _xt_debug(
                 f"Prepared {len(downloaded_files)} selected files before Imaris handoff"
             )
 
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_files_in_imaris(
-                    downloaded_files,
+                    handoff_files,
                     require_ims=require_ims,
                     selected_image_export=selected_image_export,
                 )
             )
             success_title = "Success"
             if require_ims:
-                success_status = "Opened selected IMS files in current Imaris session"
-                success_message = (
-                    "All selected IMS files opened in Imaris "
-                    "after every download completed."
+                success_status = (
+                    "Opened first selected IMS file; remaining IMS files saved"
                 )
-                failure_message = "Imaris did not accept the prepared IMS file batch."
+                success_message = _omero_multi_handoff_notice(
+                    download_dir,
+                    len(downloaded_files) - 1,
+                    completed=True,
+                )
+                failure_message = "Imaris did not accept the first prepared IMS file."
             else:
                 success_status = (
                     "Submitted selected Image exports to Imaris File Converter"
