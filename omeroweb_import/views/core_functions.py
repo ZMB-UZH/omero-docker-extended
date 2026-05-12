@@ -2748,29 +2748,40 @@ def _get_or_create_dataset(
         if existing_id:
             dataset_map[name] = existing_id
             return existing_id
-
-    existing = None
-    try:
-        existing = next(conn.getObjects("Dataset", attributes={"name": name}), None)
-    except Exception:
+    else:
         existing = None
+        try:
+            existing = next(conn.getObjects("Dataset", attributes={"name": name}), None)
+        except Exception:
+            existing = None
 
-    if existing is not None:
-        dataset_id = _get_id(existing)
-        if dataset_id is None and hasattr(existing, "getId"):
-            dataset_id = existing.getId().getValue()
-        dataset_map[name] = dataset_id
-        if project_id and dataset_id:
-            _link_dataset_to_project(conn, dataset_id, project_id)
-        return dataset_id
+        if existing is not None:
+            dataset_id = _get_id(existing)
+            if dataset_id is None and hasattr(existing, "getId"):
+                dataset_id = existing.getId().getValue()
+            dataset_map[name] = dataset_id
+            return dataset_id
 
     try:
         dataset = DatasetI()
         dataset.setName(rstring(name))
         dataset = conn.getUpdateService().saveAndReturnObject(dataset)
         dataset_id = dataset.getId().getValue()
-        if project_id:
-            _link_dataset_to_project(conn, dataset_id, project_id)
+        if project_id and not _link_dataset_to_project(conn, dataset_id, project_id):
+            logger.warning(
+                "Created dataset %s for project %s but could not link it.",
+                name,
+                project_id,
+            )
+            try:
+                conn.deleteObjects("Dataset", [dataset_id], wait=True)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to remove unlinked dataset %s after project link failure: %s",
+                    dataset_id,
+                    exc,
+                )
+            return None
     except Exception as exc:
         logger.warning("Failed to create dataset %s: %s", name, exc)
         return None

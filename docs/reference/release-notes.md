@@ -1,5 +1,26 @@
 # Release Notes
 
+## 2026-05-12 Import and Imaris Connector Hardening
+
+- Refreshed pinned infrastructure images after upstream release-note review:
+  CrowdSec `v1.7.8`, Alloy `v1.16.1`, Redis `8.6.3-alpine`,
+  Redis exporter `v1.83.0-alpine`, Prometheus `v3.11.3`, and Ollama
+  `0.23.2`.
+- Strengthened image-pin regression coverage so Compose, Dockerfile, and
+  workflow container images cannot use untagged or floating aliases such as
+  `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
+  `current`.
+- Project-selected imports now create or reuse Dataset targets only inside the
+  selected Project. If a target cannot be placed there, import stops before any
+  file is imported.
+- The Imaris XT connector preserves selected OMERO image names by default,
+  prompts before replacing same-name local files, and uses timestamped duplicate
+  names only by explicit user choice or opt-in setting.
+- The XT connector help button now opens a larger user-focused modal help
+  window. Search fields, browser lists, Search, and Append-to-observed-folders
+  controls are disabled before connection and after disconnect while preserving
+  loaded setting values.
+
 ## 2026-05-06 Imaris XT Connector UI Refresh
 
 ### Highlights

@@ -35,8 +35,10 @@ Related docs:
   files into a generated `Orphaned_images_base_path_import_<suffix>` Dataset.
 - Folder paths are translated into Dataset names from the relative upload path.
   Nested folders use backslashes, such as `folderA\subfolderB`.
-- Project selection controls where the created Dataset targets are linked. It
-  does not rename base-path orphan files or folder-derived Dataset names.
+- Project selection strictly scopes every created Dataset target to that Project.
+  If a target Dataset cannot be found, created, and linked inside the selected
+  Project, the import stops before files are imported. Project selection does
+  not rename base-path orphan files or folder-derived Dataset names.
 - Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the staged package root that OMERO groups, while ordinary folders still import file-by-file.
 - Heavy import planning for grouped formats is deferred to the background import worker after the final upload response returns, so large `.zarr` dry-run scans do not block a Gunicorn request long enough to trigger worker timeouts.
 - Request-path dataset preparation now prefers the background logical import-unit plan that OMERO/Bio-Formats already produced, so dataset creation stays aligned with grouped/package imports across formats instead of relying on raw upload-path heuristics.
@@ -256,8 +258,9 @@ name.
 For browser uploads without `dataset_name_override`, folder-derived Dataset
 names still come from the relative upload path. Top-level/base-path files use a
 generated `Orphaned_images_base_path_import_<suffix>` Dataset, including when a
-Project is selected. Project selection only controls where those Dataset targets
-are linked.
+Project is selected. Project selection strictly scopes those Dataset targets to
+the selected Project; imports must not reuse same-name Datasets from OMERO root
+or another Project.
 
 ## Code structure
 

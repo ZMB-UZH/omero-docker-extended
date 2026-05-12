@@ -4,18 +4,18 @@
 
 | Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
 | -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
-| Prometheus                 | v3.11.2              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
+| Prometheus                 | v3.11.3              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
 | Grafana                    | 13.0.1               | Dashboards and visualization                                            | `http://grafana:3000`                      |
 | Loki                       | 3.7.1                | Log aggregation backend                                                 | `http://loki:3100`                         |
-| Alloy                      | v1.15.1              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
+| Alloy                      | v1.16.1              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
 | Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
 | Node exporter              | v1.11.1              | Host-level metrics                                                      | `http://node-exporter:9100`                |
 | cAdvisor                   | v0.56.2              | Container resource metrics                                              | `http://cadvisor:8080`                     |
 | Postgres exporter          | v0.19.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
 | Postgres exporter (plugin) | v0.19.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
-| Redis exporter             | v1.82.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
+| Redis exporter             | v1.83.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
 | Path usage exporter        | custom (Python 3.12) | OMERO volume disk usage via textfile collector                          | writes to node-exporter textfile directory |
-| CrowdSec                   | v1.7.6               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
+| CrowdSec                   | v1.7.8               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
 
 Monitoring data-directory ownership is auto-detected by
 `installation/installation_script.sh` before each install/update. For images

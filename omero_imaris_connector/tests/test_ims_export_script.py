@@ -963,31 +963,6 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in ome tiff source materialization covers wrapper and exporter paths.
     """
     module = _load_script_module()
-
-    class _FixedDatetime:
-        """Test double for fixed datetime behavior in this module."""
-
-        @staticmethod
-        def now(_timezone):
-            """Return `_FixedDatetime`'s fixed timestamp.
-
-            Inputs: `_timezone`. Output: `_Now` result.
-            """
-
-            class _Now:
-                """Test double for now behavior in this module."""
-
-                @staticmethod
-                def strftime(fmt):
-                    """Return the strftime for `_Now`.
-
-                    Inputs: `fmt`. Output: `str`.
-                    """
-                    return "20260429T120000Z"
-
-            return _Now()
-
-    monkeypatch.setattr(module, "datetime", _FixedDatetime)
     image = types.SimpleNamespace(
         getName=lambda: "demo.ome.tif",
         exportOmeTiff=lambda bufsize: (8, iter([b"ome-", b"tiff"])),
@@ -996,7 +971,7 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
         object(), image, 7, str(tmp_path / "exports")
     )
     assert source is not None
-    assert source.endswith("demo.ome.tif_20260429T120000Z.ome.tif")
+    assert source.endswith("demo.ome.tif.ome.tif")
     assert pathlib.Path(source).read_bytes() == b"ome-tiff"
     assert not pathlib.Path(source + ".tmp").exists()
 
@@ -1324,36 +1299,11 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
     )
     monkeypatch.setattr(module, "convert_to_ims", lambda image, src, dst: True)
 
-    class _FixedDatetime:
-        """Test double for fixed datetime behavior in this module."""
-
-        @staticmethod
-        def now(_timezone):
-            """Return `_FixedDatetime`'s fixed timestamp.
-
-            Inputs: `_timezone`. Output: `_Now` result.
-            """
-
-            class _Now:
-                """Test double for now behavior in this module."""
-
-                @staticmethod
-                def strftime(fmt):
-                    """Return the strftime for `_Now`.
-
-                    Inputs: `fmt`. Output: `str`.
-                    """
-                    return "20260330T120000Z"
-
-            return _Now()
-
-    monkeypatch.setattr(module, "datetime", _FixedDatetime)
-
     ok, message, export_path = module.run_conversion(conn, 7, str(tmp_path / "exports"))
 
     assert ok is True
     assert export_path is not None
-    assert export_path.endswith("unsafe_name_.ome.tif_20260330T120000Z.ims")
+    assert export_path.endswith("unsafe_name_.ome.tif.ims")
     assert message == f"Successfully exported IMS: {export_path}"
 
     missing_conn = types.SimpleNamespace(getObject=lambda kind, image_id: None)
@@ -1375,31 +1325,6 @@ def test_convert_to_ims_and_run_conversion_cover_failure_paths(
     input_file = tmp_path / "input.ome.tif"
     input_file.write_text("data", encoding="utf-8")
     output_file = tmp_path / "output.ims"
-
-    class _FixedDatetime:
-        """Test double for fixed datetime behavior in this module."""
-
-        @staticmethod
-        def now(_timezone):
-            """Return `_FixedDatetime`'s fixed timestamp.
-
-            Inputs: `_timezone`. Output: `_Now` result.
-            """
-
-            class _Now:
-                """Test double for now behavior in this module."""
-
-                @staticmethod
-                def strftime(fmt):
-                    """Return the strftime for `_Now`.
-
-                    Inputs: `fmt`. Output: `str`.
-                    """
-                    return "20260331T120000Z"
-
-            return _Now()
-
-    monkeypatch.setattr(module, "datetime", _FixedDatetime)
 
     monkeypatch.setattr(module, "IMARISCONVERT_INSTALL_DIR", str(install_dir))
     monkeypatch.setattr(module.shutil, "which", lambda name: None)

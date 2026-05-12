@@ -858,8 +858,8 @@ CATALOG: tuple[Rule, ...] = (
     Rule(
         id="RG013",
         severity="medium",
-        title="`:latest` image tag in Compose / Dockerfile / workflow",
-        fix="Pin to an explicit version tag or digest.",
+        title="Floating or untagged image reference in Compose / Dockerfile / workflow",
+        fix="Pin to an explicit version tag or digest; do not use latest, stable, edge, main, master, nightly, rolling, or current aliases.",
         scanner="hadolint/DL3007+trivy",
         closed_history=4,
         applies_to=(
@@ -873,7 +873,12 @@ CATALOG: tuple[Rule, ...] = (
         extra_excludes=("third_party/", ".tmp_*"),
         skip_tests=False,
         kind="regex",
-        pattern=r"^[^#]*?(?:image:|FROM\s+)\s*\S+:latest\b",
+        pattern=(
+            r"^\s*(?:image:|FROM\s+)\s*[\"']?(?!\$\{)"
+            r"(?:[A-Za-z0-9._-]+(?::[0-9]+)?/)*[A-Za-z0-9._-]+"
+            r"(?::(?:latest|stable|edge|main|master|nightly|rolling|current)\b"
+            r"|(?=\s*(?:$|#|[\"'])))"
+        ),
         pattern_flags=re.IGNORECASE,
     ),
     Rule(

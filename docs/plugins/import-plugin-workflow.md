@@ -48,8 +48,10 @@ flowchart TD
   `Orphaned_images_base_path_import_<suffix>` Dataset.
 - Folder paths are translated into Dataset names from the relative upload path;
   nested folders use backslashes, such as `folderA\subfolderB`.
-- Project selection controls where the created Dataset targets are linked. It
-  does not rename base-path orphan files or folder-derived Dataset names.
+- Project selection strictly scopes every created Dataset target to that Project.
+  If a selected-Project target cannot be found, created, and linked in that
+  Project, the import stops before files are imported. Project selection does
+  not rename base-path orphan files or folder-derived Dataset names.
 - External clients can drive the same lifecycle without the browser UI. When a
   client starts the job with `dataset_name_override` and no `project_id`, the
   import target becomes one OMERO-root Dataset named by that override.
@@ -64,7 +66,11 @@ flowchart TD
 - Dataset creation and later import execution both follow the same persisted plan.
 - `dataset_name_override` short-circuits the normal path-derived dataset naming
   logic so all uploaded entries land in the explicitly requested Dataset.
-- The request path should prepare missing Dataset targets when possible, but the import worker can also create them later through an independent admin-created user session if planning finished after the upload response returned.
+- The request path should prepare missing Dataset targets when possible, but the
+  import worker can also create them later through an independent admin-created
+  user session if planning finished after the upload response returned. When a
+  Project was selected, both paths must create or reuse Datasets only inside that
+  selected Project.
 
 ### 3. Route decision
 

@@ -225,7 +225,20 @@ When `Search function` is enabled, the XT dialog shows search fields directly
 above the Projects, Datasets, and Images lists. The fields filter only the data
 already loaded into each panel, using case-insensitive partial text matching, so
 typing does not trigger additional OMERO.web requests or background conversion
-work. Clearing a search restores the full loaded list for that panel.
+work. Before a successful connection, and after any disconnect, the three search
+fields and the three browser lists stay disabled and visually greyed out.
+Clearing a search restores the full loaded list for that panel.
+
+## Local filenames
+
+Connector downloads preserve the selected OMERO image name by default, with only
+the required converter extension added when needed. The `OMERO` converter writes
+IMS files and the `Imaris` converter writes selected-image OME-TIFF exports. If
+any planned filename already exists in the selected folder, the XT dialog asks
+before export starts whether to replace those files, keep both copies with
+unique names, or cancel. Timestamped duplicate names are used only for an
+explicit keep-both choice or when `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` is
+enabled for non-GUI callers.
 
 ## Multi-image loading
 
@@ -279,6 +292,8 @@ the selected folder even though only the first one is opened automatically.
 - Untracked selected Image export: the `Imaris` path refuses to submit it.
 - Server-side IMS download is not IMS/HDF5: the `OMERO` path rejects the file
   before any Imaris handoff.
+- Duplicate local output names: export waits for the user's replace, keep-both,
+  or cancel decision before conversion starts.
 - Multi-image preparation failure: no batch handoff is attempted.
 
 ## Verification points
@@ -302,6 +317,10 @@ The regression suite covers the critical contracts:
   Converter batch.
 - Browser search filters already-loaded Projects, Datasets, and Images by
   partial text without additional server calls.
+- Browser search fields and browser lists are disabled before connection and
+  after disconnect.
+- Connector downloads preserve planned local filenames by default and prompt
+  before replacing duplicates.
 - The `OMERO` path rejects non-HDF5 IMS download responses.
 - Single-image and multi-image load workers require converter-specific valid
   outputs before Imaris handoff.

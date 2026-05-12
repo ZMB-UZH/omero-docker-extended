@@ -10,6 +10,10 @@ from pathlib import Path
 class BuildVersionEnvContractTests(unittest.TestCase):
     """Test cases for build version env contract tests."""
 
+    FORBIDDEN_FLOATING_IMAGE_TAGS = frozenset(
+        {"latest", "stable", "edge", "main", "master", "nightly", "rolling", "current"}
+    )
+
     @classmethod
     def setUpClass(cls) -> None:
         """Prepare shared fixtures for `BuildVersionEnvContractTests` checks.
@@ -24,6 +28,19 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: `relative_path`. Output: `str`.
         """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
+
+    def assert_explicit_nonfloating_image_ref(self, image_ref: str) -> None:
+        """Verify an image reference is explicit and not a floating alias.
+
+        Inputs: `image_ref` Docker image reference. Output: fails on unpinned or floating tags.
+        """
+        normalized = image_ref.strip().strip("\"'")
+        if normalized == "scratch":
+            return
+        image_without_digest = normalized.split("@", 1)[0]
+        self.assertIn(":", image_without_digest, normalized)
+        tag = image_without_digest.rsplit(":", 1)[-1].lower()
+        self.assertNotIn(tag, self.FORBIDDEN_FLOATING_IMAGE_TAGS, normalized)
 
     def test_installation_paths_example_excludes_build_version_pins(self) -> None:
         """Verify installation paths example excludes build version pins.
@@ -91,25 +108,25 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.40.0-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.15.1"', compose_text)
-        self.assertIn('image: "prom/prometheus:v3.11.2"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.16.1"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.11.3"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.11.1"', compose_text)
-        self.assertIn('image: "oliver006/redis_exporter:v1.82.0-alpine"', compose_text)
-        self.assertIn('image: "redis:8.6.2-alpine"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.83.0-alpine"', compose_text)
+        self.assertIn('image: "redis:8.6.3-alpine"', compose_text)
         self.assertIn('image: "ghcr.io/google/cadvisor:0.56.2"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.1"', compose_text)
         self.assertIn('image: "grafana/grafana:13.0.1"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.21.0"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.23.2"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
-        self.assertNotIn("grafana/alloy:v1.13.2", compose_text)
-        self.assertNotIn("prom/prometheus:v3.10.0", compose_text)
+        self.assertNotIn("grafana/alloy:v1.15.1", compose_text)
+        self.assertNotIn("prom/prometheus:v3.11.2", compose_text)
         self.assertNotIn("prom/node-exporter:v1.10.2", compose_text)
-        self.assertNotIn("oliver006/redis_exporter:v1.81.0-alpine", compose_text)
-        self.assertNotIn("redis:8.6.1-alpine", compose_text)
+        self.assertNotIn("oliver006/redis_exporter:v1.82.0-alpine", compose_text)
+        self.assertNotIn("redis:8.6.2-alpine", compose_text)
         self.assertNotIn("gcr.io/cadvisor/cadvisor:v0.55.1", compose_text)
         self.assertNotIn("grafana/loki:3.6.7", compose_text)
         self.assertNotIn("grafana/grafana:12.4.1", compose_text)
-        self.assertNotIn("ollama/ollama:latest", compose_text)
+        self.assertNotIn("ollama/ollama:0.21.0", compose_text)
 
     def test_alloy_persists_runtime_positions(self) -> None:
         """Verify alloy persists runtime positions.
@@ -162,21 +179,48 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             script_text,
         )
 
-    def test_compose_images_are_explicitly_tagged_and_never_latest(self) -> None:
-        """Verify compose images are explicitly tagged and never latest.
+    def test_compose_images_are_explicitly_tagged_and_never_floating(self) -> None:
+        """Verify compose images are explicitly tagged and never floating.
 
-        Inputs: repository fixtures. Output: fails on regressions in compose images are explicitly tagged and never latest.
+        Inputs: repository fixtures. Output: fails on regressions in compose images are explicitly tagged and never floating.
         """
         compose_text = self.read_text("docker-compose.yml")
         image_refs = re.findall(r"^\s*image:\s*[\"']?([^\"'\n#]+)", compose_text, re.M)
 
         self.assertTrue(image_refs)
         for image_ref in image_refs:
-            image_ref = image_ref.strip()
-            image_without_digest = image_ref.split("@", 1)[0]
-            tag = image_without_digest.rsplit(":", 1)[-1]
-            self.assertIn(":", image_without_digest, image_ref)
-            self.assertNotEqual("latest", tag, image_ref)
+            self.assert_explicit_nonfloating_image_ref(image_ref)
+
+    def test_dockerfile_bases_are_explicitly_tagged_and_never_floating(self) -> None:
+        """Verify Dockerfile bases are explicitly tagged and never floating.
+
+        Inputs: repository fixtures. Output: fails on regressions in Dockerfile base image pinning.
+        """
+        for dockerfile_path in sorted((self.repo_root / "docker").glob("*.Dockerfile")):
+            dockerfile_text = dockerfile_path.read_text(encoding="utf-8")
+            from_refs = re.findall(r"^\s*FROM\s+([^\s#]+)", dockerfile_text, re.M)
+            self.assertTrue(from_refs, str(dockerfile_path))
+            for image_ref in from_refs:
+                with self.subTest(dockerfile=dockerfile_path.name, image_ref=image_ref):
+                    self.assert_explicit_nonfloating_image_ref(image_ref)
+
+    def test_workflow_container_images_are_explicitly_tagged_and_never_floating(
+        self,
+    ) -> None:
+        """Verify workflow container images are explicitly tagged and never floating.
+
+        Inputs: repository fixtures. Output: fails on regressions in workflow container pinning.
+        """
+        for workflow_path in sorted(
+            (self.repo_root / ".github" / "workflows").glob("*")
+        ):
+            if workflow_path.suffix not in {".yml", ".yaml"}:
+                continue
+            workflow_text = workflow_path.read_text(encoding="utf-8")
+            image_refs = re.findall(r"^\s*image:\s*([^\s#]+)", workflow_text, re.M)
+            for image_ref in image_refs:
+                with self.subTest(workflow=workflow_path.name, image_ref=image_ref):
+                    self.assert_explicit_nonfloating_image_ref(image_ref)
 
     def test_alpine_323_base_images_use_current_verified_digest(self) -> None:
         """Verify alpine 323 base images use current verified digest.

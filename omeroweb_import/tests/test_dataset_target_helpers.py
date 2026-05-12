@@ -711,8 +711,8 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
     monkeypatch.setattr(
         core_functions,
         "_link_dataset_to_project",
-        lambda conn, dataset_id, project_id: link_calls.append(
-            (dataset_id, project_id)
+        lambda conn, dataset_id, project_id: (
+            link_calls.append((dataset_id, project_id)) or True
         ),
     )
 
@@ -726,21 +726,71 @@ def test_dataset_creation_helpers_cover_cache_link_and_failure_paths(
         getUpdateService=lambda: None,
     )
     monkeypatch.setattr(core_functions, "_get_id", lambda obj: None)
-    assert core_functions._get_or_create_dataset(existing_conn, "Existing", {}, 7) == 66
-    assert link_calls == [(66, 7)]
+    assert core_functions._get_or_create_dataset(existing_conn, "Existing", {}) == 66
+    assert link_calls == []
 
-    create_conn = SimpleNamespace(
+    lookup_failing_conn = SimpleNamespace(
         getObjects=lambda model, attributes=None: (_ for _ in ()).throw(
             RuntimeError("lookup exploded")
+        ),
+        getUpdateService=lambda: SimpleNamespace(
+            saveAndReturnObject=lambda dataset: SimpleNamespace(
+                getId=lambda: _Value(77)
+            )
+        ),
+    )
+    assert (
+        core_functions._get_or_create_dataset(lookup_failing_conn, "Lookup", {}) == 77
+    )
+
+    deleted_datasets = []
+    create_conn = SimpleNamespace(
+        getObject=lambda model, project_id: _NamedProject(project_id, "Project"),
+        getObjects=lambda model, attributes=None: (_ for _ in ()).throw(
+            AssertionError(
+                "project-selected imports must not use global Dataset lookup"
+            )
         ),
         getUpdateService=lambda: SimpleNamespace(
             saveAndReturnObject=lambda dataset: SimpleNamespace(
                 getId=lambda: _Value(88)
             )
         ),
+        deleteObjects=lambda kind, ids, wait=False: deleted_datasets.append(
+            (kind, tuple(ids), wait)
+        ),
     )
     assert core_functions._get_or_create_dataset(create_conn, "Fresh", {}, 9) == 88
     assert link_calls[-1] == (88, 9)
+
+    monkeypatch.setattr(
+        core_functions, "_link_dataset_to_project", lambda *_args: False
+    )
+    unlinked_map = {}
+    assert (
+        core_functions._get_or_create_dataset(create_conn, "Unlinked", unlinked_map, 9)
+        is None
+    )
+    assert unlinked_map == {}
+    assert deleted_datasets == [("Dataset", (88,), True)]
+
+    delete_failing_conn = SimpleNamespace(
+        getObject=lambda model, project_id: _NamedProject(project_id, "Project"),
+        getUpdateService=lambda: SimpleNamespace(
+            saveAndReturnObject=lambda dataset: SimpleNamespace(
+                getId=lambda: _Value(89)
+            )
+        ),
+        deleteObjects=lambda kind, ids, wait=False: (_ for _ in ()).throw(
+            RuntimeError("delete exploded")
+        ),
+    )
+    assert (
+        core_functions._get_or_create_dataset(
+            delete_failing_conn, "StillUnlinked", {}, 9
+        )
+        is None
+    )
 
     failing_conn = SimpleNamespace(
         getObjects=lambda model, attributes=None: iter([]),
