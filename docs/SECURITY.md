@@ -64,7 +64,10 @@ Locale data is intentionally preserved across the hardened images for compatibil
 
 ## Image pinning
 
-- All Docker images in `docker-compose.yml` use explicit version tags (e.g., `postgres:16.12`, `redis:8.6.2-alpine`).
+- All Docker images in `docker-compose.yml` use explicit version tags (e.g.,
+  `postgres:16.12`, `redis:8.6.3-alpine`). Untagged images and floating aliases
+  such as `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
+  `current` are prohibited.
 - Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.0`, `celery==5.3.6`).
 - Dependabot monitors pip and Docker dependencies weekly and opens PRs for updates.
 

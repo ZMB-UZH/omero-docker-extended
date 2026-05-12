@@ -272,22 +272,24 @@ Operational rule:
   an available converter, a structurally valid local path that is not known to
   be unwritable, and at least one selected entry in the Images panel are all
   present.
-- `Autosave settings`, `Show log`, and `Search function` are pre-read before
-  the standalone XT dialog renders. `Autosave settings` remains disabled until
-  the OMERO login succeeds. `Show log` defaults to enabled for new users, is
-  immediately written when toggled, and controls whether normal command-window
-  log output is shown on the next startup. `Search function` defaults to
-  disabled for new users and is persisted immediately when toggled. When enabled
-  it shows local search fields for Projects, Datasets, and Images, each filtering
-  the already-loaded panel by case-insensitive partial text without issuing
-  additional OMERO requests. The path-row `Append to observed folders` checkbox
-  is visible but intentionally not connected to any runtime behavior until the
-  observed-folder integration is implemented. After a verified connection, the
-  connector writes `.imaris_omero_connector/settings.env` under
-  the detected user home with only host, port, username, HTTPS state, local
-  path, selected converter, autosave state, show-log state, search-function
-  state, the cached `IMARIS_EXE` path when discovered, and the connector
-  version. The version value is refreshed silently on
+- `Autosave settings`, `Show log`, `Search function`, and `Append to Observed
+  Folders` are pre-read before the standalone XT dialog renders. `Autosave
+  settings`, `Search function`, and `Append to Observed Folders` remain disabled
+  until the OMERO login succeeds, while preserving their loaded checked states.
+  `Show log` defaults to enabled for new users, is immediately written when
+  toggled, and controls whether normal command-window log output is shown on the
+  next startup. `Search function` defaults to disabled for new users and is
+  persisted immediately when toggled after connection. When enabled it shows
+  local search fields for Projects, Datasets, and Images; before connection or
+  after disconnect those fields and the three browser lists are greyed out and
+  non-interactive. `Append to Observed Folders` is persisted after connection and
+  applies only when the user confirms `Load images into Imaris`. After a
+  verified connection, the connector writes
+  `.imaris_omero_connector/settings.env` under the detected user home with only
+  host, port, username, HTTPS state, local path, selected converter, autosave
+  state, show-log state, search-function state, append-observed-folders state,
+  the cached `IMARIS_EXE` path when discovered, and the connector version. The
+  version value is refreshed silently on
   every standalone XT startup from the same version value shown by the info
   dialog. If an existing `settings.env` has no matching current version, the
   connector archives it as `settings.env.old` and creates a fresh settings
@@ -347,6 +349,11 @@ Operational rule:
   directory when no explicit directory is supplied by a caller outside the GUI.
   The HTTP download buffer is bounded for memory safety and can be tuned with
   `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` without changing file-format behavior.
+  Downloaded connector files preserve the selected OMERO image name by default.
+  The GUI prompts before replacing same-name files in the selected folder;
+  timestamped unique names are used only when the user chooses to keep both
+  files, or when `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` is enabled for non-GUI
+  callers.
 
 ### 7. OMERO converter failed after private config lookup replaced env handoff
 

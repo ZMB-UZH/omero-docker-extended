@@ -15,6 +15,10 @@ OMERO with visible progress.
 Upload and import are separate steps. A file can finish uploading before OMERO
 has finished importing it.
 
+When a project is selected, all created datasets and imported images stay inside
+that project. Top-level files are placed in an automatically named dataset;
+folders become datasets named from the folder path.
+
 ## Special Methods
 
 If a special method is available, select it only when it matches your data.

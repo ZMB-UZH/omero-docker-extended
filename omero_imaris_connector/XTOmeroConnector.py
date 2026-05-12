@@ -122,6 +122,7 @@ messagebox: Any = _DeferredTkImport("tkinter.messagebox")
 EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 DOWNLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES"
+UNIQUE_DOWNLOAD_SUFFIX_ENV = "OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX"
 DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 MIN_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024
 MAX_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
@@ -216,6 +217,8 @@ FOLDER_PATH_PLACEHOLDER_FG = "#9ca3af"
 FOLDER_PATH_TEXT_FG = "#111827"
 BROWSER_SEARCH_PLACEHOLDER_FG = "#9ca3af"
 BROWSER_SEARCH_TEXT_FG = "#111827"
+BROWSER_DISABLED_BG = "#edf0f3"
+BROWSER_DISABLED_FG = "#7a828a"
 LOCAL_PATH_WRITE_ERROR_TITLE = "Path Not Writable"
 LOCAL_PATH_WRITE_ERROR_MESSAGE = (
     "Please select or type an existing folder that Imaris can write to."
@@ -245,12 +248,56 @@ AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
 CONNECTOR_INFO_TITLE = "OMERO Connector"
 CONNECTOR_INFO_VERSION = "1.0.0"
 CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"
-CONNECTOR_INFO_CONTACT = "mitridisefstratios@gmail.com"
 CONNECTOR_INFO_DISCLAIMER = (
     "This software is provided as-is, without warranty of any kind, express or "
     "implied. Use of the connector is at the user's own risk. No liability can "
     "be assumed for data loss or any other damages arising from its use."
 )
+CONNECTOR_HELP_TITLE = "OMERO Connector Help"
+CONNECTOR_HELP_SECTIONS = (
+    (
+        "Find images",
+        (
+            "Sign in with your OMERO account.",
+            "Choose a project, then a dataset, then one or more images.",
+            "Use Search to narrow the visible list and Refresh after OMERO changes.",
+        ),
+    ),
+    (
+        "Choose how to open",
+        (
+            "OMERO creates an IMS file and opens it in the current Imaris session.",
+            "Imaris creates an OME-TIFF file and sends it to Imaris File Converter.",
+            "Only choices that are ready to use are shown.",
+        ),
+    ),
+    (
+        "Save files",
+        (
+            "Choose the folder where the downloaded files should be saved.",
+            "Files keep the selected OMERO image names by default.",
+            "If names already exist in that folder, you can replace them, keep both copies, or cancel before anything starts.",
+        ),
+    ),
+    (
+        "Open several images",
+        (
+            "The connector saves every selected image first.",
+            "With OMERO, the first IMS opens automatically and the rest stay in the chosen folder.",
+            "With Imaris, all selected images are sent together when they are ready.",
+        ),
+    ),
+    (
+        "If something changes",
+        (
+            "If a newly uploaded image is missing, click Refresh.",
+            "If Load is disabled, reconnect and choose an available converter.",
+            "If a folder cannot be used, choose a different folder and try again.",
+        ),
+    ),
+)
+DUPLICATE_DOWNLOAD_POLICY_REPLACE = "replace"
+DUPLICATE_DOWNLOAD_POLICY_UNIQUE = "unique"
 CONNECTOR_SETTINGS_KEY_PREFIX = "OMERO_CONNECTOR_"
 CONNECTOR_SETTINGS_HOST_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HOST"
 CONNECTOR_SETTINGS_PORT_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PORT"
@@ -1061,6 +1108,14 @@ def _download_chunk_size_bytes():
         MIN_DOWNLOAD_CHUNK_SIZE_BYTES,
         min(value, MAX_DOWNLOAD_CHUNK_SIZE_BYTES),
     )
+
+
+def _unique_download_suffix_enabled():
+    """Return whether duplicate downloads should use timestamped suffixes.
+
+    Inputs: process environment. Output: bool.
+    """
+    return _connector_settings_bool(os.environ.get(UNIQUE_DOWNLOAD_SUFFIX_ENV), False)
 
 
 def _bounded_env_int(env_name, default, minimum, maximum):
@@ -5730,6 +5785,20 @@ def _unique_download_path(download_dir, filename):
     raise RuntimeError("Could not allocate a unique download filename.")
 
 
+def _download_path_for_policy(download_dir, filename, duplicate_policy=None):
+    """Return the final connector download path for the selected duplicate policy.
+
+    Inputs: `download_dir`, `filename`, `duplicate_policy`. Output: local path.
+    """
+    safe_filename = _safe_download_filename(filename, "download")
+    use_unique = duplicate_policy == DUPLICATE_DOWNLOAD_POLICY_UNIQUE
+    if duplicate_policy is None:
+        use_unique = _unique_download_suffix_enabled()
+    if use_unique:
+        return _unique_download_path(download_dir, safe_filename)
+    return os.path.join(download_dir, safe_filename)
+
+
 def _collect_imaris_xt_diagnostics():
     """Collect imaris XT diagnostics.
 
@@ -7081,11 +7150,14 @@ class OMEROWebClient:
         image_id,
         download_dir,
         fallback_name="export.ims",
+        target_filename=None,
+        duplicate_policy=None,
     ):
         """Download an Imaris .ims export for a given image_id.
 
-        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`. Output:
-        `local_path`. Raises: RuntimeError when validation or the called operation fails.
+        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`,
+        `target_filename`, `duplicate_policy`. Output: `local_path`. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         if download_dir is None:
             download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
@@ -7131,6 +7203,8 @@ class OMEROWebClient:
                         image_id,
                         download_dir,
                         fallback_name=fallback_name,
+                        target_filename=target_filename,
+                        duplicate_policy=duplicate_policy,
                     )
 
                 raw_body = response.read().decode("utf-8", errors="replace")
@@ -7269,11 +7343,15 @@ class OMEROWebClient:
                 cd = response.headers.get("Content-Disposition", "")
                 filename = _extract_content_disposition_filename(cd)
                 safe_filename = _safe_download_filename(
-                    filename,
+                    target_filename or filename,
                     fallback_name,
                     default_extension=".ims",
                 )
-                local_path = _unique_download_path(download_dir, safe_filename)
+                local_path = _download_path_for_policy(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                )
 
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
@@ -7341,11 +7419,14 @@ class OMEROWebClient:
         image_id,
         download_dir,
         fallback_name="image.ome.tif",
+        target_filename=None,
+        duplicate_policy=None,
     ):
         """Download a standard OMERO.web OME-TIFF export for one Image ID.
 
-        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`. Output:
-        local OME-TIFF path. Raises: RuntimeError when validation or export fails.
+        Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`,
+        `target_filename`, `duplicate_policy`. Output: local OME-TIFF path. Raises:
+        RuntimeError when validation or export fails.
         """
         if download_dir is None:
             download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
@@ -7391,14 +7472,21 @@ class OMEROWebClient:
 
                 cd = response.headers.get("Content-Disposition", "")
                 filename = _extract_content_disposition_filename(cd)
-                safe_filename = _safe_download_filename(filename, fallback_name)
+                safe_filename = _safe_download_filename(
+                    target_filename or filename,
+                    fallback_name,
+                )
                 if os.path.splitext(safe_filename)[1].lower() not in {
                     ".tif",
                     ".tiff",
                     ".tf8",
                 }:
                     safe_filename = f"{safe_filename}.ome.tif"
-                local_path = _unique_download_path(download_dir, safe_filename)
+                local_path = _download_path_for_policy(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                )
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
@@ -7829,6 +7917,8 @@ class OMEROBrowserDialog:
             text="Search",
             variable=self.search_function_var,
             command=self._on_search_function_changed,
+            state=_tk_constant("DISABLED", "disabled"),
+            disabledforeground="#7a828a",
         )
         self.search_function_check.pack(
             side=tk.LEFT,
@@ -7860,6 +7950,8 @@ class OMEROBrowserDialog:
             text="Append to Observed Folders",
             variable=self.append_observed_folders_var,
             command=self._on_append_observed_folders_changed,
+            state=_tk_constant("DISABLED", "disabled"),
+            disabledforeground="#7a828a",
         )
         self.append_observed_folders_check.pack(side=tk.LEFT)
         self.converter_frame = tk.Frame(self.converter_slot)
@@ -7965,6 +8057,7 @@ class OMEROBrowserDialog:
         self.help_btn = _CircularIconButton(
             self.panel_icon_frame,
             text="?",
+            command=self._show_connector_help,
             bg=CONNECTOR_HELP_ICON_BG,
             fg=CONNECTOR_HELP_ICON_FG,
             activebackground=CONNECTOR_HELP_ICON_ACTIVE_BG,
@@ -8118,6 +8211,7 @@ class OMEROBrowserDialog:
         self._draw_connection_indicator("disconnected")
         self.root.bind("<Button-1>", self._clear_text_focus_on_non_input_click, add="+")
         self._set_browser_search_visible(self._search_function_enabled())
+        self._set_browser_interaction_state(False)
         self._align_path_row_control_heights()
 
     def _clear_text_focus_on_non_input_click(self, event):
@@ -8707,6 +8801,65 @@ class OMEROBrowserDialog:
                 if callable(grid_remove):
                     grid_remove()
         self._apply_all_browser_search_filters()
+        self._set_browser_interaction_state(getattr(self, "_connected", False))
+
+    def _set_browser_interaction_state(self, enabled):
+        """Enable or disable browser searches and lists.
+
+        Inputs: `enabled`. Output: None.
+        """
+        enabled = bool(enabled)
+        state = (
+            _tk_constant("NORMAL", "normal")
+            if enabled
+            else _tk_constant("DISABLED", "disabled")
+        )
+        search_state = state
+        for check_name in ("search_function_check", "append_observed_folders_check"):
+            configure = getattr(getattr(self, check_name, None), "config", None)
+            if callable(configure):
+                configure(state=state)
+
+        for key, entry in getattr(self, "_browser_search_entries", {}).items():
+            configure = getattr(entry, "config", None)
+            if not callable(configure):
+                continue
+            if enabled:
+                foreground = (
+                    BROWSER_SEARCH_PLACEHOLDER_FG
+                    if getattr(self, "_browser_search_placeholder_visible", {}).get(
+                        key, False
+                    )
+                    else BROWSER_SEARCH_TEXT_FG
+                )
+                configure(
+                    state=search_state,
+                    bg="white",
+                    fg=foreground,
+                    disabledforeground=BROWSER_DISABLED_FG,
+                )
+            else:
+                configure(
+                    state=search_state,
+                    bg=BROWSER_DISABLED_BG,
+                    fg=BROWSER_DISABLED_FG,
+                    disabledforeground=BROWSER_DISABLED_FG,
+                )
+
+        for listbox_name in ("plist", "dlist", "ilist"):
+            listbox = getattr(self, listbox_name, None)
+            configure = getattr(listbox, "config", None)
+            if not callable(configure):
+                continue
+            if enabled:
+                configure(state=state, bg="white", fg="#111827")
+            else:
+                configure(
+                    state=state,
+                    bg=BROWSER_DISABLED_BG,
+                    fg=BROWSER_DISABLED_FG,
+                    disabledforeground=BROWSER_DISABLED_FG,
+                )
 
     def _on_browser_search_changed(self, key):
         """Filter one browser panel after its search query changes.
@@ -8911,18 +9064,25 @@ class OMEROBrowserDialog:
         self._modal_background_window_disabled = False
 
     @staticmethod
-    def _call_messagebox_function(function, title, message, parent):
+    def _call_messagebox_function(function, title, message, parent, **options):
         """Call a Tk messagebox function with a parent when supported.
 
-        Inputs: `function`, `title`, `message`, `parent`. Output: function result.
+        Inputs: `function`, `title`, `message`, `parent`, `options`. Output: function
+        result.
         """
         try:
-            return function(title, message, parent=parent)
+            return function(title, message, parent=parent, **options)
         except TypeError as exc:
             message_text = str(exc)
             if "parent" not in message_text and "keyword" not in message_text:
                 raise
-            return function(title, message)
+            try:
+                return function(title, message, **options)
+            except TypeError as fallback_exc:
+                fallback_text = str(fallback_exc)
+                if "keyword" not in fallback_text:
+                    raise
+                return function(title, message)
 
     def _run_blocking_modal(self, callback):
         """Run a blocking modal while the main window cannot be interacted with.
@@ -8935,10 +9095,10 @@ class OMEROBrowserDialog:
         finally:
             self._unlock_modal_background()
 
-    def _show_messagebox_dialog(self, kind, title, message):
+    def _show_messagebox_dialog(self, kind, title, message, **options):
         """Show a modal messagebox with the main window locked behind it.
 
-        Inputs: `kind`, `title`, `message`. Output: messagebox result.
+        Inputs: `kind`, `title`, `message`, `options`. Output: messagebox result.
         """
         function = getattr(messagebox, kind)
         return self._run_blocking_modal(
@@ -8947,6 +9107,7 @@ class OMEROBrowserDialog:
                 title,
                 message,
                 getattr(self, "root", None),
+                **options,
             )
         )
 
@@ -8977,6 +9138,18 @@ class OMEROBrowserDialog:
         Inputs: `title`, `message`. Output: bool.
         """
         return bool(self._show_messagebox_dialog("askyesno", title, message))
+
+    def _ask_yes_no_cancel_dialog(self, title, message):
+        """Show a modal yes/no/cancel question dialog.
+
+        Inputs: `title`, `message`. Output: bool or None.
+        """
+        return self._show_messagebox_dialog(
+            "askyesnocancel",
+            title,
+            message,
+            default="yes",
+        )
 
     def _connector_settings_snapshot(self):
         """Return the connector settings that may be persisted.
@@ -9165,13 +9338,21 @@ class OMEROBrowserDialog:
             )
             configure(state=state)
 
+    def _set_connected_settings_control_state(self, enabled):
+        """Enable or disable settings that require a verified OMERO connection.
+
+        Inputs: `enabled`. Output: None.
+        """
+        self._set_autosave_settings_control_state(enabled)
+        self._set_browser_interaction_state(enabled)
+
     def _on_autosave_settings_changed(self):
         """Persist the autosave status immediately after a user toggle.
 
         Inputs: none. Output: None.
         """
         if not getattr(self, "_connected", False):
-            self._set_autosave_settings_control_state(False)
+            self._set_connected_settings_control_state(False)
             return
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
@@ -9190,6 +9371,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: None.
         """
+        if not getattr(self, "_connected", False):
+            self._set_connected_settings_control_state(False)
+            return
         self._set_browser_search_visible(self._search_function_enabled())
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
@@ -9199,6 +9383,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: None.
         """
+        if not getattr(self, "_connected", False):
+            self._set_connected_settings_control_state(False)
+            return
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
 
@@ -9207,7 +9394,7 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: None.
         """
-        self._set_autosave_settings_control_state(True)
+        self._set_connected_settings_control_state(True)
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
 
@@ -9908,6 +10095,7 @@ class OMEROBrowserDialog:
         self._set_autosave_settings_control_state(False)
         self._set_status(status_text, status_color)
         self._set_connection_indicator("disconnected")
+        self._set_browser_interaction_state(False)
 
     def _detect_converter_options_after_connection(self, client=None):
         """Populate converter options from verified OMERO and Imaris capabilities.
@@ -10260,6 +10448,112 @@ class OMEROBrowserDialog:
         """
         self.root.after(0, lambda: self._show_info_dialog(title, message))
 
+    def _show_connector_help(self):
+        """Show the modal OMERO connector help window.
+
+        Inputs: none. Output: None.
+        """
+
+        def _show_modal():
+            """Build and show the blocking connector help dialog.
+
+            Inputs: none. Output: None.
+            """
+            help_window = tk.Toplevel(self.root)
+            help_window.title(CONNECTOR_HELP_TITLE)
+            help_window.resizable(False, False)
+            help_window.transient(self.root)
+            help_window.configure(bg="#f8fafc")
+
+            frame = tk.Frame(help_window, padx=22, pady=18, bg="#f8fafc")
+            frame.grid(row=0, column=0, sticky=tk.NSEW)
+            frame.grid_columnconfigure(0, weight=1)
+            frame.grid_columnconfigure(1, weight=0)
+
+            title_label = tk.Label(
+                frame,
+                text=CONNECTOR_HELP_TITLE,
+                font=("Arial", 13, "bold"),
+                bg="#f8fafc",
+                fg="#111827",
+                anchor=tk.W,
+                justify=tk.LEFT,
+            )
+            title_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+
+            row_index = 1
+            for section_title, section_lines in CONNECTOR_HELP_SECTIONS:
+                tk.Label(
+                    frame,
+                    text=section_title,
+                    font=("Arial", 10, "bold"),
+                    bg="#f8fafc",
+                    fg="#1f2937",
+                    anchor=tk.W,
+                    justify=tk.LEFT,
+                ).grid(row=row_index, column=0, columnspan=2, sticky=tk.W, pady=(8, 2))
+                row_index += 1
+                for line in section_lines:
+                    tk.Label(
+                        frame,
+                        text=f"- {line}",
+                        font=("Arial", 9),
+                        bg="#f8fafc",
+                        fg="#374151",
+                        anchor=tk.W,
+                        justify=tk.LEFT,
+                        wraplength=660,
+                    ).grid(
+                        row=row_index,
+                        column=0,
+                        columnspan=2,
+                        sticky=tk.W,
+                        pady=1,
+                    )
+                    row_index += 1
+
+            def _close_help_window():
+                """Close only the connector help child window.
+
+                Inputs: none. Output: None.
+                """
+                with contextlib.suppress(Exception):
+                    help_window.grab_release()
+                help_window.destroy()
+
+            close_button = tk.Button(
+                frame,
+                text="Close",
+                command=_close_help_window,
+                font=("Arial", 9),
+                width=10,
+                default=_tk_constant("ACTIVE", "active"),
+            )
+            close_button.grid(
+                row=row_index,
+                column=1,
+                sticky=tk.SE,
+                padx=(18, 0),
+                pady=(14, 0),
+            )
+
+            help_window.protocol("WM_DELETE_WINDOW", _close_help_window)
+            help_window.update_idletasks()
+            parent_x = int(self.root.winfo_rootx() or 0)
+            parent_y = int(self.root.winfo_rooty() or 0)
+            parent_w = int(self.root.winfo_width() or 0)
+            parent_h = int(self.root.winfo_height() or 0)
+            width = max(int(help_window.winfo_reqwidth() or 0), 740)
+            height = int(help_window.winfo_reqheight() or 0)
+            x_pos = parent_x + max(0, (parent_w - width) // 2)
+            y_pos = parent_y + max(0, (parent_h - height) // 2)
+            help_window.geometry(f"{width}x{height}+{x_pos}+{y_pos}")
+            close_button.focus_set()
+            help_window.grab_set()
+            self.root.wait_window(help_window)
+
+        _show_modal()
+
     def _show_connector_info(self):
         """Show the modal OMERO connector information window.
 
@@ -10304,8 +10598,7 @@ class OMEROBrowserDialog:
             metadata_label_font = ("Arial", 9, "bold")
             metadata_value_font = ("Arial", 9)
             metadata_rows = (
-                ("Author(s):", CONNECTOR_INFO_AUTHOR),
-                ("Contact:", CONNECTOR_INFO_CONTACT),
+                ("Original developer:", CONNECTOR_INFO_AUTHOR),
                 ("Version:", CONNECTOR_INFO_VERSION),
             )
             for row_index, (label_text, value_text) in enumerate(
@@ -10345,7 +10638,7 @@ class OMEROBrowserDialog:
                 width=10,
                 default=_tk_constant("ACTIVE", "active"),
             )
-            close_button.grid(row=4, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
+            close_button.grid(row=3, column=2, sticky=tk.SE, padx=(18, 0), pady=(10, 0))
 
             info_window.protocol("WM_DELETE_WINDOW", _close_info_window)
             info_window.update_idletasks()
@@ -11080,6 +11373,7 @@ class OMEROBrowserDialog:
                 "#f39c12",
                 active_bg="#d68910",
             )
+            self._set_browser_interaction_state(True)
             self._set_connection_indicator("connected")
             self._apply_loaded_projects(projects)
             self._set_converter_options(converter_options)
@@ -11115,6 +11409,7 @@ class OMEROBrowserDialog:
             active_bg="#2f85c7",
         )
         self._set_autosave_settings_control_state(False)
+        self._set_browser_interaction_state(False)
         self._set_status("Connection failed", "#f8d7da")
         self._set_connection_indicator("error")
         self._connection_in_progress = False
@@ -12093,6 +12388,142 @@ class OMEROBrowserDialog:
                 return f"Image {image_id}"
         return "selected image"
 
+    @staticmethod
+    def _download_filename_for_image(img, converter):
+        """Return the intended local filename for a selected OMERO image.
+
+        Inputs: `img`, `converter`. Output: safe local filename.
+        """
+        image_id = img.get("id") if isinstance(img, dict) else None
+        fallback_stem = OMEROBrowserDialog._image_cache_subdir(
+            image_id if image_id is not None else "unknown"
+        )
+        image_name = OMEROBrowserDialog._image_display_name(img)
+        if converter == "OMERO":
+            return _safe_download_filename(
+                image_name,
+                f"{fallback_stem}.ims",
+                default_extension=".ims",
+            )
+        if converter == "Imaris":
+            filename = _safe_download_filename(
+                image_name,
+                f"{fallback_stem}.ome.tif",
+            )
+            if os.path.splitext(filename)[1].lower() not in {".tif", ".tiff", ".tf8"}:
+                filename = f"{filename}.ome.tif"
+            return filename
+        raise RuntimeError(f"Unsupported converter: {converter}")
+
+    def _planned_download_filenames(self, images, converter):
+        """Return intended local filenames for the selected import.
+
+        Inputs: `images`, `converter`. Output: list of filename strings.
+        """
+        return [
+            self._download_filename_for_image(img, converter)
+            for img in list(images or [])
+            if isinstance(img, dict)
+        ]
+
+    @staticmethod
+    def _repeated_download_filenames(filenames):
+        """Return planned filenames that repeat within the same selection.
+
+        Inputs: `filenames`. Output: ordered list of filename strings.
+        """
+        repeated = []
+        seen = set()
+        emitted = set()
+        for filename in filenames:
+            safe_filename = _safe_download_filename(filename, "download")
+            if safe_filename in seen and safe_filename not in emitted:
+                repeated.append(safe_filename)
+                emitted.add(safe_filename)
+            seen.add(safe_filename)
+        return repeated
+
+    @staticmethod
+    def _existing_download_filename_conflicts(download_dir, filenames):
+        """Return planned filenames that already exist in the download folder.
+
+        Inputs: `download_dir`, `filenames`. Output: ordered list of filename strings.
+        """
+        conflicts = []
+        seen = set()
+        for filename in filenames:
+            safe_filename = _safe_download_filename(filename, "download")
+            if safe_filename in seen:
+                continue
+            if os.path.exists(os.path.join(download_dir, safe_filename)):
+                conflicts.append(safe_filename)
+                seen.add(safe_filename)
+        return conflicts
+
+    @staticmethod
+    def _duplicate_download_prompt_message(conflicts, repeated=None):
+        """Return user-facing duplicate download prompt text.
+
+        Inputs: `conflicts`, `repeated`. Output: prompt message.
+        """
+        names = list(conflicts or [])
+        repeated_names = [name for name in list(repeated or []) if name not in names]
+        names.extend(repeated_names)
+        preview_limit = 8
+        preview = "\n".join(f"- {name}" for name in names[:preview_limit])
+        if len(names) > preview_limit:
+            preview += f"\n- ... and {len(names) - preview_limit} more"
+        return (
+            "The selected folder already contains one or more planned output "
+            "filenames, or the current selection includes repeated names.\n\n"
+            f"{preview}\n\n"
+            "Choose Yes to replace matching files in the selected folder. If "
+            "selected images share one name, later copies will be saved with "
+            "unique names so no selected image overwrites another. Choose No "
+            "to keep existing files and save this import with unique names, or "
+            "Cancel to stop before the export starts."
+        )
+
+    def _resolve_duplicate_download_policy(self, images, converter, download_dir):
+        """Resolve how the current import should handle existing local files.
+
+        Inputs: `images`, `converter`, `download_dir`. Output: `(proceed, policy)`.
+        """
+        planned_filenames = self._planned_download_filenames(images, converter)
+        repeated = self._repeated_download_filenames(planned_filenames)
+        conflicts = self._existing_download_filename_conflicts(
+            download_dir,
+            planned_filenames,
+        )
+        if not conflicts and not repeated:
+            return True, None
+        answer = self._ask_yes_no_cancel_dialog(
+            "Duplicate Filenames",
+            self._duplicate_download_prompt_message(conflicts, repeated),
+        )
+        if answer is None:
+            return False, None
+        if answer:
+            return True, DUPLICATE_DOWNLOAD_POLICY_REPLACE
+        return True, DUPLICATE_DOWNLOAD_POLICY_UNIQUE
+
+    @staticmethod
+    def _per_file_duplicate_download_policy(
+        target_filename,
+        duplicate_policy,
+        planned_names_seen,
+    ):
+        """Return a per-file duplicate policy that avoids batch self-overwrite.
+
+        Inputs: `target_filename`, `duplicate_policy`, `planned_names_seen`. Output:
+        duplicate policy string or None.
+        """
+        safe_filename = _safe_download_filename(target_filename, "download")
+        if safe_filename in planned_names_seen:
+            return DUPLICATE_DOWNLOAD_POLICY_UNIQUE
+        planned_names_seen.add(safe_filename)
+        return duplicate_policy
+
     def _selected_image_export_key(self, file_path):
         """Return a stable key for a tracked selected-image export path.
 
@@ -12142,10 +12573,13 @@ class OMEROBrowserDialog:
         self,
         image_id,
         download_dir,
+        target_filename=None,
+        duplicate_policy=None,
     ):
         """Export one OMERO Image ID for direct Imaris handoff.
 
-        Inputs: `image_id`, `download_dir`. Output: selected-image export path.
+        Inputs: `image_id`, `download_dir`, `target_filename`, `duplicate_policy`.
+        Output: selected-image export path.
         """
         self._set_status(
             f"Imaris converter: exporting selected Image {image_id} as OME-TIFF...",
@@ -12155,6 +12589,8 @@ class OMEROBrowserDialog:
             image_id,
             download_dir,
             fallback_name=f"{self._image_cache_subdir(image_id)}.ome.tif",
+            target_filename=target_filename,
+            duplicate_policy=duplicate_policy,
         )
         selected_export = self._mark_selected_image_export_file(ome_tiff_file)
         _xt_debug(
@@ -12231,6 +12667,7 @@ class OMEROBrowserDialog:
             self._set_converter_options(list(available_converter_options))
             return
 
+        worker_args: Tuple[Any, ...]
         if len(selected_images) == 1:
             img = selected_images[0]
             confirmation = (
@@ -12266,6 +12703,15 @@ class OMEROBrowserDialog:
         ):
             return
 
+        proceed, duplicate_policy = self._resolve_duplicate_download_policy(
+            selected_images,
+            converter,
+            self.export_dir,
+        )
+        if not proceed:
+            return
+        worker_args = (*worker_args, duplicate_policy)
+
         self._append_current_path_to_imaris_arena_if_enabled()
         self._set_actions_busy_for_load(True)
         threading.Thread(
@@ -12287,11 +12733,11 @@ class OMEROBrowserDialog:
         if load_btn is not None:
             load_btn.config(state=_tk_constant("NORMAL", "normal"))
 
-    def _load_worker(self, img, converter):
+    def _load_worker(self, img, converter, duplicate_policy=None):
         """Load the worker for `OMEROBrowserDialog`.
 
-        Inputs: `img`, `converter`. Output: None. Raises: RuntimeError when validation or the
-        called operation fails.
+        Inputs: `img`, `converter`, `duplicate_policy`. Output: None. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         workflow_succeeded = False
         try:
@@ -12320,6 +12766,7 @@ class OMEROBrowserDialog:
                 )
 
             download_dir = self.export_dir
+            target_filename = self._download_filename_for_image(img, converter)
 
             if converter == "OMERO":
                 self._set_status(
@@ -12332,6 +12779,8 @@ class OMEROBrowserDialog:
                     image_id,
                     download_dir,
                     fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
+                    target_filename=target_filename,
+                    duplicate_policy=duplicate_policy,
                 )
                 require_ims = True
                 selected_image_export = False
@@ -12342,6 +12791,8 @@ class OMEROBrowserDialog:
                 downloaded_file = self._download_selected_image_with_imaris_converter(
                     image_id,
                     download_dir,
+                    target_filename=target_filename,
+                    duplicate_policy=duplicate_policy,
                 )
                 require_ims = False
                 selected_image_export = True
@@ -12414,11 +12865,11 @@ class OMEROBrowserDialog:
                 wait=False,
             )
 
-    def _load_multiple_worker(self, images, converter):
+    def _load_multiple_worker(self, images, converter, duplicate_policy=None):
         """Load the multiple worker for `OMEROBrowserDialog`.
 
-        Inputs: `images`, `converter`. Output: None. Raises: RuntimeError when validation or the
-        called operation fails.
+        Inputs: `images`, `converter`, `duplicate_policy`. Output: None. Raises:
+        RuntimeError when validation or the called operation fails.
         """
         workflow_succeeded = False
         try:
@@ -12455,11 +12906,18 @@ class OMEROBrowserDialog:
             require_ims = converter == "OMERO"
             selected_image_export = converter == "Imaris"
             download_dir = self.export_dir
+            planned_names_seen: Set[str] = set()
             for index, img in enumerate(selected_images, start=1):
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
                 image_name = self._image_display_name(img)
+                target_filename = self._download_filename_for_image(img, converter)
+                per_file_duplicate_policy = self._per_file_duplicate_download_policy(
+                    target_filename,
+                    duplicate_policy,
+                    planned_names_seen,
+                )
 
                 if converter == "OMERO":
                     self._set_status(
@@ -12470,6 +12928,8 @@ class OMEROBrowserDialog:
                         image_id,
                         download_dir,
                         fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
+                        target_filename=target_filename,
+                        duplicate_policy=per_file_duplicate_policy,
                     )
                 else:
                     self._set_status(
@@ -12481,6 +12941,8 @@ class OMEROBrowserDialog:
                         self._download_selected_image_with_imaris_converter(
                             image_id,
                             download_dir,
+                            target_filename=target_filename,
+                            duplicate_policy=per_file_duplicate_policy,
                         )
                     )
 

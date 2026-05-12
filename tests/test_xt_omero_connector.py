@@ -191,6 +191,19 @@ class _FakeListbox:
         self.activated = []
         self.anchors = []
         self.focused = False
+        self.configs = []
+        self.options = {}
+        self.state = None
+
+    def config(self, **kwargs):
+        """Apply widget configuration.
+
+        Inputs: `**kwargs`. Output: None.
+        """
+        self.configs.append(kwargs)
+        self.options.update(kwargs)
+        if "state" in kwargs:
+            self.state = kwargs["state"]
 
     def delete(self, start, end=None):
         """Delete the delete for `_FakeListbox`.
@@ -1085,9 +1098,13 @@ def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_p
 
     client.opener = _FakeOpener()
 
-    local_path = client.download_ims_export(63, tmp_path)
+    local_path = client.download_ims_export(
+        63,
+        tmp_path,
+        target_filename="original image name.ims",
+    )
 
-    assert Path(local_path).name == "selected.ims"
+    assert Path(local_path).name == "original image name.ims"
     assert module.is_ims_file(local_path) is True
     assert calls[0] == (
         (
@@ -3670,6 +3687,7 @@ def test_search_function_toggle_updates_settings_immediately_without_password(
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("Imaris")
     dialog._show_autosave_settings_error = _noop
+    dialog._connected = True
 
     module.OMEROBrowserDialog._on_search_function_changed(dialog)
 
@@ -3715,6 +3733,7 @@ def test_append_observed_folders_toggle_updates_settings_only(
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("Imaris")
     dialog._show_autosave_settings_error = _noop
+    dialog._connected = True
 
     monkeypatch.setattr(module.os, "name", "nt", raising=False)
     monkeypatch.setattr(module, "_import_winreg_module", lambda: fake_winreg)
@@ -5551,6 +5570,7 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "panel_icon_frame.grid_configure(padx=(12, 0))" in source
     assert "self.help_btn = _CircularIconButton(" in source
     assert 'text="?",' in source
+    assert "command=self._show_connector_help" in source
     assert "bg=CONNECTOR_HELP_ICON_BG" in source
     assert "fg=CONNECTOR_HELP_ICON_FG" in source
     assert "font=CONNECTOR_PANEL_ICON_FONT" in source
@@ -5565,7 +5585,7 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "self.info_btn.pack(side=tk.LEFT)" in source
     assert 'CONNECTOR_INFO_VERSION = "1.0.0"' in source
     assert 'CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"' in source
-    assert 'CONNECTOR_INFO_CONTACT = "mitridisefstratios@gmail.com"' in source
+    assert "CONNECTOR_INFO_CONTACT" not in source
     assert '"contributors are not liable' not in source
     assert '"service interruption' not in source
     assert "No liability can " in source
@@ -5580,12 +5600,12 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "pady=(0, 14)" not in info_source
     assert "disclaimer.grid(" in info_source
     assert "pady=0" in info_source
-    assert '("Author(s):", CONNECTOR_INFO_AUTHOR)' in info_source
-    assert '("Contact:", CONNECTOR_INFO_CONTACT)' in info_source
+    assert '("Original developer:", CONNECTOR_INFO_AUTHOR)' in info_source
+    assert '"Contact:"' not in info_source
     assert '("Version:", CONNECTOR_INFO_VERSION)' in info_source
     assert 'metadata_label_font = ("Arial", 9, "bold")' in info_source
     assert "font=metadata_label_font" in info_source
-    assert "row=4, column=2" in info_source
+    assert "row=3, column=2" in info_source
     assert "def _close_info_window():" in info_source
     assert "info_window.grab_release()" in info_source
     assert "command=_close_info_window" in info_source
@@ -5593,6 +5613,19 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     assert "self._run_blocking_modal(_show_modal)" not in info_source
     assert "info_window.grab_set()" in source
     assert "self.root.wait_window(info_window)" in source
+    assert "def _show_connector_help(self):" in source
+    help_source = source[
+        source.index("def _show_connector_help(self):") : source.index(
+            "def _show_connector_info(self):"
+        )
+    ]
+    assert "CONNECTOR_HELP_SECTIONS" in help_source
+    assert "help_window.title(CONNECTOR_HELP_TITLE)" in help_source
+    assert "width = max(int(help_window.winfo_reqwidth() or 0), 740)" in help_source
+    assert "help_window.grab_release()" in help_source
+    assert "command=_close_help_window" in help_source
+    assert "self.root.wait_window(help_window)" in help_source
+    assert "permission" not in help_source.lower()
 
 
 def test_connector_info_close_button_destroys_only_child_window(monkeypatch):
@@ -5815,6 +5848,235 @@ def test_connector_info_close_button_destroys_only_child_window(monkeypatch):
     assert windows[0].grab_released is True
     assert windows[0].destroyed is True
     assert root.destroyed is False
+
+
+def test_connector_help_close_button_destroys_only_child_window(monkeypatch):
+    """Verify help-window close cannot route through the main window close path.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on child-window close regressions.
+    """
+    module = _load_xt_module()
+    captured = {"button_command": None, "labels": []}
+    windows = []
+
+    class _Root:
+        """Fake connector root that records accidental destroy calls."""
+
+        def __init__(self):
+            """Create root state.
+
+            Inputs: none. Output: initializes root state.
+            """
+            self.destroyed = False
+
+        @staticmethod
+        def winfo_rootx():
+            """Return fake root x position.
+
+            Inputs: none. Output: int.
+            """
+            return 10
+
+        @staticmethod
+        def winfo_rooty():
+            """Return fake root y position.
+
+            Inputs: none. Output: int.
+            """
+            return 20
+
+        @staticmethod
+        def winfo_width():
+            """Return fake root width.
+
+            Inputs: none. Output: int.
+            """
+            return 500
+
+        @staticmethod
+        def winfo_height():
+            """Return fake root height.
+
+            Inputs: none. Output: int.
+            """
+            return 300
+
+        def wait_window(self, window):
+            """Simulate clicking the help child close button while waiting.
+
+            Inputs: `window`. Output: None.
+            """
+            assert window.grabbed is True
+            assert captured["button_command"] is not None
+            captured["button_command"]()
+
+        def destroy(self):
+            """Record unexpected main-root destruction.
+
+            Inputs: none. Output: None.
+            """
+            self.destroyed = True
+
+    class _Window:
+        """Fake child Toplevel used by the help dialog."""
+
+        def __init__(self, root):
+            """Create child-window state.
+
+            Inputs: `root`. Output: initializes child-window state.
+            """
+            self.root = root
+            self.destroyed = False
+            self.grabbed = False
+            self.grab_released = False
+            self.close_protocol = None
+            self.geometry_value = ""
+            windows.append(self)
+
+        @staticmethod
+        def title(_text):
+            """Accept title updates.
+
+            Inputs: `_text`. Output: None.
+            """
+
+        @staticmethod
+        def resizable(_width, _height):
+            """Accept resizable updates.
+
+            Inputs: `_width`, `_height`. Output: None.
+            """
+
+        @staticmethod
+        def transient(_root):
+            """Accept transient updates.
+
+            Inputs: `_root`. Output: None.
+            """
+
+        @staticmethod
+        def configure(**_kwargs):
+            """Accept configuration updates.
+
+            Inputs: `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def update_idletasks():
+            """Accept idle-task updates.
+
+            Inputs: none. Output: None.
+            """
+
+        @staticmethod
+        def winfo_reqwidth():
+            """Return fake requested width.
+
+            Inputs: none. Output: int.
+            """
+            return 240
+
+        @staticmethod
+        def winfo_reqheight():
+            """Return fake requested height.
+
+            Inputs: none. Output: int.
+            """
+            return 320
+
+        def geometry(self, geometry):
+            """Capture geometry updates.
+
+            Inputs: `geometry`. Output: None.
+            """
+            self.geometry_value = geometry
+
+        def protocol(self, name, command):
+            """Capture close protocol callback.
+
+            Inputs: `name`, `command`. Output: None.
+            """
+            assert name == "WM_DELETE_WINDOW"
+            self.close_protocol = command
+
+        def grab_set(self):
+            """Record child modal grab.
+
+            Inputs: none. Output: None.
+            """
+            self.grabbed = True
+
+        def grab_release(self):
+            """Record child modal grab release.
+
+            Inputs: none. Output: None.
+            """
+            self.grab_released = True
+
+        def destroy(self):
+            """Record child destruction.
+
+            Inputs: none. Output: None.
+            """
+            self.destroyed = True
+
+    class _Widget:
+        """Fake Tk widget for labels, frames, and buttons."""
+
+        def __init__(self, *_args, **kwargs):
+            """Capture label text and optional button command.
+
+            Inputs: `_args`, `kwargs`. Output: initializes widget state.
+            """
+            if "text" in kwargs:
+                captured["labels"].append(str(kwargs["text"]))
+            command = kwargs.get("command")
+            if command is not None:
+                captured["button_command"] = command
+
+        @staticmethod
+        def grid(*_args, **_kwargs):
+            """Accept grid placement.
+
+            Inputs: `_args`, `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def grid_columnconfigure(*_args, **_kwargs):
+            """Accept grid column configuration.
+
+            Inputs: `_args`, `_kwargs`. Output: None.
+            """
+
+        @staticmethod
+        def focus_set():
+            """Accept focus request.
+
+            Inputs: none. Output: None.
+            """
+
+    for constant in ("NSEW", "W", "LEFT", "SE"):
+        monkeypatch.setattr(module.tk, constant, constant.lower(), raising=False)
+    monkeypatch.setattr(module.tk, "Toplevel", _Window, raising=False)
+    monkeypatch.setattr(module.tk, "Frame", _Widget, raising=False)
+    monkeypatch.setattr(module.tk, "Label", _Widget, raising=False)
+    monkeypatch.setattr(module.tk, "Button", _Widget, raising=False)
+
+    root = _Root()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.root = root
+
+    module.OMEROBrowserDialog._show_connector_help(dialog)
+
+    assert len(windows) == 1
+    assert windows[0].close_protocol is captured["button_command"]
+    assert windows[0].grab_released is True
+    assert windows[0].destroyed is True
+    assert root.destroyed is False
+    assert windows[0].geometry_value.startswith("740x")
+    assert module.CONNECTOR_HELP_TITLE in captured["labels"]
+    assert "Find images" in captured["labels"]
+    assert not any("permission" in text.lower() for text in captured["labels"])
 
 
 def test_blocking_messagebox_locks_background_window_and_cursors(monkeypatch):
@@ -6954,6 +7216,61 @@ def test_browser_search_filters_loaded_entities_by_partial_match():
     assert refresh_calls
 
 
+def test_browser_interaction_state_disables_search_controls_and_lists():
+    """Verify disconnected browser panels are visually and functionally disabled.
+
+    Inputs: repository fixtures. Output: fails on disconnected browser UI regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.search_function_check = _FakeButton()
+    dialog.append_observed_folders_check = _FakeButton()
+    dialog._browser_search_entries = {
+        "projects": _FakeEntry("Type to search Projects"),
+        "datasets": _FakeEntry("Type to search Datasets"),
+        "images": _FakeEntry("Type to search Images"),
+    }
+    dialog._browser_search_placeholder_visible = {
+        "projects": True,
+        "datasets": True,
+        "images": False,
+    }
+    dialog.plist = _FakeListbox()
+    dialog.dlist = _FakeListbox()
+    dialog.ilist = _FakeListbox()
+
+    module.OMEROBrowserDialog._set_browser_interaction_state(dialog, False)
+
+    assert dialog.search_function_check.state == "disabled"
+    assert dialog.append_observed_folders_check.state == "disabled"
+    assert all(
+        entry.options["state"] == "disabled"
+        and entry.options["bg"] == module.BROWSER_DISABLED_BG
+        for entry in dialog._browser_search_entries.values()
+    )
+    assert [dialog.plist.state, dialog.dlist.state, dialog.ilist.state] == [
+        "disabled",
+        "disabled",
+        "disabled",
+    ]
+
+    module.OMEROBrowserDialog._set_browser_interaction_state(dialog, True)
+
+    assert dialog.search_function_check.state == "normal"
+    assert dialog.append_observed_folders_check.state == "normal"
+    assert dialog._browser_search_entries["projects"].options["fg"] == (
+        module.BROWSER_SEARCH_PLACEHOLDER_FG
+    )
+    assert dialog._browser_search_entries["images"].options["fg"] == (
+        module.BROWSER_SEARCH_TEXT_FG
+    )
+    assert [dialog.plist.state, dialog.dlist.state, dialog.ilist.state] == [
+        "normal",
+        "normal",
+        "normal",
+    ]
+
+
 def test_open_file_in_imaris_does_not_launch_fallback_when_live_handle_fails(tmp_path):
     """Confirm open file in imaris does not launch fallback when live handle fails exposes the expected failure.
 
@@ -7873,6 +8190,134 @@ def test_safe_download_filename_removes_paths_markers_and_reserved_names():
     assert module._safe_download_filename("", "img_1", ".ims") == "img_1.ims"
 
 
+def test_download_path_policy_replaces_by_default_and_uniques_only_when_requested(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify duplicate filename policy keeps original names unless unique is requested.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on duplicate
+    download naming regressions.
+    """
+    module = _load_xt_module()
+    existing = tmp_path / "selected.ims"
+    existing.write_bytes(b"old")
+
+    monkeypatch.delenv(module.UNIQUE_DOWNLOAD_SUFFIX_ENV, raising=False)
+    assert module._download_path_for_policy(tmp_path, "selected.ims") == str(existing)
+    assert module._download_path_for_policy(
+        tmp_path,
+        "selected.ims",
+        module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+    ) == str(existing)
+
+    unique_path = Path(
+        module._download_path_for_policy(
+            tmp_path,
+            "selected.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_UNIQUE,
+        )
+    )
+    assert unique_path.parent == tmp_path
+    assert unique_path.name.startswith("selected__")
+    assert unique_path.suffix == ".ims"
+
+    monkeypatch.setenv(module.UNIQUE_DOWNLOAD_SUFFIX_ENV, "true")
+    env_unique_path = Path(module._download_path_for_policy(tmp_path, "selected.ims"))
+    assert env_unique_path.parent == tmp_path
+    assert env_unique_path.name.startswith("selected__")
+    assert env_unique_path.suffix == ".ims"
+
+
+def test_duplicate_download_prompt_resolves_replace_unique_and_cancel(tmp_path):
+    """Verify duplicate download prompt returns the selected import policy.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on duplicate prompt regressions.
+    """
+    module = _load_xt_module()
+    (tmp_path / "sample.ims").write_bytes(b"old")
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    answers = [True, False, None]
+    messages = []
+    dialog._ask_yes_no_cancel_dialog = lambda title, message: (
+        messages.append((title, message)) or answers.pop(0)
+    )
+    images = [{"id": 5, "name": "sample"}]
+
+    assert module.OMEROBrowserDialog._resolve_duplicate_download_policy(
+        dialog,
+        images,
+        "OMERO",
+        tmp_path,
+    ) == (True, module.DUPLICATE_DOWNLOAD_POLICY_REPLACE)
+    assert module.OMEROBrowserDialog._resolve_duplicate_download_policy(
+        dialog,
+        images,
+        "OMERO",
+        tmp_path,
+    ) == (True, module.DUPLICATE_DOWNLOAD_POLICY_UNIQUE)
+    assert module.OMEROBrowserDialog._resolve_duplicate_download_policy(
+        dialog,
+        images,
+        "OMERO",
+        tmp_path,
+    ) == (False, None)
+
+    assert [title for title, _message in messages] == [
+        "Duplicate Filenames",
+        "Duplicate Filenames",
+        "Duplicate Filenames",
+    ]
+    assert all("sample.ims" in message for _title, message in messages)
+    assert all(
+        "Cancel to stop before the export starts" in message for _, message in messages
+    )
+
+
+def test_duplicate_download_prompt_is_skipped_without_existing_names(tmp_path):
+    """Verify imports without existing filenames start without a duplicate prompt.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on duplicate prompt regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._ask_yes_no_cancel_dialog = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("duplicate prompt must not open without filename conflicts")
+    )
+
+    assert module.OMEROBrowserDialog._resolve_duplicate_download_policy(
+        dialog,
+        [{"id": 6, "name": "new image"}],
+        "Imaris",
+        tmp_path,
+    ) == (True, None)
+
+
+def test_duplicate_download_prompt_detects_repeated_selected_names(tmp_path):
+    """Verify repeated selected filenames are resolved before export starts.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on duplicate prompt regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    messages = []
+    dialog._ask_yes_no_cancel_dialog = lambda title, message: (
+        messages.append((title, message)) or True
+    )
+
+    assert module.OMEROBrowserDialog._resolve_duplicate_download_policy(
+        dialog,
+        [{"id": 6, "name": "same"}, {"id": 7, "name": "same"}],
+        "OMERO",
+        tmp_path,
+    ) == (True, module.DUPLICATE_DOWNLOAD_POLICY_REPLACE)
+
+    assert messages
+    assert messages[0][0] == "Duplicate Filenames"
+    assert "same.ims" in messages[0][1]
+    assert "selected images share one name" in messages[0][1]
+
+
 def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
     """Check that XT log sanitizer redacts session material and user paths keeps sensitive data out of output.
 
@@ -8032,9 +8477,13 @@ def test_client_download_selected_image_ome_tiff_uses_standard_export_endpoint(
 
     client.opener = _FakeOpener()
 
-    local_path = client.download_selected_image_ome_tiff(17, tmp_path)
+    local_path = client.download_selected_image_ome_tiff(
+        17,
+        tmp_path,
+        target_filename="selected image",
+    )
 
-    assert Path(local_path).name == "demo.ome.tif"
+    assert Path(local_path).name == "selected image.ome.tif"
     assert Path(local_path).read_bytes() == b"II*\x00selected-image"
     assert opened_urls == [
         (
@@ -8359,20 +8808,42 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         assert imaris_id == "17"
         return resolution_results.pop(0)
 
-    def _download_ims_export(image_id, download_dir, fallback_name):
+    def _download_ims_export(
+        image_id,
+        download_dir,
+        fallback_name,
+        target_filename=None,
+        duplicate_policy=None,
+    ):
         """Record server-side IMS export download.
 
         Inputs: OMERO image id, target directory, fallback name. Output: local file path.
         """
-        downloads.append(("ims", image_id, Path(download_dir), fallback_name))
+        downloads.append(
+            (
+                "ims",
+                image_id,
+                Path(download_dir),
+                fallback_name,
+                target_filename,
+                duplicate_policy,
+            )
+        )
         return str(local_file)
 
-    def _download_with_imaris_converter(image_id, download_dir):
+    def _download_with_imaris_converter(
+        image_id,
+        download_dir,
+        target_filename=None,
+        duplicate_policy=None,
+    ):
         """Record selected-image export for direct Imaris handoff.
 
         Inputs: OMERO image id, target directory. Output: local file path.
         """
-        downloads.append(("imaris", image_id, Path(download_dir)))
+        downloads.append(
+            ("imaris", image_id, Path(download_dir), target_filename, duplicate_policy)
+        )
         dialog._mark_selected_image_export_file(local_file)
         return str(local_file)
 
@@ -8430,7 +8901,9 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
     )
 
     if converter == "OMERO":
-        assert downloads == [(expected_download, 7, tmp_path, "img_7.ims")]
+        assert downloads == [
+            (expected_download, 7, tmp_path, "img_7.ims", "sample.ims", None)
+        ]
         assert opened == [str(local_file)]
         assert dialog.imaris is not None
         assert resolution_results == []
@@ -8442,6 +8915,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         assert str(downloads[0][2]).replace("\\", "/") == str(tmp_path).replace(
             "\\", "/"
         )
+        assert downloads[0][3:] == ("sample.ome.tif", None)
         assert opened == []
         assert dialog.imaris is None
         assert len(resolution_results) == 2
@@ -9977,7 +10451,7 @@ def test_load_routes_single_selection_to_single_worker(tmp_path, monkeypatch):
     assert threads == [
         {
             "target": dialog._load_worker,
-            "args": (image, "OMERO"),
+            "args": (image, "OMERO", None),
             "daemon": True,
         }
     ]
@@ -10054,7 +10528,7 @@ def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
     assert threads == [
         {
             "target": dialog._load_multiple_worker,
-            "args": ([first, second], "Imaris"),
+            "args": ([first, second], "Imaris", None),
             "daemon": True,
         }
     ]
@@ -10135,7 +10609,7 @@ def test_load_omero_multi_selection_warns_only_first_image_opens(
     assert threads == [
         {
             "target": dialog._load_multiple_worker,
-            "args": ([first, second], "OMERO"),
+            "args": ([first, second], "OMERO", None),
             "daemon": True,
         }
     ]
@@ -10164,8 +10638,17 @@ def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly
     dialog.export_dir = str(tmp_path)
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
-        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name: (
-            calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+            calls.append(
+                (
+                    "ome-tiff",
+                    image_id,
+                    Path(download_dir),
+                    fallback_name,
+                    target_filename,
+                    duplicate_policy,
+                )
+            )
             or str(ome_tiff_file)
         ),
         download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -10196,7 +10679,9 @@ def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly
         "Imaris",
     )
 
-    assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif")]
+    assert calls == [
+        ("ome-tiff", 7, tmp_path, "img_7.ome.tif", "selected image.ome.tif", None)
+    ]
     assert opened == [(str(ome_tiff_file), False, True)]
     assert dialog.temp_files == [str(ome_tiff_file)]
     assert statuses[-1][0] == (
@@ -10230,8 +10715,17 @@ def test_imaris_converter_marks_selected_export_without_detail_or_conversion(
     dialog.temp_files = []
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog.client = types.SimpleNamespace(
-        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name: (
-            calls.append(("ome-tiff", image_id, Path(download_dir), fallback_name))
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+            calls.append(
+                (
+                    "ome-tiff",
+                    image_id,
+                    Path(download_dir),
+                    fallback_name,
+                    target_filename,
+                    duplicate_policy,
+                )
+            )
             or str(ome_tiff_file)
         ),
         download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -10246,7 +10740,7 @@ def test_imaris_converter_marks_selected_export_without_detail_or_conversion(
     )
 
     assert result == str(ome_tiff_file)
-    assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif")]
+    assert calls == [("ome-tiff", 7, tmp_path, "img_7.ome.tif", None, None)]
     assert dialog.temp_files == []
     assert dialog._is_tracked_selected_image_export_file(ome_tiff_file) is True
     assert (
@@ -10509,8 +11003,17 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
     dialog.export_dir = str(tmp_path)
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
-        download_ims_export=lambda image_id, download_dir, fallback_name: (
-            calls.append(("ims", image_id, Path(download_dir), fallback_name))
+        download_ims_export=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+            calls.append(
+                (
+                    "ims",
+                    image_id,
+                    Path(download_dir),
+                    fallback_name,
+                    target_filename,
+                    duplicate_policy,
+                )
+            )
             or str(ims_file)
         ),
         download_original_file=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -10538,7 +11041,7 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
         "OMERO",
     )
 
-    assert calls == [("ims", 8, tmp_path, "img_8.ims")]
+    assert calls == [("ims", 8, tmp_path, "img_8.ims", "sample.ims", None)]
     assert opened == [(str(ims_file), True, False)]
     assert dialog.temp_files == [str(ims_file)]
     assert not (tmp_path / "img_8").exists()
@@ -10561,14 +11064,29 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     events = []
     info_messages = []
 
-    def _download_ims_export(image_id, download_dir, fallback_name):
+    def _download_ims_export(
+        image_id,
+        download_dir,
+        fallback_name,
+        target_filename=None,
+        duplicate_policy=None,
+    ):
         """Download the IMS export.
 
         Inputs: `image_id` OMERO image ID, `download_dir`, `fallback_name`. Output:
         download IMS export result.
         """
         assert not any(event[0] == "open" for event in events)
-        events.append(("download", image_id, Path(download_dir), fallback_name))
+        events.append(
+            (
+                "download",
+                image_id,
+                Path(download_dir),
+                fallback_name,
+                target_filename,
+                duplicate_policy,
+            )
+        )
         return files_by_id[image_id]
 
     dialog = object.__new__(module.OMEROBrowserDialog)
@@ -10611,14 +11129,87 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     )
 
     assert events == [
-        ("download", 11, tmp_path, "img_11.ims"),
-        ("download", 12, tmp_path, "img_12.ims"),
+        ("download", 11, tmp_path, "img_11.ims", "first.ims", None),
+        ("download", 12, tmp_path, "img_12.ims", "second.ims", None),
         ("open", (str(first_ims),), True, False),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
     assert "Only the first selected image was opened" in info_messages[0]
     assert str(tmp_path) in info_messages[0]
     assert "Imaris 11 Workflow/Batch processing pipeline" in info_messages[0]
+
+
+def test_load_multiple_worker_uniques_repeated_selected_filenames(tmp_path):
+    """Verify repeated selected filenames never overwrite earlier batch downloads.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on repeated local filename regressions.
+    """
+    module = _load_xt_module()
+    first_ims = tmp_path / "first.ims"
+    second_ims = tmp_path / "second.ims"
+    first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
+    second_ims.write_bytes(b"\x89HDF\r\n\x1a\nsecond")
+    files_by_id = {31: str(first_ims), 32: str(second_ims)}
+    downloads = []
+
+    def _download_ims_export(
+        image_id,
+        download_dir,
+        fallback_name,
+        target_filename=None,
+        duplicate_policy=None,
+    ):
+        """Record each planned repeated-name IMS export.
+
+        Inputs: `image_id`, `download_dir`, `fallback_name`. Output: local IMS path.
+        """
+        downloads.append(
+            (
+                image_id,
+                Path(download_dir),
+                fallback_name,
+                target_filename,
+                duplicate_policy,
+            )
+        )
+        return files_by_id[image_id]
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.client = types.SimpleNamespace(download_ims_export=_download_ims_export)
+    dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._show_info = lambda *_args, **_kwargs: None
+    dialog._show_error = lambda *_args, **_kwargs: None
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: (
+        None if not wait else callback()
+    )
+    dialog._open_downloaded_files_in_imaris = lambda *_args, **_kwargs: True
+
+    module.OMEROBrowserDialog._load_multiple_worker(
+        dialog,
+        [{"id": 31, "name": "same"}, {"id": 32, "name": "same"}],
+        "OMERO",
+        module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+    )
+
+    assert downloads == [
+        (
+            31,
+            tmp_path,
+            "img_31.ims",
+            "same.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+        ),
+        (
+            32,
+            tmp_path,
+            "img_32.ims",
+            "same.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_UNIQUE,
+        ),
+    ]
 
 
 def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
@@ -10639,13 +11230,26 @@ def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
     statuses = []
     info_messages = []
 
-    def _download_with_imaris_converter(image_id, download_dir):
+    def _download_with_imaris_converter(
+        image_id,
+        download_dir,
+        target_filename=None,
+        duplicate_policy=None,
+    ):
         """Export one selected image through standard OMERO.web.
 
         Inputs: `image_id`, `download_dir`. Output: selected-image export path.
         """
         assert not opened
-        events.append(("selected-export", image_id, Path(download_dir)))
+        events.append(
+            (
+                "selected-export",
+                image_id,
+                Path(download_dir),
+                target_filename,
+                duplicate_policy,
+            )
+        )
         file_path = files_by_id[image_id]
         dialog._mark_selected_image_export_file(file_path)
         return file_path
@@ -10693,11 +11297,15 @@ def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
             "selected-export",
             21,
             tmp_path,
+            "well A01 field 1.ome.tif",
+            None,
         ),
         (
             "selected-export",
             22,
             tmp_path,
+            "well A01 field 2.ome.tif",
+            None,
         ),
     ]
     assert opened == [([str(first_export), str(second_export)], False, True)]

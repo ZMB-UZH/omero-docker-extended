@@ -6,7 +6,6 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import omero.rtypes
@@ -629,10 +628,9 @@ def _build_export_path(export_root, image, image_id):
     Inputs: `export_root`, `image`, `image_id` OMERO image ID. Output: `join` result.
     """
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}")
     os.makedirs(output_dir, exist_ok=True)
-    return os.path.join(output_dir, f"{safe_name}_{timestamp}.ims")
+    return os.path.join(output_dir, f"{safe_name}.ims")
 
 
 def _build_intermediate_ome_tiff_path(export_root, image, image_id):
@@ -641,10 +639,9 @@ def _build_intermediate_ome_tiff_path(export_root, image, image_id):
     Inputs: `export_root`, `image`, `image_id`. Output: `os.path.join` result.
     """
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = os.path.join(export_root, f"image_{image_id}", "source")
     os.makedirs(output_dir, exist_ok=True)
-    return os.path.join(output_dir, f"{safe_name}_{timestamp}.ome.tif")
+    return os.path.join(output_dir, f"{safe_name}.ome.tif")
 
 
 def _write_binary_chunk(handle, chunk):

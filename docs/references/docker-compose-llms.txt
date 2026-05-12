@@ -1,6 +1,9 @@
-Docker Compose reference notes for AI Agent workflows.
+# Docker Compose Reference Notes
+
+Reference notes for AI Agent workflows.
 
 Service topology (docker-compose.yml):
+
 - 21 Compose services total on a single "omero" bridge network: 19 long-running runtime containers by default, 20 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
 - All services have explicit healthcheck: blocks. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
 - Service startup ordering via depends_on with condition: service_healthy.
@@ -8,33 +11,37 @@ Service topology (docker-compose.yml):
 - All images use pinned version tags. Never use :latest.
 
 Core services:
+
 - omeroserver (host port from OMERO_SERVER_HOST_PORT, default 4064; container/API port from OMERO_CLI_PORT, default 4064): OMERO.server, custom Dockerfile, depends on database.
 - omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
 - database (port 5432): PostgreSQL 16.12, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.12, OMERO plugin database.
-- redis (port 6379): Redis 8.6.2-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
-- ollama (port 11434 internal): Ollama 0.21.0 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
+- redis (port 6379): Redis 8.6.3-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
+- ollama (port 11434 internal): Ollama 0.23.2 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 
 Supporting services:
+
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
 - portainer (ports 9000, 9443): container management UI, portainer/portainer-ce:2.40.0-alpine.
 
 Monitoring services:
-- prometheus (port 9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.11.2.
+
+- prometheus (port 9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.11.3.
 - grafana (port 3000): 4 auto-provisioned dashboards, grafana/grafana:13.0.1.
 - loki (port 3100): log aggregation backend, grafana/loki:3.7.1.
-- alloy (port 12345): log collection from Docker containers + OMERO log files, grafana/alloy:v1.15.1.
+- alloy (port 12345): log collection from Docker containers + OMERO log files, grafana/alloy:v1.16.1.
 - blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.28.0.
 - node-exporter: host metrics, prom/node-exporter:v1.11.1.
 - cadvisor: container metrics, ghcr.io/google/cadvisor:0.56.2.
 - postgres-exporter: OMERO database metrics, prometheuscommunity/postgres-exporter:v0.19.1.
 - postgres-exporter-plugin: plugin database metrics, prometheuscommunity/postgres-exporter:v0.19.1.
-- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.82.0-alpine.
+- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.83.0-alpine.
 - path-usage-exporter: custom Python 3.12 service exporting host path usage metrics via node-exporter textfile collector.
 - crowdsec (profile-gated, port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
 
 Environment files:
+
 - installation_paths.env: host filesystem path variables consumed by volume mounts.
 - env/omeroserver.env: OMERO.server configuration (DB, Java, scripts, security).
 - env/omeroweb.env: OMERO.web configuration (apps, plugins, admin tools endpoints, upload settings).
@@ -42,6 +49,7 @@ Environment files:
 - env/grafana.env: Grafana admin credentials and auth settings.
 
 Volume mount patterns:
+
 - Host paths from installation_paths.env bind-mounted into containers.
 - PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
 - Redis uses tmpfs for /data (512MB).
@@ -51,6 +59,7 @@ Volume mount patterns:
 
 Compose commands (explicit manual form: include installation paths, secrets,
 and OMERO.server env files when not relying on repo-root `.env`):
+
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps

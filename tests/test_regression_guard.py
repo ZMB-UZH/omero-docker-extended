@@ -165,6 +165,39 @@ class RegressionGuardEngineTests(unittest.TestCase):
         )
         self.assertFalse(any(f.rule_id == "RG012" for f in findings))
 
+    def test_floating_and_untagged_image_references_are_flagged(self) -> None:
+        """Verify floating and untagged image references are flagged.
+
+        Inputs: repository fixtures. Output: fails on regressions in image pinning detection.
+        """
+        for path, text in (
+            ("Dockerfile.bad", "FROM python:latest\nUSER appuser\n"),
+            ("docker-compose.yml", "services:\n  redis:\n    image: redis\n"),
+            ("docker-compose.yml", "services:\n  app:\n    image: vendor/app:stable\n"),
+        ):
+            with self.subTest(path=path, text=text):
+                findings = self._scan_one(path, text)
+                self.assertTrue(any(f.rule_id == "RG013" for f in findings))
+
+    def test_pinned_image_references_are_not_flagged(self) -> None:
+        """Verify pinned image references are not flagged.
+
+        Inputs: repository fixtures. Output: fails on regressions in image pinning false positives.
+        """
+        for path, text in (
+            ("Dockerfile.good", "FROM python:3.12.10-slim\nUSER appuser\n"),
+            (
+                "docker-compose.yml",
+                "services:\n  app:\n    image: vendor/app:1.2.3@sha256:"
+                + ("0" * 64)
+                + "\n",
+            ),
+            ("docker-compose.yml", "services:\n  app:\n    image: omeroweb:custom\n"),
+        ):
+            with self.subTest(path=path, text=text):
+                findings = self._scan_one(path, text)
+                self.assertFalse(any(f.rule_id == "RG013" for f in findings))
+
 
 class RegressionGuardCliTests(unittest.TestCase):
     """Test cases for regression guard cli tests."""
