@@ -4,7 +4,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import omero
 from celery import states
@@ -243,6 +243,7 @@ def _run_script_via_omero_cli(
     host: str,
     port: int,
     session_key: str | None = None,
+    status_callback: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, str]:
     """Launch IMS export with OMERO CLI inside the OMERO.web container.
 
@@ -287,11 +288,29 @@ def _run_script_via_omero_cli(
     env["OMERO_SESSIONDIR"] = str(session_dir)
     env["OMERO_TMPDIR"] = str(tmp_dir)
 
-    result = process_utils.run(
+    def _report_cli_tick(pid: int, elapsed: float) -> None:
+        """Report live OMERO CLI metadata. Inputs: `pid`, `elapsed`. Output: None."""
+        if status_callback is None:
+            return
+        try:
+            status_callback(
+                "running_script",
+                {
+                    "script_id": int(script_id),
+                    "cli_pid": int(pid),
+                    "elapsed": float(elapsed),
+                },
+            )
+        except Exception:
+            logger.exception("Failed to update IMS export CLI process metadata")
+
+    result = process_utils.run_streaming(
         cmd,
         timeout=EXPORT_TIMEOUT + 120,
         check=False,
         env=env,
+        tick_interval=1.0,
+        on_tick=_report_cli_tick,
     )
 
     combined = (
@@ -511,6 +530,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
             host=host,
             port=port,
             session_key=cli_session_key,
+            status_callback=_update_task_state,
         )
         normalized_state = "FINISHED"
 

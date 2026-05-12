@@ -1,7 +1,7 @@
 #
 # <CustomTools>
 #  <Menu>
-#   <Item name="OMERO Connector" icon="Python3" tooltip="Interact with OMERO">
+#   <Item name="OMERO Connector" icon="OMERO" tooltip="Interact with OMERO">
 #    <Command>Python3XT::XTOmeroConnector(%i)</Command>
 #   </Item>
 #  </Menu>
@@ -116,6 +116,11 @@ tk: Any = _DeferredTkImport("tkinter")
 filedialog: Any = _DeferredTkImport("tkinter.filedialog")
 messagebox: Any = _DeferredTkImport("tkinter.messagebox")
 
+
+class _ConnectorOperationCancelled(RuntimeError):
+    """Raised when the user stops the current connector operation."""
+
+
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
 # because this script runs inside Imaris on the user's machine.
@@ -134,6 +139,7 @@ MAX_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
 FOLDER_EXPORT_TIMEOUT = 3600
 FOLDER_EXPORT_POLL_INTERVAL = 2.0
 FOLDER_EXPORT_CONFIRM_PREVIEW_LIMIT = 10
+CANCEL_POLL_INTERVAL = 0.1
 HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
 HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
 DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS = 3
@@ -174,8 +180,9 @@ CONVERTER_DROPDOWN_ARROW_WIDTH = 24
 ACTION_ROW_HORIZONTAL_PAD = 10
 ACTION_BUTTON_PAD = 0
 ACTION_BUTTON_GAP = 4
+STOP_BUTTON_LEFT_GAP = 36
 STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
-CONNECTION_LABEL_WIDTH = len("Username:")
+CONNECTION_LABEL_WIDTH = len("Local path:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
 CONNECTOR_HELP_ICON_BG = "#b9e4ff"
 CONNECTOR_HELP_ICON_ACTIVE_BG = "#9ed7f6"
@@ -245,7 +252,7 @@ AUTOSAVE_SETTINGS_ERROR_TITLE = "Settings Not Saved"
 AUTOSAVE_SETTINGS_ERROR_MESSAGE = (
     "Autosave settings could not update the OMERO connector settings file."
 )
-CONNECTOR_INFO_TITLE = "OMERO Connector"
+CONNECTOR_INFO_TITLE = "Info"
 CONNECTOR_INFO_VERSION = "1.0.0"
 CONNECTOR_INFO_AUTHOR = "Efstratios Mitridis"
 CONNECTOR_INFO_DISCLAIMER = (
@@ -253,7 +260,7 @@ CONNECTOR_INFO_DISCLAIMER = (
     "implied. Use of the connector is at the user's own risk. No liability can "
     "be assumed for data loss or any other damages arising from its use."
 )
-CONNECTOR_HELP_TITLE = "OMERO Connector Help"
+CONNECTOR_HELP_TITLE = "Help"
 CONNECTOR_HELP_SECTIONS = (
     (
         "Find images",
@@ -310,6 +317,9 @@ CONNECTOR_SETTINGS_SHOW_LOG_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "SHOW_LOG"
 CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY = (
     CONNECTOR_SETTINGS_KEY_PREFIX + "SEARCH_FUNCTION"
 )
+CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY = (
+    CONNECTOR_SETTINGS_KEY_PREFIX + "COLLABORATION_PROJECTS"
+)
 CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY = (
     CONNECTOR_SETTINGS_KEY_PREFIX + "APPEND_OBSERVED_FOLDERS"
 )
@@ -325,14 +335,72 @@ CONNECTOR_SETTINGS_KEYS = (
     CONNECTOR_SETTINGS_PORT_KEY,
     CONNECTOR_SETTINGS_USERNAME_KEY,
     CONNECTOR_SETTINGS_HTTPS_KEY,
-    CONNECTOR_SETTINGS_PATH_KEY,
     CONNECTOR_SETTINGS_CONVERTER_KEY,
     CONNECTOR_SETTINGS_AUTOSAVE_KEY,
     CONNECTOR_SETTINGS_SHOW_LOG_KEY,
     CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY,
+    CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY,
     CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY,
     CONNECTOR_SETTINGS_IMARIS_EXE_KEY,
     CONNECTOR_SETTINGS_VERSION_KEY,
+)
+CONNECTOR_SETTINGS_DEPRECATED_KEYS = (CONNECTOR_SETTINGS_PATH_KEY,)
+OMERO_LOGOMARK_SOURCE_URL = "https://www.openmicroscopy.org/img/logos/ome-logomark.svg"
+OMERO_LOGOMARK_SVG_SHA256 = (
+    "55646a0742bb001c6678cbabae8ae939d88c0f37e074527daadc289d8c7ac539"
+)
+OMERO_LOGOMARK_SVG_BYTES = (
+    b'<?xml version="1.0" encoding="utf-8"?>\n<!-- Generator: Adobe Illustrator'
+    b" 19.2.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg versi"
+    b'on="1.1" id="logo_-_color" xmlns="http://www.w3.org/2000/svg" xmlns:xlin'
+    b'k="http://www.w3.org/1999/xlink" x="0px"\n\t y="0px" viewBox="0 0 1024 896'
+    b'" style="enable-background:new 0 0 1024 896;" xml:space="preserve">\n<sty'
+    b'le type="text/css">\n\t.st0{fill:#DF283F;}\n\t.st1{fill:#1C4A87;}\n\t.st2{fill'
+    b':#128669;}\n\t.st3{fill:#1D8DCD;}\n</style>\n<g>\n\t<g>\n\t\t<path class="st0" d='
+    b'"M256,448c0,70.7-57.3,128-128,128S0,518.7,0,448s57.3-128,128-128S256,377'
+    b'.3,256,448z"/>\n\t\t<path class="st1" d="M1024,448c0,70.7-57.3,128-128,128s'
+    b'-128-57.3-128-128s57.3-128,128-128S1024,377.3,1024,448z"/>\n\t\t<path class'
+    b'="st2" d="M832,128c0,70.7-57.3,128-128,128s-128-57.3-128-128S633.3,0,704'
+    b',0S832,57.3,832,128z"/>\n\t\t<path class="st1" d="M448,128c0,70.7-57.3,128-'
+    b'128,128s-128-57.3-128-128S249.3,0,320,0S448,57.3,448,128z"/>\n\t\t<path cla'
+    b'ss="st3" d="M832,768c0,70.7-57.3,128-128,128s-128-57.3-128-128s57.3-128,'
+    b'128-128S832,697.3,832,768z"/>\n\t\t<path class="st1" d="M448,768c0,70.7-57.'
+    b'3,128-128,128s-128-57.3-128-128s57.3-128,128-128S448,697.3,448,768z"/>\n\t'
+    b"</g>\n</g>\n</svg>\n"
+)
+OMERO_LOGOMARK_PNG64_SHA256 = (
+    "4bf9098f0cdfb8042a4a9f6a4f079673b6a534f2bd0b7b87a80fc99141595613"
+)
+OMERO_LOGOMARK_PNG64_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAAA4CAYAAABNGP5yAAAFIElEQVRo3u2aTWxU"
+    "VRTHf/PSqgm21IqtJrowceFeERXwa8FCXfiB8YMUNFHUnegGTDDRxLpyCTXqwk+U"
+    "aLsBtRJjqNF2IbBm56JkiqFo6Uwi0ARd3HNn7rxO37vn3vemQ+QkTZq27//O+d/X"
+    "+879zakQEDc//J79thd4CNgObAJukp//CfwKfA78BFwEOPX9Hi/9wdFXXf0HRX9z"
+    "Sv834DNX/683x9S19IQYIDEM7AZGgOvTHgHPAFuAr4B3gTml/pCjv66N/tOifwAY"
+    "BaohRVS0F8jqDwNjwOOelx0GXgaqeU+BrP6Qo++T43fATqCqfQqSANN6gT3AY4pr"
+    "HgX2Alcp9H2LB3gEeAu4WluMygBZ/buBHYrkbDwHbHb2j2Uhq78hRt/ZP4o3QJLa"
+    "CgworwPoB57KuafVvy5Av89DP9qAa4H1AcnZuFOMWCnWFKC/tkwD+jAbVGisy0mw"
+    "vwD9fs0FIf8C3R6qHLUGLAJnIpI7KxorRa0A/XNlGlAHjkUkeDwnwTrwe4n60Qb8"
+    "C3yrvYlEDfgGuJSjPw4sBOjXJbdLmotUBkgXNwN8Iclq4mvgl6xOULq4GcwZIkT/"
+    "aCc6wYuY3v6w4ppJ4B3ggsffLmF6+0MK/R+Btz314wyQFZzD9Pb7yf53WAQ+Al4C"
+    "TvnoywqeBl4B9uXo10T/RV/9dMScBueA14AJ4ElMA2NPbWcxG9I4cBTlcdjR3yX6"
+    "WzFNzg1t9KeQlQ85Dge/19v09AM0m5BFUhuZsnja9PSZ+iHFRxmQYURLaAv3MKI"
+    "lQgtf0YA/br8/84JbT05F3bDs0C5IiwGp4vvkC8xmU+t2I1LFu/nXSXWg1ohKqvA"
+    "e4F7gCeAumpvOPKZDm8CwuKVuMsEpvAe4h+ambA9W85gOdgLDKpesCa4BwxgSMwI"
+    "MrnCvBeBLhPF1mQFDkv/2nPwPSP5VgIoUPwR8gD/jO4TpA1bdBKf4/ZgnV8UQEwy"
+    "nK5PxlR29GHrsWzwYhrgXuCYBHsA8NppXYgXYBmzKe2uUGbL6G4DnlfkDPAtsSTA"
+    "AclB5MTQZ32pCkgpmwwthiGuBFxLMJy6hsR4lgys41mDeVqGxMQFujBBQM7iCo4/"
+    "mqzoo/4TLg/NlRVT+CeboGRp5jK/sqBPJEBNMZxcax7rAgBiGOJ0AnxLG4GoEMLi"
+    "CI4Yh1oBPEuBnIhjfanaCDqMMYYgHgckEQ1NGMe2hb2gYX9kRwhCPSP7/JLKClvG"
+    "NUTDjKzvkKbAMMY9R1oCPMQxxFlqZYBXD+MZZzuDmacP4VvsglArLKG3+llFWJP8"
+    "TTv4XrHmNd2ibnn4A0+RUxNUF95ddVnwWo6zQZIiNfaIFiLjxv0ZinbihNm55/3j"
+    "m72ffuCNKP8qADAa3jCGGGJEqPlM/1IggAzwY3BmaDK7BEH1NcAq3+pZRZuqHmBD"
+    "zyVAWg7tNEh/BYYgB+rtpzyuK0AfC5wS1c3wNhpj3FMjqaxlfYw5R+xTEzAlq5v"
+    "i0c4JaxhfMKDs1J2gZYuacoKx+KOPbBtyX99aIMoA4Buc7Jxiq37E5wRgG5zMnGK"
+    "t/ZU6wTAMuB354ZU6wTAM6MScYo3+ibAMsgwuZE/SZ44udE8ybQ4wzQLq4acIZ4l"
+    "RWJyhdXOgc4kHMwJQqYuYENQxRM8cXMod4RPTPl94KO3OCOzH9+t8Zf34O+BDFHJ"
+    "8UcBrT2+/z0LdzgrPaWiB+TnAXhhDvADbSOpIyjfnMYRI475in0X8d8/S0058R/R"
+    "+sfshx+D8g375eb+s8dAAAAABJRU5ErkJggg=="
 )
 _ROUNDED_BUTTON_OPTION_ALIASES = {
     "background": "bg",
@@ -1330,6 +1398,20 @@ def _folder_display_name(folder_path):
     return drive.rstrip(":\\/").strip()
 
 
+def _display_local_path(path_value):
+    """Return a local path string using the host platform separator.
+
+    Inputs: `path_value`. Output: display path string.
+    """
+    candidate = _coerce_path(path_value)
+    if candidate is None:
+        return ""
+    path_text = os.fspath(candidate)
+    if os.name == "nt":
+        return path_text.replace("/", "\\")
+    return path_text
+
+
 def _is_filesystem_root(folder_path):
     """Return whether filesystem root.
 
@@ -1583,6 +1665,7 @@ def _default_connector_settings_for_current_version():
         CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
         CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY: "false",
         CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: "false",
     }
 
@@ -1994,6 +2077,8 @@ def _connector_settings_output_lines(existing_lines, settings):
     output = []
     for line in existing_lines:
         key, _raw_value = _split_connector_settings_env_line(line)
+        if key in CONNECTOR_SETTINGS_DEPRECATED_KEYS:
+            continue
         if key in CONNECTOR_SETTINGS_KEYS:
             if key not in seen:
                 output.append(rendered[key])
@@ -2368,6 +2453,22 @@ def _parse_port(port_value):
     if port <= 0 or port > 65535:
         return None
     return port
+
+
+def _valid_port_entry_text(value):
+    """Return whether text is valid while typing the port entry.
+
+    Inputs: proposed entry text. Output: bool.
+    """
+    text = str(value or "")
+    if not text:
+        return True
+    if not text.isdigit() or len(text) > 5:
+        return False
+    try:
+        return int(text) <= 65535
+    except (TypeError, ValueError):
+        return False
 
 
 def _host_text_has_url_scheme(host_text):
@@ -2991,6 +3092,38 @@ def _looks_like_imaris_application(candidate):
     )
 
 
+def _imaris_application_handle_is_live(candidate):
+    """Return whether an Imaris handle still responds to cheap read probes.
+
+    Inputs: candidate handle. Output: bool.
+    """
+    if not _looks_like_imaris_application(candidate):
+        return False
+    probe_names = (
+        "GetCurrentFileName",
+        "GetNumberOfImages",
+        "GetDataSet",
+        "GetFactory",
+        "GetVersion",
+    )
+    probed = False
+    for name in probe_names:
+        method = getattr(candidate, name, None)
+        if not callable(method):
+            continue
+        probed = True
+        try:
+            method()
+            return True
+        except Exception as exc:
+            _xt_debug(
+                "Cached Imaris handle failed live-session probe "
+                f"{name}: {type(exc).__name__}"
+            )
+            return False
+    return probed or _looks_like_imaris_application(candidate)
+
+
 def _infer_imaris_major_version_from_path(path_value):
     """Infer the Imaris major version from an executable or install path.
 
@@ -3208,6 +3341,36 @@ def _antialiased_circle_image(master, width, height, fill, outline):
             row.append(_circle_pixel_color(distance, radius, fill, outline, background))
         rows.append("{" + " ".join(row) + "}")
     image.put(" ".join(rows), to=(0, 0, width, height))
+    return image
+
+
+def _omero_logomark_photo_image(master, size=64):
+    """Return the embedded OME/OMERO logomark as a Tk PhotoImage.
+
+    Inputs: Tk master and square size. Output: PhotoImage.
+    """
+    return tk.PhotoImage(
+        master=master,
+        data=OMERO_LOGOMARK_PNG64_BASE64,
+        format="png",
+    )
+
+
+def _apply_omero_window_icon(window, image=None):
+    """Apply the OMERO logomark as a Tk window icon when supported.
+
+    Inputs: Tk window and optional cached image. Output: image or None.
+    """
+    if window is None:
+        return image
+    try:
+        icon = image or _omero_logomark_photo_image(window)
+        iconphoto = getattr(window, "iconphoto", None)
+        if callable(iconphoto):
+            iconphoto(True, icon)
+        return icon
+    except Exception as exc:
+        _xt_debug(f"OMERO window icon setup failed: {type(exc).__name__}")
     return image
 
 
@@ -3742,6 +3905,88 @@ class _CircularIconButton(_RoundedButton):
         image = _antialiased_circle_image(self._canvas, width, height, fill, outline)
         self._circle_image = image
         self._canvas.create_image(0, surface_offset, anchor=tk.NW, image=image)
+        self._canvas.create_text(
+            width / 2 + surface_offset / 2,
+            height / 2 + surface_offset / 2 - 1,
+            text=self._text,
+            fill=text_fill,
+            font=self._font,
+        )
+
+
+class _StopSignButton(_RoundedButton):
+    """Canvas-backed hexagonal stop button with the shared button behavior."""
+
+    @staticmethod
+    def _hexagon_points(left, top, right, bottom):
+        """Return traffic-stop-sign polygon coordinates.
+
+        Inputs: bounding box. Output: list of point coordinates.
+        """
+        width = right - left
+        cut = min(width * 0.23, (bottom - top) * 0.45)
+        return [
+            left + cut,
+            top,
+            right - cut,
+            top,
+            right,
+            (top + bottom) / 2,
+            right - cut,
+            bottom,
+            left + cut,
+            bottom,
+            left,
+            (top + bottom) / 2,
+        ]
+
+    def _redraw(self):
+        """Redraw the stop-sign button after state or size changes.
+
+        Inputs: no caller arguments. Output: performs the documented action and returns None.
+        """
+        width = max(int(self._canvas.winfo_width() or self._width), self._width)
+        height = max(int(self._canvas.winfo_height() or self._height), self._height)
+        self._canvas.delete("all")
+
+        enabled = self._is_enabled()
+        pressed = enabled and self._pressed
+        if not enabled:
+            fill = _blend_colors(self._bg, "#edf1f4", 0.65)
+            text_fill = _blend_colors(self._fg, "#6f7b84", 0.55)
+            border = _blend_colors("#ffffff", "#d7dde2", 0.5)
+            shadow = _blend_colors(self._bg, "#d7dde2", 0.8)
+        elif pressed:
+            fill = self._active_bg
+            text_fill = self._active_fg
+            border = "#ffffff"
+            shadow = _shade_color(self._bg, -0.45)
+        elif self._hover:
+            fill = _shade_color(self._bg, 0.08)
+            text_fill = self._fg
+            border = "#ffffff"
+            shadow = _shade_color(self._bg, -0.38)
+        else:
+            fill = self._bg
+            text_fill = self._fg
+            border = "#ffffff"
+            shadow = _shade_color(self._bg, -0.35)
+
+        surface_offset = 2 if pressed else 0
+        left = 4
+        top = 3 + surface_offset
+        right = width - 5
+        bottom = height - 6 + surface_offset
+        shadow_points = self._hexagon_points(left + 1, top + 3, right + 1, bottom + 3)
+        sign_points = self._hexagon_points(left, top, right, bottom)
+        self._canvas.create_polygon(shadow_points, fill=shadow, outline="")
+        self._canvas.create_polygon(
+            sign_points,
+            fill=fill,
+            outline=border,
+            width=3,
+            joinstyle=_tk_constant("ROUND", "round"),
+        )
         self._canvas.create_text(
             width / 2 + surface_offset / 2,
             height / 2 + surface_offset / 2 - 1,
@@ -5799,6 +6044,45 @@ def _download_path_for_policy(download_dir, filename, duplicate_policy=None):
     return os.path.join(download_dir, safe_filename)
 
 
+def _raise_if_cancelled(cancel_event, context="Operation"):
+    """Raise when a user stop request has been signaled.
+
+    Inputs: optional cancel event and context. Output: None. Raises:
+    _ConnectorOperationCancelled.
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise _ConnectorOperationCancelled(f"{context} stopped by user.")
+
+
+def _safe_remove_partial_download(path_value):
+    """Remove a partial connector download file after cancellation.
+
+    Inputs: path. Output: None.
+    """
+    if not path_value:
+        return
+    try:
+        candidate = _coerce_path(path_value)
+        if candidate is not None and candidate.is_file():
+            candidate.unlink()
+    except OSError:
+        _xt_debug("Could not remove partial stopped download.")
+
+
+def _wait_for_cancel_or_timeout(cancel_event, seconds, context="Operation"):
+    """Sleep in small increments so a stop request is observed quickly.
+
+    Inputs: optional cancel event, seconds, context. Output: None. Raises:
+    _ConnectorOperationCancelled when stopped.
+    """
+    deadline = time.time() + max(0.0, float(seconds or 0))
+    while time.time() < deadline:
+        _raise_if_cancelled(cancel_event, context)
+        remaining = deadline - time.time()
+        time.sleep(min(CANCEL_POLL_INTERVAL, max(0.0, remaining)))
+    _raise_if_cancelled(cancel_event, context)
+
+
 def _collect_imaris_xt_diagnostics():
     """Collect imaris XT diagnostics.
 
@@ -6024,6 +6308,7 @@ class OMEROWebClient:
         self.csrf_token = None
         self.session_id = None
         self.session_key = None
+        self.user_id = None
 
     @staticmethod
     def _build_base_url(host, port, scheme):
@@ -6122,15 +6407,87 @@ class OMEROWebClient:
         )
 
     @staticmethod
-    def _with_all_groups(endpoint):
-        """API endpoints query all groups accessible to the user.
+    def _extract_event_context_user_id(payload):
+        """Return the current OMERO experimenter id from an API login payload.
 
-        Inputs: `endpoint`. Output: with all groups result.
+        Inputs: decoded login payload. Output: user id or None.
+        """
+        if not isinstance(payload, dict):
+            return None
+        event_context = payload.get("eventContext")
+        if not isinstance(event_context, dict):
+            return None
+        user_id = event_context.get("userId")
+        if user_id is None:
+            return None
+        try:
+            return int(user_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _refresh_current_user_context(self, password):
+        """Record the authenticated OMERO user id from the documented JSON API.
+
+        Inputs: current login password. Output: bool.
+        """
+        if not password or not self.csrf_token:
+            return False
+        login_url = f"{self.api_url}/login/"
+        data = urllib.parse.urlencode(
+            {
+                "username": self.username,
+                "password": password,
+                "server": 1,
+                "csrfmiddlewaretoken": self.csrf_token,
+            }
+        ).encode()
+        req = self._create_request_with_cookies(login_url, data=data, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        try:
+            response = self.opener.open(req, timeout=30)
+            raw_body = response.read()
+            self._extract_cookies_from_jar()
+            payload = json.loads(raw_body.decode("utf-8"))
+        except Exception as exc:
+            _xt_debug(
+                f"Current OMERO user context lookup failed: {type(exc).__name__}: {exc}"
+            )
+            return False
+        user_id = self._extract_event_context_user_id(payload)
+        if user_id is None:
+            _xt_debug("Current OMERO user context lookup returned no user id")
+            return False
+        self.user_id = user_id
+        return True
+
+    @staticmethod
+    def _with_all_groups(endpoint):
+        """Return an API endpoint that queries all groups accessible to the user.
+
+        Inputs: `endpoint`. Output: endpoint with the all-groups query flag.
         """
         if "group=" in endpoint:
             return endpoint
         separator = "&" if "?" in endpoint else "?"
         return f"{endpoint}{separator}group=-1"
+
+    @staticmethod
+    def _project_endpoint(include_collaboration_projects, user_id=None):
+        """Return the project endpoint for the requested collaboration scope.
+
+        Inputs: `include_collaboration_projects`, `user_id`. Output: API endpoint.
+        """
+        endpoint = "m/projects/"
+        if include_collaboration_projects:
+            return OMEROWebClient._with_all_groups(endpoint)
+        try:
+            owner_id = int(user_id)
+        except (TypeError, ValueError):
+            raise RuntimeError(
+                "Cannot restrict projects to the current OMERO user because the "
+                "session did not report a user id."
+            ) from None
+        return f"{endpoint}?owner={owner_id}&group=-1"
 
     def _extract_items(self, payload, collection_keys=None):
         """Extract list payloads from common API response wrappers.
@@ -6274,6 +6631,8 @@ class OMEROWebClient:
             if not self.session_id:
                 _xt_debug("Login failed: session cookie missing after POST")
                 return False
+
+            self._refresh_current_user_context(password)
 
             if pre_auth_session and self.session_id == pre_auth_session:
                 _xt_debug("Login warning: session cookie unchanged after POST")
@@ -6854,7 +7213,13 @@ class OMEROWebClient:
                 )
             )
 
-        for key in ("upload_url", "import_step_url", "status_url", "confirm_url"):
+        for key in (
+            "upload_url",
+            "import_step_url",
+            "status_url",
+            "confirm_url",
+            "prune_url",
+        ):
             if payload.get(key):
                 payload[key] = self._normalize_url(payload[key], self.base_url)
         return payload
@@ -7002,6 +7367,37 @@ class OMEROWebClient:
             )
         return payload
 
+    def cancel_folder_export_job(self, job_payload):
+        """Best-effort cancellation for a folder export upload/import job.
+
+        Inputs: job payload. Output: bool indicating whether a cancel request was sent.
+        """
+        if not isinstance(job_payload, dict):
+            return False
+        prune_url = job_payload.get("prune_url")
+        if prune_url:
+            prune_url = self._normalize_url(prune_url, self.base_url)
+            try:
+                status_code, payload, raw_text = self._request_json_url(
+                    prune_url,
+                    method="POST",
+                    payload={"keep_paths": []},
+                    timeout=30,
+                    context="folder export cancellation",
+                )
+                if status_code < 400 and isinstance(payload, dict):
+                    _xt_debug(
+                        "Folder export server-side staged files pruned after stop"
+                    )
+                    return True
+                _xt_debug(
+                    "Folder export cancel prune returned "
+                    f"status={status_code} body_length={len(raw_text or '')}"
+                )
+            except Exception as exc:
+                _xt_debug(f"Folder export cancel prune failed: {type(exc).__name__}")
+        return False
+
     def poll_activity(self, job_id, timeout=900, interval=2):
         """Poll a script activity until completion.
 
@@ -7023,6 +7419,39 @@ class OMEROWebClient:
 
         return None
 
+    def cancel_ims_export(self, cancel_url):
+        """Cancel a server-side OMERO IMS export job.
+
+        Inputs: cancel URL. Output: bool indicating whether cancel was accepted.
+        """
+        if not cancel_url:
+            return False
+        cancel_url = self._normalize_url(cancel_url, self.base_url)
+        try:
+            status_code, payload, raw_text = self._request_json_url(
+                cancel_url,
+                method="POST",
+                payload={"cancel": True},
+                timeout=30,
+                context="OMERO converter IMS export cancellation",
+            )
+            if (
+                status_code < 400
+                and isinstance(payload, dict)
+                and payload.get("cancelled") is True
+            ):
+                _xt_debug("OMERO converter: server-side IMS export stopped")
+                return True
+            _xt_debug(
+                "OMERO converter: cancel returned "
+                f"status={status_code} body_length={len(raw_text or '')}"
+            )
+        except Exception as exc:
+            _xt_debug(
+                f"OMERO converter: cancel request failed {type(exc).__name__}: {exc}"
+            )
+        return False
+
     def ping(self, timeout=10):
         """That the authenticated OMERO.web session still answers.
 
@@ -7035,14 +7464,21 @@ class OMEROWebClient:
         )
         return data is not None
 
-    def list_projects(self, *, timeout=30, raise_on_error=False, retry_transient=False):
+    def list_projects(
+        self,
+        *,
+        timeout=30,
+        raise_on_error=False,
+        retry_transient=False,
+        include_collaboration_projects=True,
+    ):
         """Return the projects for `OMEROWebClient`.
 
-        Inputs: `timeout` timeout seconds, `raise_on_error`, `retry_transient`. Output:
-        `_build_named_entities` result.
+        Inputs: `timeout` timeout seconds, `raise_on_error`, `retry_transient`,
+        `include_collaboration_projects`. Output: `_build_named_entities` result.
         """
         data = self._api_request(
-            self._with_all_groups("m/projects/"),
+            self._project_endpoint(include_collaboration_projects, self.user_id),
             timeout=timeout,
             raise_on_error=raise_on_error,
             retry_transient=retry_transient,
@@ -7152,6 +7588,7 @@ class OMEROWebClient:
         fallback_name="export.ims",
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Download an Imaris .ims export for a given image_id.
 
@@ -7159,6 +7596,7 @@ class OMEROWebClient:
         `target_filename`, `duplicate_policy`. Output: `local_path`. Raises:
         RuntimeError when validation or the called operation fails.
         """
+        _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
         if download_dir is None:
             download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
             os.makedirs(download_dir, exist_ok=True)
@@ -7188,8 +7626,11 @@ class OMEROWebClient:
 
         # Create request with explicit cookies
         req = self._create_request_with_cookies(export_url)
+        status_url = None
+        local_path = None
 
         try:
+            _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
             with self.opener.open(req, timeout=30) as response:
                 if self._check_login_redirect(
                     response, "OMERO converter IMS export request"
@@ -7205,6 +7646,7 @@ class OMEROWebClient:
                         fallback_name=fallback_name,
                         target_filename=target_filename,
                         duplicate_policy=duplicate_policy,
+                        cancel_event=cancel_event,
                     )
 
                 raw_body = response.read().decode("utf-8", errors="replace")
@@ -7237,6 +7679,7 @@ class OMEROWebClient:
             reauth_attempted = False
 
             while time.time() < deadline:
+                _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
                 poll_count += 1
                 _xt_debug(
                     f"OMERO converter: IMS export poll #{poll_count} endpoint="
@@ -7315,7 +7758,11 @@ class OMEROWebClient:
                         download_url = self._normalize_url(download_url, base)
                     break
 
-                time.sleep(EXPORT_POLL_INTERVAL)
+                _wait_for_cancel_or_timeout(
+                    cancel_event,
+                    EXPORT_POLL_INTERVAL,
+                    "OMERO converter IMS export",
+                )
 
             if not download_url:
                 raise RuntimeError(
@@ -7323,6 +7770,7 @@ class OMEROWebClient:
                 )
 
             # Download the file
+            _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
             _xt_debug(
                 "OMERO converter: downloading IMS endpoint="
                 f"{_safe_url_for_log(download_url)}"
@@ -7362,6 +7810,10 @@ class OMEROWebClient:
                 )
                 with open(local_path, "wb") as f:
                     while True:
+                        _raise_if_cancelled(
+                            cancel_event,
+                            "OMERO converter IMS export download",
+                        )
                         chunk = response.read(chunk_size)
                         if not chunk:
                             break
@@ -7379,6 +7831,7 @@ class OMEROWebClient:
                 if total_size:
                     _xt_console_log()
 
+            _raise_if_cancelled(cancel_event, "OMERO converter IMS export download")
             if not os.path.exists(local_path):
                 raise RuntimeError(
                     f"Download completed but file not found at {local_path}"
@@ -7393,6 +7846,10 @@ class OMEROWebClient:
             _xt_debug("OMERO converter: IMS export downloaded OK")
             return local_path
 
+        except _ConnectorOperationCancelled:
+            self.cancel_ims_export(status_url)
+            _safe_remove_partial_download(local_path)
+            raise
         except urllib.error.HTTPError as e:
             try:
                 body_length = len(e.read())
@@ -7421,6 +7878,7 @@ class OMEROWebClient:
         fallback_name="image.ome.tif",
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Download a standard OMERO.web OME-TIFF export for one Image ID.
 
@@ -7428,6 +7886,7 @@ class OMEROWebClient:
         `target_filename`, `duplicate_policy`. Output: local OME-TIFF path. Raises:
         RuntimeError when validation or export fails.
         """
+        _raise_if_cancelled(cancel_event, "Imaris converter selected Image export")
         if download_dir is None:
             download_dir = os.path.join(tempfile.gettempdir(), "ImarisOMEROExports")
             os.makedirs(download_dir, exist_ok=True)
@@ -7446,8 +7905,10 @@ class OMEROWebClient:
             f"{_safe_url_for_log(export_url)}"
         )
         req = self._create_request_with_cookies(export_url)
+        local_path = None
 
         try:
+            _raise_if_cancelled(cancel_event, "Imaris converter selected Image export")
             with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
                 if self._check_login_redirect(
                     response, "Imaris converter selected Image OME-TIFF export"
@@ -7496,6 +7957,10 @@ class OMEROWebClient:
                 )
                 with open(local_path, "wb") as f:
                     while True:
+                        _raise_if_cancelled(
+                            cancel_event,
+                            "Imaris converter selected Image download",
+                        )
                         chunk = response.read(chunk_size)
                         if not chunk:
                             break
@@ -7513,6 +7978,9 @@ class OMEROWebClient:
                 if total_size:
                     _xt_console_log()
 
+            _raise_if_cancelled(
+                cancel_event, "Imaris converter selected Image download"
+            )
             if not os.path.exists(local_path):
                 raise RuntimeError(
                     f"Download completed but file not found at {local_path}"
@@ -7526,6 +7994,9 @@ class OMEROWebClient:
 
             _xt_debug("Imaris converter: selected Image OME-TIFF export downloaded OK")
             return local_path
+        except _ConnectorOperationCancelled:
+            _safe_remove_partial_download(local_path)
+            raise
         except urllib.error.HTTPError as e:
             try:
                 body_length = len(e.read())
@@ -7621,7 +8092,7 @@ class OMEROBrowserDialog:
         self._native_bridge_probe_done = threading.Event()
         self._native_bridge_probe_started = False
         self._native_bridge_probe_in_progress = False
-        self._native_bridge_available = _looks_like_imaris_application(self.imaris)
+        self._native_bridge_available = _imaris_application_handle_is_live(self.imaris)
         self._native_bridge_python_executable = None
         self._native_bridge_probe_error = ""
         self._native_bridge_last_verified_at = (
@@ -7632,6 +8103,8 @@ class OMEROBrowserDialog:
         self._folder_export_available = False
         self._folder_export_reason = "Connect to OMERO first."
         self._folder_export_in_progress = False
+        self._operation_cancel_event = threading.Event()
+        self._active_folder_export_job = None
         self._folder_export_initial_path_hint_consumed = False
         self._last_folder_export_selection = ""
         self._load_in_progress = False
@@ -7656,6 +8129,8 @@ class OMEROBrowserDialog:
         self.show_log_check: Any
         self.search_function_var: Any
         self.search_function_check: Any
+        self.collaboration_projects_var: Any
+        self.collaboration_projects_check: Any
         self.append_observed_folders_var: Any
         self.append_observed_folders_check: Any
         self._browser_search_frames = {}
@@ -7696,6 +8171,7 @@ class OMEROBrowserDialog:
         self.root = tk.Tk()
         self._ui_thread_id = threading.get_ident()
         self.root.title("OMERO Connector")
+        self._window_icon_image = _apply_omero_window_icon(self.root)
         self.root.geometry(
             f"{OMERO_CONNECTOR_WINDOW_WIDTH}x{OMERO_CONNECTOR_WINDOW_HEIGHT}"
         )
@@ -7711,6 +8187,7 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
+        self._request_stop_current_operation()
         self._cancel_password_reveal_timer()
         self._cancel_health_ping()
         self._cancel_indicator_blink()
@@ -7764,9 +8241,7 @@ class OMEROBrowserDialog:
         default_https = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_HTTPS_KEY), False
         )
-        default_folder_path = _filled_connector_setting(
-            saved_settings, CONNECTOR_SETTINGS_PATH_KEY
-        )
+        default_folder_path = ""
         default_converter = _filled_connector_setting(
             saved_settings, CONNECTOR_SETTINGS_CONVERTER_KEY
         )
@@ -7778,6 +8253,10 @@ class OMEROBrowserDialog:
         )
         default_search_function = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY), False
+        )
+        default_collaboration_projects = _connector_settings_bool(
+            saved_settings.get(CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY),
+            False,
         )
         default_append_observed_folders = _connector_settings_bool(
             saved_settings.get(CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY),
@@ -7795,7 +8274,16 @@ class OMEROBrowserDialog:
         self._connection_label(conn_frame, "Port:").grid(
             row=0, column=2, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
-        self.port_entry = tk.Entry(conn_frame, width=8)
+        port_validate_command = None
+        register = getattr(self.root, "register", None)
+        if callable(register):
+            port_validate_command = (register(_valid_port_entry_text), "%P")
+        port_entry_options: Any = {"width": 8}
+        if port_validate_command is not None:
+            port_entry_options.update(
+                {"validate": "key", "validatecommand": port_validate_command}
+            )
+        self.port_entry = tk.Entry(conn_frame, **port_entry_options)
         self.port_entry.insert(0, default_port)
         self.port_entry.grid(row=0, column=3, pady=5, padx=5, sticky=tk.W)
 
@@ -7880,6 +8368,9 @@ class OMEROBrowserDialog:
         self.autosave_settings_var = tk.BooleanVar(value=default_autosave_settings)
         self.show_log_var = tk.BooleanVar(value=default_show_log)
         self.search_function_var = tk.BooleanVar(value=default_search_function)
+        self.collaboration_projects_var = tk.BooleanVar(
+            value=default_collaboration_projects
+        )
         self.autosave_settings_frame = tk.Frame(
             conn_frame,
             width=AUTOSAVE_SETTINGS_FRAME_WIDTH,
@@ -7921,6 +8412,18 @@ class OMEROBrowserDialog:
             disabledforeground="#7a828a",
         )
         self.search_function_check.pack(
+            side=tk.LEFT,
+            padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
+        )
+        self.collaboration_projects_check = tk.Checkbutton(
+            self.autosave_settings_frame,
+            text="Collaboration projects",
+            variable=self.collaboration_projects_var,
+            command=self._on_collaboration_projects_changed,
+            state=_tk_constant("DISABLED", "disabled"),
+            disabledforeground="#7a828a",
+        )
+        self.collaboration_projects_check.pack(
             side=tk.LEFT,
             padx=(AUTOSAVE_SETTINGS_OPTION_GAP, 0),
         )
@@ -7998,7 +8501,7 @@ class OMEROBrowserDialog:
         self._folder_path_placeholder_visible = False
         self._folder_path_trace_suppressed = False
         self._folder_path_write_state = "empty"
-        self.path_label = self._connection_label(conn_frame, "Path:")
+        self.path_label = self._connection_label(conn_frame, "Local path:")
         self.path_label.grid(
             row=2, column=0, sticky=_tk_constant("NSEW", "nsew"), pady=5
         )
@@ -8158,7 +8661,27 @@ class OMEROBrowserDialog:
         )
         self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)
 
-        close_btn = _RoundedButton(
+        self.stop_btn = _StopSignButton(
+            actions,
+            text="STOP",
+            command=self._request_stop_current_operation,
+            bg="#d71920",
+            fg="white",
+            activebackground="#a90f14",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+            width=108,
+            height=52,
+        )
+        self.stop_btn.grid(
+            row=0,
+            column=3,
+            sticky=tk.W,
+            padx=(STOP_BUTTON_LEFT_GAP, 0),
+        )
+        self.stop_btn.grid_remove()
+
+        self.close_btn = _RoundedButton(
             actions,
             text="Close",
             command=self._on_close,
@@ -8170,7 +8693,7 @@ class OMEROBrowserDialog:
             width=120,
             height=52,
         )
-        close_btn.grid(row=0, column=4, sticky=tk.E, padx=ACTION_BUTTON_PAD)
+        self.close_btn.grid(row=0, column=4, sticky=tk.E, padx=ACTION_BUTTON_PAD)
 
         # Reserved for a later progress bar.
         bottom_progress_margin = tk.Frame(
@@ -8603,7 +9126,7 @@ class OMEROBrowserDialog:
 
         Inputs: `folder_path`, `write_state`. Output: None.
         """
-        value = str(folder_path or "")
+        value = _display_local_path(folder_path)
         self._set_folder_path_var_safely(value)
         self._folder_path_placeholder_visible = False
         self._folder_path_write_state = (
@@ -8647,6 +9170,15 @@ class OMEROBrowserDialog:
         Inputs: none. Output: bool.
         """
         variable = getattr(self, "search_function_var", None)
+        getter: Any = getattr(variable, "get", None)
+        return bool(getter() if callable(getter) else False)
+
+    def _collaboration_projects_enabled(self):
+        """Return whether project browsing should include collaboration projects.
+
+        Inputs: none. Output: bool.
+        """
+        variable = getattr(self, "collaboration_projects_var", None)
         getter: Any = getattr(variable, "get", None)
         return bool(getter() if callable(getter) else False)
 
@@ -8815,7 +9347,11 @@ class OMEROBrowserDialog:
             else _tk_constant("DISABLED", "disabled")
         )
         search_state = state
-        for check_name in ("search_function_check", "append_observed_folders_check"):
+        for check_name in (
+            "search_function_check",
+            "collaboration_projects_check",
+            "append_observed_folders_check",
+        ):
             configure = getattr(getattr(self, check_name, None), "config", None)
             if callable(configure):
                 configure(state=state)
@@ -9062,6 +9598,7 @@ class OMEROBrowserDialog:
         if getattr(self, "_modal_background_window_disabled", False):
             self._set_main_window_disabled(False)
         self._modal_background_window_disabled = False
+        self._sync_action_button_cursors()
 
     @staticmethod
     def _call_messagebox_function(function, title, message, parent, **options):
@@ -9188,7 +9725,6 @@ class OMEROBrowserDialog:
             CONNECTOR_SETTINGS_PORT_KEY: self._entry_text("port_entry").strip(),
             CONNECTOR_SETTINGS_USERNAME_KEY: self._entry_text("user_entry").strip(),
             CONNECTOR_SETTINGS_HTTPS_KEY: _connector_settings_bool_text(https_value),
-            CONNECTOR_SETTINGS_PATH_KEY: self._current_local_folder_path(),
             CONNECTOR_SETTINGS_CONVERTER_KEY: _stringvar_value(
                 getattr(self, "converter_var", None)
             ),
@@ -9200,6 +9736,9 @@ class OMEROBrowserDialog:
             ),
             CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: _connector_settings_bool_text(
                 self._search_function_enabled()
+            ),
+            CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY: (
+                _connector_settings_bool_text(self._collaboration_projects_enabled())
             ),
             CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: _connector_settings_bool_text(
                 self._append_observed_folders_enabled()
@@ -9323,6 +9862,39 @@ class OMEROBrowserDialog:
         if callable(delete):
             delete(0, _tk_constant("END", "end"))
 
+    def _set_password_entry_interactive(self, enabled):
+        """Enable or gray out the password entry and reveal control.
+
+        Inputs: `enabled`. Output: None.
+        """
+        enabled = bool(enabled)
+        state = (
+            _tk_constant("NORMAL", "normal")
+            if enabled
+            else _tk_constant("DISABLED", "disabled")
+        )
+        bg = "white" if enabled else BROWSER_DISABLED_BG
+        fg = "#111827" if enabled else BROWSER_DISABLED_FG
+        frame_config = getattr(getattr(self, "password_frame", None), "config", None)
+        if callable(frame_config):
+            frame_config(bg=bg)
+        entry_config = getattr(getattr(self, "pass_entry", None), "config", None)
+        if callable(entry_config):
+            entry_config(
+                state=state,
+                bg=bg,
+                fg=fg,
+                disabledbackground=BROWSER_DISABLED_BG,
+                disabledforeground=BROWSER_DISABLED_FG,
+            )
+        reveal_config = getattr(
+            getattr(self, "password_reveal_btn", None),
+            "config",
+            None,
+        )
+        if callable(reveal_config):
+            reveal_config(state=state)
+
     def _set_autosave_settings_control_state(self, enabled):
         """Enable or disable the autosave settings checkbox.
 
@@ -9377,6 +9949,18 @@ class OMEROBrowserDialog:
         self._set_browser_search_visible(self._search_function_enabled())
         if not self._write_autosave_settings():
             self._show_autosave_settings_error()
+
+    def _on_collaboration_projects_changed(self):
+        """Persist the project-scope setting and refresh the project list.
+
+        Inputs: none. Output: None.
+        """
+        if not getattr(self, "_connected", False):
+            self._set_connected_settings_control_state(False)
+            return
+        if not self._write_autosave_settings():
+            self._show_autosave_settings_error()
+        self._refresh_browser()
 
     def _on_append_observed_folders_changed(self):
         """Persist the Imaris Arena observed-folder append setting.
@@ -9756,6 +10340,7 @@ class OMEROBrowserDialog:
         """
         deadline = time.time() + FOLDER_EXPORT_TIMEOUT
         while time.time() < deadline:
+            self._raise_if_current_operation_cancelled("Folder export")
             status_payload = self.client.get_folder_export_status(status_url)
             self._set_status(
                 self._folder_export_status_text(folder_name, status_payload),
@@ -9773,9 +10358,14 @@ class OMEROBrowserDialog:
                     raise RuntimeError(
                         "Folder export was cancelled after OMERO reported incompatible files."
                     )
+                self._raise_if_current_operation_cancelled("Folder export")
                 self._set_status("Confirming compatible OMERO export...", "#fff3cd")
                 self.client.confirm_folder_export(confirm_url)
-            time.sleep(FOLDER_EXPORT_POLL_INTERVAL)
+            _wait_for_cancel_or_timeout(
+                getattr(self, "_operation_cancel_event", None),
+                FOLDER_EXPORT_POLL_INTERVAL,
+                "Folder export",
+            )
 
         raise RuntimeError("Folder export timed out while waiting for OMERO.")
 
@@ -9786,7 +10376,10 @@ class OMEROBrowserDialog:
         when validation or the called operation fails.
         """
         export_succeeded = False
+        export_cancelled = False
+        job_payload = None
         try:
+            self._raise_if_current_operation_cancelled("Folder export")
             self._set_status("Scanning selected folder...", "#fff3cd")
             local_entries = _collect_local_folder_entries(selected_folder)
             total_bytes = sum(int(entry.get("size") or 0) for entry in local_entries)
@@ -9800,16 +10393,19 @@ class OMEROBrowserDialog:
             job_payload = self.client.start_folder_export_job(
                 folder_name, local_entries
             )
+            self._active_folder_export_job = job_payload
             upload_url = job_payload.get("upload_url")
             import_step_url = job_payload.get("import_step_url")
             status_url = job_payload.get("status_url")
             confirm_url = job_payload.get("confirm_url")
+            prune_url = job_payload.get("prune_url")
 
             if (
                 not upload_url
                 or not import_step_url
                 or not status_url
                 or not confirm_url
+                or not prune_url
             ):
                 raise RuntimeError(
                     "OMERO returned an incomplete folder-export job response."
@@ -9820,6 +10416,7 @@ class OMEROBrowserDialog:
             file_count = len(local_entries)
 
             for file_index, entry in enumerate(local_entries, start=1):
+                self._raise_if_current_operation_cancelled("Folder export")
                 absolute_path = entry.get("absolute_path")
                 relative_path = entry.get("relative_path")
                 file_size = int(entry.get("size") or 0)
@@ -9831,6 +10428,7 @@ class OMEROBrowserDialog:
                     chunk_start = 0
                     sent_empty_file = False
                     while True:
+                        self._raise_if_current_operation_cancelled("Folder export")
                         chunk = handle.read(chunk_size)
                         if not chunk:
                             if file_size == 0 and not sent_empty_file:
@@ -9879,6 +10477,7 @@ class OMEROBrowserDialog:
                         f"Folder upload size verification failed for {relative_path}."
                     )
 
+            self._raise_if_current_operation_cancelled("Folder export")
             self._set_status("Starting OMERO folder export...", "#fff3cd")
             self.client.trigger_folder_export(import_step_url)
             final_status = self._wait_for_folder_export_completion(
@@ -9914,13 +10513,24 @@ class OMEROBrowserDialog:
                     ),
                 )
             export_succeeded = True
+        except _ConnectorOperationCancelled as exc:
+            export_cancelled = True
+            if job_payload:
+                self.client.cancel_folder_export_job(job_payload)
+            self._set_status("Folder export stopped by user", "#fff3cd")
+            _xt_debug(f"Folder export stopped by user: {exc}")
         except Exception as exc:
             self._set_status("Folder export failed", "#f8d7da")
             self._show_error("Folder Export Failed", str(exc))
             _xt_debug(f"Folder export failed: {type(exc).__name__}: {exc}")
         finally:
+            self._active_folder_export_job = None
             self._invoke_on_ui_thread(
-                partial(self._finish_export_workflow, export_succeeded),
+                partial(
+                    self._finish_export_workflow,
+                    export_succeeded,
+                    export_cancelled,
+                ),
                 wait=False,
             )
 
@@ -10009,6 +10619,7 @@ class OMEROBrowserDialog:
             fg="white",
             activeforeground="white",
         )
+        self._sync_action_button_cursors()
 
     def _toggle_connection(self):
         """Toggle the connection for `OMEROBrowserDialog`.
@@ -10039,6 +10650,7 @@ class OMEROBrowserDialog:
             ("csrf_token", None),
             ("session_id", None),
             ("session_key", None),
+            ("user_id", None),
         ):
             with contextlib.suppress(Exception):
                 setattr(client, attr, value)
@@ -10066,8 +10678,10 @@ class OMEROBrowserDialog:
             self.client.csrf_token = None
             self.client.session_id = None
             self.client.session_key = None
+            self.client.user_id = None
         self.client = None
         self._connected = False
+        self._set_password_entry_interactive(True)
         self._pid = None
         self._did = None
         self._refresh_generation += 1
@@ -10121,8 +10735,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: bool.
         """
-        if _looks_like_imaris_application(getattr(self, "imaris", None)):
+        if _imaris_application_handle_is_live(getattr(self, "imaris", None)):
             return True
+        self.imaris = None
         return _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
 
     def _has_imaris_converter_handoff_target(self):
@@ -10273,6 +10888,23 @@ class OMEROBrowserDialog:
         else:
             self._set_connection_indicator("disconnected")
 
+    def _sync_action_button_cursors(self):
+        """Restore hand cursors on custom connector buttons after modal locks.
+
+        Inputs: none. Output: None.
+        """
+        for name in (
+            "connect_btn",
+            "load_btn",
+            "export_btn",
+            "stop_btn",
+            "close_btn",
+            "refresh_btn",
+        ):
+            sync = getattr(getattr(self, name, None), "_sync_cursor", None)
+            if callable(sync):
+                sync()
+
     def _reset_background_cursor_after_silent_work(self):
         """Restore the main-window background cursor after silent background work.
 
@@ -10297,6 +10929,7 @@ class OMEROBrowserDialog:
                 "Suppressed non-fatal exception in XTOmeroConnector.py",
                 exc_info=exc,
             )
+        self._sync_action_button_cursors()
 
     def _request_background_cursor_reset(self):
         """Schedule a safe background cursor reset on the UI thread.
@@ -10461,6 +11094,9 @@ class OMEROBrowserDialog:
             """
             help_window = tk.Toplevel(self.root)
             help_window.title(CONNECTOR_HELP_TITLE)
+            _apply_omero_window_icon(
+                help_window, getattr(self, "_window_icon_image", None)
+            )
             help_window.resizable(False, False)
             help_window.transient(self.root)
             help_window.configure(bg="#f8fafc")
@@ -10567,6 +11203,9 @@ class OMEROBrowserDialog:
             """
             info_window = tk.Toplevel(self.root)
             info_window.title(CONNECTOR_INFO_TITLE)
+            _apply_omero_window_icon(
+                info_window, getattr(self, "_window_icon_image", None)
+            )
             info_window.resizable(False, False)
             info_window.transient(self.root)
             info_window.configure(bg="#f8fafc")
@@ -10741,8 +11380,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: bool.
         """
-        if _looks_like_imaris_application(getattr(self, "imaris", None)):
+        if _imaris_application_handle_is_live(getattr(self, "imaris", None)):
             return True
+        self.imaris = None
         if _coerce_imaris_id(getattr(self, "imaris_id", None)) is None:
             return False
 
@@ -10751,15 +11391,16 @@ class OMEROBrowserDialog:
 
             Inputs: none. Output: bool.
             """
-            if _looks_like_imaris_application(getattr(self, "imaris", None)):
+            if _imaris_application_handle_is_live(getattr(self, "imaris", None)):
                 return True
+            self.imaris = None
             _xt_debug("Attempting direct Imaris XT handle acquisition")
             resolved = _resolve_imaris_application(
                 self.imaris_id,
                 retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
                 retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
             )
-            if _looks_like_imaris_application(resolved):
+            if _imaris_application_handle_is_live(resolved):
                 self.imaris = resolved
                 _xt_debug("Resolved direct Imaris XT handle for current session")
                 return True
@@ -10802,6 +11443,8 @@ class OMEROBrowserDialog:
 
         self._set_status("Opening IMS in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
+        if not _imaris_application_handle_is_live(getattr(self, "imaris", None)):
+            self.imaris = None
 
         if (
             native_bridge_enabled
@@ -10909,6 +11552,8 @@ class OMEROBrowserDialog:
 
         self._set_status("Opening selected files in Imaris...", "#fff3cd")
         native_bridge_enabled = _native_imaris_bridge_enabled()
+        if not _imaris_application_handle_is_live(getattr(self, "imaris", None)):
+            self.imaris = None
 
         if (
             native_bridge_enabled
@@ -10986,7 +11631,7 @@ class OMEROBrowserDialog:
             with self._native_bridge_probe_lock:
                 self._native_bridge_probe_in_progress = False
                 self._native_bridge_probe_started = True
-                self._native_bridge_available = _looks_like_imaris_application(
+                self._native_bridge_available = _imaris_application_handle_is_live(
                     getattr(self, "imaris", None)
                 )
                 self._native_bridge_python_executable = None
@@ -11007,13 +11652,14 @@ class OMEROBrowserDialog:
                 return
             self._native_bridge_probe_in_progress = True
             self._native_bridge_probe_started = True
-            if _looks_like_imaris_application(self.imaris):
+            if _imaris_application_handle_is_live(self.imaris):
                 self._native_bridge_available = True
                 self._native_bridge_last_verified_at = time.time()
                 self._native_bridge_probe_in_progress = False
                 self._native_bridge_probe_done.set()
                 _xt_debug("Native bridge probe skipped: current Imaris handle is live")
                 return
+            self.imaris = None
 
         threading.Thread(target=self._native_bridge_probe_worker, daemon=True).start()
 
@@ -11026,7 +11672,7 @@ class OMEROBrowserDialog:
             self._native_bridge_probe_done.clear()
             self._native_bridge_probe_started = False
             self._native_bridge_probe_in_progress = False
-            self._native_bridge_available = _looks_like_imaris_application(
+            self._native_bridge_available = _imaris_application_handle_is_live(
                 getattr(self, "imaris", None)
             )
             self._native_bridge_python_executable = None
@@ -11065,7 +11711,7 @@ class OMEROBrowserDialog:
         if not _native_imaris_bridge_enabled():
             with self._native_bridge_probe_lock:
                 self._native_bridge_python_executable = None
-                self._native_bridge_available = _looks_like_imaris_application(
+                self._native_bridge_available = _imaris_application_handle_is_live(
                     getattr(self, "imaris", None)
                 )
                 self._native_bridge_probe_error = ""
@@ -11112,12 +11758,13 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: `bool`.
         """
-        if _looks_like_imaris_application(self.imaris):
+        if _imaris_application_handle_is_live(self.imaris):
             with self._native_bridge_probe_lock:
                 self._native_bridge_available = True
                 self._native_bridge_probe_error = ""
                 self._native_bridge_last_verified_at = time.time()
             return True
+        self.imaris = None
 
         if not _native_imaris_bridge_enabled():
             with self._native_bridge_probe_lock:
@@ -11173,8 +11820,9 @@ class OMEROBrowserDialog:
 
         Inputs: none. Output: bool.
         """
-        if _looks_like_imaris_application(self.imaris):
+        if _imaris_application_handle_is_live(self.imaris):
             return True
+        self.imaris = None
 
         self._set_status("Checking Imaris same-session open support...", "#fff3cd")
         if self._resolve_direct_imaris_handle_for_handoff():
@@ -11294,13 +11942,22 @@ class OMEROBrowserDialog:
         self._set_connection_indicator("busy")
 
         scheme = "https" if self.https_var.get() else "http"
+        include_collaboration_projects = self._collaboration_projects_enabled()
         threading.Thread(
             target=self._connect_worker,
-            args=(h, port, u, pw, scheme),
+            args=(h, port, u, pw, scheme, include_collaboration_projects),
             daemon=True,
         ).start()
 
-    def _connect_worker(self, host, port, username, password, scheme):
+    def _connect_worker(
+        self,
+        host,
+        port,
+        username,
+        password,
+        scheme,
+        include_collaboration_projects=True,
+    ):
         """Run OMERO.web login and capability detection off the Tk UI thread.
 
         Inputs: connection parameters. Output: schedules a UI-thread completion.
@@ -11325,7 +11982,9 @@ class OMEROBrowserDialog:
                 ),
                 wait=False,
             )
-            projects = client.list_projects()
+            projects = client.list_projects(
+                include_collaboration_projects=include_collaboration_projects
+            )
             converter_options = self._detect_converter_options_after_connection(client)
             folder_export_capability = self._detect_folder_export_after_connection(
                 client
@@ -11366,6 +12025,7 @@ class OMEROBrowserDialog:
             self.client = client
             self._connected = True
             self._clear_password_entry()
+            self._set_password_entry_interactive(False)
             client.password = CLEARED_CREDENTIAL_TEXT
             self._set_connect_button(
                 "Disconnect",
@@ -11401,6 +12061,7 @@ class OMEROBrowserDialog:
         self._clear_client_session_state(client)
         self.client = None
         self._connected = False
+        self._set_password_entry_interactive(True)
         self._set_folder_export_capability(False, "Connect to OMERO first.")
         self._set_connect_button(
             "Connect",
@@ -11484,7 +12145,11 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: loads the described state and returns None.
         """
-        self._apply_loaded_projects(self.client.list_projects())
+        self._apply_loaded_projects(
+            self.client.list_projects(
+                include_collaboration_projects=self._collaboration_projects_enabled()
+            )
+        )
 
     def _apply_loaded_projects(self, projects):
         """Populate the project browser from an already-fetched project list.
@@ -11952,6 +12617,88 @@ class OMEROBrowserDialog:
         self._folder_export_reason = str(reason or "").strip()
         self._update_export_button_state()
 
+    def _operation_is_running(self):
+        """Return whether a load or folder export workflow is active.
+
+        Inputs: none. Output: bool.
+        """
+        return bool(
+            getattr(self, "_load_in_progress", False)
+            or getattr(self, "_folder_export_in_progress", False)
+        )
+
+    def _show_stop_button_if_needed(self):
+        """Show the stop button only during cancellable operations.
+
+        Inputs: none. Output: None.
+        """
+        stop_btn = getattr(self, "stop_btn", None)
+        if stop_btn is None:
+            return
+        if self._operation_is_running():
+            stop_btn.grid()
+            event = getattr(self, "_operation_cancel_event", None)
+            stop_btn.config(
+                state=(
+                    _tk_constant("DISABLED", "disabled")
+                    if event is not None and event.is_set()
+                    else _tk_constant("NORMAL", "normal")
+                )
+            )
+            return
+        stop_btn.grid_remove()
+
+    def _begin_cancellable_operation(self):
+        """Reset cancellation state before starting a load or export workflow.
+
+        Inputs: none. Output: None.
+        """
+        event = getattr(self, "_operation_cancel_event", None)
+        if event is None:
+            self._operation_cancel_event = threading.Event()
+        else:
+            event.clear()
+        self._active_folder_export_job = None
+        self._show_stop_button_if_needed()
+
+    def _request_stop_current_operation(self):
+        """Signal the active load/export workflow to stop.
+
+        Inputs: none. Output: None.
+        """
+        if not self._operation_is_running():
+            return
+        event = getattr(self, "_operation_cancel_event", None)
+        if event is None:
+            event = threading.Event()
+            self._operation_cancel_event = event
+        if event.is_set():
+            return
+        event.set()
+        _xt_debug("Stop requested by user; cancelling active connector operation")
+        self._set_status("Stopping current connector operation...", "#fff3cd")
+        stop_btn = getattr(self, "stop_btn", None)
+        if stop_btn is not None:
+            stop_btn.config(state=_tk_constant("DISABLED", "disabled"))
+        job_payload = getattr(self, "_active_folder_export_job", None)
+        client = getattr(self, "client", None)
+        if job_payload and client is not None:
+            threading.Thread(
+                target=client.cancel_folder_export_job,
+                args=(job_payload,),
+                daemon=True,
+            ).start()
+
+    def _raise_if_current_operation_cancelled(self, context):
+        """Raise if the user has requested the current operation to stop.
+
+        Inputs: context. Output: None.
+        """
+        _raise_if_cancelled(
+            getattr(self, "_operation_cancel_event", None),
+            context,
+        )
+
     def _set_load_button_for_converter(self):
         """Set the load button for converter for `OMEROBrowserDialog`.
 
@@ -11985,6 +12732,7 @@ class OMEROBrowserDialog:
         load_btn = getattr(self, "load_btn", None)
         connect_btn = getattr(self, "connect_btn", None)
         if active:
+            self._begin_cancellable_operation()
             self._set_connection_indicator("busy")
             if load_btn is not None:
                 load_btn.config(state=disabled)
@@ -11992,6 +12740,7 @@ class OMEROBrowserDialog:
             self._set_refresh_button_state(disabled)
             if connect_btn is not None:
                 connect_btn.config(state=disabled)
+            self._show_stop_button_if_needed()
             return
 
         if connect_btn is not None and getattr(self, "_connected", False):
@@ -12020,6 +12769,7 @@ class OMEROBrowserDialog:
             and not getattr(self, "_load_in_progress", False)
         ):
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._show_stop_button_if_needed()
 
     def _clear_actions_busy_for_export(self):
         """Clear the actions busy for export for `OMEROBrowserDialog`.
@@ -12028,13 +12778,13 @@ class OMEROBrowserDialog:
         """
         self._set_actions_busy_for_export(False)
 
-    def _finish_export_workflow(self, succeeded):
+    def _finish_export_workflow(self, succeeded, cancelled=False):
         """Restore export action state and reflect final connection indicator state.
 
         Inputs: `succeeded`. Output: None.
         """
         self._set_actions_busy_for_export(False)
-        if succeeded:
+        if succeeded or cancelled:
             self._restore_idle_connection_indicator()
         else:
             self._set_connection_indicator("error")
@@ -12049,6 +12799,7 @@ class OMEROBrowserDialog:
         load_btn = getattr(self, "load_btn", None)
         connect_btn = getattr(self, "connect_btn", None)
         if active:
+            self._begin_cancellable_operation()
             self._set_connection_indicator("busy")
             if load_btn is not None:
                 load_btn.config(state=disabled, text=self._load_button_text())
@@ -12056,6 +12807,7 @@ class OMEROBrowserDialog:
             self._set_refresh_button_state(disabled)
             if connect_btn is not None:
                 connect_btn.config(state=disabled)
+            self._show_stop_button_if_needed()
             return
 
         if connect_btn is not None and getattr(self, "_connected", False):
@@ -12084,6 +12836,7 @@ class OMEROBrowserDialog:
             and not getattr(self, "_folder_export_in_progress", False)
         ):
             self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._show_stop_button_if_needed()
 
     def _clear_actions_busy_for_load(self):
         """Clear the actions busy for load for `OMEROBrowserDialog`.
@@ -12092,13 +12845,13 @@ class OMEROBrowserDialog:
         """
         self._set_actions_busy_for_load(False)
 
-    def _finish_load_workflow(self, succeeded):
+    def _finish_load_workflow(self, succeeded, cancelled=False):
         """Restore load action state and reflect final connection indicator state.
 
         Inputs: `succeeded`. Output: None.
         """
         self._set_actions_busy_for_load(False)
-        if succeeded:
+        if succeeded or cancelled:
             self._restore_idle_connection_indicator()
         else:
             self._set_connection_indicator("error")
@@ -12119,15 +12872,21 @@ class OMEROBrowserDialog:
         generation = self._refresh_generation
         project_id = self._current_selected_project_id()
         dataset_id = self._current_selected_dataset_id()
+        include_collaboration_projects = self._collaboration_projects_enabled()
         self._set_refresh_button_state(_tk_constant("DISABLED", "disabled"))
         self._set_status("Refreshing OMERO browser...", "#fff3cd")
         threading.Thread(
             target=self._refresh_worker,
-            args=(project_id, dataset_id, generation),
+            args=(project_id, dataset_id, generation, include_collaboration_projects),
             daemon=True,
         ).start()
 
-    def _fetch_browser_state_for_refresh(self, project_id, dataset_id):
+    def _fetch_browser_state_for_refresh(
+        self,
+        project_id,
+        dataset_id,
+        include_collaboration_projects=True,
+    ):
         """Fetch the browser state for refresh for `OMEROBrowserDialog`.
 
         Inputs: `project_id` OMERO project ID, `dataset_id` OMERO dataset ID. Output:
@@ -12138,6 +12897,7 @@ class OMEROBrowserDialog:
             timeout=timeout,
             raise_on_error=True,
             retry_transient=True,
+            include_collaboration_projects=include_collaboration_projects,
         )
         project_index = self._find_entity_index(projects, project_id)
         datasets = []
@@ -12164,7 +12924,13 @@ class OMEROBrowserDialog:
 
         return projects, project_index, datasets, dataset_index, images
 
-    def _refresh_worker(self, project_id, dataset_id, generation):
+    def _refresh_worker(
+        self,
+        project_id,
+        dataset_id,
+        generation,
+        include_collaboration_projects=True,
+    ):
         """Refresh the worker for `OMEROBrowserDialog`.
 
         Inputs: `project_id` OMERO project ID, `dataset_id` OMERO dataset ID,
@@ -12184,7 +12950,11 @@ class OMEROBrowserDialog:
                         datasets,
                         dataset_index,
                         images,
-                    ) = self._fetch_browser_state_for_refresh(project_id, dataset_id)
+                    ) = self._fetch_browser_state_for_refresh(
+                        project_id,
+                        dataset_id,
+                        include_collaboration_projects,
+                    )
                     last_error = None
                     break
                 except Exception as exc:
@@ -12575,6 +13345,7 @@ class OMEROBrowserDialog:
         download_dir,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Export one OMERO Image ID for direct Imaris handoff.
 
@@ -12591,6 +13362,7 @@ class OMEROBrowserDialog:
             fallback_name=f"{self._image_cache_subdir(image_id)}.ome.tif",
             target_filename=target_filename,
             duplicate_policy=duplicate_policy,
+            cancel_event=cancel_event,
         )
         selected_export = self._mark_selected_image_export_file(ome_tiff_file)
         _xt_debug(
@@ -12740,7 +13512,9 @@ class OMEROBrowserDialog:
         RuntimeError when validation or the called operation fails.
         """
         workflow_succeeded = False
+        workflow_cancelled = False
         try:
+            self._raise_if_current_operation_cancelled("Load into Imaris")
             image_id = img.get("id") if isinstance(img, dict) else None
             if image_id is None:
                 raise RuntimeError("Selected image is missing an OMERO image id.")
@@ -12781,6 +13555,7 @@ class OMEROBrowserDialog:
                     fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                     target_filename=target_filename,
                     duplicate_policy=duplicate_policy,
+                    cancel_event=getattr(self, "_operation_cancel_event", None),
                 )
                 require_ims = True
                 selected_image_export = False
@@ -12793,6 +13568,7 @@ class OMEROBrowserDialog:
                     download_dir,
                     target_filename=target_filename,
                     duplicate_policy=duplicate_policy,
+                    cancel_event=getattr(self, "_operation_cancel_event", None),
                 )
                 require_ims = False
                 selected_image_export = True
@@ -12811,6 +13587,7 @@ class OMEROBrowserDialog:
 
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download file from OMERO.")
+            self._raise_if_current_operation_cancelled("Load into Imaris")
 
             if require_ims and not is_ims_file(downloaded_file):
                 raise RuntimeError(
@@ -12855,13 +13632,21 @@ class OMEROBrowserDialog:
             else:
                 raise RuntimeError(failure_message)
 
+        except _ConnectorOperationCancelled as exc:
+            workflow_cancelled = True
+            self._set_status("Load into Imaris stopped by user", "#fff3cd")
+            _xt_debug(f"Load into Imaris stopped by user: {exc}")
         except Exception as e:
             self._set_status("✗ Failed", "#f8d7da")
             self._show_error("Error", str(e))
             _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
         finally:
             self._invoke_on_ui_thread(
-                partial(self._finish_load_workflow, workflow_succeeded),
+                partial(
+                    self._finish_load_workflow,
+                    workflow_succeeded,
+                    workflow_cancelled,
+                ),
                 wait=False,
             )
 
@@ -12872,7 +13657,9 @@ class OMEROBrowserDialog:
         RuntimeError when validation or the called operation fails.
         """
         workflow_succeeded = False
+        workflow_cancelled = False
         try:
+            self._raise_if_current_operation_cancelled("Load into Imaris")
             selected_images = [
                 img for img in list(images or []) if isinstance(img, dict)
             ]
@@ -12908,6 +13695,7 @@ class OMEROBrowserDialog:
             download_dir = self.export_dir
             planned_names_seen: Set[str] = set()
             for index, img in enumerate(selected_images, start=1):
+                self._raise_if_current_operation_cancelled("Load into Imaris")
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
@@ -12930,6 +13718,7 @@ class OMEROBrowserDialog:
                         fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                         target_filename=target_filename,
                         duplicate_policy=per_file_duplicate_policy,
+                        cancel_event=getattr(self, "_operation_cancel_event", None),
                     )
                 else:
                     self._set_status(
@@ -12943,6 +13732,11 @@ class OMEROBrowserDialog:
                             download_dir,
                             target_filename=target_filename,
                             duplicate_policy=per_file_duplicate_policy,
+                            cancel_event=getattr(
+                                self,
+                                "_operation_cancel_event",
+                                None,
+                            ),
                         )
                     )
 
@@ -12967,6 +13761,7 @@ class OMEROBrowserDialog:
                 downloaded_files.append(downloaded_file)
                 self.temp_files.append(downloaded_file)
 
+            self._raise_if_current_operation_cancelled("Load into Imaris")
             if require_ims:
                 handoff_files = downloaded_files[:1]
                 self._set_status(
@@ -13022,13 +13817,21 @@ class OMEROBrowserDialog:
             else:
                 raise RuntimeError(failure_message)
 
+        except _ConnectorOperationCancelled as exc:
+            workflow_cancelled = True
+            self._set_status("Load into Imaris stopped by user", "#fff3cd")
+            _xt_debug(f"Multi-image load stopped by user: {exc}")
         except Exception as e:
             self._set_status("✗ Failed", "#f8d7da")
             self._show_error("Error", str(e))
             _xt_debug(f"Multi-image load worker failed: {type(e).__name__}: {e}")
         finally:
             self._invoke_on_ui_thread(
-                partial(self._finish_load_workflow, workflow_succeeded),
+                partial(
+                    self._finish_load_workflow,
+                    workflow_succeeded,
+                    workflow_cancelled,
+                ),
                 wait=False,
             )
 

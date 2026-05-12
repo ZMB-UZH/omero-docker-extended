@@ -14,6 +14,7 @@ repository. Use it before attempting speculative code changes.
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
 | IMS export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final IMS handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
+| User presses Stop but server-side work continues | Cancellation did not reach the Celery task or the tracked OMERO CLI process | Check the `/imaris-export/?job=...` POST cancellation response and worker logs for `IMS export task cancelled` plus local CLI termination metadata |
 | Selected Image export downloads but Imaris shows only a transient scene object or no pixels | Selected-image export was submitted through the XT file-open bridge or the main Imaris executable instead of Imaris File Converter | The `Imaris` converter must submit the tracked OMERO.web OME-TIFF export to discovered `ImarisFileConverter.exe`, matching a manual drag/drop onto the Imaris icon |
 | A `Volume` object appears in Imaris but the exported IMS is not visibly opened | File-open returned or changed scene state without proving the downloaded IMS became visible | Treat this as failed handoff; inspect log lines after `Using Imaris handle type=...` for current-file or visible-dataset verification |
 
@@ -120,7 +121,24 @@ Interpretation:
 
 This is not the same failure as `waiting_for_processor`.
 
-### 5. CLI launch worked only when it used the requesting user's OMERO session
+### 5. Stop must cancel the tracked server-side export, not just the XT UI
+
+Expected behavior:
+
+- the XT client POSTs `{"cancel": true}` to the active IMS export status URL,
+- the server revokes the Celery task with worker termination enabled,
+- the server terminates the tracked local OMERO CLI process only when `/proc`
+  still shows an `omero script launch` command line for that pid,
+- known export files, recent image export artifacts, and any created
+  FileAnnotation are removed where possible,
+- the XT client removes partial local downloads and logs that the operation was
+  stopped by the user.
+
+If any of those checks fail, treat the remaining process or file as a
+cancellation bug. Do not treat a hidden progress bar or a closed dialog as proof
+that server-side work actually stopped.
+
+### 6. CLI launch worked only when it used the requesting user's OMERO session
 
 Observed behavior:
 
@@ -144,7 +162,7 @@ Fix:
   whenever one is available,
 - fall back to the job-service session only if no user session key was provided.
 
-### 6. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
+### 7. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
 
 Observed behavior:
 
@@ -272,24 +290,30 @@ Operational rule:
   an available converter, a structurally valid local path that is not known to
   be unwritable, and at least one selected entry in the Images panel are all
   present.
-- `Autosave settings`, `Show log`, `Search function`, and `Append to Observed
-  Folders` are pre-read before the standalone XT dialog renders. `Autosave
-  settings`, `Search function`, and `Append to Observed Folders` remain disabled
-  until the OMERO login succeeds, while preserving their loaded checked states.
-  `Show log` defaults to enabled for new users, is immediately written when
-  toggled, and controls whether normal command-window log output is shown on the
-  next startup. `Search function` defaults to disabled for new users and is
-  persisted immediately when toggled after connection. When enabled it shows
-  local search fields for Projects, Datasets, and Images; before connection or
-  after disconnect those fields and the three browser lists are greyed out and
-  non-interactive. `Append to Observed Folders` is persisted after connection and
-  applies only when the user confirms `Load images into Imaris`. After a
-  verified connection, the connector writes
-  `.imaris_omero_connector/settings.env` under the detected user home with only
-  host, port, username, HTTPS state, local path, selected converter, autosave
-  state, show-log state, search-function state, append-observed-folders state,
-  the cached `IMARIS_EXE` path when discovered, and the connector version. The
-  version value is refreshed silently on
+- `Autosave settings`, `Show log`, `Search function`, `Collaboration projects`,
+  and `Append to Observed Folders` are pre-read before the standalone XT dialog
+  renders. `Autosave settings`, `Search function`, `Collaboration projects`, and
+  `Append to Observed Folders` remain disabled until the OMERO login succeeds,
+  while preserving their loaded checked states. `Show log` defaults to enabled
+  for new users, is immediately written when toggled, and controls whether
+  normal command-window log output is shown on the next startup. `Search
+  function` defaults to disabled for new users and is persisted immediately when
+  toggled after connection. When enabled it shows local search fields for
+  Projects, Datasets, and Images; before connection or after disconnect those
+  fields and the three browser lists are greyed out and non-interactive.
+  `Collaboration projects` defaults to disabled when no saved value exists.
+  When disabled, project loading is restricted to projects owned by the actual
+  connected OMERO user; when enabled, all accessible projects remain visible.
+  `Append to Observed Folders` is persisted after connection and applies only
+  when the user confirms `Load images into Imaris`. After a verified connection,
+  the connector writes `.imaris_omero_connector/settings.env` under the detected
+  user home with only host, port, username, HTTPS state, selected converter,
+  autosave state, show-log state, search-function state,
+  collaboration-projects state, append-observed-folders state, the cached
+  `IMARIS_EXE` path when discovered, and the connector version. The local path
+  is intentionally excluded from settings and is empty on every connector
+  startup; stale `OMERO_CONNECTOR_PATH` entries are removed on the next settings
+  write. The version value is refreshed silently on
   every standalone XT startup from the same version value shown by the info
   dialog. If an existing `settings.env` has no matching current version, the
   connector archives it as `settings.env.old` and creates a fresh settings
@@ -355,7 +379,7 @@ Operational rule:
   files, or when `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` is enabled for non-GUI
   callers.
 
-### 7. OMERO converter failed after private config lookup replaced env handoff
+### 8. OMERO converter failed after private config lookup replaced env handoff
 
 Observed behavior:
 

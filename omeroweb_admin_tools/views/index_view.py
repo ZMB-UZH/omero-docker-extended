@@ -26,7 +26,7 @@ from django.shortcuts import render
 from django.template.backends.django import DjangoTemplates
 from django.template.response import SimpleTemplateResponse
 from django.urls import reverse
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from omeroweb.decorators import login_required
 from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
@@ -2709,6 +2709,7 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
     )
 
 
+@csrf_exempt
 @login_required()
 @require_root_user
 def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
@@ -2717,6 +2718,10 @@ def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     Inputs: `request` Django request, `subpath` (str), `conn` OMERO gateway connection,
     `_url`, `**kwargs` keyword arguments. Output: `_grafana_unavailable_response`
     Raises: RuntimeError when validation or the called operation fails.
+
+    RegressionGuard: allowed @csrf_exempt for the Grafana proxy only. OMERO root
+    auth gates this browser route, the proxy rewrites origin/referrer to Grafana,
+    and Grafana validates its own CSRF token/cookie for login POSTs.
     """
     root_error = _require_root_user(request, conn)
     if root_error:

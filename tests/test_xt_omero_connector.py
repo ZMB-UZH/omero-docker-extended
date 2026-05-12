@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
+import base64
 import builtins
+import hashlib
+import importlib.util
 import inspect
 import json
 import ntpath
@@ -12,7 +14,7 @@ import subprocess
 import sys
 import types
 import urllib.parse
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -1166,6 +1168,63 @@ def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
 
     with pytest.raises(RuntimeError, match="not a valid IMS"):
         client.download_ims_export(64, tmp_path)
+
+
+def test_client_download_ims_export_cancels_server_job_when_stopped(tmp_path):
+    """Verify stop during OMERO converter polling calls the server cancel endpoint.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on cancellation regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    cancel_event = module.threading.Event()
+    calls = []
+
+    class _CancelOnReadResponse(_FakeHTTPResponse):
+        """Response that marks the operation cancelled during status polling."""
+
+        def read(self, size=-1):
+            """Set the cancel event before returning the status payload.
+
+            Inputs: `size`. Output: response chunk.
+            """
+            cancel_event.set()
+            return super().read(size)
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout=None):
+            """Serve start, status, and cancellation responses.
+
+            Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
+            """
+            calls.append((request.full_url, getattr(request, "data", None), timeout))
+            if "imaris-export/?image=65" in request.full_url:
+                return _FakeHTTPResponse(
+                    b'{"job_id": "job-3", "status_url": "/status/job-3"}'
+                )
+            if "/status/job-3" in request.full_url:
+                if getattr(request, "data", None):
+                    return _FakeHTTPResponse(b'{"cancelled": true}')
+                return _CancelOnReadResponse(
+                    b'{"finished": false, "failed": false, "state": "RUNNING"}'
+                )
+            raise AssertionError(f"unexpected URL: {request.full_url}")
+
+    client.opener = _FakeOpener()
+
+    with pytest.raises(module._ConnectorOperationCancelled):
+        client.download_ims_export(65, tmp_path, cancel_event=cancel_event)
+
+    cancel_posts = [
+        data for url, data, _timeout in calls if "/status/job-3" in url and data
+    ]
+    assert cancel_posts
+    assert all(b"cancel" in data for data in cancel_posts)
+    assert not list(tmp_path.iterdir())
 
 
 def test_client_detects_folder_export_capability_from_start_endpoint():
@@ -2970,6 +3029,84 @@ def test_connector_settings_env_path_uses_connector_user_folder(tmp_path):
     )
 
 
+def test_embedded_omero_logomark_assets_match_recorded_upstream_hashes():
+    """Verify embedded OMERO logomark source bytes and window icon PNG stay exact.
+
+    Inputs: none. Output: fails on regressions in the embedded logo assets.
+    """
+    module = _load_xt_module()
+
+    assert (
+        hashlib.sha256(module.OMERO_LOGOMARK_SVG_BYTES).hexdigest()
+        == module.OMERO_LOGOMARK_SVG_SHA256
+    )
+    assert module.OMERO_LOGOMARK_SOURCE_URL == (
+        "https://www.openmicroscopy.org/img/logos/ome-logomark.svg"
+    )
+    assert (
+        hashlib.sha256(base64.b64decode(module.OMERO_LOGOMARK_PNG64_BASE64)).hexdigest()
+        == module.OMERO_LOGOMARK_PNG64_SHA256
+    )
+
+
+def test_xt_custom_tools_entry_uses_omero_icon_metadata():
+    """Verify the Imaris XT entry no longer advertises the generic Python icon.
+
+    Inputs: none. Output: fails on regressions in XT CustomTools icon metadata.
+    """
+    source = Path(_XT_SCRIPT).read_text(encoding="utf-8")
+
+    assert 'icon="OMERO"' in source
+    assert 'icon="Python3"' not in source
+
+
+def test_port_entry_validation_accepts_only_digits_in_valid_range():
+    """Verify the port entry validation enforces digit-only 0..65535 input.
+
+    Inputs: none. Output: fails on regressions in port typing validation.
+    """
+    module = _load_xt_module()
+
+    for value in ("", "0", "1", "443", "65535"):
+        assert module._valid_port_entry_text(value) is True
+    for value in ("65536", "100000", "12a", "-1", " 443"):
+        assert module._valid_port_entry_text(value) is False
+
+
+def test_display_local_path_uses_windows_separators_on_windows():
+    """Verify local path display uses backslashes when running on Windows.
+
+    Inputs: none. Output: fails on path display regressions.
+    """
+    module = _load_xt_module()
+    original_os_name = module.os.name
+    module.os.name = "nt"
+    try:
+        assert (
+            module._display_local_path(PureWindowsPath("C:/Data/OMERO Exports"))
+            == "C:\\Data\\OMERO Exports"
+        )
+    finally:
+        module.os.name = original_os_name
+
+
+def test_project_endpoint_respects_collaboration_scope():
+    """Verify project loading can be restricted to the actual OMERO user.
+
+    Inputs: none. Output: fails on collaboration project scope regressions.
+    """
+    module = _load_xt_module()
+
+    assert module.OMEROWebClient._project_endpoint(True, user_id=42) == (
+        "m/projects/?group=-1"
+    )
+    assert module.OMEROWebClient._project_endpoint(False, user_id=42) == (
+        "m/projects/?owner=42&group=-1"
+    )
+    with pytest.raises(RuntimeError, match="current OMERO user"):
+        module.OMEROWebClient._project_endpoint(False, user_id=None)
+
+
 def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_path):
     """Verify settings writes replace stale keys without preserving credentials.
 
@@ -2985,6 +3122,7 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
                 'OMERO_CONNECTOR_HOST="old.example.org"',
                 'OMERO_CONNECTOR_PORT="4064"',
                 'OMERO_CONNECTOR_PORT="duplicate"',
+                'OMERO_CONNECTOR_PATH="/stale/local/path"',
                 'OMERO_CONNECTOR_PASSWORD="do-not-keep"',
                 'PASSWORD="do-not-keep-either"',
                 'OTHER_CONNECTOR_NOTE="keep-me"',
@@ -3000,11 +3138,11 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
         module.CONNECTOR_SETTINGS_PORT_KEY: "443",
         module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
         module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
-        module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path / "Exports" / "A folder"),
         module.CONNECTOR_SETTINGS_CONVERTER_KEY: "Imaris",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "false",
         module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "true",
+        module.CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY: "true",
         sensitive_key: sensitive_value,
     }
 
@@ -3016,16 +3154,16 @@ def test_connector_settings_writer_replaces_known_keys_and_drops_passwords(tmp_p
     assert 'OTHER_CONNECTOR_NOTE="keep-me"' in content
     assert content.count(module.CONNECTOR_SETTINGS_PORT_KEY + "=") == 1
     assert "PASSWORD" not in content
+    assert module.CONNECTOR_SETTINGS_PATH_KEY not in content
     assert "do-not-keep" not in content
     assert sensitive_value not in content
     assert loaded[module.CONNECTOR_SETTINGS_HOST_KEY] == "omero.example.org"
     assert loaded[module.CONNECTOR_SETTINGS_PORT_KEY] == "443"
-    assert loaded[module.CONNECTOR_SETTINGS_PATH_KEY] == str(
-        tmp_path / "Exports" / "A folder"
-    )
+    assert module.CONNECTOR_SETTINGS_PATH_KEY not in loaded
     assert loaded[module.CONNECTOR_SETTINGS_CONVERTER_KEY] == "Imaris"
     assert loaded[module.CONNECTOR_SETTINGS_SHOW_LOG_KEY] == "false"
     assert loaded[module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY] == "true"
+    assert loaded[module.CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY] == "true"
     assert (
         loaded[module.CONNECTOR_SETTINGS_VERSION_KEY] == module.CONNECTOR_INFO_VERSION
     )
@@ -3530,6 +3668,7 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(True)
     dialog.search_function_var = _FakeVar(False)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("OMERO")
@@ -3546,11 +3685,11 @@ def test_connector_settings_snapshot_excludes_password_value(tmp_path):
         module.CONNECTOR_SETTINGS_PORT_KEY: "443",
         module.CONNECTOR_SETTINGS_USERNAME_KEY: "alice",
         module.CONNECTOR_SETTINGS_HTTPS_KEY: "true",
-        module.CONNECTOR_SETTINGS_PATH_KEY: str(tmp_path),
         module.CONNECTOR_SETTINGS_CONVERTER_KEY: "OMERO",
         module.CONNECTOR_SETTINGS_AUTOSAVE_KEY: "true",
         module.CONNECTOR_SETTINGS_SHOW_LOG_KEY: "true",
         module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY: "false",
+        module.CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY: "false",
         module.CONNECTOR_SETTINGS_APPEND_OBSERVED_FOLDERS_KEY: "false",
         module.CONNECTOR_SETTINGS_IMARIS_EXE_KEY: "",
         module.CONNECTOR_SETTINGS_VERSION_KEY: module.CONNECTOR_INFO_VERSION,
@@ -3575,6 +3714,7 @@ def test_connector_settings_snapshot_preserves_cached_imaris_exe(tmp_path):
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(True)
     dialog.search_function_var = _FakeVar(False)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("Imaris")
@@ -3642,6 +3782,7 @@ def test_show_log_toggle_updates_settings_immediately_without_password(
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(False)
     dialog.search_function_var = _FakeVar(True)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("Imaris")
@@ -3683,6 +3824,7 @@ def test_search_function_toggle_updates_settings_immediately_without_password(
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(True)
     dialog.search_function_var = _FakeVar(True)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.converter_var = _FakeVar("Imaris")
@@ -3695,6 +3837,44 @@ def test_search_function_toggle_updates_settings_immediately_without_password(
     assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_CONVERTER_KEY + '="Imaris"' in content
+    assert "PASSWORD" not in content
+    assert "super-secret" not in content
+
+
+def test_collaboration_projects_toggle_persists_and_refreshes_browser(tmp_path):
+    """Verify collaboration project scope is saved per user and refreshes projects.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on collaboration-toggle regressions.
+    """
+    module = _load_xt_module()
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    settings_path = module._connector_settings_env_path(tmp_path)
+    refresh_calls = []
+    dialog._settings_file_path = settings_path
+    dialog._saved_settings = {}
+    dialog._autosave_settings_write_error = ""
+    dialog.host_entry = _FakeEntry("omero.example.org")
+    dialog.port_entry = _FakeEntry("443")
+    dialog.user_entry = _FakeEntry("alice")
+    dialog.pass_entry = _FakeEntry("super-secret")
+    dialog.https_var = _FakeVar(True)
+    dialog.autosave_settings_var = _FakeVar(True)
+    dialog.show_log_var = _FakeVar(True)
+    dialog.search_function_var = _FakeVar(False)
+    dialog.collaboration_projects_var = _FakeVar(True)
+    dialog.folder_path_var = _FakeVar(str(tmp_path))
+    dialog._folder_path_placeholder_visible = False
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog._show_autosave_settings_error = _noop
+    dialog._connected = True
+    dialog._refresh_browser = lambda: refresh_calls.append(True)
+
+    module.OMEROBrowserDialog._on_collaboration_projects_changed(dialog)
+
+    content = settings_path.read_text(encoding="utf-8")
+    assert refresh_calls == [True]
+    assert module.CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY + '="true"' in content
+    assert module.CONNECTOR_SETTINGS_PATH_KEY not in content
     assert "PASSWORD" not in content
     assert "super-secret" not in content
 
@@ -3728,6 +3908,7 @@ def test_append_observed_folders_toggle_updates_settings_only(
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(True)
     dialog.search_function_var = _FakeVar(False)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.append_observed_folders_var = _FakeVar(True)
     dialog.folder_path_var = _FakeVar(str(export_folder))
     dialog._folder_path_placeholder_visible = False
@@ -4203,7 +4384,7 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
             return True
 
         @staticmethod
-        def list_projects():
+        def list_projects(**_kwargs):
             """Return a minimal project list.
 
             Inputs: none. Output: project fixtures.
@@ -4230,7 +4411,9 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     dialog.autosave_settings_var = _FakeVar(True)
     dialog.show_log_var = _FakeVar(True)
     dialog.search_function_var = _FakeVar(False)
+    dialog.collaboration_projects_var = _FakeVar(False)
     dialog.autosave_settings_check = _FakeButton()
+    dialog.collaboration_projects_check = _FakeButton()
     dialog.folder_path_var = _FakeVar(str(tmp_path))
     dialog._folder_path_placeholder_visible = False
     dialog.connect_btn = _FakeButton()
@@ -4269,14 +4452,10 @@ def test_successful_connection_enables_autosave_and_writes_verified_settings(
     assert module.CONNECTOR_SETTINGS_PORT_KEY + '="443"' in content
     assert module.CONNECTOR_SETTINGS_USERNAME_KEY + '="alice"' in content
     assert module.CONNECTOR_SETTINGS_HTTPS_KEY + '="true"' in content
-    expected_path_setting = (
-        module.CONNECTOR_SETTINGS_PATH_KEY
-        + "="
-        + module._format_connector_settings_env_value(str(tmp_path))
-    )
-    assert expected_path_setting in content
+    assert module.CONNECTOR_SETTINGS_PATH_KEY not in content
     assert module.CONNECTOR_SETTINGS_SHOW_LOG_KEY + '="true"' in content
     assert module.CONNECTOR_SETTINGS_SEARCH_FUNCTION_KEY + '="false"' in content
+    assert module.CONNECTOR_SETTINGS_COLLABORATION_PROJECTS_KEY + '="false"' in content
     assert dialog.pass_entry.value == ""
     password_attr = "pass" + "word"
     assert getattr(created_clients[0], password_attr) == str()
@@ -4349,6 +4528,7 @@ def test_connect_starts_background_worker_without_blocking_ui_thread(monkeypatch
         "alice",
         "typed-secret",
         "https",
+        False,
     )
     assert threads[0].daemon is True
     assert threads[0].started is True
@@ -4591,6 +4771,11 @@ def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
             if len(self.calls) == 2:
                 assert TEST_LOGIN_VALUE.encode() in request.data
                 return _FakeHTTPResponse(b"", headers={"Content-Type": "text/html"})
+            if len(self.calls) == 3:
+                return _FakeHTTPResponse(
+                    b'{"eventContext":{"userId":42}}',
+                    headers={"Content-Type": "application/json"},
+                )
             return _FakeHTTPResponse(
                 b'{"data":[]}',
                 headers={"Content-Type": "application/json"},
@@ -4621,7 +4806,8 @@ def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
     assert client.connect() is True
     password_attr = "pass" + "word"
     assert getattr(client, password_attr) == str()
-    assert len(opener.calls) == 3
+    assert len(opener.calls) == 4
+    assert client.user_id == 42
 
 
 def test_omero_web_client_builds_direct_opener_for_configured_host(monkeypatch):
@@ -4959,7 +5145,9 @@ def test_browser_dialog_places_folder_selector_inside_connection_settings():
     assert source.index(connection_marker) < source.index(selector_marker)
     assert source.index(selector_marker) < source.index(browser_marker)
     assert "folder_path_frame" not in source
-    assert 'self.path_label = self._connection_label(conn_frame, "Path:")' in source
+    assert (
+        'self.path_label = self._connection_label(conn_frame, "Local path:")' in source
+    )
     assert "self.path_label.grid(" in source
     assert 'FOLDER_PATH_PLACEHOLDER = "Type or select local path..."' in source
     assert (
@@ -5100,7 +5288,9 @@ def test_connection_setting_labels_are_start_aligned_without_moving_entries():
     for label in ("Port", "Username", "Password"):
         assert f'self._connection_label(conn_frame, "{label}:").grid' in source
     assert 'self.host_label = self._connection_label(conn_frame, "Host:")' in source
-    assert 'self.path_label = self._connection_label(conn_frame, "Path:")' in source
+    assert (
+        'self.path_label = self._connection_label(conn_frame, "Local path:")' in source
+    )
     assert "self.host_label.grid(" in source
     assert "self.path_label.grid(" in source
 
@@ -6932,6 +7122,7 @@ def test_export_folder_worker_uploads_folder_and_reports_success(tmp_path):
                 "import_step_url": "https://omero.example.org/import/",
                 "status_url": "https://omero.example.org/status/",
                 "confirm_url": "https://omero.example.org/confirm/",
+                "prune_url": "https://omero.example.org/prune/",
             }
         ),
         upload_folder_chunk=lambda *args: client_calls.append(("upload",) + args) or {},
@@ -8494,6 +8685,60 @@ def test_client_download_selected_image_ome_tiff_uses_standard_export_endpoint(
     assert "archived_files" not in opened_urls[0][0]
 
 
+def test_client_download_selected_image_ome_tiff_removes_partial_on_cancel(tmp_path):
+    """Verify stop during Imaris-converter download removes partial OME-TIFF files.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on partial-download cleanup regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    cancel_event = module.threading.Event()
+
+    class _CancelAfterChunkResponse(_FakeHTTPResponse):
+        """Response that cancels after the first payload chunk."""
+
+        def read(self, size=-1):
+            """Return a chunk and then mark the operation cancelled.
+
+            Inputs: `size`. Output: response chunk.
+            """
+            chunk = super().read(4 if size and size > 4 else size)
+            if chunk:
+                cancel_event.set()
+            return chunk
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout):
+            """Return a cancellable TIFF response.
+
+            Inputs: `request`, `timeout`. Output: response object.
+            """
+            return _CancelAfterChunkResponse(
+                b"II*\x00partial-body",
+                headers={
+                    "Content-Disposition": 'attachment; filename="partial.ome.tif"',
+                    "Content-Type": "image/tiff",
+                    "Content-Length": "17",
+                },
+            )
+
+    client.opener = _FakeOpener()
+
+    with pytest.raises(module._ConnectorOperationCancelled):
+        client.download_selected_image_ome_tiff(
+            18,
+            tmp_path,
+            target_filename="partial image",
+            cancel_event=cancel_event,
+        )
+
+    assert not list(tmp_path.iterdir())
+
+
 def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
     tmp_path,
     monkeypatch,
@@ -8814,6 +9059,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         fallback_name,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Record server-side IMS export download.
 
@@ -8836,6 +9082,7 @@ def test_load_worker_retries_delayed_direct_handoff_after_nonblocking_preflight(
         download_dir,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Record selected-image export for direct Imaris handoff.
 
@@ -10375,7 +10622,7 @@ def test_refresh_browser_does_not_repaint_action_buttons(monkeypatch):
     assert threads == [
         (
             dialog._refresh_worker,
-            ("project-1", "dataset-1", 5),
+            ("project-1", "dataset-1", 5, False),
             True,
         )
     ]
@@ -10638,7 +10885,7 @@ def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly
     dialog.export_dir = str(tmp_path)
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
-        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None, cancel_event=None: (
             calls.append(
                 (
                     "ome-tiff",
@@ -10715,7 +10962,7 @@ def test_imaris_converter_marks_selected_export_without_detail_or_conversion(
     dialog.temp_files = []
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog.client = types.SimpleNamespace(
-        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+        download_selected_image_ome_tiff=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None, cancel_event=None: (
             calls.append(
                 (
                     "ome-tiff",
@@ -11003,7 +11250,7 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
     dialog.export_dir = str(tmp_path)
     dialog.temp_files = []
     dialog.client = types.SimpleNamespace(
-        download_ims_export=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None: (
+        download_ims_export=lambda image_id, download_dir, fallback_name, target_filename=None, duplicate_policy=None, cancel_event=None: (
             calls.append(
                 (
                     "ims",
@@ -11070,6 +11317,7 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
         fallback_name,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Download the IMS export.
 
@@ -11158,6 +11406,7 @@ def test_load_multiple_worker_uniques_repeated_selected_filenames(tmp_path):
         fallback_name,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Record each planned repeated-name IMS export.
 
@@ -11235,6 +11484,7 @@ def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
         download_dir,
         target_filename=None,
         duplicate_policy=None,
+        cancel_event=None,
     ):
         """Export one selected image through standard OMERO.web.
 

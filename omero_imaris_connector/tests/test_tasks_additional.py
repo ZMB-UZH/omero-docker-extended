@@ -344,7 +344,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     captured = {}
 
-    def successful_run(cmd, *, timeout, check, env, **_kwargs):
+    def successful_run(cmd, *, timeout, check, env, on_tick, **_kwargs):
         """Return the successful run.
 
         Inputs: `cmd`, `timeout` timeout seconds, `check`, `env` environment mapping,
@@ -358,23 +358,32 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
             "OMERO_SESSIONDIR": env["OMERO_SESSIONDIR"],
             "OMERO_TMPDIR": env["OMERO_TMPDIR"],
         }
+        on_tick(12345, 0.0)
         return types.SimpleNamespace(
             returncode=0,
             stdout=f"* Export_Path = {export_path}\n* Export_Name = demo.ims",
             stderr="",
         )
 
-    monkeypatch.setattr(tasks.subprocess, "run", successful_run)
+    monkeypatch.setattr(tasks.subprocess, "run_streaming", successful_run)
+    status_updates = []
     outputs = tasks._run_script_via_omero_cli(
         script_id=7,
         image_id=11,
         host="omeroserver",
         port=4064,
         session_key="session-key",
+        status_callback=lambda status, meta: status_updates.append((status, meta)),
     )
     assert outputs["Export_Path"] == str(export_path)
     assert captured["cmd"][:5] == [str(cli_path), "-q", "script", "launch", "7"]
     assert captured["timeout"] == tasks.EXPORT_TIMEOUT + 120
+    assert status_updates == [
+        (
+            "running_script",
+            {"script_id": 7, "cli_pid": 12345, "elapsed": 0.0},
+        )
+    ]
     assert captured["env"]["HOME"] == captured["env"]["OMERO_USERDIR"]
     assert Path(captured["env"]["OMERO_USERDIR"]).is_relative_to(
         TEST_RUNTIME_ROOT / "tmp"
@@ -385,7 +394,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     monkeypatch.setattr(
         tasks.subprocess,
-        "run",
+        "run_streaming",
         lambda *args, **kwargs: types.SimpleNamespace(
             returncode=1,
             stdout="",
@@ -402,7 +411,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     monkeypatch.setattr(
         tasks.subprocess,
-        "run",
+        "run_streaming",
         lambda *args, **kwargs: types.SimpleNamespace(
             returncode=0,
             stdout="* Message = Could not get original file path",
@@ -415,7 +424,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     monkeypatch.setattr(
         tasks.subprocess,
-        "run",
+        "run_streaming",
         lambda *args, **kwargs: types.SimpleNamespace(
             returncode=0,
             stdout="* Message = done",

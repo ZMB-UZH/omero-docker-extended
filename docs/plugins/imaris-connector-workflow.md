@@ -104,6 +104,10 @@ the connector does not repeat registry or vendor-directory discovery.
 
 The connector stores the last selected converter in the connector-owned
 `settings.env`. That value is treated as a preference only, never as authority.
+The local output path is intentionally excluded from all save/autosave
+mechanisms; each XT startup begins with an empty local path field. Saved legacy
+`OMERO_CONNECTOR_PATH` entries are dropped the next time connector settings are
+written.
 
 ```mermaid
 flowchart TD
@@ -126,6 +130,13 @@ list again. If `settings.env` contains `OMERO` but the connected server no
 longer exposes the custom capability flag, the connector refuses the stale value,
 refreshes the dropdown from the verified options, and does not start a download.
 
+Per-user settings also include `Search function`, `Collaboration projects`,
+`Autosave settings`, `Show log`, and `Append observed folders`. `Collaboration
+projects` defaults to disabled when no saved entry exists. When disabled, the
+project request is restricted to the connected user's own OMERO user id. When
+enabled, the connector uses the existing all-groups project listing so shared
+projects remain visible.
+
 ## OMERO converter path
 
 The `OMERO` converter is the custom server-side path in this repository. It
@@ -144,8 +155,8 @@ flowchart TD
     I -->|RUNNING| H
     I -->|FAILED| J[XT reports export failure]
     I -->|FINISHED| K[XT downloads exported IMS]
-    K --> L[XT validates IMS HDF5 signature]
-    L --> M[XT opens IMS in current Imaris session]
+K --> L[XT validates IMS HDF5 signature]
+L --> M[XT opens IMS in current Imaris session]
 ```
 
 This path is custom by design. It must not appear for arbitrary OMERO
@@ -153,6 +164,13 @@ installations that do not explicitly expose this repository's capability flag.
 For a standard non-custom OMERO.web host, a missing custom capability endpoint is
 treated as ordinary absence of the `OMERO` converter, not as an Imaris converter
 warning or failure.
+
+If the user presses Stop while this path is running, the XT client posts a
+cancel request to the job status URL. The server revokes the Celery task with
+termination enabled, terminates the tracked local OMERO CLI process when the
+process command line still matches the expected script launch, records a
+cancelled result, deletes any known generated FileAnnotation, and removes
+server-side export files that were created during the task window.
 
 ## Imaris converter path
 
@@ -209,8 +227,8 @@ flowchart TD
     F --> G{Bridge available?}
     G -->|Yes| H[Submit open request through native bridge]
     G -->|No| E
-    C --> K[Verify observable Imaris state change when possible]
-    H --> K
+C --> K[Verify observable Imaris state change when possible]
+H --> K
 ```
 
 The load workers validate converter-specific outputs before any handoff request
@@ -218,6 +236,11 @@ is made. The `OMERO` path requires IMS/HDF5 and uses the same-session bridge.
 The `Imaris` path requires a TIFF/BigTIFF file that was downloaded and tracked
 by the same dialog instance as a selected Image export, then submits that file
 to the installed Imaris File Converter.
+
+The connector revalidates the current Imaris application handle immediately
+before opening the file. If the original Imaris window was closed after the XT
+dialog started, the stale handle is cleared and the connector fails cleanly
+instead of opening a surprise new Imaris window or freezing the XT dialog.
 
 ## Browser search
 
@@ -228,6 +251,29 @@ typing does not trigger additional OMERO.web requests or background conversion
 work. Before a successful connection, and after any disconnect, the three search
 fields and the three browser lists stay disabled and visually greyed out.
 Clearing a search restores the full loaded list for that panel.
+
+The `Collaboration projects` checkbox sits with the same settings controls as
+`Search function`. It is disabled and visually greyed out whenever the browser
+is disconnected, matching `Autosave settings` behavior.
+
+## Stop button and responsiveness
+
+Long-running loads, downloads, and folder exports run off the Tk UI thread. The
+dialog shows a red hexagonal Stop control only while one of those sequences is
+active. Pressing Stop sets the shared cancellation event, writes a clear log
+message, disables the Stop control, removes partial local downloads, and
+restores the normal button state without showing a success dialog for cancelled
+work.
+
+Client-side downloads poll the cancellation event before network starts,
+between IMS job polls, before and during file writes, and before handoff to
+Imaris or Imaris File Converter. Folder export cancellation stops further
+upload/poll work and calls the server prune endpoint for the active upload job
+so staged files are removed.
+
+Information and help dialogs remain modal by design because they sit above the
+main XT window. Conversion, download, folder-export, and Imaris handoff work
+must not freeze the main window.
 
 ## Local filenames
 
@@ -283,6 +329,10 @@ the selected folder even though only the first one is opened automatically.
   load.
 - No same-session Imaris handoff target for `OMERO`: no server-side IMS export
   is started.
+- Stale or closed Imaris application handle: the stale handle is cleared and no
+  new Imaris process is opened implicitly.
+- User Stop request: current client-side work is cancelled, partial downloads
+  are removed, and server-side OMERO converter work is revoked and cleaned.
 - No discoverable `ImarisFileConverter.exe` for `Imaris`: no selected Image
   export is started.
 - Selected Image export endpoint unavailable: the `Imaris` path fails without
@@ -319,6 +369,13 @@ The regression suite covers the critical contracts:
   partial text without additional server calls.
 - Browser search fields and browser lists are disabled before connection and
   after disconnect.
+- `Collaboration projects` defaults to disabled, persists per user, and
+  switches project listing between own-user projects and all accessible
+  projects.
+- The local path is not persisted and stale saved path entries are removed from
+  connector settings.
+- Stop requests cancel client downloads and server-side OMERO converter jobs,
+  clean partial files, and do not freeze the Tk dialog.
 - Connector downloads preserve planned local filenames by default and prompt
   before replacing duplicates.
 - The `OMERO` path rejects non-HDF5 IMS download responses.
@@ -329,6 +386,11 @@ The regression suite covers the critical contracts:
   `OMERO_LIVE_PASSWORD`, and `OMERO_LIVE_IMAGE_ID`. The live test authenticates,
   downloads the selected Image export, and checks server-side IMS export when
   the custom capability exists.
+
+The XT script embeds the OME logomark source bytes from
+`https://www.openmicroscopy.org/img/logos/ome-logomark.svg` and verifies the
+embedded SVG and Tk window-icon PNG hashes in the regression suite. No
+server-side static logo asset is required for the XT connector window icon.
 
 ## Related docs
 

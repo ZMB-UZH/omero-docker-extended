@@ -1,4 +1,8 @@
+import json
 import logging
+import os
+import signal
+from pathlib import Path
 import time
 import urllib.parse
 
@@ -12,6 +16,7 @@ from .celery_app import app as celery_app
 from .config import get_celery_queue, use_celery
 from .imaris_service import (
     EXPORT_POLL_INTERVAL,
+    EXPORT_ROOT,
     EXPORT_TIMEOUT,
     _bool_from_request,
     _build_download_response,
@@ -29,9 +34,12 @@ INVALID_BASE_URL_MESSAGE = "Invalid base_url parameter."
 INVALID_OMERO_PORT_MESSAGE = "Invalid OMERO port parameter."
 IMS_EXPORT_FAILED_MESSAGE = "IMS export failed."
 IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
+IMS_EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
 TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 OMERO_IMS_EXPORT_CAPABILITY_FLAG = "omero_imaris_connector_v1"
 OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
+IMS_EXPORT_CLI_TERMINATION_GRACE_SECONDS = 2.0
+IMS_EXPORT_CLI_TERMINATION_POLL_SECONDS = 0.1
 
 
 def _parse_base_url(value):
@@ -99,6 +107,350 @@ def _text_response(message, status):
     response = HttpResponse(status=status, content_type=TEXT_PLAIN_CONTENT_TYPE)
     response.write(str(message))
     return response
+
+
+def _celery_task_id(job_id):
+    """Return the raw Celery task id for a public IMS export job id.
+
+    Inputs: `job_id`. Output: task id or None.
+    """
+    if not isinstance(job_id, str) or not job_id.startswith(CELERY_JOB_PREFIX):
+        return None
+    task_id = job_id[len(CELERY_JOB_PREFIX) :]
+    return task_id or None
+
+
+def _safe_export_path(path_value):
+    """Return a real export-root child path or None.
+
+    Inputs: path value. Output: pathlib Path or None.
+    """
+    if not path_value:
+        return None
+    try:
+        export_root = Path(os.path.realpath(EXPORT_ROOT))
+        candidate = Path(os.path.realpath(str(path_value)))
+    except (TypeError, ValueError, OSError):
+        return None
+    try:
+        candidate.relative_to(export_root)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _remove_export_file(path_value):
+    """Remove one safe IMS export file if present.
+
+    Inputs: path value. Output: bool.
+    """
+    candidate = _safe_export_path(path_value)
+    if candidate is None:
+        return False
+    try:
+        if candidate.is_file():
+            candidate.unlink()
+            return True
+    except OSError as exc:
+        logger.warning(
+            "Failed to remove cancelled IMS export file %s: %s",
+            sanitize_log_value(candidate),
+            sanitize_log_value(exc),
+        )
+    return False
+
+
+def _remove_recent_image_exports(meta):
+    """Remove partial export files created during the cancelled task window.
+
+    Inputs: Celery task meta. Output: removed file count.
+    """
+    if not isinstance(meta, dict):
+        return 0
+    raw_image_id = meta.get("image_id")
+    raw_started_at = meta.get("started_at")
+    if raw_image_id is None or raw_started_at is None:
+        return 0
+    try:
+        image_id = int(raw_image_id)
+        started_at = float(raw_started_at)
+    except (TypeError, ValueError):
+        return 0
+    image_dir = _safe_export_path(Path(EXPORT_ROOT) / f"image_{image_id}")
+    if image_dir is None or not image_dir.is_dir():
+        return 0
+    removed_count = 0
+    threshold = max(0.0, started_at - 1.0)
+    for candidate in image_dir.rglob("*"):
+        try:
+            if (
+                candidate.is_file()
+                and candidate.stat().st_mtime >= threshold
+                and _safe_export_path(candidate) is not None
+            ):
+                candidate.unlink()
+                removed_count += 1
+        except OSError as exc:
+            logger.warning(
+                "Failed to remove cancelled IMS export artifact %s: %s",
+                sanitize_log_value(candidate),
+                sanitize_log_value(exc),
+            )
+    for directory in sorted(
+        (path for path in image_dir.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        try:
+            directory.rmdir()
+        except OSError:
+            continue
+    try:
+        image_dir.rmdir()
+    except OSError:
+        pass
+    return removed_count
+
+
+def _delete_file_annotation(conn, file_ann_id):
+    """Best-effort deletion of a created IMS FileAnnotation.
+
+    Inputs: OMERO connection and annotation id. Output: bool.
+    """
+    try:
+        ann_id = int(file_ann_id)
+    except (TypeError, ValueError):
+        return False
+    delete_objects = getattr(conn, "deleteObjects", None)
+    if callable(delete_objects):
+        try:
+            delete_objects("Annotation", [ann_id], wait=True)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Failed to delete cancelled IMS file annotation %s: %s",
+                sanitize_log_value(ann_id),
+                sanitize_log_value(exc),
+            )
+    return False
+
+
+def _cleanup_cancelled_export(conn, outputs, meta):
+    """Cleanup known server-side IMS export artifacts for a cancelled task.
+
+    Inputs: OMERO connection, outputs, task metadata. Output: cleanup summary.
+    """
+    cleanup = {
+        "export_file_removed": False,
+        "recent_artifacts_removed": 0,
+        "file_annotation_removed": False,
+    }
+    export_path = _extract_output_value(outputs or {}, "Export_Path")
+    file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")
+    cleanup["export_file_removed"] = _remove_export_file(export_path)
+    cleanup["recent_artifacts_removed"] = _remove_recent_image_exports(meta)
+    if conn is not None and file_ann_id:
+        cleanup["file_annotation_removed"] = _delete_file_annotation(conn, file_ann_id)
+    return cleanup
+
+
+def _export_cli_pid_from_meta(meta):
+    """Return a local OMERO CLI pid from trusted task metadata.
+
+    Inputs: Celery task metadata. Output: pid or None.
+    """
+    if not isinstance(meta, dict):
+        return None
+    if meta.get("status") != "running_script":
+        return None
+    raw_pid = meta.get("cli_pid")
+    if raw_pid is None:
+        return None
+    try:
+        pid = int(raw_pid)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 1:
+        return None
+    return pid
+
+
+def _read_proc_cmdline(pid):
+    """Read a process command line without exposing it to the response.
+
+    Inputs: pid. Output: argv tuple or empty tuple.
+    """
+    try:
+        raw = (Path("/proc") / str(int(pid)) / "cmdline").read_bytes()
+    except (OSError, TypeError, ValueError):
+        return ()
+    return tuple(
+        part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part
+    )
+
+
+def _is_expected_ims_export_cli_process(pid):
+    """Return whether pid still belongs to the expected OMERO CLI launch.
+
+    Inputs: pid. Output: bool.
+    """
+    parts = _read_proc_cmdline(pid)
+    if not parts:
+        return False
+    executable = Path(parts[0]).name
+    return executable == "omero" and "script" in parts and "launch" in parts
+
+
+def _process_is_alive(pid):
+    """Return whether a local process id exists.
+
+    Inputs: pid. Output: bool.
+    """
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _terminate_export_cli_process(meta):
+    """Terminate the live OMERO CLI process for a cancelled IMS export.
+
+    Inputs: Celery task metadata. Output: cleanup summary.
+    """
+    pid = _export_cli_pid_from_meta(meta)
+    result = {
+        "local_cli_termination_attempted": False,
+        "local_cli_process_stopped": False,
+    }
+    if pid is None:
+        return result
+    if not _is_expected_ims_export_cli_process(pid):
+        logger.warning(
+            "IMS export cancellation skipped local process termination for pid=%s; "
+            "command line no longer matches OMERO CLI script launch.",
+            sanitize_log_value(pid),
+        )
+        return result
+
+    result["local_cli_termination_attempted"] = True
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        result["local_cli_process_stopped"] = True
+        return result
+    except OSError as exc:
+        logger.warning(
+            "Failed to terminate IMS export CLI process pid=%s: %s",
+            sanitize_log_value(pid),
+            sanitize_log_value(exc),
+        )
+        return result
+
+    deadline = time.time() + IMS_EXPORT_CLI_TERMINATION_GRACE_SECONDS
+    while time.time() < deadline:
+        if not _process_is_alive(pid):
+            result["local_cli_process_stopped"] = True
+            return result
+        time.sleep(IMS_EXPORT_CLI_TERMINATION_POLL_SECONDS)
+
+    if not _is_expected_ims_export_cli_process(pid):
+        result["local_cli_process_stopped"] = not _process_is_alive(pid)
+        return result
+
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        result["local_cli_process_stopped"] = True
+        return result
+    except OSError as exc:
+        logger.warning(
+            "Failed to kill IMS export CLI process pid=%s: %s",
+            sanitize_log_value(pid),
+            sanitize_log_value(exc),
+        )
+        return result
+
+    result["local_cli_process_stopped"] = not _process_is_alive(pid)
+    return result
+
+
+def _cancel_celery_job(job_id, conn=None):
+    """Revoke a Celery-backed IMS export and cleanup any known artifacts.
+
+    Inputs: public job id and optional OMERO connection. Output: dict payload.
+    """
+    task_id = _celery_task_id(job_id)
+    if task_id is None:
+        return {
+            "ok": False,
+            "error": "Only Celery-backed IMS export jobs are supported.",
+        }
+    state, outputs, _error, meta = _poll_celery_job(job_id)
+    async_result = celery_app.AsyncResult(task_id)
+    try:
+        celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+    except Exception as exc:
+        logger.warning(
+            "Failed to revoke IMS export task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+    try:
+        async_result.backend.store_result(
+            task_id,
+            {"state": "CANCELLED", "error": IMS_EXPORT_CANCELLED_MESSAGE},
+            state=celery_states.REVOKED,
+        )
+    except Exception as exc:
+        logger.debug(
+            "Failed to record cancelled IMS export result %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+    cleanup = _cleanup_cancelled_export(conn, outputs, meta)
+    cleanup.update(_terminate_export_cli_process(meta))
+    logger.info(
+        "IMS export task cancelled job_id=%s prior_state=%s cleanup=%s",
+        sanitize_log_value(job_id),
+        sanitize_log_value(state),
+        sanitize_log_value(cleanup),
+    )
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "state": "CANCELLED",
+        "cancelled": True,
+        "cleanup": cleanup,
+    }
+
+
+def _cancel_requested(request):
+    """Return whether an IMS export status request asks to cancel the job.
+
+    Inputs: Django request. Output: bool.
+    """
+    if _bool_from_request(request.GET.get("cancel")):
+        return True
+    post_data = getattr(request, "POST", {})
+    if _bool_from_request(post_data.get("cancel")):
+        return True
+    content_type = str(request.META.get("CONTENT_TYPE") or "").lower()
+    if "application/json" not in content_type:
+        return False
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return _bool_from_request(payload.get("cancel"))
 
 
 @login_required()
@@ -171,6 +523,13 @@ def imaris_export(request, conn=None, **kwargs):
                 "Only Celery-backed IMS export jobs are supported.",
                 status=400,
             )
+        if _cancel_requested(request):
+            if request.method != "POST":
+                return HttpResponse(
+                    "IMS export cancellation requires POST.",
+                    status=405,
+                )
+            return JsonResponse(_cancel_celery_job(job_id, conn))
         state, outputs, _error, meta = _poll_celery_job(job_id)
         normalized_state = _normalize_job_state(state)
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
