@@ -113,9 +113,12 @@ Grafana proxy authentication depends on passing session and auth headers
 through OMERO.web. The proxy forwards `Authorization`, `Cookie`, and
 `X-Grafana-Csrf-Token` request headers, rewrites `Origin` and `Referer` to
 match the Grafana backend origin, and preserves `Set-Cookie` responses.
-The view is marked `@csrf_exempt` so Django's own CSRF middleware does not
-block Grafana login POST requests; Grafana's backend validates CSRF
-independently. Cookie `Path` attributes are rewritten to
+The Grafana proxy is the only documented Admin Tools `@csrf_exempt` route:
+OMERO.web still requires an authenticated root user before proxying, while
+Grafana validates its own login CSRF token and cookie. This exception prevents
+Django's CSRF middleware from blocking Grafana login POST requests made through
+the OMERO.web domain. Prometheus proxy requests are not covered by this
+exception. Cookie `Path` attributes are rewritten to
 `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login
 sessions continue to work when Grafana is accessed through the plugin proxy
 route.

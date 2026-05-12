@@ -112,6 +112,45 @@ class RegressionGuardEngineTests(unittest.TestCase):
         )
         self.assertTrue(any(f.rule_id == "RG002" for f in findings))
 
+    def test_only_documented_grafana_proxy_csrf_exemption_is_allowed(self) -> None:
+        """Verify the one documented Grafana CSRF exception stays narrow.
+
+        Inputs: synthesized views. Output: fails on CSRF guard drift.
+        """
+        allowed = self._scan_one(
+            "module/grafana.py",
+            "from django.views.decorators.csrf import csrf_exempt\n"
+            "from omeroweb.decorators import login_required\n"
+            "def require_root_user(fn): return fn\n"
+            "@csrf_exempt\n"
+            "@login_required()\n"
+            "@require_root_user\n"
+            "def grafana_proxy(request):\n"
+            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
+            "    pass\n",
+        )
+        self.assertFalse(any(f.rule_id == "RG006" for f in allowed))
+
+        missing_controls = self._scan_one(
+            "module/grafana_missing_controls.py",
+            "from django.views.decorators.csrf import csrf_exempt\n"
+            "@csrf_exempt\n"
+            "def grafana_proxy(request):\n"
+            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
+            "    pass\n",
+        )
+        self.assertTrue(any(f.rule_id == "RG006" for f in missing_controls))
+
+        other_view = self._scan_one(
+            "module/other.py",
+            "from django.views.decorators.csrf import csrf_exempt\n"
+            "@csrf_exempt\n"
+            "def other_proxy(request):\n"
+            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
+            "    pass\n",
+        )
+        self.assertTrue(any(f.rule_id == "RG006" for f in other_view))
+
     def test_test_files_skip_assert_rule(self) -> None:
         """Verify regression guard allows plain asserts inside test files.
 

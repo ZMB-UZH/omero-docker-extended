@@ -36,26 +36,26 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `150`
-- Production Python lines: `74,987`
+- Production Python lines: `76,211`
 - Test Python files: `178`
-- Test Python lines: `121,622`
+- Test Python lines: `122,034`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
 
 ### Largest production modules inspected
 
-- `omero_imaris_connector/XTOmeroConnector.py`: `13,277` lines
+- `omero_imaris_connector/XTOmeroConnector.py`: `14,080` lines
 - `omeroweb_import/views/core_functions.py`: `9,879` lines
-- `omeroweb_admin_tools/views/index_view.py`: `3,418` lines
+- `omeroweb_admin_tools/views/index_view.py`: `3,423` lines
 - `tools/cocoindex_agent_search.py`: `3,070` lines
 - `omeroweb_import/views/index_view.py`: `1,877` lines
 - `omero_web_zarr/integration.py`: `1,801` lines
 - `omeroweb_tools/services/enhanced_search_service.py`: `1,687` lines
 - `omeroweb_tools/services/acquisition_metadata.py`: `1,468` lines
+- `tools/regression_guard.py`: `1,447` lines
 - `omeroweb_tools/services/enhanced_search_store.py`: `1,422` lines
 - `omero_web_zarr/utils.py`: `1,420` lines
-- `tools/regression_guard.py`: `1,410` lines
 - `omeroweb_admin_tools/services/log_query.py`: `1,375` lines
 - `omero_imaris_connector/imaris_service.py`: `1,296` lines
 - `tools/env_safety_guard.py`: `1,247` lines

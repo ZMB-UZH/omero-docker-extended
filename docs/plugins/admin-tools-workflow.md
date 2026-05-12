@@ -79,6 +79,9 @@ flowchart TD
 
 - Embedded Grafana dashboards are served through an authenticated reverse proxy (`/resource-monitoring/grafana-proxy/<subpath>`).
 - The Grafana proxy rewrites `appSubUrl`, `appUrl`, cookie paths, and auth headers so Grafana sessions work correctly behind the plugin route.
+- The Grafana proxy is the documented CSRF exemption in this plugin: OMERO.web
+  root authentication still gates the route, and Grafana validates its own
+  login CSRF token/cookie after the proxy rewrites origin/referrer headers.
 - Prometheus queries are proxied as standard request/response traffic; the SSE notifications endpoint is short-circuited with `204 No Content`.
 - The Prometheus proxy root redirects to `/targets`.
 - Docker container stats and system info are fetched via the mounted Docker socket (read-only).

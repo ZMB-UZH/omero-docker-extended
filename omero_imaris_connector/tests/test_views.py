@@ -614,6 +614,121 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
         views._start_celery_job(SimpleNamespace(), 17)
 
 
+def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
+    monkeypatch,
+    tmp_path,
+):
+    """Verify IMS export cancellation revokes work, kills CLI, and cleans safely.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in
+    cancellation cleanup and response sanitization.
+    """
+    views = _import_views()
+    export_root = tmp_path / "exports"
+    image_dir = export_root / "image_12"
+    image_dir.mkdir(parents=True)
+    export_path = image_dir / "finished.ims"
+    partial_path = image_dir / "partial.ims"
+    export_path.write_bytes(b"finished")
+    partial_path.write_bytes(b"partial")
+
+    deleted = []
+    revoked = []
+    stored = []
+    alive = {"345": True}
+
+    class _FakeBackend:
+        """Test double for Celery backend result storage."""
+
+        @staticmethod
+        def store_result(task_id, payload, state):
+            """Record the stored Celery result.
+
+            Inputs: `task_id`, `payload`, `state`. Output: None.
+            """
+            stored.append((task_id, payload, state))
+
+    monkeypatch.setattr(views, "EXPORT_ROOT", export_root)
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "RUNNING",
+            {"Export_Path": str(export_path), "File_Annotation_Id": "9"},
+            None,
+            {
+                "status": "running_script",
+                "image_id": 12,
+                "started_at": 0.0,
+                "cli_pid": 345,
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: SimpleNamespace(backend=_FakeBackend()),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        views.celery_app,
+        "control",
+        SimpleNamespace(
+            revoke=lambda task_id, terminate, signal: revoked.append(
+                (task_id, terminate, signal)
+            )
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        views,
+        "_is_expected_ims_export_cli_process",
+        lambda pid: pid == 345,
+    )
+
+    def _fake_kill(pid, sig):
+        """Record expected process termination calls.
+
+        Inputs: `pid`, `sig`. Output: None or raises ProcessLookupError.
+        """
+        if sig == 0:
+            if alive.get(str(pid)):
+                return None
+            raise ProcessLookupError
+        if sig == views.signal.SIGTERM:
+            alive[str(pid)] = False
+            return None
+        raise AssertionError(f"unexpected signal: {sig}")
+
+    monkeypatch.setattr(views.os, "kill", _fake_kill)
+
+    conn = SimpleNamespace(
+        deleteObjects=lambda obj_type, ids, wait: deleted.append((obj_type, ids, wait))
+    )
+
+    payload = views._cancel_celery_job("celery-task-123", conn)
+    serialized = json.dumps(payload)
+
+    assert payload["cancelled"] is True
+    assert payload["cleanup"]["export_file_removed"] is True
+    assert payload["cleanup"]["recent_artifacts_removed"] == 1
+    assert payload["cleanup"]["file_annotation_removed"] is True
+    assert payload["cleanup"]["local_cli_termination_attempted"] is True
+    assert payload["cleanup"]["local_cli_process_stopped"] is True
+    assert revoked == [("task-123", True, "SIGTERM")]
+    assert stored == [
+        (
+            "task-123",
+            {"state": "CANCELLED", "error": views.IMS_EXPORT_CANCELLED_MESSAGE},
+            views.celery_states.REVOKED,
+        )
+    ]
+    assert deleted == [("Annotation", [9], True)]
+    assert not export_path.exists()
+    assert not partial_path.exists()
+    assert str(export_root) not in serialized
+
+
 def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     monkeypatch,
 ) -> None:

@@ -2219,15 +2219,15 @@ def test_proxy_http_request_ignores_absent_extra_headers(monkeypatch) -> None:
     assert "X-Grafana-Csrf-Token" not in captured["headers"]
 
 
-def test_grafana_proxy_post_is_protected_by_django_csrf_middleware() -> None:
-    """Verify grafana proxy post is protected by django csrf middleware.
+def test_grafana_proxy_post_uses_documented_csrf_exemption() -> None:
+    """Verify grafana proxy post uses documented csrf exemption.
 
-    Inputs: admin-tool fixtures. Output: fails on regressions in grafana proxy post is protected by django csrf middleware.
+    Inputs: admin-tool fixtures. Output: fails on regressions in grafana proxy csrf behavior.
     """
     from omeroweb_admin_tools.views import index_view
 
     view_func = index_view.grafana_proxy
-    assert getattr(view_func, "csrf_exempt", False) is False
+    assert getattr(view_func, "csrf_exempt", False) is True
     assert "POST" in index_view._GRAFANA_PROXY_METHODS
 
     request = RequestFactory().post(
@@ -2239,8 +2239,7 @@ def test_grafana_proxy_post_is_protected_by_django_csrf_middleware() -> None:
 
     response = middleware.process_view(request, view_func, (), {"subpath": "api/login"})
 
-    assert response is not None
-    assert response.status_code == 403
+    assert response is None
 
 
 def test_prometheus_proxy_is_not_csrf_exempt() -> None:

@@ -435,6 +435,42 @@ def _ast_sql_interpolation(tree: ast.AST, _src: str) -> list[tuple[int, int, str
     return hits
 
 
+_ALLOWED_CSRF_EXEMPT_DOC_MARKER = (
+    "RegressionGuard: allowed @csrf_exempt for the Grafana proxy only."
+)
+
+
+def _decorator_name(decorator: ast.expr) -> str | None:
+    """Return a simple decorator name for guard allowlist checks.
+
+    Inputs: `decorator`. Output: decorator name or None.
+    """
+    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    if isinstance(target, ast.Name):
+        return target.id
+    return None
+
+
+def _allowed_csrf_exempt(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a CSRF exemption is the documented Grafana proxy exception.
+
+    Inputs: `node`. Output: bool.
+    """
+    if node.name != "grafana_proxy":
+        return False
+    docstring = ast.get_docstring(node) or ""
+    if _ALLOWED_CSRF_EXEMPT_DOC_MARKER not in docstring:
+        return False
+    decorator_names = {
+        name for name in (_decorator_name(dec) for dec in node.decorator_list) if name
+    }
+    return {"csrf_exempt", "login_required", "require_root_user"}.issubset(
+        decorator_names
+    )
+
+
 def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
     """Return the ast CSRF exempt.
 
@@ -446,19 +482,16 @@ def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]
             continue
         for dec in node.decorator_list:
             target = dec.func if isinstance(dec, ast.Call) else dec
-            name = (
-                target.attr
-                if isinstance(target, ast.Attribute)
-                else target.id
-                if isinstance(target, ast.Name)
-                else None
-            )
+            name = _decorator_name(dec)
             if name == "csrf_exempt":
+                if _allowed_csrf_exempt(node):
+                    continue
                 hits.append(
                     (
                         target.lineno,
                         target.col_offset,
-                        "@csrf_exempt usage. Send X-CSRFToken from the client instead.",
+                        "@csrf_exempt usage. Send X-CSRFToken from the client instead; "
+                        "only the documented Grafana proxy exception is allowed.",
                         f"@csrf_exempt on {node.name}",
                     )
                 )
@@ -768,7 +801,11 @@ CATALOG: tuple[Rule, ...] = (
         id="RG006",
         severity="medium",
         title="@csrf_exempt decorator on a view",
-        fix="Send X-CSRFToken from the client and remove the decorator.",
+        fix=(
+            "Send X-CSRFToken from the client and remove the decorator; only the "
+            "documented Grafana proxy exception may remain behind OMERO root auth "
+            "and Grafana CSRF validation."
+        ),
         scanner="semgrep/csrf-exempt",
         closed_history=34,
         applies_to=("*.py",),
