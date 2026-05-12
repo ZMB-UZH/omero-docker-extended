@@ -36,16 +36,16 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `150`
-- Production Python lines: `76,874`
+- Production Python lines: `76,875`
 - Test Python files: `178`
-- Test Python lines: `122,393`
+- Test Python lines: `122,394`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
 
 ### Largest production modules inspected
 
-- `omero_imaris_connector/XTOmeroConnector.py`: `14,739` lines
+- `omero_imaris_connector/XTOmeroConnector.py`: `14,740` lines
 - `omeroweb_import/views/core_functions.py`: `9,879` lines
 - `omeroweb_admin_tools/views/index_view.py`: `3,423` lines
 - `tools/cocoindex_agent_search.py`: `3,070` lines

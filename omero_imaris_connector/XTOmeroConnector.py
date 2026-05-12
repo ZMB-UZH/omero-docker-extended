@@ -6731,7 +6731,8 @@ class OMEROWebClient:
             )
             if parsed.scheme == "https":
                 context = ssl.create_default_context()
-                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                tls_floor = ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001
+                context.minimum_version = tls_floor
                 sock = context.wrap_socket(sock, server_hostname=parsed.hostname)
             sock.setblocking(False)
 

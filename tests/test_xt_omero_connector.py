@@ -9046,8 +9046,9 @@ def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch):
     finally:
         response.close()
 
+    tls_floor = module.ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001
     assert observed == {
-        "minimum_version_at_wrap": module.ssl.TLSVersion.TLSv1_2,
+        "minimum_version_at_wrap": tls_floor,
         "server_hostname": "omero.example.org",
     }
     assert fake_socket.closed is True
