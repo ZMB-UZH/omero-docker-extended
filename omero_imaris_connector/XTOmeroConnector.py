@@ -6174,7 +6174,10 @@ def _close_socket_quietly(sock):
     try:
         sock.close()
     except OSError:
-        pass
+        logger.debug(
+            "Suppressed non-fatal socket close failure in XT cancellable HTTP.",
+            exc_info=True,
+        )
 
 
 class _CancellableHTTPResponse:
@@ -6728,6 +6731,7 @@ class OMEROWebClient:
             )
             if parsed.scheme == "https":
                 context = ssl.create_default_context()
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
                 sock = context.wrap_socket(sock, server_hostname=parsed.hostname)
             sock.setblocking(False)
 
