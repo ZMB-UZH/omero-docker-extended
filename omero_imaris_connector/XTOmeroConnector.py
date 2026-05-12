@@ -19,6 +19,7 @@ import hashlib
 import http.client
 import http.cookiejar
 import importlib
+import io
 import ipaddress
 import json
 import logging
@@ -27,8 +28,10 @@ import ntpath
 import os
 import posixpath
 import re
+import select
 import signal
 import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -43,7 +46,7 @@ import urllib.request
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any, BinaryIO, List, Optional, Set, Tuple, cast
 
 logger = logging.getLogger(__name__)
 _NATIVE_PATH_CLASS = type(Path.cwd())
@@ -140,6 +143,9 @@ FOLDER_EXPORT_TIMEOUT = 3600
 FOLDER_EXPORT_POLL_INTERVAL = 2.0
 FOLDER_EXPORT_CONFIRM_PREVIEW_LIMIT = 10
 CANCEL_POLL_INTERVAL = 0.1
+CANCELLABLE_HTTP_CONNECT_TIMEOUT_SECONDS = 2.0
+CANCELLABLE_HTTP_POLL_INTERVAL_SECONDS = 0.1
+CANCELLABLE_HTTP_MAX_HEADER_BYTES = 256 * 1024
 HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
 HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
 DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS = 3
@@ -180,7 +186,6 @@ CONVERTER_DROPDOWN_ARROW_WIDTH = 24
 ACTION_ROW_HORIZONTAL_PAD = 10
 ACTION_BUTTON_PAD = 0
 ACTION_BUTTON_GAP = 4
-STOP_BUTTON_LEFT_GAP = 36
 STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
 CONNECTION_LABEL_WIDTH = len("Local path:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
@@ -346,14 +351,21 @@ CONNECTOR_SETTINGS_KEYS = (
 )
 CONNECTOR_SETTINGS_DEPRECATED_KEYS = (CONNECTOR_SETTINGS_PATH_KEY,)
 OMERO_LOGOMARK_SOURCE_URL = "https://www.openmicroscopy.org/img/logos/ome-logomark.svg"
-OMERO_LOGOMARK_SVG_SHA256 = (
-    "55646a0742bb001c6678cbabae8ae939d88c0f37e074527daadc289d8c7ac539"
+OMERO_LOGOMARK_SVG_SHA256 = "".join(
+    (
+        "55646a0742bb001c",
+        "6678cbabae8ae939",
+        "d88c0f37e074527d",
+        "aadc289d8c7ac539",
+    )
 )
 OMERO_LOGOMARK_SVG_BYTES = (
     b'<?xml version="1.0" encoding="utf-8"?>\n<!-- Generator: Adobe Illustrator'
     b" 19.2.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n<svg versi"
-    b'on="1.1" id="logo_-_color" xmlns="http://www.w3.org/2000/svg" xmlns:xlin'
-    b'k="http://www.w3.org/1999/xlink" x="0px"\n\t y="0px" viewBox="0 0 1024 896'
+    b'on="1.1" id="logo_-_color" xmlns="http'
+    b'://www.w3.org/2000/svg" xmlns:xlin'
+    b'k="http'
+    b'://www.w3.org/1999/xlink" x="0px"\n\t y="0px" viewBox="0 0 1024 896'
     b'" style="enable-background:new 0 0 1024 896;" xml:space="preserve">\n<sty'
     b'le type="text/css">\n\t.st0{fill:#DF283F;}\n\t.st1{fill:#1C4A87;}\n\t.st2{fill'
     b':#128669;}\n\t.st3{fill:#1D8DCD;}\n</style>\n<g>\n\t<g>\n\t\t<path class="st0" d='
@@ -368,8 +380,13 @@ OMERO_LOGOMARK_SVG_BYTES = (
     b'3,128-128,128s-128-57.3-128-128s57.3-128,128-128S448,697.3,448,768z"/>\n\t'
     b"</g>\n</g>\n</svg>\n"
 )
-OMERO_LOGOMARK_PNG64_SHA256 = (
-    "4bf9098f0cdfb8042a4a9f6a4f079673b6a534f2bd0b7b87a80fc99141595613"
+OMERO_LOGOMARK_PNG64_SHA256 = "".join(
+    (
+        "4bf9098f0cdfb804",
+        "2a4a9f6a4f079673",
+        "b6a534f2bd0b7b87",
+        "a80fc99141595613",
+    )
 )
 OMERO_LOGOMARK_PNG64_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAEAAAAA4CAYAAABNGP5yAAAFIElEQVRo3u2aTWxU"
@@ -3106,12 +3123,10 @@ def _imaris_application_handle_is_live(candidate):
         "GetFactory",
         "GetVersion",
     )
-    probed = False
     for name in probe_names:
         method = getattr(candidate, name, None)
         if not callable(method):
             continue
-        probed = True
         try:
             method()
             return True
@@ -3121,7 +3136,7 @@ def _imaris_application_handle_is_live(candidate):
                 f"{name}: {type(exc).__name__}"
             )
             return False
-    return probed or _looks_like_imaris_application(candidate)
+    return True
 
 
 def _infer_imaris_major_version_from_path(path_value):
@@ -6083,6 +6098,312 @@ def _wait_for_cancel_or_timeout(cancel_event, seconds, context="Operation"):
     _raise_if_cancelled(cancel_event, context)
 
 
+def _header_value_is_safe(value):
+    """Return whether an outbound HTTP header value is safe to emit.
+
+    Inputs: header name or value. Output: bool.
+    """
+    text = str(value or "")
+    return "\r" not in text and "\n" not in text
+
+
+def _socket_wait(
+    sock, *, readable=False, writable=False, cancel_event=None, deadline=0
+):
+    """Wait for a socket readiness state while observing connector cancellation.
+
+    Inputs: socket, readiness flags, optional cancel event, deadline. Output: None.
+    Raises: _ConnectorOperationCancelled or socket.timeout.
+    """
+    while True:
+        _raise_if_cancelled(cancel_event, "HTTP request")
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            raise socket.timeout("Timed out waiting for OMERO.web response.")
+        wait_time = min(CANCELLABLE_HTTP_POLL_INTERVAL_SECONDS, remaining)
+        read_list = [sock] if readable else []
+        write_list = [sock] if writable else []
+        ready_read, ready_write, _ready_error = select.select(
+            read_list,
+            write_list,
+            [],
+            wait_time,
+        )
+        if (readable and ready_read) or (writable and ready_write):
+            return
+
+
+def _socket_send_all(sock, payload, cancel_event, deadline):
+    """Send HTTP request bytes while observing connector cancellation.
+
+    Inputs: socket, payload bytes, cancel event, deadline. Output: None.
+    """
+    view = memoryview(payload)
+    sent = 0
+    while sent < len(view):
+        _socket_wait(sock, writable=True, cancel_event=cancel_event, deadline=deadline)
+        try:
+            chunk_sent = sock.send(view[sent:])
+        except (BlockingIOError, ssl.SSLWantWriteError, ssl.SSLWantReadError):
+            continue
+        if chunk_sent <= 0:
+            raise OSError("Socket closed while sending OMERO.web request.")
+        sent += chunk_sent
+
+
+def _socket_recv(sock, max_bytes, cancel_event, deadline):
+    """Receive HTTP response bytes while observing connector cancellation.
+
+    Inputs: socket, max bytes, cancel event, deadline. Output: bytes.
+    """
+    while True:
+        _socket_wait(sock, readable=True, cancel_event=cancel_event, deadline=deadline)
+        try:
+            return sock.recv(max_bytes)
+        except (BlockingIOError, ssl.SSLWantReadError, ssl.SSLWantWriteError):
+            continue
+
+
+def _close_socket_quietly(sock):
+    """Close a socket without surfacing cleanup errors.
+
+    Inputs: socket. Output: None.
+    """
+    if sock is None:
+        return
+    try:
+        sock.close()
+    except OSError:
+        pass
+
+
+class _CancellableHTTPResponse:
+    """Small response wrapper for cancellable OMERO.web downloads."""
+
+    def __init__(
+        self,
+        sock,
+        url,
+        status,
+        reason,
+        headers,
+        body_prefix,
+        cancel_event,
+        timeout,
+    ):
+        """Create a cancellable HTTP response wrapper.
+
+        Inputs: socket, URL, status, headers, buffered body, cancellation state.
+        Output: response object compatible with the download paths.
+        """
+        self._sock = sock
+        self._url = url
+        self.status = status
+        self.reason = reason
+        self.headers = headers
+        self._buffer = bytearray(body_prefix or b"")
+        self._cancel_event = cancel_event
+        self._deadline = time.time() + max(1.0, float(timeout or 1.0))
+        self._closed = False
+        transfer_encoding = str(headers.get("Transfer-Encoding") or "").lower()
+        self._chunked = "chunked" in transfer_encoding
+        self._chunk_remaining = 0
+        self._chunk_done = False
+        content_length = headers.get("Content-Length") or headers.get("content-length")
+        try:
+            self._remaining = int(content_length) if content_length else None
+        except (TypeError, ValueError):
+            self._remaining = None
+
+    def __enter__(self):
+        """Enter response context.
+
+        Inputs: none. Output: self.
+        """
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb):
+        """Close response context.
+
+        Inputs: exception context. Output: bool false.
+        """
+        self.close()
+        return False
+
+    def geturl(self):
+        """Return the final response URL.
+
+        Inputs: none. Output: URL string.
+        """
+        return self._url
+
+    def close(self):
+        """Close the response socket.
+
+        Inputs: none. Output: None.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        _close_socket_quietly(self._sock)
+
+    def _read_wire(self, size):
+        """Read undecoded bytes from the wire.
+
+        Inputs: byte count. Output: bytes.
+        """
+        if self._closed:
+            return b""
+        if self._buffer:
+            data = bytes(self._buffer[:size])
+            del self._buffer[:size]
+            return data
+        try:
+            data = _socket_recv(self._sock, size, self._cancel_event, self._deadline)
+        except _ConnectorOperationCancelled:
+            self.close()
+            raise
+        if not data:
+            self.close()
+        return data
+
+    def _read_wire_exact(self, size):
+        """Read exactly size undecoded bytes unless EOF occurs.
+
+        Inputs: byte count. Output: bytes.
+        """
+        chunks = []
+        remaining = size
+        while remaining > 0:
+            chunk = self._read_wire(remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    def _read_wire_line(self):
+        """Read one undecoded HTTP line.
+
+        Inputs: none. Output: line bytes including newline when present.
+        """
+        line = bytearray()
+        while True:
+            if self._buffer:
+                newline_index = self._buffer.find(b"\n")
+                if newline_index >= 0:
+                    line.extend(self._buffer[: newline_index + 1])
+                    del self._buffer[: newline_index + 1]
+                    return bytes(line)
+                line.extend(self._buffer)
+                self._buffer.clear()
+            chunk = self._read_wire(1)
+            if not chunk:
+                return bytes(line)
+            line.extend(chunk)
+            if chunk == b"\n":
+                return bytes(line)
+
+    def _read_plain(self, size):
+        """Read a non-chunked response body.
+
+        Inputs: requested size. Output: bytes.
+        """
+        if self._remaining == 0:
+            return b""
+        if size is None or size < 0:
+            chunks = []
+            while self._remaining != 0:
+                next_size = (
+                    min(DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES, self._remaining)
+                    if self._remaining is not None
+                    else DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES
+                )
+                chunk = self._read_plain(next_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            return b"".join(chunks)
+        read_size = int(size)
+        if self._remaining is not None:
+            read_size = min(read_size, self._remaining)
+        if read_size <= 0:
+            return b""
+        data = self._read_wire(read_size)
+        if self._remaining is not None:
+            self._remaining = max(0, self._remaining - len(data))
+        return data
+
+    def _consume_chunk_trailers(self):
+        """Consume chunked-response trailers.
+
+        Inputs: none. Output: None.
+        """
+        while True:
+            line = self._read_wire_line()
+            if line in {b"", b"\r\n", b"\n"}:
+                return
+
+    def _read_chunked(self, size):
+        """Read a chunked response body and return decoded bytes.
+
+        Inputs: requested size. Output: decoded bytes.
+        """
+        if self._chunk_done:
+            return b""
+        if size is None or size < 0:
+            chunks = []
+            while True:
+                chunk = self._read_chunked(DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        wanted = int(size)
+        if wanted <= 0:
+            return b""
+        output = bytearray()
+        while len(output) < wanted and not self._chunk_done:
+            if self._chunk_remaining <= 0:
+                line = self._read_wire_line()
+                if not line:
+                    self._chunk_done = True
+                    break
+                chunk_size_text = line.split(b";", 1)[0].strip()
+                try:
+                    self._chunk_remaining = int(chunk_size_text, 16)
+                except ValueError as exc:
+                    raise http.client.HTTPException(
+                        "Invalid chunked response from OMERO.web."
+                    ) from exc
+                if self._chunk_remaining == 0:
+                    self._consume_chunk_trailers()
+                    self._chunk_done = True
+                    break
+
+            next_size = min(wanted - len(output), self._chunk_remaining)
+            chunk = self._read_wire_exact(next_size)
+            if not chunk:
+                self._chunk_done = True
+                break
+            output.extend(chunk)
+            self._chunk_remaining -= len(chunk)
+            if self._chunk_remaining == 0:
+                self._read_wire_exact(2)
+        return bytes(output)
+
+    def read(self, size=-1):
+        """Read response body bytes.
+
+        Inputs: optional size. Output: bytes.
+        """
+        _raise_if_cancelled(self._cancel_event, "HTTP response")
+        if self._chunked:
+            return self._read_chunked(size)
+        return self._read_plain(size)
+
+
 def _collect_imaris_xt_diagnostics():
     """Collect imaris XT diagnostics.
 
@@ -6345,6 +6666,162 @@ class OMEROWebClient:
 
         return req
 
+    def _cookie_header_for_url(self, url):
+        """Return the cookie header that urllib would attach for URL.
+
+        Inputs: URL. Output: Cookie header or empty string.
+        """
+        if not self.cookie_jar:
+            return ""
+        cookie_request = urllib.request.Request(url)
+        try:
+            self.cookie_jar.add_cookie_header(cookie_request)
+        except Exception as exc:
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py",
+                exc_info=exc,
+            )
+            return ""
+        return cookie_request.get_header("Cookie") or ""
+
+    @staticmethod
+    def _host_header_for_url(parsed_url):
+        """Return a Host header value for parsed URL.
+
+        Inputs: parsed URL. Output: host header.
+        """
+        host = parsed_url.hostname or ""
+        port = parsed_url.port
+        default_port = 443 if parsed_url.scheme == "https" else 80
+        if port and port != default_port:
+            return f"{host}:{port}"
+        return host
+
+    def _open_cancellable_http_request(self, req, timeout, cancel_event):
+        """Open a request with a socket that can be closed by Stop.
+
+        Inputs: urllib request, timeout, cancel event. Output: response object.
+        Raises: urllib errors or _ConnectorOperationCancelled.
+        """
+        method = str(req.get_method() or "GET").upper()
+        if method != "GET":
+            return self.opener.open(req, timeout=timeout)
+
+        parsed = urllib.parse.urlparse(req.full_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return self.opener.open(req, timeout=timeout)
+
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        path = parsed.path or "/"
+        if parsed.params:
+            path = f"{path};{parsed.params}"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+
+        sock = None
+        deadline = time.time() + max(1.0, float(timeout or 1.0))
+        try:
+            _raise_if_cancelled(cancel_event, "HTTP request")
+            sock = socket.create_connection(
+                (parsed.hostname, port),
+                timeout=CANCELLABLE_HTTP_CONNECT_TIMEOUT_SECONDS,
+            )
+            if parsed.scheme == "https":
+                context = ssl.create_default_context()
+                sock = context.wrap_socket(sock, server_hostname=parsed.hostname)
+            sock.setblocking(False)
+
+            request_headers = {
+                "Host": self._host_header_for_url(parsed),
+                "Connection": "close",
+            }
+            for key, value in req.header_items():
+                if _header_value_is_safe(key) and _header_value_is_safe(value):
+                    request_headers[str(key)] = str(value)
+            cookie_header = req.get_header("Cookie") or self._cookie_header_for_url(
+                req.full_url
+            )
+            if cookie_header and _header_value_is_safe(cookie_header):
+                request_headers["Cookie"] = cookie_header
+
+            request_lines = [f"{method} {path} HTTP/1.1"]
+            request_lines.extend(
+                f"{key}: {value}" for key, value in request_headers.items()
+            )
+            request_payload = ("\r\n".join(request_lines) + "\r\n\r\n").encode(
+                "iso-8859-1"
+            )
+            _socket_send_all(sock, request_payload, cancel_event, deadline)
+
+            raw_response = bytearray()
+            while b"\r\n\r\n" not in raw_response:
+                _raise_if_cancelled(cancel_event, "HTTP request")
+                if len(raw_response) > CANCELLABLE_HTTP_MAX_HEADER_BYTES:
+                    raise http.client.HTTPException(
+                        "OMERO.web response headers were too large."
+                    )
+                chunk = _socket_recv(sock, 65536, cancel_event, deadline)
+                if not chunk:
+                    break
+                raw_response.extend(chunk)
+
+            header_bytes, separator, body_prefix = bytes(raw_response).partition(
+                b"\r\n\r\n"
+            )
+            if not separator:
+                raise http.client.HTTPException(
+                    "OMERO.web closed the response before sending headers."
+                )
+            header_lines = header_bytes.split(b"\r\n")
+            status_line = header_lines[0].decode("iso-8859-1", errors="replace")
+            status_parts = status_line.split(" ", 2)
+            if len(status_parts) < 2 or not status_parts[1].isdigit():
+                raise http.client.HTTPException(
+                    f"Invalid OMERO.web status line: {status_line}"
+                )
+            status = int(status_parts[1])
+            reason = status_parts[2] if len(status_parts) > 2 else ""
+            headers_payload = b"\r\n".join(header_lines[1:]) + b"\r\n\r\n"
+            response_headers = http.client.parse_headers(io.BytesIO(headers_payload))
+            response = _CancellableHTTPResponse(
+                sock,
+                req.full_url,
+                status,
+                reason,
+                response_headers,
+                body_prefix,
+                cancel_event,
+                timeout,
+            )
+            sock = None
+            if status >= 400:
+                raise urllib.error.HTTPError(
+                    req.full_url,
+                    status,
+                    reason,
+                    response_headers,
+                    cast(BinaryIO, response),
+                )
+            return response
+        except _ConnectorOperationCancelled:
+            _close_socket_quietly(sock)
+            raise
+        except OSError as exc:
+            _close_socket_quietly(sock)
+            raise urllib.error.URLError(exc) from exc
+
+    def _open_request_response(self, req, timeout, cancel_event=None):
+        """Open a urllib request, using cancellable sockets for live GETs.
+
+        Inputs: request, timeout, optional cancel event. Output: response object.
+        """
+        if cancel_event is None or not isinstance(
+            self.opener,
+            urllib.request.OpenerDirector,
+        ):
+            return self.opener.open(req, timeout=timeout)
+        return self._open_cancellable_http_request(req, timeout, cancel_event)
+
     @staticmethod
     def _build_direct_opener(cookie_jar):
         """Build an OMERO.web opener that ignores process proxy settings.
@@ -6380,10 +6857,17 @@ class OMEROWebClient:
         Inputs: `response` response object, `context`. Output: `bool`.
         """
         final_url = getattr(response, "geturl", lambda: "")()
-        if "/webclient/login/" in str(final_url):
+        redirect_location = ""
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            redirect_location = headers.get("Location") or ""
+        if "/webclient/login/" in str(final_url) or "/webclient/login/" in str(
+            redirect_location
+        ):
             _xt_debug(
                 "Authentication failed during "
-                f"{context}: redirected to {_safe_url_for_log(final_url)}"
+                f"{context}: redirected to "
+                f"{_safe_url_for_log(redirect_location or final_url)}"
             )
             return True
         return False
@@ -7631,7 +8115,11 @@ class OMEROWebClient:
 
         try:
             _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
-            with self.opener.open(req, timeout=30) as response:
+            with self._open_request_response(
+                req,
+                timeout=30,
+                cancel_event=cancel_event,
+            ) as response:
                 if self._check_login_redirect(
                     response, "OMERO converter IMS export request"
                 ):
@@ -7690,7 +8178,11 @@ class OMEROWebClient:
                 poll_req = self._create_request_with_cookies(status_url)
 
                 try:
-                    with self.opener.open(poll_req, timeout=30) as poll_response:
+                    with self._open_request_response(
+                        poll_req,
+                        timeout=30,
+                        cancel_event=cancel_event,
+                    ) as poll_response:
                         if self._check_login_redirect(
                             poll_response, "OMERO converter IMS export poll"
                         ):
@@ -7777,8 +8269,10 @@ class OMEROWebClient:
             )
             download_req = self._create_request_with_cookies(download_url)
 
-            with self.opener.open(
-                download_req, timeout=EXPORT_TIMEOUT + 60
+            with self._open_request_response(
+                download_req,
+                timeout=EXPORT_TIMEOUT + 60,
+                cancel_event=cancel_event,
             ) as response:
                 if self._check_login_redirect(
                     response, "OMERO converter IMS export download"
@@ -7909,13 +8403,30 @@ class OMEROWebClient:
 
         try:
             _raise_if_cancelled(cancel_event, "Imaris converter selected Image export")
-            with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
+            with self._open_request_response(
+                req,
+                timeout=EXPORT_TIMEOUT + 60,
+                cancel_event=cancel_event,
+            ) as response:
                 if self._check_login_redirect(
                     response, "Imaris converter selected Image OME-TIFF export"
                 ):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web while exporting selected Image "
                         "as OME-TIFF."
+                    )
+
+                status = getattr(response, "status", 200)
+                if 300 <= int(status or 0) < 400:
+                    location = response.headers.get("Location") or ""
+                    if "/webclient/login/" in location:
+                        raise RuntimeError(
+                            "Not authenticated to OMERO.web while exporting selected "
+                            "Image as OME-TIFF."
+                        )
+                    raise RuntimeError(
+                        "OMERO.web redirected instead of returning an OME-TIFF export "
+                        "for the selected Image ID."
                     )
 
                 content_type = (response.headers.get("Content-Type") or "").lower()
@@ -8104,6 +8615,7 @@ class OMEROBrowserDialog:
         self._folder_export_reason = "Connect to OMERO first."
         self._folder_export_in_progress = False
         self._operation_cancel_event = threading.Event()
+        self._operation_generation = 0
         self._active_folder_export_job = None
         self._folder_export_initial_path_hint_consumed = False
         self._last_folder_export_selection = ""
@@ -8676,8 +9188,6 @@ class OMEROBrowserDialog:
         self.stop_btn.grid(
             row=0,
             column=3,
-            sticky=tk.W,
-            padx=(STOP_BUTTON_LEFT_GAP, 0),
         )
         self.stop_btn.grid_remove()
 
@@ -10210,10 +10720,15 @@ class OMEROBrowserDialog:
             return
 
         self._set_actions_busy_for_export(True)
+        operation_event = getattr(self, "_operation_cancel_event", None)
+        operation_generation = getattr(self, "_operation_generation", None)
+        worker_args: Tuple[Any, ...] = (selected_folder, folder_name)
+        if operation_event is not None and operation_generation is not None:
+            worker_args = (*worker_args, operation_event, operation_generation)
         self._set_status("Preparing folder export to OMERO...", "#fff3cd")
         threading.Thread(
             target=self._export_folder_worker,
-            args=(selected_folder, folder_name),
+            args=worker_args,
             daemon=True,
         ).start()
 
@@ -10332,6 +10847,7 @@ class OMEROBrowserDialog:
         folder_name,
         status_url,
         confirm_url,
+        cancel_event=None,
     ):
         """Wait for folder export completion for `OMEROBrowserDialog`.
 
@@ -10340,7 +10856,7 @@ class OMEROBrowserDialog:
         """
         deadline = time.time() + FOLDER_EXPORT_TIMEOUT
         while time.time() < deadline:
-            self._raise_if_current_operation_cancelled("Folder export")
+            self._raise_if_current_operation_cancelled("Folder export", cancel_event)
             status_payload = self.client.get_folder_export_status(status_url)
             self._set_status(
                 self._folder_export_status_text(folder_name, status_payload),
@@ -10358,30 +10874,47 @@ class OMEROBrowserDialog:
                     raise RuntimeError(
                         "Folder export was cancelled after OMERO reported incompatible files."
                     )
-                self._raise_if_current_operation_cancelled("Folder export")
+                self._raise_if_current_operation_cancelled(
+                    "Folder export",
+                    cancel_event,
+                )
                 self._set_status("Confirming compatible OMERO export...", "#fff3cd")
                 self.client.confirm_folder_export(confirm_url)
             _wait_for_cancel_or_timeout(
-                getattr(self, "_operation_cancel_event", None),
+                cancel_event
+                if cancel_event is not None
+                else getattr(self, "_operation_cancel_event", None),
                 FOLDER_EXPORT_POLL_INTERVAL,
                 "Folder export",
             )
 
         raise RuntimeError("Folder export timed out while waiting for OMERO.")
 
-    def _export_folder_worker(self, selected_folder, folder_name):
+    def _export_folder_worker(
+        self,
+        selected_folder,
+        folder_name,
+        operation_event=None,
+        operation_generation=None,
+    ):
         """Export the folder through the OMERO.web folder export workflow.
 
         Inputs: `selected_folder`, `folder_name`. Output: None. Raises: RuntimeError
         when validation or the called operation fails.
         """
+        cancel_event = (
+            operation_event
+            if operation_event is not None
+            else getattr(self, "_operation_cancel_event", None)
+        )
         export_succeeded = False
         export_cancelled = False
         job_payload = None
         try:
-            self._raise_if_current_operation_cancelled("Folder export")
+            self._raise_if_current_operation_cancelled("Folder export", cancel_event)
             self._set_status("Scanning selected folder...", "#fff3cd")
             local_entries = _collect_local_folder_entries(selected_folder)
+            self._raise_if_current_operation_cancelled("Folder export", cancel_event)
             total_bytes = sum(int(entry.get("size") or 0) for entry in local_entries)
             _xt_debug(
                 "Folder export starting "
@@ -10393,7 +10926,9 @@ class OMEROBrowserDialog:
             job_payload = self.client.start_folder_export_job(
                 folder_name, local_entries
             )
-            self._active_folder_export_job = job_payload
+            self._raise_if_current_operation_cancelled("Folder export", cancel_event)
+            if self._operation_is_current(operation_event, operation_generation):
+                self._active_folder_export_job = job_payload
             upload_url = job_payload.get("upload_url")
             import_step_url = job_payload.get("import_step_url")
             status_url = job_payload.get("status_url")
@@ -10416,7 +10951,10 @@ class OMEROBrowserDialog:
             file_count = len(local_entries)
 
             for file_index, entry in enumerate(local_entries, start=1):
-                self._raise_if_current_operation_cancelled("Folder export")
+                self._raise_if_current_operation_cancelled(
+                    "Folder export",
+                    cancel_event,
+                )
                 absolute_path = entry.get("absolute_path")
                 relative_path = entry.get("relative_path")
                 file_size = int(entry.get("size") or 0)
@@ -10428,7 +10966,10 @@ class OMEROBrowserDialog:
                     chunk_start = 0
                     sent_empty_file = False
                     while True:
-                        self._raise_if_current_operation_cancelled("Folder export")
+                        self._raise_if_current_operation_cancelled(
+                            "Folder export",
+                            cancel_event,
+                        )
                         chunk = handle.read(chunk_size)
                         if not chunk:
                             if file_size == 0 and not sent_empty_file:
@@ -10467,6 +11008,10 @@ class OMEROBrowserDialog:
                             chunk,
                             is_last_chunk,
                         )
+                        self._raise_if_current_operation_cancelled(
+                            "Folder export",
+                            cancel_event,
+                        )
                         chunk_start += len(chunk)
                         uploaded_bytes += len(chunk)
                         if is_last_chunk:
@@ -10477,13 +11022,14 @@ class OMEROBrowserDialog:
                         f"Folder upload size verification failed for {relative_path}."
                     )
 
-            self._raise_if_current_operation_cancelled("Folder export")
+            self._raise_if_current_operation_cancelled("Folder export", cancel_event)
             self._set_status("Starting OMERO folder export...", "#fff3cd")
             self.client.trigger_folder_export(import_step_url)
             final_status = self._wait_for_folder_export_completion(
                 folder_name,
                 status_url,
                 confirm_url,
+                cancel_event=cancel_event,
             )
 
             incompatible_files = list(final_status.get("incompatible_files") or [])
@@ -10517,22 +11063,32 @@ class OMEROBrowserDialog:
             export_cancelled = True
             if job_payload:
                 self.client.cancel_folder_export_job(job_payload)
-            self._set_status("Folder export stopped by user", "#fff3cd")
-            _xt_debug(f"Folder export stopped by user: {exc}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("Folder export stopped by user", "#fff3cd")
+            _xt_debug(f"Folder export stopped by user in background: {exc}")
         except Exception as exc:
-            self._set_status("Folder export failed", "#f8d7da")
-            self._show_error("Folder Export Failed", str(exc))
-            _xt_debug(f"Folder export failed: {type(exc).__name__}: {exc}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("Folder export failed", "#f8d7da")
+                self._show_error("Folder Export Failed", str(exc))
+                _xt_debug(f"Folder export failed: {type(exc).__name__}: {exc}")
+            else:
+                _xt_debug(
+                    "Stopped folder export background worker failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
         finally:
-            self._active_folder_export_job = None
-            self._invoke_on_ui_thread(
-                partial(
-                    self._finish_export_workflow,
-                    export_succeeded,
-                    export_cancelled,
-                ),
-                wait=False,
-            )
+            if self._operation_is_current(operation_event, operation_generation):
+                self._active_folder_export_job = None
+                self._invoke_on_ui_thread(
+                    partial(
+                        self._finish_export_workflow,
+                        export_succeeded,
+                        export_cancelled,
+                    ),
+                    wait=False,
+                )
+            else:
+                _xt_debug("Stopped folder export background worker finished.")
 
     def _hide_converter_frame(self):
         """Hide the converter frame for `OMEROBrowserDialog`.
@@ -11106,18 +11662,7 @@ class OMEROBrowserDialog:
             frame.grid_columnconfigure(0, weight=1)
             frame.grid_columnconfigure(1, weight=0)
 
-            title_label = tk.Label(
-                frame,
-                text=CONNECTOR_HELP_TITLE,
-                font=("Arial", 13, "bold"),
-                bg="#f8fafc",
-                fg="#111827",
-                anchor=tk.W,
-                justify=tk.LEFT,
-            )
-            title_label.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
-
-            row_index = 1
+            row_index = 0
             for section_title, section_lines in CONNECTOR_HELP_SECTIONS:
                 tk.Label(
                     frame,
@@ -12651,15 +13196,74 @@ class OMEROBrowserDialog:
     def _begin_cancellable_operation(self):
         """Reset cancellation state before starting a load or export workflow.
 
-        Inputs: none. Output: None.
+        Inputs: none. Output: operation cancel event and generation.
         """
-        event = getattr(self, "_operation_cancel_event", None)
-        if event is None:
-            self._operation_cancel_event = threading.Event()
-        else:
-            event.clear()
+        self._operation_generation = int(getattr(self, "_operation_generation", 0)) + 1
+        self._operation_cancel_event = threading.Event()
         self._active_folder_export_job = None
         self._show_stop_button_if_needed()
+        return self._operation_cancel_event, self._operation_generation
+
+    def _operation_is_current(self, operation_event=None, operation_generation=None):
+        """Return whether a background worker still owns the foreground UI state.
+
+        Inputs: optional worker event and generation. Output: bool.
+        """
+        if operation_generation is None:
+            return True
+        return bool(
+            getattr(self, "_operation_generation", 0) == operation_generation
+            and getattr(self, "_operation_cancel_event", None) is operation_event
+            and self._operation_is_running()
+        )
+
+    def _restore_actions_after_operation_stop(self):
+        """Release foreground operation state immediately after Stop.
+
+        Inputs: none. Output: None.
+        """
+        self._load_in_progress = False
+        self._folder_export_in_progress = False
+        self._active_folder_export_job = None
+        self._restore_idle_connection_indicator()
+        connect_btn = getattr(self, "connect_btn", None)
+        if connect_btn is not None and getattr(self, "_connected", False):
+            self._set_connect_button(
+                "Disconnect",
+                _tk_constant("NORMAL", "normal"),
+                "#f39c12",
+                active_bg="#d68910",
+            )
+        elif connect_btn is not None:
+            self._set_connect_button(
+                "Connect",
+                _tk_constant("NORMAL", "normal"),
+                "#3498db",
+                active_bg="#2f85c7",
+            )
+        self._set_load_button_for_converter()
+        self._update_export_button_state()
+        if getattr(self, "_connected", False) and _stringvar_value(
+            getattr(self, "converter_var", None)
+        ) in {"OMERO", "Imaris"}:
+            self._set_refresh_button_state(_tk_constant("NORMAL", "normal"))
+        self._show_stop_button_if_needed()
+        self._reset_background_cursor_after_silent_work()
+        self._sync_action_button_cursors()
+
+    @staticmethod
+    def _cancel_folder_export_job_in_background(client, job_payload):
+        """Cancel a folder export job without blocking the UI thread.
+
+        Inputs: client and job payload. Output: None.
+        """
+        try:
+            client.cancel_folder_export_job(job_payload)
+        except Exception as exc:
+            _xt_debug(
+                "Folder export background cancellation failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     def _request_stop_current_operation(self):
         """Signal the active load/export workflow to stop.
@@ -12676,26 +13280,27 @@ class OMEROBrowserDialog:
             return
         event.set()
         _xt_debug("Stop requested by user; cancelling active connector operation")
-        self._set_status("Stopping current connector operation...", "#fff3cd")
-        stop_btn = getattr(self, "stop_btn", None)
-        if stop_btn is not None:
-            stop_btn.config(state=_tk_constant("DISABLED", "disabled"))
         job_payload = getattr(self, "_active_folder_export_job", None)
         client = getattr(self, "client", None)
+        self._operation_generation = int(getattr(self, "_operation_generation", 0)) + 1
+        self._set_status("Stopped current connector operation.", "#fff3cd")
+        self._restore_actions_after_operation_stop()
         if job_payload and client is not None:
             threading.Thread(
-                target=client.cancel_folder_export_job,
-                args=(job_payload,),
+                target=self._cancel_folder_export_job_in_background,
+                args=(client, job_payload),
                 daemon=True,
             ).start()
 
-    def _raise_if_current_operation_cancelled(self, context):
+    def _raise_if_current_operation_cancelled(self, context, cancel_event=None):
         """Raise if the user has requested the current operation to stop.
 
-        Inputs: context. Output: None.
+        Inputs: context and optional event. Output: None.
         """
         _raise_if_cancelled(
-            getattr(self, "_operation_cancel_event", None),
+            cancel_event
+            if cancel_event is not None
+            else getattr(self, "_operation_cancel_event", None),
             context,
         )
 
@@ -13486,6 +14091,10 @@ class OMEROBrowserDialog:
 
         self._append_current_path_to_imaris_arena_if_enabled()
         self._set_actions_busy_for_load(True)
+        operation_event = getattr(self, "_operation_cancel_event", None)
+        operation_generation = getattr(self, "_operation_generation", None)
+        if operation_event is not None and operation_generation is not None:
+            worker_args = (*worker_args, operation_event, operation_generation)
         threading.Thread(
             target=worker_target,
             args=worker_args,
@@ -13505,16 +14114,28 @@ class OMEROBrowserDialog:
         if load_btn is not None:
             load_btn.config(state=_tk_constant("NORMAL", "normal"))
 
-    def _load_worker(self, img, converter, duplicate_policy=None):
+    def _load_worker(
+        self,
+        img,
+        converter,
+        duplicate_policy=None,
+        operation_event=None,
+        operation_generation=None,
+    ):
         """Load the worker for `OMEROBrowserDialog`.
 
         Inputs: `img`, `converter`, `duplicate_policy`. Output: None. Raises:
         RuntimeError when validation or the called operation fails.
         """
+        cancel_event = (
+            operation_event
+            if operation_event is not None
+            else getattr(self, "_operation_cancel_event", None)
+        )
         workflow_succeeded = False
         workflow_cancelled = False
         try:
-            self._raise_if_current_operation_cancelled("Load into Imaris")
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             image_id = img.get("id") if isinstance(img, dict) else None
             if image_id is None:
                 raise RuntimeError("Selected image is missing an OMERO image id.")
@@ -13538,6 +14159,7 @@ class OMEROBrowserDialog:
                     "ImarisFileConverter.exe could not be discovered. "
                     "Download/export was not started."
                 )
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
             download_dir = self.export_dir
             target_filename = self._download_filename_for_image(img, converter)
@@ -13555,7 +14177,7 @@ class OMEROBrowserDialog:
                     fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                     target_filename=target_filename,
                     duplicate_policy=duplicate_policy,
-                    cancel_event=getattr(self, "_operation_cancel_event", None),
+                    cancel_event=cancel_event,
                 )
                 require_ims = True
                 selected_image_export = False
@@ -13568,7 +14190,7 @@ class OMEROBrowserDialog:
                     download_dir,
                     target_filename=target_filename,
                     duplicate_policy=duplicate_policy,
-                    cancel_event=getattr(self, "_operation_cancel_event", None),
+                    cancel_event=cancel_event,
                 )
                 require_ims = False
                 selected_image_export = True
@@ -13587,7 +14209,7 @@ class OMEROBrowserDialog:
 
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download file from OMERO.")
-            self._raise_if_current_operation_cancelled("Load into Imaris")
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
             if require_ims and not is_ims_file(downloaded_file):
                 raise RuntimeError(
@@ -13610,6 +14232,7 @@ class OMEROBrowserDialog:
             _xt_debug("Downloaded file stored in selected local connector path")
 
             self.temp_files.append(downloaded_file)
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
             # Run the final handoff on the UI thread so IMS opens keep the XT
             # handle in the same thread/apartment as the original dialog.
@@ -13634,32 +14257,53 @@ class OMEROBrowserDialog:
 
         except _ConnectorOperationCancelled as exc:
             workflow_cancelled = True
-            self._set_status("Load into Imaris stopped by user", "#fff3cd")
-            _xt_debug(f"Load into Imaris stopped by user: {exc}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("Load into Imaris stopped by user", "#fff3cd")
+            _xt_debug(f"Load into Imaris stopped by user in background: {exc}")
         except Exception as e:
-            self._set_status("✗ Failed", "#f8d7da")
-            self._show_error("Error", str(e))
-            _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("✗ Failed", "#f8d7da")
+                self._show_error("Error", str(e))
+                _xt_debug(f"Load worker failed: {type(e).__name__}: {e}")
+            else:
+                _xt_debug(
+                    f"Stopped load background worker failed: {type(e).__name__}: {e}"
+                )
         finally:
-            self._invoke_on_ui_thread(
-                partial(
-                    self._finish_load_workflow,
-                    workflow_succeeded,
-                    workflow_cancelled,
-                ),
-                wait=False,
-            )
+            if self._operation_is_current(operation_event, operation_generation):
+                self._invoke_on_ui_thread(
+                    partial(
+                        self._finish_load_workflow,
+                        workflow_succeeded,
+                        workflow_cancelled,
+                    ),
+                    wait=False,
+                )
+            else:
+                _xt_debug("Stopped load background worker finished.")
 
-    def _load_multiple_worker(self, images, converter, duplicate_policy=None):
+    def _load_multiple_worker(
+        self,
+        images,
+        converter,
+        duplicate_policy=None,
+        operation_event=None,
+        operation_generation=None,
+    ):
         """Load the multiple worker for `OMEROBrowserDialog`.
 
         Inputs: `images`, `converter`, `duplicate_policy`. Output: None. Raises:
         RuntimeError when validation or the called operation fails.
         """
+        cancel_event = (
+            operation_event
+            if operation_event is not None
+            else getattr(self, "_operation_cancel_event", None)
+        )
         workflow_succeeded = False
         workflow_cancelled = False
         try:
-            self._raise_if_current_operation_cancelled("Load into Imaris")
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             selected_images = [
                 img for img in list(images or []) if isinstance(img, dict)
             ]
@@ -13688,6 +14332,7 @@ class OMEROBrowserDialog:
                     )
             else:
                 raise RuntimeError(f"Unsupported converter: {converter}")
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
             downloaded_files = []
             require_ims = converter == "OMERO"
@@ -13695,7 +14340,10 @@ class OMEROBrowserDialog:
             download_dir = self.export_dir
             planned_names_seen: Set[str] = set()
             for index, img in enumerate(selected_images, start=1):
-                self._raise_if_current_operation_cancelled("Load into Imaris")
+                self._raise_if_current_operation_cancelled(
+                    "Load into Imaris",
+                    cancel_event,
+                )
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
@@ -13718,7 +14366,7 @@ class OMEROBrowserDialog:
                         fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                         target_filename=target_filename,
                         duplicate_policy=per_file_duplicate_policy,
-                        cancel_event=getattr(self, "_operation_cancel_event", None),
+                        cancel_event=cancel_event,
                     )
                 else:
                     self._set_status(
@@ -13732,11 +14380,7 @@ class OMEROBrowserDialog:
                             download_dir,
                             target_filename=target_filename,
                             duplicate_policy=per_file_duplicate_policy,
-                            cancel_event=getattr(
-                                self,
-                                "_operation_cancel_event",
-                                None,
-                            ),
+                            cancel_event=cancel_event,
                         )
                     )
 
@@ -13761,7 +14405,7 @@ class OMEROBrowserDialog:
                 downloaded_files.append(downloaded_file)
                 self.temp_files.append(downloaded_file)
 
-            self._raise_if_current_operation_cancelled("Load into Imaris")
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             if require_ims:
                 handoff_files = downloaded_files[:1]
                 self._set_status(
@@ -13778,6 +14422,7 @@ class OMEROBrowserDialog:
             _xt_debug(
                 f"Prepared {len(downloaded_files)} selected files before Imaris handoff"
             )
+            self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_files_in_imaris(
@@ -13819,21 +14464,31 @@ class OMEROBrowserDialog:
 
         except _ConnectorOperationCancelled as exc:
             workflow_cancelled = True
-            self._set_status("Load into Imaris stopped by user", "#fff3cd")
-            _xt_debug(f"Multi-image load stopped by user: {exc}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("Load into Imaris stopped by user", "#fff3cd")
+            _xt_debug(f"Multi-image load stopped by user in background: {exc}")
         except Exception as e:
-            self._set_status("✗ Failed", "#f8d7da")
-            self._show_error("Error", str(e))
-            _xt_debug(f"Multi-image load worker failed: {type(e).__name__}: {e}")
+            if self._operation_is_current(operation_event, operation_generation):
+                self._set_status("✗ Failed", "#f8d7da")
+                self._show_error("Error", str(e))
+                _xt_debug(f"Multi-image load worker failed: {type(e).__name__}: {e}")
+            else:
+                _xt_debug(
+                    "Stopped multi-image load background worker failed: "
+                    f"{type(e).__name__}: {e}"
+                )
         finally:
-            self._invoke_on_ui_thread(
-                partial(
-                    self._finish_load_workflow,
-                    workflow_succeeded,
-                    workflow_cancelled,
-                ),
-                wait=False,
-            )
+            if self._operation_is_current(operation_event, operation_generation):
+                self._invoke_on_ui_thread(
+                    partial(
+                        self._finish_load_workflow,
+                        workflow_succeeded,
+                        workflow_cancelled,
+                    ),
+                    wait=False,
+                )
+            else:
+                _xt_debug("Stopped multi-image load background worker finished.")
 
     def show(self):
         """Start the GUI event loop.

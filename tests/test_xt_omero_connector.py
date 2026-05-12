@@ -5811,6 +5811,8 @@ def test_connection_settings_has_top_right_help_and_info_buttons():
     ]
     assert "CONNECTOR_HELP_SECTIONS" in help_source
     assert "help_window.title(CONNECTOR_HELP_TITLE)" in help_source
+    assert "title_label" not in help_source
+    assert "text=CONNECTOR_HELP_TITLE" not in help_source
     assert "width = max(int(help_window.winfo_reqwidth() or 0), 740)" in help_source
     assert "help_window.grab_release()" in help_source
     assert "command=_close_help_window" in help_source
@@ -6264,7 +6266,7 @@ def test_connector_help_close_button_destroys_only_child_window(monkeypatch):
     assert windows[0].destroyed is True
     assert root.destroyed is False
     assert windows[0].geometry_value.startswith("740x")
-    assert module.CONNECTOR_HELP_TITLE in captured["labels"]
+    assert module.CONNECTOR_HELP_TITLE not in captured["labels"]
     assert "Find images" in captured["labels"]
     assert not any("permission" in text.lower() for text in captured["labels"])
 
@@ -6683,6 +6685,12 @@ def test_action_buttons_keep_fixed_size_while_close_tracks_right_edge():
         "self.export_btn.grid(row=0, column=2, sticky=tk.W, padx=ACTION_BUTTON_PAD)"
         in source
     )
+    assert "self.stop_btn = _StopSignButton(" in source
+    assert "width=108,\n            height=52," in source
+    assert (
+        "self.stop_btn.grid(\n            row=0,\n            column=3,\n        )"
+        in source
+    )
     assert "close_btn = _RoundedButton(" in source
     assert "width=120,\n            height=52," in source
     assert (
@@ -7003,6 +7011,78 @@ def test_export_folder_to_omero_cancel_stops_before_confirmation(monkeypatch):
     module.OMEROBrowserDialog._export_folder_to_omero(dialog)
 
     assert dialog._folder_export_initial_path_hint_consumed is True
+
+
+def test_stop_current_operation_releases_ui_and_cleans_server_job(monkeypatch):
+    """Verify Stop immediately releases UI state and cancels server cleanup.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on stop-state regressions.
+    """
+    module = _load_xt_module()
+    event = module.threading.Event()
+    job_payload = {"prune_url": "https://omero.example.org/prune/"}
+    statuses = []
+    calls = []
+    cancelled_jobs = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._load_in_progress = True
+    dialog._folder_export_in_progress = True
+    dialog._operation_cancel_event = event
+    dialog._operation_generation = 7
+    dialog._active_folder_export_job = job_payload
+    dialog._connected = True
+    dialog.converter_var = _FakeVar("Imaris")
+    dialog.connect_btn = object()
+    dialog.client = types.SimpleNamespace(
+        cancel_folder_export_job=lambda payload: cancelled_jobs.append(payload)
+    )
+    dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
+    dialog._restore_idle_connection_indicator = lambda: calls.append("indicator")
+    dialog._set_connect_button = lambda *args, **kwargs: calls.append(
+        ("connect", args, kwargs)
+    )
+    dialog._set_load_button_for_converter = lambda: calls.append("load")
+    dialog._update_export_button_state = lambda: calls.append("export")
+    dialog._set_refresh_button_state = lambda state: calls.append(("refresh", state))
+    dialog._show_stop_button_if_needed = lambda: calls.append("stop")
+    dialog._reset_background_cursor_after_silent_work = lambda: calls.append("cursor")
+    dialog._sync_action_button_cursors = lambda: calls.append("cursors")
+
+    class _ImmediateThread:
+        """Thread double that executes cancellation cleanup synchronously."""
+
+        def __init__(self, target, args=(), kwargs=None, daemon=None):
+            """Capture target arguments.
+
+            Inputs: thread constructor arguments. Output: initialized fake.
+            """
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+            self.daemon = daemon
+
+        def start(self):
+            """Run the target immediately.
+
+            Inputs: none. Output: target result.
+            """
+            return self.target(*self.args, **self.kwargs)
+
+    monkeypatch.setattr(module.threading, "Thread", _ImmediateThread)
+
+    module.OMEROBrowserDialog._request_stop_current_operation(dialog)
+
+    assert event.is_set()
+    assert dialog._operation_generation == 8
+    assert dialog._load_in_progress is False
+    assert dialog._folder_export_in_progress is False
+    assert dialog._active_folder_export_job is None
+    assert statuses == [("Stopped current connector operation.", "#fff3cd")]
+    assert cancelled_jobs == [job_payload]
+    assert "stop" in calls
+    assert "cursor" in calls
+    assert "cursors" in calls
 
 
 def test_export_folder_dialog_uses_last_selected_folder_after_first_hint(
@@ -8737,6 +8817,86 @@ def test_client_download_selected_image_ome_tiff_removes_partial_on_cancel(tmp_p
         )
 
     assert not list(tmp_path.iterdir())
+
+
+def test_cancellable_http_get_closes_socket_when_stopped_before_headers(monkeypatch):
+    """Verify Stop can interrupt an export request before response headers arrive.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on pre-header cancellation regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4080, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    client.cookie_jar = module.http.cookiejar.CookieJar()
+    cancel_event = module.threading.Event()
+
+    class _FakeSocket:
+        """Socket double that records request bytes and close state."""
+
+        def __init__(self):
+            """Create the fake socket.
+
+            Inputs: none. Output: initialized fake socket.
+            """
+            self.sent = bytearray()
+            self.closed = False
+
+        @staticmethod
+        def setblocking(_flag):
+            """Accept blocking mode changes.
+
+            Inputs: `_flag`. Output: None.
+            """
+
+        def send(self, payload):
+            """Record sent payload.
+
+            Inputs: payload bytes. Output: byte count.
+            """
+            self.sent.extend(payload)
+            return len(payload)
+
+        def recv(self, _size):
+            """Fail if the test reaches a real read.
+
+            Inputs: `_size`. Output: never.
+            """
+            raise AssertionError("response read should be cancelled before recv")
+
+        def close(self):
+            """Record close.
+
+            Inputs: none. Output: None.
+            """
+            self.closed = True
+
+    fake_socket = _FakeSocket()
+
+    def _fake_select(readers, writers, errors, timeout):
+        """Make send writable, then cancel before any readable response arrives.
+
+        Inputs: select lists and timeout. Output: readiness tuple.
+        """
+        if writers:
+            return ([], writers, [])
+        cancel_event.set()
+        return ([], [], errors)
+
+    monkeypatch.setattr(
+        module.socket,
+        "create_connection",
+        lambda *_args, **_kwargs: fake_socket,
+    )
+    monkeypatch.setattr(module.select, "select", _fake_select)
+    req = client._create_request_with_cookies(
+        f"{client.base_url}/webgateway/render_ome_tiff/i/17/"
+    )
+
+    with pytest.raises(module._ConnectorOperationCancelled):
+        client._open_cancellable_http_request(req, 60, cancel_event)
+
+    assert fake_socket.closed is True
+    assert b"GET /webgateway/render_ome_tiff/i/17/ HTTP/1.1" in fake_socket.sent
 
 
 def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
@@ -10695,13 +10855,11 @@ def test_load_routes_single_selection_to_single_worker(tmp_path, monkeypatch):
     module.OMEROBrowserDialog._load(dialog)
 
     assert "single" in confirmations[0][1]
-    assert threads == [
-        {
-            "target": dialog._load_worker,
-            "args": (image, "OMERO", None),
-            "daemon": True,
-        }
-    ]
+    assert threads[0]["target"] is dialog._load_worker
+    assert threads[0]["args"][:3] == (image, "OMERO", None)
+    assert threads[0]["args"][3] is dialog._operation_cancel_event
+    assert threads[0]["args"][4] == dialog._operation_generation
+    assert threads[0]["daemon"] is True
 
 
 def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
@@ -10772,13 +10930,11 @@ def test_load_routes_multi_selection_to_multi_worker(tmp_path, monkeypatch):
     module.OMEROBrowserDialog._load(dialog)
 
     assert "2 selected images" in confirmations[0][1]
-    assert threads == [
-        {
-            "target": dialog._load_multiple_worker,
-            "args": ([first, second], "Imaris", None),
-            "daemon": True,
-        }
-    ]
+    assert threads[0]["target"] is dialog._load_multiple_worker
+    assert threads[0]["args"][:3] == ([first, second], "Imaris", None)
+    assert threads[0]["args"][3] is dialog._operation_cancel_event
+    assert threads[0]["args"][4] == dialog._operation_generation
+    assert threads[0]["daemon"] is True
 
 
 def test_load_omero_multi_selection_warns_only_first_image_opens(
@@ -10853,13 +11009,11 @@ def test_load_omero_multi_selection_warns_only_first_image_opens(
     assert "selected folder" in confirmations[0][1]
     assert str(tmp_path) in confirmations[0][1]
     assert "Imaris 11 Workflow/Batch processing pipeline" in confirmations[0][1]
-    assert threads == [
-        {
-            "target": dialog._load_multiple_worker,
-            "args": ([first, second], "OMERO", None),
-            "daemon": True,
-        }
-    ]
+    assert threads[0]["target"] is dialog._load_multiple_worker
+    assert threads[0]["args"][:3] == ([first, second], "OMERO", None)
+    assert threads[0]["args"][3] is dialog._operation_cancel_event
+    assert threads[0]["args"][4] == dialog._operation_generation
+    assert threads[0]["daemon"] is True
 
 
 def test_load_worker_imaris_converter_exports_selected_image_then_opens_directly(
@@ -11643,6 +11797,57 @@ def test_load_worker_failure_logs_without_raw_traceback(tmp_path, monkeypatch, c
     assert "Traceback" not in captured.err
     assert errors == ["download failed"]
     assert "Load worker failed: RuntimeError: download failed" in messages
+
+
+def test_stopped_load_worker_stays_background_only(tmp_path, monkeypatch):
+    """Verify stale stopped load workers do not reopen UI failure state.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on stale-worker regressions.
+    """
+    module = _load_xt_module()
+    messages = []
+    monkeypatch.setattr(module, "_xt_debug", messages.append)
+    operation_event = module.threading.Event()
+    operation_event.set()
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._operation_generation = 3
+    dialog._load_in_progress = False
+    dialog._folder_export_in_progress = False
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    dialog.client = types.SimpleNamespace(
+        download_ims_export=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("download must not run after stop")
+        )
+    )
+    dialog._ensure_native_open_ready_before_export = lambda: True
+    dialog._set_status = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("stopped background worker must not update status")
+    )
+    dialog._show_info = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("stopped background worker must not show info")
+    )
+    dialog._show_error = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("stopped background worker must not show errors")
+    )
+    dialog._invoke_on_ui_thread = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("stopped background worker must not finish UI workflow")
+    )
+
+    module.OMEROBrowserDialog._load_worker(
+        dialog,
+        {"id": 9, "name": "sample"},
+        "OMERO",
+        None,
+        operation_event,
+        2,
+    )
+
+    assert any("stopped by user in background" in message for message in messages)
+    assert any(
+        "Stopped load background worker finished" in message for message in messages
+    )
 
 
 def test_load_worker_blocks_imaris_download_when_executable_handoff_unavailable(

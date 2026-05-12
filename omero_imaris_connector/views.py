@@ -207,8 +207,12 @@ def _remove_recent_image_exports(meta):
             continue
     try:
         image_dir.rmdir()
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug(
+            "Skipped removing non-empty IMS export image directory %s: %s",
+            sanitize_log_value(image_dir),
+            sanitize_log_value(exc),
+        )
     return removed_count
 
 
