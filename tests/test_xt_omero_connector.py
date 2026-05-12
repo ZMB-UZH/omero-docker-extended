@@ -8899,6 +8899,160 @@ def test_cancellable_http_get_closes_socket_when_stopped_before_headers(monkeypa
     assert b"GET /webgateway/render_ome_tiff/i/17/ HTTP/1.1" in fake_socket.sent
 
 
+def test_close_socket_quietly_logs_close_failures(monkeypatch):
+    """Verify socket cleanup failures are background debug logs, not silent passes.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on empty-except regressions.
+    """
+    module = _load_xt_module()
+    logs = []
+
+    class _BrokenSocket:
+        """Socket double that fails on close."""
+
+        @staticmethod
+        def close():
+            """Raise close failure.
+
+            Inputs: none. Output: none. Raises: OSError.
+            """
+            raise OSError("close failed")
+
+    def _record_debug(message, *args, **kwargs):
+        """Record debug log calls.
+
+        Inputs: log message and logging args. Output: None.
+        """
+        logs.append((message, args, kwargs))
+
+    monkeypatch.setattr(module.logger, "debug", _record_debug)
+
+    module._close_socket_quietly(_BrokenSocket())
+
+    assert logs == [
+        (
+            "Suppressed non-fatal socket close failure in XT cancellable HTTP.",
+            (),
+            {"exc_info": True},
+        )
+    ]
+
+
+def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch):
+    """Verify cancellable HTTPS uses an explicit secure TLS client minimum.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on insecure TLS regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient(
+        "omero.example.org",
+        443,
+        "user",
+        TEST_LOGIN_VALUE,
+        "https",
+    )
+    client.session_id = "session-123"
+    client.cookie_jar = module.http.cookiejar.CookieJar()
+    cancel_event = module.threading.Event()
+    observed = {}
+
+    class _FakeSocket:
+        """Socket double that returns a small HTTP response."""
+
+        def __init__(self):
+            """Create the fake socket.
+
+            Inputs: none. Output: initialized fake socket.
+            """
+            self.sent = bytearray()
+            self.closed = False
+            self._response = bytearray(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"
+            )
+
+        @staticmethod
+        def setblocking(_flag):
+            """Accept blocking mode changes.
+
+            Inputs: `_flag`. Output: None.
+            """
+
+        def send(self, payload):
+            """Record sent payload.
+
+            Inputs: payload bytes. Output: byte count.
+            """
+            self.sent.extend(payload)
+            return len(payload)
+
+        def recv(self, size):
+            """Return the buffered response.
+
+            Inputs: byte count. Output: bytes.
+            """
+            data = bytes(self._response[:size])
+            del self._response[:size]
+            return data
+
+        def close(self):
+            """Record close.
+
+            Inputs: none. Output: None.
+            """
+            self.closed = True
+
+    class _FakeTLSContext:
+        """TLS context double that records minimum version before wrapping."""
+
+        def __init__(self):
+            """Create fake context.
+
+            Inputs: none. Output: initialized context.
+            """
+            self.minimum_version = None
+
+        def wrap_socket(self, sock, *, server_hostname=None):
+            """Record TLS settings and return wrapped socket.
+
+            Inputs: socket and hostname. Output: socket.
+            """
+            observed["minimum_version_at_wrap"] = self.minimum_version
+            observed["server_hostname"] = server_hostname
+            return sock
+
+    fake_socket = _FakeSocket()
+
+    def _fake_select(readers, writers, errors, _timeout):
+        """Make the socket immediately ready.
+
+        Inputs: select lists and timeout. Output: readiness tuple.
+        """
+        return (readers, writers, errors)
+
+    monkeypatch.setattr(
+        module.socket,
+        "create_connection",
+        lambda *_args, **_kwargs: fake_socket,
+    )
+    monkeypatch.setattr(module.ssl, "create_default_context", _FakeTLSContext)
+    monkeypatch.setattr(module.select, "select", _fake_select)
+    req = client._create_request_with_cookies(
+        f"{client.base_url}/webgateway/render_ome_tiff/i/17/"
+    )
+
+    response = client._open_cancellable_http_request(req, 60, cancel_event)
+    try:
+        assert response.read() == b"OK"
+    finally:
+        response.close()
+
+    assert observed == {
+        "minimum_version_at_wrap": module.ssl.TLSVersion.TLSv1_2,
+        "server_hostname": "omero.example.org",
+    }
+    assert fake_socket.closed is True
+
+
 def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
     tmp_path,
     monkeypatch,
