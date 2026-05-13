@@ -11,6 +11,7 @@ repository. Use it before attempting speculative code changes.
 | Export job stays in `RUNNING` with `status=waiting_for_processor` | OMERO.server `Processor-0` missing, failed, or blocked | Run `omero admin diagnostics` in the server container |
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | OMERO converter job fails and Blitz logs `Cannot read configuration: omero.ims.export.dir` | Processor script subprocess did not receive the trusted IMS export environment | Verify the running `omero/processor.py` allowlist contains `OMERO_IMS_EXPORT_DIR` and `CONFIG_omero_managed_dir` |
+| Imaris converter async OME-TIFF export fails with `Image <id> not found` even though OMERO.web browsing shows the image | Background export joined the wrong effective OMERO session or group | Verify the task uses the requester session key before falling back to the job-service session |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
 | IMS export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final IMS handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
@@ -138,7 +139,7 @@ If any of those checks fail, treat the remaining process or file as a
 cancellation bug. Do not treat a hidden progress bar or a closed dialog as proof
 that server-side work actually stopped.
 
-### 6. CLI launch worked only when it used the requesting user's OMERO session
+### 6. Background exports must prefer the requesting user's OMERO session
 
 Observed behavior:
 
@@ -146,6 +147,9 @@ Observed behavior:
 - the CLI completed,
 - the script returned `Message=Image 4 not found` when the launch used the
   job-service OMERO session.
+- the `Imaris` converter's async OME-TIFF task later returned
+  `Image <id> not found` even though the selected image existed and was visible
+  through OMERO.web browsing with the requesting user's session.
 
 Root cause:
 
@@ -153,13 +157,15 @@ Root cause:
   image visibility as the requesting user session for this export,
 - the standalone connector was already passing the requesting user's OMERO
   session key into the task,
+- OME-TIFF materialization calls `conn.getObject("Image", image_id)` directly,
+  so using the job-service session can fail before any file export starts,
 - the Import plugin now uses independent admin-created background sessions for
   OMERO CLI imports so it does not depend on the browser's live session.
 
 Fix:
 
-- prefer the requesting user's OMERO session key for `omero script launch`
-  whenever one is available,
+- prefer the requesting user's OMERO session key for all background Imaris
+  connector exports whenever one is available,
 - fall back to the job-service session only if no user session key was provided.
 
 ### 7. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
@@ -356,11 +362,11 @@ Operational rule:
   export as the file argument. This is intentionally different from the IMS
   same-session-verification contract.
 - when multiple images are selected, the connector must finish every selected
-  Image export or server-side IMS export before handing the prepared files to
-  Imaris. The `OMERO` path then opens IMS files through the same-session
-  file-open API. The `Imaris` path submits all tracked selected Image exports
-  to one discovered Imaris File Converter launch so the converter receives the
-  selection as one batch.
+  Image export or server-side IMS export before any handoff. The `OMERO` path
+  then opens only the first prepared IMS file through the same-session file-open
+  API and leaves the remaining IMS files in the selected folder. The `Imaris`
+  path submits all tracked selected Image exports to one discovered Imaris File
+  Converter launch so the converter receives the selection as one batch.
 - the standalone browser refresh action re-queries projects, datasets, and
   images without keeping stale image selections. If the selected dataset no
   longer exists, datasets remain visible for the selected project and images are

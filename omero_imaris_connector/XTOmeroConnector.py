@@ -14822,9 +14822,9 @@ class OMEROBrowserDialog:
 
             self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             if require_ims:
-                handoff_files = downloaded_files
+                handoff_files = downloaded_files[:1]
                 self._set_status(
-                    "All selected IMS files are ready; opening them in Imaris...",
+                    "All selected IMS files are ready; opening the first one in Imaris...",
                     "#fff3cd",
                 )
             else:
@@ -14847,12 +14847,13 @@ class OMEROBrowserDialog:
             )
             success_title = "Success"
             if require_ims:
-                success_status = "Opened selected IMS files in Imaris"
-                success_message = (
-                    "All selected IMS files were opened in the current Imaris "
-                    "session after every download completed."
+                success_status = "Opened first selected IMS in Imaris"
+                success_message = _omero_multi_handoff_notice(
+                    download_dir,
+                    len(downloaded_files) - 1,
+                    completed=True,
                 )
-                failure_message = "Imaris did not accept the prepared IMS files."
+                failure_message = "Imaris did not accept the first prepared IMS file."
             else:
                 success_status = (
                     "Submitted selected Image exports to Imaris File Converter"

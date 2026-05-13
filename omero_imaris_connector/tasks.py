@@ -602,6 +602,8 @@ def _open_export_connection(session_key, host, port, secure=None):
 
     Inputs: `session_key`, `host`, `port`, `secure`. Output: BlitzGateway.
     """
+    if session_key:
+        return _open_session_connection(session_key, host, port, secure=secure)
     if use_job_service_session():
         return _open_job_service_connection(host, port, secure=secure)
     return _open_session_connection(session_key, host, port, secure=secure)
