@@ -22,12 +22,16 @@ def _install_omero_stubs() -> None:
     omero_module.SecurityViolation = type("SecurityViolation", (Exception,), {})
     omero_module.NoProcessorAvailable = type("NoProcessorAvailable", (Exception,), {})
     omero_module.client = lambda host, port: None
+    omero_module.scripts = types.SimpleNamespace()
 
     omero_gateway = types.ModuleType("omero.gateway")
     omero_gateway.BlitzGateway = type("BlitzGateway", (), {})
 
     omero_rtypes = types.ModuleType("omero.rtypes")
     omero_rtypes.rint = lambda value: value
+    omero_rtypes.rlong = lambda value: value
+    omero_rtypes.robject = lambda value: value
+    omero_rtypes.rstring = lambda value: value
 
     sys.modules["omero"] = omero_module
     sys.modules["omero.gateway"] = omero_gateway
@@ -344,7 +348,16 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 
     captured = {}
 
-    def successful_run(cmd, *, timeout, check, env, on_tick, **_kwargs):
+    def successful_run(
+        cmd,
+        *,
+        timeout,
+        check,
+        env,
+        on_tick,
+        start_new_session,
+        **_kwargs,
+    ):
         """Return the successful run.
 
         Inputs: `cmd`, `timeout` timeout seconds, `check`, `env` environment mapping,
@@ -352,6 +365,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
         """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
+        captured["start_new_session"] = start_new_session
         captured["env"] = {
             "HOME": env["HOME"],
             "OMERO_USERDIR": env["OMERO_USERDIR"],
@@ -381,9 +395,15 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     assert status_updates == [
         (
             "running_script",
-            {"script_id": 7, "cli_pid": 12345, "elapsed": 0.0},
+            {
+                "script_id": 7,
+                "cli_pid": 12345,
+                "cli_pgid": 12345,
+                "elapsed": 0.0,
+            },
         )
     ]
+    assert captured["start_new_session"] is True
     assert captured["env"]["HOME"] == captured["env"]["OMERO_USERDIR"]
     assert Path(captured["env"]["OMERO_USERDIR"]).is_relative_to(
         TEST_RUNTIME_ROOT / "tmp"
@@ -434,6 +454,64 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
     with pytest.raises(tasks.IMSExportTaskError, match="no export path") as exc_info:
         tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
     assert exc_info.value.public_message is None
+
+
+def test_run_ome_tiff_export_task_materializes_outputs_and_closes_connection(
+    monkeypatch,
+):
+    """Verify OME-TIFF export task returns serialized outputs and closes the connection.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on OME-TIFF task regressions.
+    """
+    tasks = _import_tasks(monkeypatch)
+    closed = []
+    state_updates = []
+    conn = types.SimpleNamespace(close=lambda: closed.append(True))
+    monkeypatch.setattr(
+        tasks,
+        "_open_export_connection",
+        lambda session_key, host, port, secure=None: conn,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_run_ome_tiff_export",
+        lambda conn_arg, image_id, status_callback=None: (
+            status_callback("running_export", {"export_name": "demo.ome.tif"})
+            or {
+                "Export_Path": "/exports/image_12/demo.ome.tif",
+                "Export_Name": "demo.ome.tif",
+            }
+        ),
+    )
+
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-ome"),
+        update_state=lambda state, meta: state_updates.append((state, meta)),
+    )
+
+    result = tasks.run_ome_tiff_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        secure=True,
+    )
+
+    assert result == {
+        "state": "FINISHED",
+        "outputs": {
+            "Export_Path": "/exports/image_12/demo.ome.tif",
+            "Export_Name": "demo.ome.tif",
+        },
+        "error": None,
+    }
+    assert state_updates[0][0] == "STARTED"
+    assert state_updates[0][1]["image_id"] == 12
+    assert state_updates[0][1]["status"] == "connecting"
+    assert "started_at" in state_updates[0][1]
+    assert state_updates[-1][1]["status"] == "running_export"
+    assert closed == [True]
 
 
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
@@ -743,6 +821,24 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
         "outputs": None,
         "error": "Image 7 not found",
         "public_error": True,
+    }
+    assert closed == [True]
+
+    updates.clear()
+    closed.clear()
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: True)
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=7,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        secure=True,
+    )
+    assert result == {
+        "state": "CANCELLED",
+        "outputs": None,
+        "error": "IMS export stopped by user.",
     }
     assert closed == [True]
 

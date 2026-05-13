@@ -362,6 +362,48 @@ def test_terminate_handles_process_exit_race() -> None:
     assert process_utils._terminate(RacingProcess()) == (b"out", b"err")  # type: ignore[arg-type]
 
 
+def test_terminate_kills_process_group_for_new_session(monkeypatch) -> None:
+    """Verify new-session subprocess cleanup targets the whole process group.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on subprocess group cleanup
+    regressions.
+    """
+    killed = []
+
+    class GroupProcess:
+        """Test double for a new-session process."""
+
+        pid = 4321
+        returncode = None
+        _process_utils_start_new_session = True
+
+        @staticmethod
+        def poll():
+            """Return process completion status.
+
+            Inputs: none. Output: None.
+            """
+            return None
+
+        @staticmethod
+        def communicate():
+            """Return process output.
+
+            Inputs: none. Output: tuple.
+            """
+            return b"", b""
+
+    monkeypatch.setattr(
+        process_utils.os,
+        "killpg",
+        lambda pid, sig: killed.append((pid, sig)),
+    )
+
+    process_utils._terminate(GroupProcess())  # type: ignore[arg-type]
+
+    assert killed == [(4321, process_utils.signal.SIGKILL)]
+
+
 def test_run_streaming_timeout_preserves_partial_output() -> None:
     """Check that run streaming timeout preserves partial output remains stable.
 
@@ -411,7 +453,7 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
     monkeypatch.setattr(
         process_utils,
         "_popen",
-        lambda _command, *, env, cwd: FinishedProcess(),
+        lambda _command, *, env, cwd, start_new_session=False: FinishedProcess(),
     )
 
     def monotonic() -> float:

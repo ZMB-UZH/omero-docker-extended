@@ -767,6 +767,7 @@ def test_client_detects_omero_ims_export_capability():
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
+    client.has_async_ome_tiff_export_capability = lambda: False
     opened_urls = []
 
     class _FakeOpener:
@@ -1178,6 +1179,7 @@ def test_client_download_ims_export_cancels_server_job_when_stopped(tmp_path):
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
+    client.has_async_ome_tiff_export_capability = lambda: False
     cancel_event = module.threading.Event()
     calls = []
 
@@ -1227,6 +1229,33 @@ def test_client_download_ims_export_cancels_server_job_when_stopped(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
+def test_client_cancel_active_ims_exports_clears_registry_before_network_calls():
+    """Verify active server jobs are untracked before cancellation I/O starts.
+
+    Inputs: none. Output: fails on repeated stop/cancel regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    client._remember_active_ims_export("/status/job-1")
+    client._remember_active_ims_export("/status/job-2")
+    observed_registry_sizes = []
+
+    def _cancel(status_url):
+        """Record registry size while cancellation is running.
+
+        Inputs: status URL. Output: bool.
+        """
+        observed_registry_sizes.append(len(client._active_ims_export_jobs))
+        return status_url.endswith("job-1")
+
+    client.cancel_ims_export = _cancel
+
+    assert client.cancel_active_ims_exports() == 1
+    assert observed_registry_sizes == [0, 0]
+    assert client._active_ims_export_jobs == set()
+
+
 def test_client_detects_folder_export_capability_from_start_endpoint():
     """Verify client detects folder export capability from start endpoint.
 
@@ -1235,6 +1264,7 @@ def test_client_detects_folder_export_capability_from_start_endpoint():
     module = _load_xt_module()
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
+    client.has_async_ome_tiff_export_capability = lambda: False
     opened_urls = []
 
     class _FakeOpener:
@@ -7085,6 +7115,69 @@ def test_stop_current_operation_releases_ui_and_cleans_server_job(monkeypatch):
     assert "cursors" in calls
 
 
+def test_stop_current_operation_never_calls_server_cancellation_inline(monkeypatch):
+    """Verify Stop schedules server cleanup without blocking the UI caller.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on stop-priority regressions.
+    """
+    module = _load_xt_module()
+    event = module.threading.Event()
+    thread_targets = []
+
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog._load_in_progress = True
+    dialog._folder_export_in_progress = False
+    dialog._operation_cancel_event = event
+    dialog._operation_generation = 2
+    dialog._active_folder_export_job = None
+    dialog._connected = True
+    dialog.converter_var = _FakeVar("OMERO")
+    dialog.connect_btn = None
+    dialog.client = types.SimpleNamespace(
+        cancel_active_ims_exports=lambda: (_ for _ in ()).throw(
+            AssertionError("Stop must not cancel server jobs on the UI thread")
+        )
+    )
+    dialog._set_status = lambda *_args, **_kwargs: None
+    dialog._restore_idle_connection_indicator = lambda: None
+    dialog._set_load_button_for_converter = lambda: None
+    dialog._update_export_button_state = lambda: None
+    dialog._set_refresh_button_state = lambda *_args, **_kwargs: None
+    dialog._show_stop_button_if_needed = lambda: None
+    dialog._reset_background_cursor_after_silent_work = lambda: None
+    dialog._sync_action_button_cursors = lambda: None
+
+    class _QueuedThread:
+        """Thread double that records work without executing it inline."""
+
+        def __init__(self, target, args=(), kwargs=None, daemon=None):
+            """Capture target arguments.
+
+            Inputs: thread constructor arguments. Output: initialized fake.
+            """
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+            self.daemon = daemon
+
+        def start(self):
+            """Record the scheduled target.
+
+            Inputs: none. Output: None.
+            """
+            thread_targets.append((self.target, self.args, self.daemon))
+
+    monkeypatch.setattr(module.threading, "Thread", _QueuedThread)
+
+    module.OMEROBrowserDialog._request_stop_current_operation(dialog)
+
+    assert event.is_set()
+    assert dialog._operation_generation == 3
+    assert dialog._load_in_progress is False
+    assert len(thread_targets) == 1
+    assert thread_targets[0][2] is True
+
+
 def test_export_folder_dialog_uses_last_selected_folder_after_first_hint(
     tmp_path, monkeypatch
 ):
@@ -8694,6 +8787,45 @@ def test_download_chunk_size_is_bounded_runtime_configuration(monkeypatch):
     assert module._download_chunk_size_bytes() == 131072
 
 
+def test_download_progress_reporter_throttles_tiny_socket_reads(monkeypatch):
+    """Verify progress logging does not emit one line per small socket read.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on noisy progress regressions.
+    """
+    module = _load_xt_module()
+    messages = []
+    now = {"value": 0.0}
+    monkeypatch.setattr(
+        module,
+        "_xt_console_log",
+        lambda msg="", **_kwargs: messages.append(msg),
+    )
+    monkeypatch.setattr(module.time, "monotonic", lambda: now["value"])
+    reporter = module._DownloadProgressReporter(24 * 1024 * 1024)
+
+    for downloaded in range(4096, 24 * 1024 * 1024 + 1, 4096):
+        reporter.report(downloaded)
+    reporter.finish(24 * 1024 * 1024)
+
+    progress_messages = [message for message in messages if message]
+    assert len(progress_messages) < 30
+    assert progress_messages[-1].startswith("  Progress: 100.0%")
+
+
+def test_multi_download_worker_count_is_bounded_by_selection(monkeypatch):
+    """Verify selected-image parallelism is runtime-configurable and bounded.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on worker-count regressions.
+    """
+    module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "99")
+    assert module._multi_download_worker_count(3) == 3
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "2")
+    assert module._multi_download_worker_count(3) == 2
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "bad")
+    assert module._multi_download_worker_count(3) == 3
+
+
 def test_xt_connector_imaris_load_path_does_not_download_archived_originals():
     """Verify the Imaris load path does not download archived original files.
 
@@ -8747,6 +8879,7 @@ def test_client_download_selected_image_ome_tiff_uses_standard_export_endpoint(
             )
 
     client.opener = _FakeOpener()
+    client.has_async_ome_tiff_export_capability = lambda: False
 
     local_path = client.download_selected_image_ome_tiff(
         17,
@@ -8763,6 +8896,64 @@ def test_client_download_selected_image_ome_tiff_uses_standard_export_endpoint(
         )
     ]
     assert "archived_files" not in opened_urls[0][0]
+
+
+def test_client_download_selected_image_ome_tiff_uses_async_custom_endpoint(tmp_path):
+    """Verify selected Image OME-TIFF uses the async connector endpoint when available.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on async OME-TIFF regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    client.has_async_ome_tiff_export_capability = lambda: True
+    calls = []
+
+    class _FakeOpener:
+        """Test double for fake opener."""
+
+        @staticmethod
+        def open(request, timeout=None):
+            """Serve async start, poll, and download responses.
+
+            Inputs: request and timeout. Output: fake HTTP response.
+            """
+            calls.append((request.full_url, timeout, getattr(request, "data", None)))
+            if "imaris-export/?image=19" in request.full_url:
+                assert "format=ome_tiff" in request.full_url
+                return _FakeHTTPResponse(
+                    b'{"job_id": "job-ome", "status_url": "/status/job-ome"}'
+                )
+            if "/status/job-ome" in request.full_url:
+                return _FakeHTTPResponse(
+                    b'{"finished": true, "failed": false, "download_url": "/download/job-ome"}'
+                )
+            if "/download/job-ome" in request.full_url:
+                return _FakeHTTPResponse(
+                    b"II*\x00async-selected-image",
+                    headers={
+                        "Content-Disposition": 'attachment; filename="async.ome.tif"',
+                        "Content-Type": "application/octet-stream",
+                        "Content-Length": "24",
+                    },
+                )
+            raise AssertionError(f"unexpected URL: {request.full_url}")
+
+    client.opener = _FakeOpener()
+
+    local_path = client.download_selected_image_ome_tiff(
+        19,
+        tmp_path,
+        target_filename="async selected",
+    )
+
+    assert Path(local_path).name == "async selected.ome.tif"
+    assert Path(local_path).read_bytes() == b"II*\x00async-selected-image"
+    assert calls[0][0].startswith(
+        f"{client.base_url}/omero_imaris_connector/imaris-export/?"
+    )
+    assert calls[1][0] == f"{client.base_url}/status/job-ome"
+    assert calls[2][0] == f"{client.base_url}/download/job-ome"
 
 
 def test_client_download_selected_image_ome_tiff_removes_partial_on_cancel(tmp_path):
@@ -11606,12 +11797,16 @@ def test_load_worker_omero_converter_downloads_ims_and_requires_ims(
     assert "selected Image OME-TIFF" not in joined_logs
 
 
-def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path):
+def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(
+    tmp_path,
+    monkeypatch,
+):
     """Verify load multiple worker OMERO waits for all downloads before open.
 
     Inputs: pytest provides `tmp_path`. Output: fails on regressions in load multiple worker OMERO waits for all downloads before open.
     """
     module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "1")
     first_ims = tmp_path / "first.ims"
     second_ims = tmp_path / "second.ims"
     first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
@@ -11688,20 +11883,22 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(tmp_path
     assert events == [
         ("download", 11, tmp_path, "img_11.ims", "first.ims", None),
         ("download", 12, tmp_path, "img_12.ims", "second.ims", None),
-        ("open", (str(first_ims),), True, False),
+        ("open", (str(first_ims), str(second_ims)), True, False),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
-    assert "Only the first selected image was opened" in info_messages[0]
-    assert str(tmp_path) in info_messages[0]
-    assert "Imaris 11 Workflow/Batch processing pipeline" in info_messages[0]
+    assert "All selected IMS files were opened" in info_messages[0]
 
 
-def test_load_multiple_worker_uniques_repeated_selected_filenames(tmp_path):
+def test_load_multiple_worker_uniques_repeated_selected_filenames(
+    tmp_path,
+    monkeypatch,
+):
     """Verify repeated selected filenames never overwrite earlier batch downloads.
 
     Inputs: pytest provides `tmp_path`. Output: fails on repeated local filename regressions.
     """
     module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "1")
     first_ims = tmp_path / "first.ims"
     second_ims = tmp_path / "second.ims"
     first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
@@ -11772,12 +11969,14 @@ def test_load_multiple_worker_uniques_repeated_selected_filenames(tmp_path):
 
 def test_load_multiple_worker_imaris_exports_selected_images_before_opening(
     tmp_path,
+    monkeypatch,
 ):
     """Verify multi-image Imaris exports complete before opening in Imaris.
 
     Inputs: pytest provides `tmp_path`. Output: fails on regressions in multi-image Imaris converter flow.
     """
     module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "1")
     first_export = tmp_path / "first.ome.tif"
     second_export = tmp_path / "second.ome.tif"
     first_export.write_bytes(b"II*\x00first")

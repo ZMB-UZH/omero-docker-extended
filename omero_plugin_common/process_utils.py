@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -202,20 +203,24 @@ def _popen(
     *,
     env: dict[str, str] | None,
     cwd: str | None,
+    start_new_session: bool = False,
 ) -> subprocess.Popen[bytes]:
     """Return the popen.
 
     Inputs: `command` (tuple[str, ...]), `env` (dict[str, str] | None) environment
     mapping, `cwd` (str | None) working directory. Output: `subprocess.Popen[bytes]`.
     """
-    return subprocess.Popen(
+    process = subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
         cwd=cwd,
+        start_new_session=start_new_session,
     )
+    setattr(process, "_process_utils_start_new_session", bool(start_new_session))
+    return process
 
 
 def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | None]:
@@ -226,7 +231,10 @@ def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | 
     """
     if process.poll() is None:
         try:
-            process.kill()
+            if getattr(process, "_process_utils_start_new_session", False):
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
         except ProcessLookupError:
             logger.debug(
                 "Process exited before it could be killed during subprocess cleanup.",
@@ -261,6 +269,7 @@ def run(
     timeout: float | int | None = None,
     env: Mapping[str, str] | None = None,
     cwd: CommandArg | None = None,
+    start_new_session: bool = False,
 ) -> CompletedProcess:
     """A fixed argv command with captured text output and no shell.
 
@@ -272,7 +281,12 @@ def run(
     """
     command = _normalize_command(args)
     timeout_seconds = _normalize_timeout(timeout)
-    process = _popen(command, env=_normalize_env(env), cwd=_normalize_cwd(cwd))
+    process = _popen(
+        command,
+        env=_normalize_env(env),
+        cwd=_normalize_cwd(cwd),
+        start_new_session=start_new_session,
+    )
     try:
         stdout, stderr = process.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired as exc:
@@ -295,6 +309,7 @@ def run_streaming(
     check: bool = False,
     tick_interval: float = 0.5,
     on_tick: TickCallback | None = None,
+    start_new_session: bool = False,
 ) -> CompletedProcess:
     """A fixed argv command while polling state and capturing output.
 
@@ -308,7 +323,12 @@ def run_streaming(
     timeout_seconds = _normalize_timeout(timeout)
     tick_interval = _normalize_tick_interval(tick_interval)
 
-    process = _popen(command, env=_normalize_env(env), cwd=_normalize_cwd(cwd))
+    process = _popen(
+        command,
+        env=_normalize_env(env),
+        cwd=_normalize_cwd(cwd),
+        start_new_session=start_new_session,
+    )
     started_at = time.monotonic()
     _notify_tick(process, on_tick, 0.0)
 
