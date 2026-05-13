@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import stat
 import sys
 import types
 from pathlib import Path
@@ -514,6 +515,39 @@ def test_run_ome_tiff_export_task_materializes_outputs_and_closes_connection(
     assert closed == [True]
 
 
+def test_run_ome_tiff_export_keeps_staged_file_private(monkeypatch, tmp_path):
+    """Verify OME-TIFF exports are readable by the service user only.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on permissive
+    file-mode regressions.
+    """
+    tasks = _import_tasks(monkeypatch)
+    export_path = tmp_path / "demo.ome.tif"
+
+    def materialize_ome_tiff_source(conn, image, image_id, export_root):
+        """Create a permissive file for the task helper to harden.
+
+        Inputs: fake export arguments. Output: string path to the staged file.
+        """
+        export_path.write_bytes(b"II*\x00")
+        export_path.chmod(0o666)
+        return str(export_path)
+
+    fake_script = types.SimpleNamespace(
+        _get_export_root=lambda conn: tmp_path,
+        _safe_filename=lambda name, fallback: "demo",
+        _materialize_ome_tiff_source=materialize_ome_tiff_source,
+    )
+    image = types.SimpleNamespace(getName=lambda: "demo")
+    conn = types.SimpleNamespace(getObject=lambda kind, image_id: image)
+    monkeypatch.setattr(tasks, "_ims_export_script_module", lambda: fake_script)
+
+    outputs = tasks._run_ome_tiff_export(conn, 12)
+
+    assert outputs["Export_Path"] == str(export_path)
+    assert stat.S_IMODE(export_path.stat().st_mode) == 0o600
+
+
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
     """Verify session and job service connections cover success and validation.
 
@@ -945,4 +979,8 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
         )
 
     assert updates[-1][0] == tasks.states.FAILURE
-    assert warnings == ["Error closing OMERO connection: close failed"]
+    assert warnings == [
+        "IMS export task failed image_id=8 task_id=task-3: "
+        "IMS export script not found on OMERO.server.",
+        "Error closing OMERO connection: close failed",
+    ]

@@ -14807,7 +14807,7 @@ class OMEROBrowserDialog:
                             f"{completed_count}/{count} selected files",
                             "#fff3cd",
                         )
-                except BaseException:
+                except Exception:
                     for future in futures:
                         future.cancel()
                     raise
