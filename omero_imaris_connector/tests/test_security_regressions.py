@@ -379,10 +379,31 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
         request=types.SimpleNamespace(id="task-1"),
         update_state=lambda *args, **kwargs: None,
     )
+    configured_host = "configured-omero.example"
+    configured_port = 16555
+    session_calls = []
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
+
+    def _open_session_connection(session_key, host, port, secure=None):
+        """Record requester connection arguments and return the stand-in.
+
+        Inputs: `session_key`, `host`, `port`, `secure`. Output: dummy connection.
+        """
+        session_calls.append((session_key, host, port, secure))
+        return dummy_conn
+
     monkeypatch.setattr(
-        tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn
+        tasks,
+        "_open_session_connection",
+        _open_session_connection,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_open_job_service_connection",
+        lambda *args, **kwargs: pytest.fail(
+            "job-service connection must not replace an available requester session"
+        ),
     )
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 99)
     monkeypatch.setattr(
@@ -398,12 +419,13 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
         task_self,
         image_id=5,
         session_key="user-session",
-        host="omero.internal",
-        port=4064,
+        host=configured_host,
+        port=configured_port,
         secure=True,
     )
 
     assert result["state"] == "FINISHED"
+    assert session_calls == [("user-session", configured_host, configured_port, True)]
     assert captured["session_key"] == "user-session"
     assert "username" not in captured
     assert "password" not in captured

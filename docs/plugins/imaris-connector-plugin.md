@@ -11,10 +11,11 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 - Synchronous wait mode with configurable timeout.
 - Export artifact download response.
 - OMERO CLI-based export launch from the `omeroweb` container.
-- OMERO CLI launch prefers the requesting user's OMERO session key and falls
+- Background exports prefer the requesting user's OMERO session key and fall
   back to the job-service session only when no user session key is available.
 - Direct validation path with `omero script launch` for incident debugging.
-- Job-service account support for background execution without user session dependency.
+- Job-service account fallback for background execution when no user session key
+  is available.
 - Optional OMERO connection overrides (host, port, secure) for advanced routing.
 
 ## Key route
@@ -37,7 +38,7 @@ Client request
 omero_imaris_connector/views.py   (HTTP endpoint)
     │
     ▼
-omero_imaris_connector/tasks.py   (Celery task: run_ims_export_task)
+omero_imaris_connector/tasks.py   (Celery task: IMS or OME-TIFF export)
     │
     ├─► _open_session_connection()    (join user's OMERO session)
     │   or _open_job_service_connection() (dedicated service account)

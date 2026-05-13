@@ -11883,10 +11883,12 @@ def test_load_multiple_worker_omero_waits_for_all_downloads_before_open(
     assert events == [
         ("download", 11, tmp_path, "img_11.ims", "first.ims", None),
         ("download", 12, tmp_path, "img_12.ims", "second.ims", None),
-        ("open", (str(first_ims), str(second_ims)), True, False),
+        ("open", (str(first_ims),), True, False),
     ]
     assert dialog.temp_files == [str(first_ims), str(second_ims)]
-    assert "All selected IMS files were opened" in info_messages[0]
+    assert "Only the first selected image was opened" in info_messages[0]
+    assert str(tmp_path) in info_messages[0]
+    assert "Imaris 11 Workflow/Batch processing pipeline" in info_messages[0]
 
 
 def test_load_multiple_worker_uniques_repeated_selected_filenames(

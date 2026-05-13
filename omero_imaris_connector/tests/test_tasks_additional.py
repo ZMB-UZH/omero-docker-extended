@@ -625,6 +625,55 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
         tasks._open_job_service_connection("omeroserver", 4064)
 
 
+def test_open_export_connection_prefers_requesting_session_when_job_service_enabled(
+    monkeypatch,
+) -> None:
+    """Verify requester sessions stay authoritative in job-service mode.
+
+    Inputs: pytest provides `monkeypatch`. Output: validates connection
+    selection for requester-session and job-service fallback paths.
+    """
+    tasks = _import_tasks(monkeypatch)
+    calls = []
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
+    monkeypatch.setattr(
+        tasks,
+        "_open_session_connection",
+        lambda session_key, host, port, secure=None: (
+            calls.append(("session", session_key, host, port, secure)) or "session-conn"
+        ),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_open_job_service_connection",
+        lambda host, port, secure=None: (
+            calls.append(("job-service", host, port, secure)) or "job-service-conn"
+        ),
+    )
+
+    configured_host = "configured-omero.example"
+    configured_port = 16555
+
+    assert (
+        tasks._open_export_connection(
+            "request-session", configured_host, configured_port, secure=True
+        )
+        == "session-conn"
+    )
+    assert calls == [
+        ("session", "request-session", configured_host, configured_port, True)
+    ]
+
+    calls.clear()
+    assert (
+        tasks._open_export_connection(
+            None, configured_host, configured_port, secure=True
+        )
+        == "job-service-conn"
+    )
+    assert calls == [("job-service", configured_host, configured_port, True)]
+
+
 def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
     monkeypatch, tmp_path
 ):
