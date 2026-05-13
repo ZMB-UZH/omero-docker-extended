@@ -11,7 +11,11 @@ import omero
 from celery import states
 from omero.gateway import BlitzGateway
 from omero_plugin_common import process_utils
-from omero_plugin_common.logging_utils import summarize_process_output
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitized_exc_info,
+    summarize_process_output,
+)
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
@@ -35,7 +39,7 @@ _GENERIC_OME_TIFF_EXPORT_ERROR = "OME-TIFF export job failed."
 _EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
 _EXPORT_CANCEL_MARKER_PREFIX = "omero_imaris_connector:export_cancel:"
 _EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS = 300
-_DOWNLOADABLE_EXPORT_FILE_MODE = 0o644
+_DOWNLOADABLE_EXPORT_FILE_MODE = 0o600
 _PUBLIC_SCRIPT_MESSAGES = {
     "Conversion to IMS failed",
     "Could not get original file path",
@@ -130,8 +134,8 @@ def mark_export_task_cancel_requested(task_id):
     except Exception as exc:
         logger.debug(
             "Unable to mark export task cancellation for %s: %s",
-            task_id,
-            exc,
+            sanitize_log_value(task_id),
+            sanitize_log_value(exc),
         )
         return False
 
@@ -150,8 +154,8 @@ def export_task_cancel_requested(task_id):
     except Exception as exc:
         logger.debug(
             "Unable to read export task cancellation marker for %s: %s",
-            task_id,
-            exc,
+            sanitize_log_value(task_id),
+            sanitize_log_value(exc),
         )
         return False
 
@@ -776,7 +780,13 @@ def run_ims_export_task(
         return result
 
     except Exception as exc:
-        logger.exception("IMS export task failed: %s", exc)
+        logger.warning(
+            "IMS export task failed image_id=%s task_id=%s: %s",
+            sanitize_log_value(image_id),
+            sanitize_log_value(self.request.id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         if export_task_cancel_requested(self.request.id):
             return _cancelled_task_result(owner_token=owner_token)
         failure_meta = _build_failure_meta(exc)
@@ -800,7 +810,11 @@ def run_ims_export_task(
                 conn.close()
                 logger.debug("OMERO connection closed for image_id=%s", image_id)
             except Exception as e:
-                logger.warning("Error closing OMERO connection: %s", e)
+                logger.warning(
+                    "Error closing OMERO connection: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
 
 
 @app.task(bind=True, name="omero_imaris_connector.run_ome_tiff_export_task")
@@ -865,7 +879,13 @@ def run_ome_tiff_export_task(
             result["owner_token"] = owner_token
         return result
     except Exception as exc:
-        logger.exception("OME-TIFF export task failed: %s", exc)
+        logger.warning(
+            "OME-TIFF export task failed image_id=%s task_id=%s: %s",
+            sanitize_log_value(image_id),
+            sanitize_log_value(self.request.id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         if export_task_cancel_requested(self.request.id):
             return _cancelled_task_result(owner_token=owner_token)
         failure_meta = _build_failure_meta(exc)
@@ -889,4 +909,8 @@ def run_ome_tiff_export_task(
                 conn.close()
                 logger.debug("OMERO connection closed for image_id=%s", image_id)
             except Exception as e:
-                logger.warning("Error closing OMERO connection: %s", e)
+                logger.warning(
+                    "Error closing OMERO connection: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
