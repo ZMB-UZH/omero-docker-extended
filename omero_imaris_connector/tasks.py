@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -39,7 +40,8 @@ _GENERIC_OME_TIFF_EXPORT_ERROR = "OME-TIFF export job failed."
 _EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
 _EXPORT_CANCEL_MARKER_PREFIX = "omero_imaris_connector:export_cancel:"
 _EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS = 300
-_DOWNLOADABLE_EXPORT_FILE_MODE = 0o600
+_DOWNLOADABLE_EXPORT_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
+_PRIVATE_EXPORT_DIR_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
 _PUBLIC_SCRIPT_MESSAGES = {
     "Conversion to IMS failed",
     "Could not get original file path",
@@ -413,7 +415,7 @@ def _run_script_via_omero_cli(
             dir=omero_userdir_root,
         )
     )
-    os.chmod(omero_userdir, 0o700)
+    os.chmod(omero_userdir, _PRIVATE_EXPORT_DIR_MODE)
     session_dir = omero_userdir / "sessions"
     tmp_dir = omero_userdir / "tmp"
     session_dir.mkdir(parents=True, exist_ok=True)
