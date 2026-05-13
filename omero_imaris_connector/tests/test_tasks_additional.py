@@ -979,8 +979,11 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
         )
 
     assert updates[-1][0] == tasks.states.FAILURE
-    assert warnings == [
+    expected_failure_warning = (
         "IMS export task failed image_id=8 task_id=task-3: "
-        "IMS export script not found on OMERO.server.",
+        + "IMS export script not found on OMERO.server."
+    )
+    assert warnings == [
+        expected_failure_warning,
         "Error closing OMERO connection: close failed",
     ]
