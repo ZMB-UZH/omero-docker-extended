@@ -17,12 +17,13 @@ from omero_plugin_common.logging_utils import (
     sanitized_exc_info,
     summarize_process_output,
 )
-from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
 from .config import (
     get_celery_broker_url,
     get_celery_result_expires,
+    get_connector_tmp_dir,
+    get_ome_tiff_staging_root,
     get_job_service_credentials,
     use_job_service_session,
 )
@@ -42,6 +43,7 @@ _EXPORT_CANCEL_MARKER_PREFIX = "omero_imaris_connector:export_cancel:"
 _EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS = 300
 _DOWNLOADABLE_EXPORT_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
 _PRIVATE_EXPORT_DIR_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+_PRESERVE_JOINED_SESSION_ATTR = "_omero_imaris_preserve_joined_session"
 _PUBLIC_SCRIPT_MESSAGES = {
     "Conversion to IMS failed",
     "Could not get original file path",
@@ -408,7 +410,7 @@ def _run_script_via_omero_cli(
     env = os.environ.copy()
     # Keep OMERO CLI session/cache files on the managed plugin tmp volume
     # rather than a shared world-writable system temp directory.
-    omero_userdir_root = get_plugin_tmp_dir("omero-cli", create=True)
+    omero_userdir_root = get_connector_tmp_dir("omero-cli", create=True)
     omero_userdir = Path(
         tempfile.mkdtemp(
             prefix=f"ims-export-{int(image_id)}-",
@@ -519,9 +521,7 @@ def _open_session_connection(session_key, host, port, secure=None):
         client = omero.client(host, port)
 
         # Join the existing session
-        logger.debug(
-            "Joining session with key=%s...", session_key[:8] if session_key else "None"
-        )
+        logger.debug("Joining requester OMERO session for background export.")
         session = client.joinSession(session_key)
 
         if not session:
@@ -531,11 +531,12 @@ def _open_session_connection(session_key, host, port, secure=None):
 
         # Create BlitzGateway from the client
         conn = BlitzGateway(client_obj=client)
+        setattr(conn, _PRESERVE_JOINED_SESSION_ATTR, True)
 
         # Enable cross-group access for the export
         conn.SERVICE_OPTS.setOmeroGroup("-1")
 
-        logger.debug("Successfully connected to OMERO as session=%s", session_key[:8])
+        logger.debug("Successfully connected to requester OMERO session.")
         return conn
 
     except omero.ClientError as e:
@@ -589,6 +590,7 @@ def _open_job_service_connection(host, port, secure=None):
             raise RuntimeError(
                 "Failed to connect to OMERO with job-service credentials."
             )
+        setattr(conn, _PRESERVE_JOINED_SESSION_ATTR, False)
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         logger.debug("Successfully connected to OMERO using the job-service account.")
         return conn
@@ -607,6 +609,24 @@ def _open_export_connection(session_key, host, port, secure=None):
     if use_job_service_session():
         return _open_job_service_connection(host, port, secure=secure)
     return _open_session_connection(session_key, host, port, secure=secure)
+
+
+def _close_export_connection(conn) -> None:
+    """Close an export connection without killing joined requester sessions.
+
+    Inputs: OMERO gateway connection. Output: None.
+    """
+    close = getattr(conn, "close", None)
+    if not callable(close):
+        return
+    hard_close = not bool(getattr(conn, _PRESERVE_JOINED_SESSION_ATTR, False))
+    try:
+        close(hard=hard_close)
+    except TypeError:
+        try:
+            close(hard_close)
+        except TypeError:
+            close()
 
 
 def _update_export_task_state(
@@ -655,7 +675,7 @@ def _run_ome_tiff_export(conn, image_id, status_callback=None):
             public_message=f"Image {int(image_id)} not found",
         )
     ims_export_script = _ims_export_script_module()
-    export_root = ims_export_script._get_export_root(conn)
+    export_root = get_ome_tiff_staging_root(create=True)
     export_name = (
         ims_export_script._safe_filename(
             image.getName(),
@@ -811,7 +831,7 @@ def run_ims_export_task(
     finally:
         if conn:
             try:
-                conn.close()
+                _close_export_connection(conn)
                 logger.debug("OMERO connection closed for image_id=%s", image_id)
             except Exception as e:
                 logger.warning(
@@ -910,7 +930,7 @@ def run_ome_tiff_export_task(
     finally:
         if conn:
             try:
-                conn.close()
+                _close_export_connection(conn)
                 logger.debug("OMERO connection closed for image_id=%s", image_id)
             except Exception as e:
                 logger.warning(

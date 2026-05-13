@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import stat
 import sys
 import types
@@ -11,6 +12,17 @@ import pytest
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
 TEST_SERVICE_AUTH_VALUE = "job-auth-fixture"
+
+
+@pytest.fixture(autouse=True)
+def _clean_test_runtime_root():
+    """Remove generated runtime files around each test.
+
+    Inputs: none. Output: yields for test execution.
+    """
+    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
+    yield
+    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
 
 
 def _install_omero_stubs() -> None:
@@ -515,26 +527,32 @@ def test_run_ome_tiff_export_task_materializes_outputs_and_closes_connection(
     assert closed == [True]
 
 
-def test_run_ome_tiff_export_keeps_staged_file_private(monkeypatch, tmp_path):
+def test_run_ome_tiff_export_keeps_staged_file_private(monkeypatch):
     """Verify OME-TIFF exports are readable by the service user only.
 
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on permissive
     file-mode regressions.
     """
     tasks = _import_tasks(monkeypatch)
-    export_path = tmp_path / "demo.ome.tif"
+    observed_export_roots = []
 
     def materialize_ome_tiff_source(conn, image, image_id, export_root):
         """Create a permissive file for the task helper to harden.
 
         Inputs: fake export arguments. Output: string path to the staged file.
         """
+        observed_export_roots.append(Path(export_root))
+        export_path = Path(export_root) / f"image_{int(image_id)}" / "source"
+        export_path.mkdir(parents=True, exist_ok=True)
+        export_path = export_path / "demo.ome.tif"
         export_path.write_bytes(b"II*\x00")
         export_path.chmod(0o666)
         return str(export_path)
 
     fake_script = types.SimpleNamespace(
-        _get_export_root=lambda conn: tmp_path,
+        _get_export_root=lambda conn: pytest.fail(
+            "OME-TIFF staging must not use OMERO_IMS_EXPORT_DIR"
+        ),
         _safe_filename=lambda name, fallback: "demo",
         _materialize_ome_tiff_source=materialize_ome_tiff_source,
     )
@@ -544,8 +562,13 @@ def test_run_ome_tiff_export_keeps_staged_file_private(monkeypatch, tmp_path):
 
     outputs = tasks._run_ome_tiff_export(conn, 12)
 
-    assert outputs["Export_Path"] == str(export_path)
-    assert stat.S_IMODE(export_path.stat().st_mode) == 0o600
+    expected_root = (
+        TEST_RUNTIME_ROOT / "tmp" / "omero-imaris-connector" / "ome-tiff-source"
+    )
+    expected_path = expected_root / "image_12" / "source" / "demo.ome.tif"
+    assert observed_export_roots == [expected_root]
+    assert outputs["Export_Path"] == str(expected_path)
+    assert stat.S_IMODE(expected_path.stat().st_mode) == 0o600
 
 
 def test_session_and_job_service_connections_cover_success_and_validation(monkeypatch):
@@ -604,6 +627,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
     assert join_calls == ["session-1"]
     assert detach_calls == [True]
     assert conn.group == "-1"
+    assert getattr(conn, tasks._PRESERVE_JOINED_SESSION_ATTR) is True
 
     with pytest.raises(RuntimeError, match="Invalid port value"):
         tasks._open_session_connection("session-1", "omeroserver", "bad-port")
@@ -615,6 +639,7 @@ def test_session_and_job_service_connections_cover_success_and_validation(monkey
     )
     conn = tasks._open_job_service_connection("omeroserver", 4064, secure=True)
     assert conn.group == "-1"
+    assert getattr(conn, tasks._PRESERVE_JOINED_SESSION_ATTR) is False
 
     monkeypatch.setattr(
         tasks,
@@ -672,6 +697,36 @@ def test_open_export_connection_prefers_requesting_session_when_job_service_enab
         == "job-service-conn"
     )
     assert calls == [("job-service", configured_host, configured_port, True)]
+
+
+def test_close_export_connection_preserves_joined_requester_session(monkeypatch):
+    """Verify requester-session task cleanup does not kill the OMERO.web session.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on hard-close regressions.
+    """
+    tasks = _import_tasks(monkeypatch)
+    calls = []
+    requester_conn = types.SimpleNamespace(close=lambda **kwargs: calls.append(kwargs))
+    setattr(requester_conn, tasks._PRESERVE_JOINED_SESSION_ATTR, True)
+
+    tasks._close_export_connection(requester_conn)
+
+    assert calls == [{"hard": False}]
+
+
+def test_close_export_connection_hard_closes_job_service_session(monkeypatch):
+    """Verify job-service task cleanup owns and closes its own session.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on session cleanup regressions.
+    """
+    tasks = _import_tasks(monkeypatch)
+    calls = []
+    job_conn = types.SimpleNamespace(close=lambda **kwargs: calls.append(kwargs))
+    setattr(job_conn, tasks._PRESERVE_JOINED_SESSION_ATTR, False)
+
+    tasks._close_export_connection(job_conn)
+
+    assert calls == [{"hard": True}]
 
 
 def test_run_ims_export_task_updates_failure_meta_and_closes_connections(

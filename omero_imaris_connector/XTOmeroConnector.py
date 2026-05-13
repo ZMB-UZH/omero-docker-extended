@@ -3460,6 +3460,106 @@ def _antialiased_circle_image(master, width, height, fill, outline):
     return image
 
 
+def _point_in_polygon(x_pos, y_pos, points):
+    """Return whether a point is inside a polygon.
+
+    Inputs: coordinates and flat polygon points. Output: bool.
+    """
+    vertices = list(zip(points[0::2], points[1::2]))
+    inside = False
+    previous_x, previous_y = vertices[-1]
+    for current_x, current_y in vertices:
+        crosses = (current_y > y_pos) != (previous_y > y_pos)
+        if crosses:
+            slope_x = (previous_x - current_x) * (y_pos - current_y)
+            slope_y = previous_y - current_y
+            if x_pos < current_x + slope_x / slope_y:
+                inside = not inside
+        previous_x, previous_y = current_x, current_y
+    return inside
+
+
+def _polygon_coverage(x_pos, y_pos, points, samples=3):
+    """Return antialias coverage for a polygon pixel.
+
+    Inputs: pixel coordinate, flat polygon points, sample count. Output: float.
+    """
+    hits = 0
+    total = samples * samples
+    step = 1.0 / samples
+    offset = step / 2.0
+    for sample_y in range(samples):
+        y_sample = y_pos + offset + sample_y * step
+        for sample_x in range(samples):
+            x_sample = x_pos + offset + sample_x * step
+            if _point_in_polygon(x_sample, y_sample, points):
+                hits += 1
+    return hits / total
+
+
+def _inset_polygon(points, inset):
+    """Return polygon points moved toward their centroid.
+
+    Inputs: flat polygon points and inset. Output: flat polygon points.
+    """
+    vertices = list(zip(points[0::2], points[1::2]))
+    center_x = sum(vertex[0] for vertex in vertices) / len(vertices)
+    center_y = sum(vertex[1] for vertex in vertices) / len(vertices)
+    inset_points = []
+    for x_pos, y_pos in vertices:
+        dx = x_pos - center_x
+        dy = y_pos - center_y
+        distance = math.hypot(dx, dy)
+        if distance <= 0:
+            inset_points.extend([x_pos, y_pos])
+            continue
+        scale = max(0.0, (distance - inset) / distance)
+        inset_points.extend([center_x + dx * scale, center_y + dy * scale])
+    return inset_points
+
+
+def _antialiased_stop_sign_image(
+    master,
+    width,
+    height,
+    shadow_points,
+    sign_points,
+    fill,
+    border,
+    shadow,
+):
+    """Return a smooth stop-sign button background image.
+
+    Inputs: Tk master, dimensions, polygons, colors. Output: Tk PhotoImage.
+    """
+    width = max(1, int(width))
+    height = max(1, int(height))
+    background = _resolve_tk_color(master, _widget_background(master))
+    fill = _resolve_tk_color(master, fill, fallback=background)
+    border = _resolve_tk_color(master, border, fallback=fill)
+    shadow = _resolve_tk_color(master, shadow, fallback=background)
+    inner_points = _inset_polygon(sign_points, 2.2)
+    image = tk.PhotoImage(master=master, width=width, height=height)
+    rows = []
+    for y_pos in range(height):
+        row = []
+        for x_pos in range(width):
+            color = background
+            shadow_coverage = _polygon_coverage(x_pos, y_pos, shadow_points)
+            if shadow_coverage:
+                color = _blend_colors(color, shadow, shadow_coverage)
+            sign_coverage = _polygon_coverage(x_pos, y_pos, sign_points)
+            if sign_coverage:
+                color = _blend_colors(color, border, sign_coverage)
+            inner_coverage = _polygon_coverage(x_pos, y_pos, inner_points)
+            if inner_coverage:
+                color = _blend_colors(color, fill, inner_coverage)
+            row.append(color)
+        rows.append("{" + " ".join(row) + "}")
+    image.put(" ".join(rows), to=(0, 0, width, height))
+    return image
+
+
 def _omero_logomark_photo_image(master, size=64):
     """Return the embedded OME/OMERO logomark as a Tk PhotoImage.
 
@@ -4095,14 +4195,18 @@ class _StopSignButton(_RoundedButton):
         bottom = height - 6 + surface_offset
         shadow_points = self._hexagon_points(left + 1, top + 3, right + 1, bottom + 3)
         sign_points = self._hexagon_points(left, top, right, bottom)
-        self._canvas.create_polygon(shadow_points, fill=shadow, outline="")
-        self._canvas.create_polygon(
+        image = _antialiased_stop_sign_image(
+            self._canvas,
+            width,
+            height,
+            shadow_points,
             sign_points,
-            fill=fill,
-            outline=border,
-            width=3,
-            joinstyle=_tk_constant("ROUND", "round"),
+            fill,
+            border,
+            shadow,
         )
+        self._stop_sign_image = image
+        self._canvas.create_image(0, 0, anchor=tk.NW, image=image)
         self._canvas.create_text(
             width / 2 + surface_offset / 2,
             height / 2 + surface_offset / 2 - 1,
