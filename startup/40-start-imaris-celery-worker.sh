@@ -2,6 +2,22 @@
 
 set -euo pipefail
 
+runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"
+runtime_home="${OMERO_WEB_ROOT:-/opt/omero/web}"
+if [[ "$(id -u)" -eq 0 && "${runtime_user}" != "root" ]]; then
+    if ! id "${runtime_user}" >/dev/null 2>&1; then
+        echo "ERROR: OMERO.web runtime user '${runtime_user}' does not exist." >&2
+        exit 1
+    fi
+    exec env \
+        USER="${runtime_user}" \
+        LOGNAME="${runtime_user}" \
+        LNAME="${runtime_user}" \
+        USERNAME="${runtime_user}" \
+        HOME="${runtime_home}" \
+        runuser -p -m -u "${runtime_user}" -- "${BASH_SOURCE[0]}" "$@"
+fi
+
 use_celery_raw="${OMERO_IMS_USE_CELERY:-true}"
 use_celery="$(echo "${use_celery_raw}" | tr '[:upper:]' '[:lower:]')"
 if [[ "${use_celery}" != "true" ]]; then
@@ -53,7 +69,18 @@ fi
 # Add defaults to prevent empty string issues
 celery_queue="${OMERO_IMS_CELERY_QUEUE:-imaris_export}"
 celery_loglevel="${OMERO_IMS_CELERY_LOGLEVEL:-info}"
-celery_concurrency="${OMERO_IMS_CELERY_WORKER_CONCURRENCY:-1}"
+default_celery_concurrency="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || printf '4\n')"
+celery_concurrency="${OMERO_IMS_CELERY_WORKER_CONCURRENCY:-${default_celery_concurrency}}"
+case "${celery_concurrency}" in
+    '' | *[!0-9]*)
+        echo "ERROR: OMERO_IMS_CELERY_WORKER_CONCURRENCY must be a positive integer." >&2
+        exit 1
+        ;;
+esac
+if [[ "${celery_concurrency}" -lt 1 ]]; then
+    echo "ERROR: OMERO_IMS_CELERY_WORKER_CONCURRENCY must be a positive integer." >&2
+    exit 1
+fi
 
 echo "=========================================="
 echo "Starting Imaris Celery worker"

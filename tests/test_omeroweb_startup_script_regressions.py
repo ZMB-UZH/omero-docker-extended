@@ -459,6 +459,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "WORKER_CALLS_FILE": str(calls_file),
                 "OMERO_WEB_ROOT": str(web_root),
                 "OMERO_WEB_VENV": "venv-3.12",
+                "OMERO_WEB_RUNTIME_USER": "root"
+                if os.geteuid() == 0
+                else os.environ.get("USER", ""),
             }
 
             subprocess.run(
@@ -493,6 +496,22 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "--concurrency=1 -Q enhanced_search --hostname=enhanced-search@%h",
                 calls[3],
             )
+
+    def test_imaris_worker_drops_root_before_starting_celery(self) -> None:
+        """Verify Imaris Celery worker does not run OMERO CLI tasks as root.
+
+        Inputs: repository fixture. Output: fails on root-worker regressions.
+        """
+        script_text = self.imaris_worker_script.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"',
+            script_text,
+        )
+        self.assertIn(
+            'runuser -p -m -u "${runtime_user}" -- "${BASH_SOURCE[0]}" "$@"',
+            script_text,
+        )
 
     def test_98_cleanprevious_removes_stale_pid_file(self) -> None:
         """Check 98 cleanprevious removes stale pid file cleanup behavior.

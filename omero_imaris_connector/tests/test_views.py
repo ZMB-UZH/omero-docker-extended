@@ -3,6 +3,7 @@ from __future__ import annotations
 import django
 import json
 import logging
+import sys
 from types import SimpleNamespace
 
 from django.conf import settings
@@ -95,6 +96,7 @@ def test_imaris_export_capabilities_reports_omero_when_script_is_available(
         "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": True, "Imaris": True},
         "omero_ims_export": True,
+        "ome_tiff_async_export": True,
     }
 
 
@@ -121,6 +123,7 @@ def test_imaris_export_capabilities_hides_omero_without_script(monkeypatch) -> N
         "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": False, "Imaris": True},
         "omero_ims_export": False,
+        "ome_tiff_async_export": True,
     }
 
 
@@ -152,6 +155,7 @@ def test_imaris_export_capabilities_hides_probe_exceptions(monkeypatch, caplog) 
         "omero_ims_export_capability": views.OMERO_IMS_EXPORT_CAPABILITY_FLAG,
         "converters": {"OMERO": False, "Imaris": True},
         "omero_ims_export": False,
+        "ome_tiff_async_export": True,
     }
     assert "backend secret" in caplog.text
 
@@ -476,7 +480,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
     wait_override_request.session = SimpleNamespace(session_key=None)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-10"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-10"
     )
     monkeypatch.setattr(
         views,
@@ -499,7 +503,7 @@ def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown
     )
     unknown_state_request.session = SimpleNamespace(session_key=None)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-11"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-11"
     )
     monkeypatch.setattr(
         views,
@@ -562,12 +566,56 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
         {"status": "cancelled"},
     )
 
+    _set_result(
+        views.EXPORT_STATE_CANCELLED,
+        info={"error": views.IMS_EXPORT_CANCELLED_MESSAGE},
+    )
+    assert views._poll_celery_job("celery-job-4b") == (
+        "CANCELLED",
+        None,
+        views.IMS_EXPORT_CANCELLED_MESSAGE,
+        {"error": views.IMS_EXPORT_CANCELLED_MESSAGE},
+    )
+
     _set_result("CUSTOM", info={"status": "custom"})
     assert views._poll_celery_job("celery-job-5") == (
         "CUSTOM",
         None,
         None,
         {"status": "custom"},
+    )
+
+
+def test_poll_celery_job_handles_malformed_stale_backend_result(monkeypatch):
+    """Verify malformed stale Celery results do not break status/cancel flows.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on stale-result regressions.
+    """
+    views = _import_views()
+
+    class _BrokenResult:
+        """AsyncResult double whose backend properties raise on decode."""
+
+        @property
+        def state(self):
+            """Raise like Celery does for malformed exception-state results.
+
+            Inputs: none. Output: raises ValueError.
+            """
+            raise ValueError("Exception information must include the exception type")
+
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: _BrokenResult(),
+        raising=False,
+    )
+
+    assert views._poll_celery_job("celery-job-6") == (
+        "FAILED",
+        None,
+        views.IMS_EXPORT_JOB_FAILED_MESSAGE,
+        None,
     )
 
 
@@ -587,20 +635,42 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
         views.run_ims_export_task,
         "apply_async",
         lambda kwargs, queue: dispatched.setdefault(
-            "result",
+            "ims",
             SimpleNamespace(id="task-123", kwargs=kwargs, queue=queue),
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        views.run_ome_tiff_export_task,
+        "apply_async",
+        lambda kwargs, queue: dispatched.setdefault(
+            "ome",
+            SimpleNamespace(id="task-456", kwargs=kwargs, queue=queue),
         ),
         raising=False,
     )
 
     assert views._start_celery_job(SimpleNamespace(), 17) == "celery-task-123"
-    assert dispatched["result"].kwargs == {
+    assert dispatched["ims"].kwargs == {
         "image_id": 17,
         "session_key": "session-key",
         "host": "omeroserver",
         "port": 4064,
         "secure": True,
+        "owner_token": views._hash_job_owner_token("session-key"),
     }
+    assert (
+        views._start_celery_job(
+            SimpleNamespace(),
+            18,
+            export_format=views.EXPORT_FORMAT_OME_TIFF,
+        )
+        == "celery-task-456"
+    )
+    assert dispatched["ome"].kwargs["image_id"] == 18
+    assert dispatched["ome"].kwargs["owner_token"] == views._hash_job_owner_token(
+        "session-key"
+    )
 
     monkeypatch.setattr(views, "_get_session_key", lambda conn: None)
     with pytest.raises(RuntimeError, match="session key unavailable"):
@@ -612,6 +682,88 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
     )
     with pytest.raises(RuntimeError, match="out of range"):
         views._start_celery_job(SimpleNamespace(), 17)
+
+
+def test_export_job_owner_registry_rejects_other_sessions(monkeypatch):
+    """Verify export job ownership is session-scoped before task metadata exists.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on multi-user isolation
+    regressions.
+    """
+    views = _import_views()
+    records = {}
+    monkeypatch.setattr(
+        views.cache,
+        "set",
+        lambda key, value, timeout=None: records.setdefault(key, value),
+    )
+    monkeypatch.setattr(views.cache, "get", lambda key: records.get(key))
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: conn.session_key)
+
+    job_id = "celery-task-123"
+    views._record_export_job_owner(
+        job_id,
+        views._hash_job_owner_token("session-a"),
+    )
+
+    assert views._export_job_belongs_to_current_session(
+        job_id,
+        SimpleNamespace(session_key="session-a"),
+    )
+    assert not views._export_job_belongs_to_current_session(
+        job_id,
+        SimpleNamespace(session_key="session-b"),
+    )
+
+
+def test_remove_queued_redis_task_removes_only_matching_message(monkeypatch):
+    """Verify stop removes matching queued Celery messages from the Redis broker.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on stale queued work
+    cancellation regressions.
+    """
+    views = _import_views()
+    removed = []
+
+    class _FakeRedis:
+        """Redis list double for queued Celery messages."""
+
+        @staticmethod
+        def lrange(queue_key, start, end):
+            """Return queued messages.
+
+            Inputs: queue key and range. Output: list of messages.
+            """
+            assert queue_key == views.CELERY_QUEUE
+            assert (start, end) == (0, -1)
+            return [b'{"headers":{"id":"other"}}', b'{"headers":{"id":"task-123"}}']
+
+        @staticmethod
+        def lrem(queue_key, count, message):
+            """Record removed messages.
+
+            Inputs: queue key, count, message. Output: number removed.
+            """
+            removed.append((queue_key, count, message))
+            return 1
+
+    monkeypatch.setattr(
+        views.celery_app.conf,
+        "broker_url",
+        "redis://redis:6379/2",
+        raising=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "redis",
+        SimpleNamespace(Redis=SimpleNamespace(from_url=lambda url: _FakeRedis())),
+    )
+
+    result = views._remove_queued_redis_task("task-123")
+
+    assert result["broker_queue_removal_attempted"] is True
+    assert result["broker_queue_messages_removed"] == 1
+    assert removed == [(views.CELERY_QUEUE, 1, b'{"headers":{"id":"task-123"}}')]
 
 
 def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
@@ -635,6 +787,8 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
     deleted = []
     revoked = []
     stored = []
+    forgotten = []
+    events = []
     alive = {"345": True}
 
     class _FakeBackend:
@@ -667,15 +821,19 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
     monkeypatch.setattr(
         views.celery_app,
         "AsyncResult",
-        lambda task_id: SimpleNamespace(backend=_FakeBackend()),
+        lambda task_id: SimpleNamespace(
+            backend=_FakeBackend(),
+            forget=lambda: forgotten.append(task_id),
+        ),
         raising=False,
     )
     monkeypatch.setattr(
         views.celery_app,
         "control",
         SimpleNamespace(
-            revoke=lambda task_id, terminate, signal: revoked.append(
-                (task_id, terminate, signal)
+            revoke=lambda task_id, terminate, signal: (
+                events.append("revoke"),
+                revoked.append((task_id, terminate, signal)),
             )
         ),
         raising=False,
@@ -684,6 +842,19 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
         views,
         "_is_expected_ims_export_cli_process",
         lambda pid: pid == 345,
+    )
+    monkeypatch.setattr(
+        views,
+        "_remove_queued_redis_task",
+        lambda task_id: {
+            "broker_queue_removal_attempted": True,
+            "broker_queue_messages_removed": 1,
+        },
+    )
+    monkeypatch.setattr(
+        views,
+        "mark_export_task_cancel_requested",
+        lambda task_id: events.append("mark_cancel"),
     )
 
     def _fake_kill(pid, sig):
@@ -696,6 +867,7 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
                 return None
             raise ProcessLookupError
         if sig == views.signal.SIGTERM:
+            events.append("terminate_cli")
             alive[str(pid)] = False
             return None
         raise AssertionError(f"unexpected signal: {sig}")
@@ -715,18 +887,115 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
     assert payload["cleanup"]["file_annotation_removed"] is True
     assert payload["cleanup"]["local_cli_termination_attempted"] is True
     assert payload["cleanup"]["local_cli_process_stopped"] is True
+    assert payload["cleanup"]["broker_queue_messages_removed"] == 1
+    assert events[:3] == ["mark_cancel", "terminate_cli", "revoke"]
     assert revoked == [("task-123", True, "SIGTERM")]
     assert stored == [
         (
             "task-123",
-            {"state": "CANCELLED", "error": views.IMS_EXPORT_CANCELLED_MESSAGE},
-            views.celery_states.REVOKED,
+            {
+                "state": views.EXPORT_STATE_CANCELLED,
+                "error": views.IMS_EXPORT_CANCELLED_MESSAGE,
+            },
+            views.EXPORT_STATE_CANCELLED,
         )
     ]
+    assert forgotten == ["task-123"]
     assert deleted == [("Annotation", [9], True)]
     assert not export_path.exists()
     assert not partial_path.exists()
     assert str(export_root) not in serialized
+
+
+def test_terminate_export_cli_process_prefers_process_group(monkeypatch):
+    """Verify IMS cancellation terminates the recorded OMERO CLI process group.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on process-group cancellation
+    regressions.
+    """
+    views = _import_views()
+    signals = []
+    members = [[345, 346], []]
+    monkeypatch.setattr(
+        views,
+        "_process_group_has_expected_ims_export_cli",
+        lambda pgid: pgid == 345,
+    )
+    monkeypatch.setattr(
+        views,
+        "_process_group_members",
+        lambda pgid: members.pop(0) if members else [],
+    )
+    monkeypatch.setattr(
+        views.os,
+        "killpg",
+        lambda pgid, sig: signals.append((pgid, sig)),
+    )
+
+    result = views._terminate_export_cli_process(
+        {"status": "running_script", "cli_pid": 345, "cli_pgid": 345}
+    )
+
+    assert result["local_cli_termination_attempted"] is True
+    assert result["local_cli_process_stopped"] is True
+    assert signals == [(345, views.signal.SIGTERM)]
+
+
+def test_expected_ims_export_cli_detection_accepts_python_shebang(monkeypatch):
+    """Verify live OMERO CLI shebang processes are recognized for cancellation.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on process validation
+    regressions.
+    """
+    views = _import_views()
+    cmdlines = {
+        101: (
+            "/opt/omero/web/venv-3.12/bin/python3.12",
+            "/opt/omero/web/venv-3.12/bin/omero",
+            "script",
+            "launch",
+            "1002",
+            "Image_ID=338",
+        ),
+        102: ("omero", "script", "launch", "1002"),
+        103: ("python3", "/opt/not-omero", "script", "launch"),
+        104: ("/opt/omero/web/venv-3.12/bin/omero", "sessions", "list"),
+    }
+    monkeypatch.setattr(views, "_read_proc_cmdline", lambda pid: cmdlines[int(pid)])
+
+    assert views._is_expected_ims_export_cli_process(101)
+    assert views._is_expected_ims_export_cli_process(102)
+    assert not views._is_expected_ims_export_cli_process(103)
+    assert not views._is_expected_ims_export_cli_process(104)
+
+
+def test_terminate_process_group_treats_zombie_only_group_as_stopped(monkeypatch):
+    """Verify cancelled export groups do not report active work for zombies only.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on cancellation cleanup
+    reporting regressions.
+    """
+    views = _import_views()
+    signals = []
+    monkeypatch.setattr(
+        views,
+        "_process_group_has_expected_ims_export_cli",
+        lambda pgid: pgid == 345,
+    )
+    monkeypatch.setattr(
+        views,
+        "_process_group_members",
+        lambda pgid: [345] if pgid == 345 else [],
+    )
+    monkeypatch.setattr(views, "_process_is_zombie", lambda pid: True)
+    monkeypatch.setattr(
+        views.os,
+        "killpg",
+        lambda pgid, sig: signals.append((pgid, sig)),
+    )
+
+    assert views._terminate_process_group(345) is True
+    assert signals == [(345, views.signal.SIGTERM)]
 
 
 def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
@@ -808,7 +1077,7 @@ def test_imaris_view_helpers_cover_env_fallbacks_and_unknown_status_paths(
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-12"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-12"
     )
     time_values = iter([0.0, views.EXPORT_TIMEOUT + 1.0])
     monkeypatch.setattr(views.time, "time", lambda: next(time_values, 0.0))
@@ -881,7 +1150,7 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-7"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-7"
     )
     async_response = views.imaris_export(async_request, conn=SimpleNamespace())
     async_payload = json.loads(async_response.content)
@@ -932,7 +1201,7 @@ def test_imaris_export_covers_async_status_download_and_sync_success_paths(monke
     )
     sync_request.session = SimpleNamespace(session_key=None)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-8"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-8"
     )
     monkeypatch.setattr(
         views,
@@ -994,7 +1263,7 @@ def test_imaris_export_rejects_missing_image_invalid_image_no_celery_and_timeout
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 7)
     monkeypatch.setattr(
-        views, "_start_celery_job", lambda conn, image_id: "celery-job-9"
+        views, "_start_celery_job", lambda conn, image_id, **_kwargs: "celery-job-9"
     )
     monkeypatch.setattr(
         views,

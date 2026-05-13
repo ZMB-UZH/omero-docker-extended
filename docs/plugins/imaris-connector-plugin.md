@@ -48,6 +48,8 @@ omero_imaris_connector/tasks.py   (Celery task: run_ims_export_task)
 ```
 
 The Celery worker runs inside the `omeroweb` container, managed by supervisord alongside OMERO.web.
+It must run as the OMERO.web runtime user, not as root, because the OMERO CLI
+refuses root execution to avoid corrupting OMERO user-directory permissions.
 
 ## Required runtime dependencies
 
@@ -71,20 +73,21 @@ The Celery worker runs inside the `omeroweb` container, managed by supervisord a
 
 Defined in `env/omero-celery.env`:
 
-| Variable                            | Purpose                                         | Example                |
-| ----------------------------------- | ----------------------------------------------- | ---------------------- |
-| `OMERO_IMS_USE_CELERY`              | Enable Celery-backed exports                    | `true`                 |
-| `OMERO_IMS_USE_JOB_SERVICE_SESSION` | Use job-service account instead of user session | `false`                |
-| `OMERO_IMS_CELERY_BROKER_URL`       | Redis broker URL                                | `redis://redis:6379/2` |
-| `OMERO_IMS_CELERY_BACKEND_URL`      | Redis result backend URL                        | `redis://redis:6379/2` |
-| `OMERO_IMS_CELERY_QUEUE`            | Queue name (must match producer and worker)     | `imaris_export`        |
-| `OMERO_IMS_CELERY_RESULT_EXPIRES`   | Result expiry in seconds                        | `7200`                 |
-| `OMERO_IMS_CELERY_TIME_LIMIT`       | Task time limit in seconds                      | `7200`                 |
-| `OMERO_IMS_CELERY_MAX_RETRIES`      | Broker connection retry count                   | `20`                   |
-| `OMERO_IMS_CELERY_PREFETCH`         | Worker prefetch multiplier                      | `1`                    |
-| `OMERO_IMS_EXPORT_TIMEOUT`          | Sync mode timeout in seconds                    | `3600`                 |
-| `OMERO_IMS_EXPORT_POLL_INTERVAL`    | Status poll interval in seconds                 | `2.0`                  |
-| `OMERO_IMS_SCRIPT_NAME`             | Export script name                              | `IMS_Export.py`        |
+| Variable                              | Purpose                                         | Example                |
+| ------------------------------------- | ----------------------------------------------- | ---------------------- |
+| `OMERO_IMS_USE_CELERY`                | Enable Celery-backed exports                    | `true`                 |
+| `OMERO_IMS_USE_JOB_SERVICE_SESSION`   | Use job-service account instead of user session | `false`                |
+| `OMERO_IMS_CELERY_BROKER_URL`         | Redis broker URL                                | `redis://redis:6379/2` |
+| `OMERO_IMS_CELERY_BACKEND_URL`        | Redis result backend URL                        | `redis://redis:6379/2` |
+| `OMERO_IMS_CELERY_QUEUE`              | Queue name (must match producer and worker)     | `imaris_export`        |
+| `OMERO_IMS_CELERY_RESULT_EXPIRES`     | Result expiry in seconds                        | `7200`                 |
+| `OMERO_IMS_CELERY_TIME_LIMIT`         | Task time limit in seconds                      | `7200`                 |
+| `OMERO_IMS_CELERY_WORKER_CONCURRENCY` | Concurrent Imaris export workers                | `4`                    |
+| `OMERO_IMS_CELERY_MAX_RETRIES`        | Broker connection retry count                   | `20`                   |
+| `OMERO_IMS_CELERY_PREFETCH`           | Worker prefetch multiplier                      | `1`                    |
+| `OMERO_IMS_EXPORT_TIMEOUT`            | Sync mode timeout in seconds                    | `3600`                 |
+| `OMERO_IMS_EXPORT_POLL_INTERVAL`      | Status poll interval in seconds                 | `2.0`                  |
+| `OMERO_IMS_SCRIPT_NAME`               | Export script name                              | `IMS_Export.py`        |
 
 Defined in `env/omeroserver.env`:
 

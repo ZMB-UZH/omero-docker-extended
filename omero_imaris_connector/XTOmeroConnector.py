@@ -14,6 +14,7 @@ Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 """
 
 import contextlib
+import concurrent.futures
 import datetime
 import hashlib
 import http.client
@@ -131,10 +132,14 @@ EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 DOWNLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES"
 UNIQUE_DOWNLOAD_SUFFIX_ENV = "OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX"
-DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
+DEFAULT_DOWNLOAD_CHUNK_SIZE_BYTES = 8 * 1024 * 1024
 MIN_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024
 MAX_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024 * 1024
 DOWNLOAD_PROGRESS_UNIT_BYTES = 1024 * 1024
+DOWNLOAD_PROGRESS_PERCENT_STEP = 5.0
+DOWNLOAD_PROGRESS_SECONDS_STEP = 2.0
+UNKNOWN_DOWNLOAD_PROGRESS_STEP_BYTES = 16 * 1024 * 1024
+MULTI_DOWNLOAD_WORKERS_ENV = "OMERO_IMARIS_MULTI_DOWNLOAD_WORKERS"
 UPLOAD_CHUNK_SIZE_ENV = "OMERO_IMARIS_UPLOAD_CHUNK_BYTES"
 DEFAULT_UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 MIN_UPLOAD_CHUNK_SIZE_BYTES = 64 * 1024
@@ -146,6 +151,7 @@ CANCEL_POLL_INTERVAL = 0.1
 CANCELLABLE_HTTP_CONNECT_TIMEOUT_SECONDS = 2.0
 CANCELLABLE_HTTP_POLL_INTERVAL_SECONDS = 0.1
 CANCELLABLE_HTTP_MAX_HEADER_BYTES = 256 * 1024
+IMS_EXPORT_CANCEL_TIMEOUT_SECONDS = 5
 HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
 HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
 DEFAULT_HTTP_TRANSIENT_RETRY_ATTEMPTS = 3
@@ -212,6 +218,9 @@ BROWSER_PANEL_MIN_FRACTION = 0.5 * (1.0 / 3.0)
 BROWSER_PANEL_MAX_FRACTION = 1.5 * (1.0 / 3.0)
 BROWSER_SPLITTER_WIDTH = 8
 BOTTOM_PROGRESS_RESERVED_HEIGHT = 12
+DUPLICATE_FILENAME_DIALOG_WIDTH = 980
+DUPLICATE_FILENAME_DIALOG_HEIGHT = 460
+DUPLICATE_FILENAME_DIALOG_WRAP_LENGTH = 900
 ENABLE_NATIVE_IMARIS_BRIDGE_ENV = "IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY"
 TEXT_INPUT_WIDGET_CLASSES = {
     "Entry",
@@ -1193,6 +1202,98 @@ def _download_chunk_size_bytes():
         MIN_DOWNLOAD_CHUNK_SIZE_BYTES,
         min(value, MAX_DOWNLOAD_CHUNK_SIZE_BYTES),
     )
+
+
+def _multi_download_worker_count(selected_count):
+    """Return the bounded worker count for parallel selected-image downloads.
+
+    Inputs: selected image count. Output: worker count.
+    """
+    try:
+        count = max(1, int(selected_count or 1))
+    except (TypeError, ValueError):
+        count = 1
+    raw_value = os.environ.get(MULTI_DOWNLOAD_WORKERS_ENV, "").strip()
+    if raw_value:
+        try:
+            configured = int(raw_value, 10)
+        except ValueError:
+            configured = count
+        return max(1, min(configured, count))
+    try:
+        cpu_count = os.cpu_count() or 1
+    except Exception:
+        cpu_count = 1
+    return max(1, min(count, cpu_count))
+
+
+class _DownloadProgressReporter:
+    """Throttle user-visible download progress for streaming connector transfers."""
+
+    def __init__(self, total_size):
+        """Create a progress reporter for one transfer.
+
+        Inputs: total response bytes, when known. Output: initialized reporter.
+        """
+        try:
+            self.total_size = max(0, int(total_size or 0))
+        except (TypeError, ValueError):
+            self.total_size = 0
+        self._last_bytes = 0
+        self._last_percent = 0.0
+        self._last_report_at = 0.0
+        self._reported = False
+
+    def _should_report(self, downloaded, *, force=False):
+        """Return whether this byte count should be logged.
+
+        Inputs: downloaded byte count and force flag. Output: bool.
+        """
+        if force:
+            return self._reported or downloaded > 0
+        if downloaded <= 0:
+            return False
+        now = time.monotonic()
+        if not self._reported:
+            return True
+        if now - self._last_report_at >= DOWNLOAD_PROGRESS_SECONDS_STEP:
+            return True
+        if self.total_size > 0:
+            percent = (downloaded / self.total_size) * 100.0
+            if percent >= 100.0:
+                return True
+            return percent - self._last_percent >= DOWNLOAD_PROGRESS_PERCENT_STEP
+        return downloaded - self._last_bytes >= UNKNOWN_DOWNLOAD_PROGRESS_STEP_BYTES
+
+    def report(self, downloaded, *, force=False):
+        """Emit a throttled progress line.
+
+        Inputs: downloaded byte count and force flag. Output: None.
+        """
+        downloaded = max(0, int(downloaded or 0))
+        if not self._should_report(downloaded, force=force):
+            return
+        progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
+        if self.total_size > 0:
+            percent = min(100.0, (downloaded / self.total_size) * 100.0)
+            message = f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)"
+            self._last_percent = percent
+        else:
+            message = f"  Progress: {progress_mb:.1f} MB"
+        self._last_bytes = downloaded
+        self._last_report_at = time.monotonic()
+        self._reported = True
+        _xt_console_log(message, end="\r", flush=True)
+
+    def finish(self, downloaded):
+        """Finish the progress line when at least one update was emitted.
+
+        Inputs: downloaded byte count. Output: None.
+        """
+        if self.total_size > 0:
+            self.report(downloaded, force=True)
+        if self._reported:
+            _xt_console_log()
 
 
 def _unique_download_suffix_enabled():
@@ -6633,6 +6734,8 @@ class OMEROWebClient:
         self.session_id = None
         self.session_key = None
         self.user_id = None
+        self._active_ims_export_jobs: Set[str] = set()
+        self._active_ims_export_jobs_lock = threading.Lock()
 
     @staticmethod
     def _build_base_url(host, port, scheme):
@@ -7588,6 +7691,32 @@ class OMEROWebClient:
             _xt_debug("OMERO converter: custom server-side IMS export is disabled")
         return available
 
+    def has_async_ome_tiff_export_capability(self):
+        """Return True when custom async OME-TIFF export is available.
+
+        Inputs: none. Output: bool.
+        """
+        if not self.session_id:
+            return False
+        base = self.base_url.rstrip("/")
+        capability_url = f"{base}/omero_imaris_connector/imaris-export/?capabilities=1"
+        req = self._create_request_with_cookies(capability_url)
+        try:
+            with self.opener.open(req, timeout=30) as response:
+                if self._check_login_redirect(
+                    response, "Imaris converter capability check"
+                ):
+                    return False
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        except Exception:
+            return False
+        return (
+            isinstance(payload, dict)
+            and payload.get(OMERO_IMS_EXPORT_CAPABILITY_KEY)
+            == OMERO_IMS_EXPORT_CAPABILITY_FLAG
+            and payload.get("ome_tiff_async_export") is True
+        )
+
     def get_folder_export_capability(self):
         """Detect whether OMERO.web exposes the folder export workflow.
 
@@ -7921,7 +8050,7 @@ class OMEROWebClient:
                 cancel_url,
                 method="POST",
                 payload={"cancel": True},
-                timeout=30,
+                timeout=IMS_EXPORT_CANCEL_TIMEOUT_SECONDS,
                 context="OMERO converter IMS export cancellation",
             )
             if (
@@ -7940,6 +8069,40 @@ class OMEROWebClient:
                 f"OMERO converter: cancel request failed {type(exc).__name__}: {exc}"
             )
         return False
+
+    def _remember_active_ims_export(self, status_url):
+        """Track one server-side IMS export so Stop can cancel it immediately.
+
+        Inputs: status URL. Output: None.
+        """
+        if not status_url:
+            return
+        with self._active_ims_export_jobs_lock:
+            self._active_ims_export_jobs.add(status_url)
+
+    def _forget_active_ims_export(self, status_url):
+        """Stop tracking one server-side IMS export status URL.
+
+        Inputs: status URL. Output: None.
+        """
+        if not status_url:
+            return
+        with self._active_ims_export_jobs_lock:
+            self._active_ims_export_jobs.discard(status_url)
+
+    def cancel_active_ims_exports(self):
+        """Cancel all currently tracked server-side IMS export jobs.
+
+        Inputs: none. Output: number of accepted cancel requests.
+        """
+        with self._active_ims_export_jobs_lock:
+            status_urls = list(self._active_ims_export_jobs)
+            self._active_ims_export_jobs.clear()
+        cancelled = 0
+        for status_url in status_urls:
+            if self.cancel_ims_export(status_url):
+                cancelled += 1
+        return cancelled
 
     def ping(self, timeout=10):
         """That the authenticated OMERO.web session still answers.
@@ -8159,6 +8322,7 @@ class OMEROWebClient:
                     )
 
                 status_url = self._normalize_url(status_url, base)
+                self._remember_active_ims_export(status_url)
                 _xt_debug(
                     "OMERO converter: IMS export started; polling endpoint="
                     f"{_safe_url_for_log(status_url)}"
@@ -8303,6 +8467,7 @@ class OMEROWebClient:
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
+                progress = _DownloadProgressReporter(total_size)
 
                 _xt_debug(
                     "OMERO converter: downloading IMS to selected local connector path"
@@ -8318,17 +8483,9 @@ class OMEROWebClient:
                             break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total_size:
-                            percent = (downloaded / total_size) * 100.0
-                            progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
-                            _xt_console_log(
-                                f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
-                                end="\r",
-                                flush=True,
-                            )
+                        progress.report(downloaded)
 
-                if total_size:
-                    _xt_console_log()
+                progress.finish(downloaded)
 
             _raise_if_cancelled(cancel_event, "OMERO converter IMS export download")
             if not os.path.exists(local_path):
@@ -8369,6 +8526,175 @@ class OMEROWebClient:
             raise RuntimeError(
                 f"OMERO converter IMS export failed (URLError): {e}"
             ) from e
+        finally:
+            self._forget_active_ims_export(status_url)
+
+    def _download_selected_image_ome_tiff_via_async_export(
+        self,
+        image_id,
+        download_dir,
+        fallback_name,
+        target_filename=None,
+        duplicate_policy=None,
+        cancel_event=None,
+    ):
+        """Download an OME-TIFF produced by the custom async export endpoint.
+
+        Inputs: image id, download directory, naming policy, cancellation event.
+        Output: local OME-TIFF path.
+        """
+        _raise_if_cancelled(cancel_event, "Imaris converter selected Image export")
+        base = self.base_url.rstrip("/")
+        query_params = {
+            "image": int(image_id),
+            "format": "ome_tiff",
+            "async": 1,
+            "base_url": base,
+        }
+        export_url = (
+            f"{base}/omero_imaris_connector/imaris-export/?"
+            f"{urllib.parse.urlencode(query_params)}"
+        )
+        _xt_debug(
+            "Imaris converter: requesting async selected Image OME-TIFF export "
+            f"endpoint={_safe_url_for_log(export_url)}"
+        )
+        status_url = None
+        local_path = None
+        try:
+            req = self._create_request_with_cookies(export_url)
+            with self._open_request_response(
+                req,
+                timeout=30,
+                cancel_event=cancel_event,
+            ) as response:
+                if self._check_login_redirect(
+                    response, "Imaris converter async selected Image export"
+                ):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web while starting selected Image "
+                        "OME-TIFF export."
+                    )
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+            job_id = payload.get("job_id")
+            status_url = payload.get("status_url")
+            if not job_id or not status_url:
+                raise RuntimeError(
+                    f"Unexpected Imaris converter async export response: {payload}"
+                )
+            status_url = self._normalize_url(status_url, base)
+            self._remember_active_ims_export(status_url)
+            _xt_debug(
+                "Imaris converter: async OME-TIFF export started; polling endpoint="
+                f"{_safe_url_for_log(status_url)}"
+            )
+
+            deadline = time.time() + EXPORT_TIMEOUT
+            download_url = None
+            poll_count = 0
+            last_state = None
+            while time.time() < deadline:
+                _raise_if_cancelled(cancel_event, "Imaris converter OME-TIFF export")
+                poll_count += 1
+                poll_req = self._create_request_with_cookies(status_url)
+                with self._open_request_response(
+                    poll_req,
+                    timeout=30,
+                    cancel_event=cancel_event,
+                ) as poll_response:
+                    poll_payload = json.loads(
+                        poll_response.read().decode("utf-8", errors="replace")
+                    )
+                last_state = poll_payload.get("state")
+                _xt_debug(
+                    "Imaris converter: async OME-TIFF export poll "
+                    f"#{poll_count} state={last_state} "
+                    f"finished={bool(poll_payload.get('finished'))} "
+                    f"failed={bool(poll_payload.get('failed'))} "
+                    f"status={poll_payload.get('status') or '<unset>'}"
+                )
+                if poll_payload.get("failed"):
+                    error_msg = poll_payload.get("error", "unknown error")
+                    raise RuntimeError(
+                        f"Selected Image OME-TIFF export failed: {error_msg}"
+                    )
+                if poll_payload.get("finished"):
+                    download_url = poll_payload.get("download_url")
+                    if download_url:
+                        download_url = self._normalize_url(download_url, base)
+                    break
+                _wait_for_cancel_or_timeout(
+                    cancel_event,
+                    EXPORT_POLL_INTERVAL,
+                    "Imaris converter OME-TIFF export",
+                )
+            if not download_url:
+                raise RuntimeError(
+                    "Selected Image OME-TIFF export timed out "
+                    f"(last state: {last_state})"
+                )
+
+            download_req = self._create_request_with_cookies(download_url)
+            _xt_debug(
+                "Imaris converter: downloading async selected Image OME-TIFF export"
+            )
+            with self._open_request_response(
+                download_req,
+                timeout=EXPORT_TIMEOUT + 60,
+                cancel_event=cancel_event,
+            ) as response:
+                cd = response.headers.get("Content-Disposition", "")
+                filename = _extract_content_disposition_filename(cd)
+                safe_filename = _safe_download_filename(
+                    target_filename or filename,
+                    fallback_name,
+                )
+                if os.path.splitext(safe_filename)[1].lower() not in {
+                    ".tif",
+                    ".tiff",
+                    ".tf8",
+                }:
+                    safe_filename = f"{safe_filename}.ome.tif"
+                local_path = _download_path_for_policy(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                )
+                total_size = int(response.headers.get("content-length", 0) or 0)
+                progress = _DownloadProgressReporter(total_size)
+                downloaded = 0
+                chunk_size = _download_chunk_size_bytes()
+                with open(local_path, "wb") as f:
+                    while True:
+                        _raise_if_cancelled(
+                            cancel_event,
+                            "Imaris converter selected Image download",
+                        )
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        progress.report(downloaded)
+                progress.finish(downloaded)
+            if not os.path.exists(local_path):
+                raise RuntimeError(
+                    f"Download completed but file not found at {local_path}"
+                )
+            if os.path.getsize(local_path) <= 0:
+                raise RuntimeError("Selected Image OME-TIFF export is empty")
+            if not is_tiff_file(local_path):
+                raise RuntimeError(
+                    "Selected Image OME-TIFF export is not a readable TIFF file."
+                )
+            _xt_debug("Imaris converter: async selected Image OME-TIFF downloaded OK")
+            return local_path
+        except _ConnectorOperationCancelled:
+            self.cancel_ims_export(status_url)
+            _safe_remove_partial_download(local_path)
+            raise
+        finally:
+            self._forget_active_ims_export(status_url)
 
     def download_selected_image_ome_tiff(
         self,
@@ -8396,6 +8722,16 @@ class OMEROWebClient:
             )
         if not self.session_id:
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
+
+        if self.has_async_ome_tiff_export_capability():
+            return self._download_selected_image_ome_tiff_via_async_export(
+                image_id,
+                download_dir,
+                fallback_name,
+                target_filename=target_filename,
+                duplicate_policy=duplicate_policy,
+                cancel_event=cancel_event,
+            )
 
         base = self.base_url.rstrip("/")
         export_url = f"{base}/webgateway/render_ome_tiff/i/{int(image_id)}/"
@@ -8467,6 +8803,7 @@ class OMEROWebClient:
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
+                progress = _DownloadProgressReporter(total_size)
 
                 _xt_debug(
                     "Imaris converter: downloading selected Image OME-TIFF export"
@@ -8482,17 +8819,9 @@ class OMEROWebClient:
                             break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total_size:
-                            percent = (downloaded / total_size) * 100.0
-                            progress_mb = downloaded / DOWNLOAD_PROGRESS_UNIT_BYTES
-                            _xt_console_log(
-                                f"  Progress: {percent:.1f}% ({progress_mb:.1f} MB)",
-                                end="\r",
-                                flush=True,
-                            )
+                        progress.report(downloaded)
 
-                if total_size:
-                    _xt_console_log()
+                progress.finish(downloaded)
 
             _raise_if_cancelled(
                 cancel_event, "Imaris converter selected Image download"
@@ -13270,6 +13599,24 @@ class OMEROBrowserDialog:
                 f"{type(exc).__name__}: {exc}"
             )
 
+    @staticmethod
+    def _cancel_active_ims_exports_in_background(client):
+        """Cancel tracked OMERO IMS export jobs without blocking the UI thread.
+
+        Inputs: client. Output: None.
+        """
+        canceller = getattr(client, "cancel_active_ims_exports", None)
+        if not callable(canceller):
+            return
+        try:
+            cancelled = canceller()
+            _xt_debug(f"OMERO converter: Stop cancelled {cancelled} active IMS job(s)")
+        except Exception as exc:
+            _xt_debug(
+                "OMERO converter background cancellation failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
     def _request_stop_current_operation(self):
         """Signal the active load/export workflow to stop.
 
@@ -13294,6 +13641,12 @@ class OMEROBrowserDialog:
             threading.Thread(
                 target=self._cancel_folder_export_job_in_background,
                 args=(client, job_payload),
+                daemon=True,
+            ).start()
+        if client is not None:
+            threading.Thread(
+                target=self._cancel_active_ims_exports_in_background,
+                args=(client,),
                 daemon=True,
             ).start()
 
@@ -14339,83 +14692,139 @@ class OMEROBrowserDialog:
                 raise RuntimeError(f"Unsupported converter: {converter}")
             self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
 
-            downloaded_files = []
             require_ims = converter == "OMERO"
             selected_image_export = converter == "Imaris"
             download_dir = self.export_dir
             planned_names_seen: Set[str] = set()
+            download_plan = []
             for index, img in enumerate(selected_images, start=1):
-                self._raise_if_current_operation_cancelled(
-                    "Load into Imaris",
-                    cancel_event,
-                )
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
-                image_name = self._image_display_name(img)
                 target_filename = self._download_filename_for_image(img, converter)
                 per_file_duplicate_policy = self._per_file_duplicate_download_policy(
                     target_filename,
                     duplicate_policy,
                     planned_names_seen,
                 )
-
-                if converter == "OMERO":
-                    self._set_status(
-                        f"OMERO converter: exporting IMS {index}/{count}: {image_name}",
-                        "#fff3cd",
+                download_plan.append(
+                    (
+                        index,
+                        image_id,
+                        self._image_display_name(img),
+                        target_filename,
+                        per_file_duplicate_policy,
                     )
+                )
+
+            def _download_selected_file(plan_item):
+                """Download one planned selected image file.
+
+                Inputs: plan item tuple. Output: tuple of one-based index and path.
+                """
+                index, image_id, image_name, target_filename, policy = plan_item
+                self._raise_if_current_operation_cancelled(
+                    "Load into Imaris",
+                    cancel_event,
+                )
+                if converter == "OMERO":
                     downloaded_file = self.client.download_ims_export(
                         image_id,
                         download_dir,
                         fallback_name=f"{self._image_cache_subdir(image_id)}.ims",
                         target_filename=target_filename,
-                        duplicate_policy=per_file_duplicate_policy,
+                        duplicate_policy=policy,
                         cancel_event=cancel_event,
                     )
                 else:
-                    self._set_status(
-                        f"Imaris converter: exporting selected Image {index}/{count}: "
-                        f"{image_name}",
-                        "#fff3cd",
-                    )
                     downloaded_file = (
                         self._download_selected_image_with_imaris_converter(
                             image_id,
                             download_dir,
                             target_filename=target_filename,
-                            duplicate_policy=per_file_duplicate_policy,
+                            duplicate_policy=policy,
                             cancel_event=cancel_event,
                         )
                     )
+                _xt_debug(
+                    "Multi-image download completed "
+                    f"index={index}/{count} converter={converter} image={image_name}"
+                )
+                return index, downloaded_file
 
-                if not downloaded_file or not os.path.exists(downloaded_file):
-                    raise RuntimeError(
-                        "Failed to download one selected file from OMERO."
-                    )
-                if require_ims and not is_ims_file(downloaded_file):
-                    raise RuntimeError(
-                        "A downloaded file is not a valid IMS (HDF5) file. "
-                        "Refusing to open the selected batch."
-                    )
-                if (
-                    selected_image_export
-                    and not self._is_tracked_selected_image_export_file(downloaded_file)
-                ):
-                    raise RuntimeError(
-                        "A downloaded selected Image export is not a readable TIFF "
-                        "file. Refusing to open the selected batch."
-                    )
+            worker_count = _multi_download_worker_count(count)
+            self._set_status(
+                f"{converter} converter: exporting {count} selected images "
+                f"with {worker_count} concurrent worker(s)...",
+                "#fff3cd",
+            )
+            _xt_debug(
+                "Multi-image selected export dispatching "
+                f"count={count} converter={converter} workers={worker_count}"
+            )
+            downloaded_by_index = {}
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="omero-imaris-download",
+            ) as executor:
+                futures = [
+                    executor.submit(_download_selected_file, plan_item)
+                    for plan_item in download_plan
+                ]
+                completed_count = 0
+                try:
+                    for future in concurrent.futures.as_completed(futures):
+                        self._raise_if_current_operation_cancelled(
+                            "Load into Imaris",
+                            cancel_event,
+                        )
+                        index, downloaded_file = future.result()
+                        if not downloaded_file or not os.path.exists(downloaded_file):
+                            raise RuntimeError(
+                                "Failed to download one selected file from OMERO."
+                            )
+                        if require_ims and not is_ims_file(downloaded_file):
+                            raise RuntimeError(
+                                "A downloaded file is not a valid IMS (HDF5) file. "
+                                "Refusing to open the selected batch."
+                            )
+                        if (
+                            selected_image_export
+                            and not self._is_tracked_selected_image_export_file(
+                                downloaded_file
+                            )
+                        ):
+                            raise RuntimeError(
+                                "A downloaded selected Image export is not a readable "
+                                "TIFF file. Refusing to open the selected batch."
+                            )
 
-                downloaded_files.append(downloaded_file)
-                self.temp_files.append(downloaded_file)
+                        downloaded_by_index[index] = downloaded_file
+                        self.temp_files.append(downloaded_file)
+                        completed_count += 1
+                        self._set_status(
+                            f"{converter} converter: downloaded "
+                            f"{completed_count}/{count} selected files",
+                            "#fff3cd",
+                        )
+                except BaseException:
+                    for future in futures:
+                        future.cancel()
+                    raise
+
+            downloaded_files = [
+                downloaded_by_index[index]
+                for index in range(1, count + 1)
+                if index in downloaded_by_index
+            ]
+            if len(downloaded_files) != count:
+                raise RuntimeError("Not all selected files were downloaded from OMERO.")
 
             self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             if require_ims:
-                handoff_files = downloaded_files[:1]
+                handoff_files = downloaded_files
                 self._set_status(
-                    "All selected IMS files are ready; opening the first one in "
-                    "Imaris...",
+                    "All selected IMS files are ready; opening them in Imaris...",
                     "#fff3cd",
                 )
             else:
@@ -14438,15 +14847,12 @@ class OMEROBrowserDialog:
             )
             success_title = "Success"
             if require_ims:
-                success_status = (
-                    "Opened first selected IMS file; remaining IMS files saved"
+                success_status = "Opened selected IMS files in Imaris"
+                success_message = (
+                    "All selected IMS files were opened in the current Imaris "
+                    "session after every download completed."
                 )
-                success_message = _omero_multi_handoff_notice(
-                    download_dir,
-                    len(downloaded_files) - 1,
-                    completed=True,
-                )
-                failure_message = "Imaris did not accept the first prepared IMS file."
+                failure_message = "Imaris did not accept the prepared IMS files."
             else:
                 success_status = (
                     "Submitted selected Image exports to Imaris File Converter"

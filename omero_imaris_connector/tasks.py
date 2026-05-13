@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -14,7 +15,12 @@ from omero_plugin_common.logging_utils import summarize_process_output
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 from .celery_app import app
-from .config import get_job_service_credentials, use_job_service_session
+from .config import (
+    get_celery_broker_url,
+    get_celery_result_expires,
+    get_job_service_credentials,
+    use_job_service_session,
+)
 from .imaris_service import (
     EXPORT_TIMEOUT,
     _find_script_id,
@@ -25,6 +31,11 @@ logger = logging.getLogger(__name__)
 subprocess = process_utils
 
 _GENERIC_EXPORT_ERROR = "IMS export job failed."
+_GENERIC_OME_TIFF_EXPORT_ERROR = "OME-TIFF export job failed."
+_EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
+_EXPORT_CANCEL_MARKER_PREFIX = "omero_imaris_connector:export_cancel:"
+_EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS = 300
+_DOWNLOADABLE_EXPORT_FILE_MODE = 0o644
 _PUBLIC_SCRIPT_MESSAGES = {
     "Conversion to IMS failed",
     "Could not get original file path",
@@ -47,6 +58,117 @@ class IMSExportTaskError(RuntimeError):
         """
         super().__init__(message)
         self.public_message = public_message
+
+
+class OMEExportTaskError(RuntimeError):
+    """Error whose public message is safe to return for OME-TIFF export jobs."""
+
+    def __init__(self, message: str, public_message: str | None = None) -> None:
+        """Initialize the error with an optional sanitized public message.
+
+        Inputs: `message`, `public_message`. Output: None.
+        """
+        super().__init__(message)
+        self.public_message = public_message
+
+
+def _export_cancel_marker_key(task_id):
+    """Return the Redis key used to mark user-requested export cancellation.
+
+    Inputs: Celery task id. Output: marker key or None.
+    """
+    if not task_id:
+        return None
+    return f"{_EXPORT_CANCEL_MARKER_PREFIX}{task_id}"
+
+
+def _export_cancel_marker_ttl():
+    """Return the cancellation marker TTL.
+
+    Inputs: none. Output: TTL seconds.
+    """
+    try:
+        return max(_EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS, get_celery_result_expires())
+    except Exception:
+        return _EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS
+
+
+def _export_cancel_redis_client():
+    """Return a Redis client for cancellation markers when configured.
+
+    Inputs: none. Output: Redis client or None.
+    """
+    try:
+        redis_url = str(get_celery_broker_url() or "")
+    except Exception:
+        return None
+    if not redis_url.startswith(("redis://", "rediss://")):
+        return None
+    try:
+        from redis import Redis  # type: ignore[import-not-found]
+    except Exception:
+        return None
+    try:
+        return Redis.from_url(redis_url)
+    except Exception:
+        logger.debug("Unable to create Redis client for export cancellation markers.")
+        return None
+
+
+def mark_export_task_cancel_requested(task_id):
+    """Mark a Celery export task as user-cancelled.
+
+    Inputs: Celery task id. Output: whether the marker was stored.
+    """
+    key = _export_cancel_marker_key(task_id)
+    client = _export_cancel_redis_client()
+    if key is None or client is None:
+        return False
+    try:
+        client.setex(key, _export_cancel_marker_ttl(), b"1")
+        return True
+    except Exception as exc:
+        logger.debug(
+            "Unable to mark export task cancellation for %s: %s",
+            task_id,
+            exc,
+        )
+        return False
+
+
+def export_task_cancel_requested(task_id):
+    """Return whether a Celery export task has a user-cancel marker.
+
+    Inputs: Celery task id. Output: bool.
+    """
+    key = _export_cancel_marker_key(task_id)
+    client = _export_cancel_redis_client()
+    if key is None or client is None:
+        return False
+    try:
+        return bool(client.get(key))
+    except Exception as exc:
+        logger.debug(
+            "Unable to read export task cancellation marker for %s: %s",
+            task_id,
+            exc,
+        )
+        return False
+
+
+def _cancelled_task_result(owner_token=None):
+    """Return a stable cancelled export task payload.
+
+    Inputs: optional owner token. Output: result dict.
+    """
+    result = {
+        "state": "CANCELLED",
+        "outputs": None,
+        "error": _EXPORT_CANCELLED_MESSAGE,
+    }
+    if owner_token:
+        result["owner_token"] = owner_token
+    return result
 
 
 def _public_script_message(message: str | None) -> str | None:
@@ -73,6 +195,8 @@ def _public_failure_message(exc: Exception) -> str:
 
     Inputs: `exc`. Output: `str`.
     """
+    if isinstance(exc, OMEExportTaskError):
+        return exc.public_message or _GENERIC_OME_TIFF_EXPORT_ERROR
     if isinstance(exc, IMSExportTaskError):
         return exc.public_message or _GENERIC_EXPORT_ERROR
     return _GENERIC_EXPORT_ERROR
@@ -89,7 +213,7 @@ def _build_failure_meta(exc: Exception) -> dict[str, Any]:
         "exc_module": exc.__class__.__module__,
         "exc_message": public_message,
         "error": public_message,
-        "public_error": isinstance(exc, IMSExportTaskError),
+        "public_error": isinstance(exc, (IMSExportTaskError, OMEExportTaskError)),
     }
 
 
@@ -278,7 +402,14 @@ def _run_script_via_omero_cli(
     env = os.environ.copy()
     # Keep OMERO CLI session/cache files on the managed plugin tmp volume
     # rather than a shared world-writable system temp directory.
-    omero_userdir = get_plugin_tmp_dir("omero-cli", create=True)
+    omero_userdir_root = get_plugin_tmp_dir("omero-cli", create=True)
+    omero_userdir = Path(
+        tempfile.mkdtemp(
+            prefix=f"ims-export-{int(image_id)}-",
+            dir=omero_userdir_root,
+        )
+    )
+    os.chmod(omero_userdir, 0o700)
     session_dir = omero_userdir / "sessions"
     tmp_dir = omero_userdir / "tmp"
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -298,20 +429,25 @@ def _run_script_via_omero_cli(
                 {
                     "script_id": int(script_id),
                     "cli_pid": int(pid),
+                    "cli_pgid": int(pid),
                     "elapsed": float(elapsed),
                 },
             )
         except Exception:
             logger.exception("Failed to update IMS export CLI process metadata")
 
-    result = process_utils.run_streaming(
-        cmd,
-        timeout=EXPORT_TIMEOUT + 120,
-        check=False,
-        env=env,
-        tick_interval=1.0,
-        on_tick=_report_cli_tick,
-    )
+    try:
+        result = process_utils.run_streaming(
+            cmd,
+            timeout=EXPORT_TIMEOUT + 120,
+            check=False,
+            env=env,
+            tick_interval=1.0,
+            on_tick=_report_cli_tick,
+            start_new_session=True,
+        )
+    finally:
+        shutil.rmtree(omero_userdir, ignore_errors=True)
 
     combined = (
         (result.stdout or "")
@@ -455,8 +591,100 @@ def _open_job_service_connection(host, port, secure=None):
         raise RuntimeError("Failed to open OMERO job-service session.") from e
 
 
+def _open_export_connection(session_key, host, port, secure=None):
+    """Open the configured OMERO connection for background export jobs.
+
+    Inputs: `session_key`, `host`, `port`, `secure`. Output: BlitzGateway.
+    """
+    if use_job_service_session():
+        return _open_job_service_connection(host, port, secure=secure)
+    return _open_session_connection(session_key, host, port, secure=secure)
+
+
+def _update_export_task_state(
+    self,
+    image_id,
+    start_time,
+    status,
+    extra_meta=None,
+    owner_token=None,
+):
+    """Update a Celery export task state with shared metadata.
+
+    Inputs: task instance, image id, start time, status, metadata. Output: None.
+    """
+    meta = {
+        "image_id": image_id,
+        "status": status,
+        "started_at": start_time,
+    }
+    if owner_token:
+        meta["owner_token"] = owner_token
+    if extra_meta:
+        meta.update(extra_meta)
+    self.update_state(state="STARTED", meta=meta)
+
+
+def _ims_export_script_module():
+    """Return the IMS export script helpers only when export work needs them.
+
+    Inputs: none. Output: IMS export script module.
+    """
+    from .omero_scripts import IMS_Export as ims_export_script
+
+    return ims_export_script
+
+
+def _run_ome_tiff_export(conn, image_id, status_callback=None):
+    """Materialize one OMERO image as an OME-TIFF file on the export volume.
+
+    Inputs: OMERO connection, image id, optional status callback. Output: outputs.
+    """
+    image = conn.getObject("Image", image_id)
+    if not image:
+        raise OMEExportTaskError(
+            f"OME-TIFF export image {int(image_id)} not found.",
+            public_message=f"Image {int(image_id)} not found",
+        )
+    ims_export_script = _ims_export_script_module()
+    export_root = ims_export_script._get_export_root(conn)
+    export_name = (
+        ims_export_script._safe_filename(
+            image.getName(),
+            fallback=f"omero_image_{int(image_id)}",
+        )
+        + ".ome.tif"
+    )
+    if status_callback is not None:
+        status_callback("running_export", {"export_name": export_name})
+    export_path = ims_export_script._materialize_ome_tiff_source(
+        conn,
+        image,
+        int(image_id),
+        export_root,
+    )
+    if not export_path:
+        raise OMEExportTaskError(
+            "OME-TIFF export did not produce a file.",
+            public_message="Could not export selected Image as OME-TIFF",
+        )
+    os.chmod(export_path, _DOWNLOADABLE_EXPORT_FILE_MODE)
+    return {
+        "Export_Path": export_path,
+        "Export_Name": export_name,
+    }
+
+
 @app.task(bind=True, name="omero_imaris_connector.run_ims_export_task")
-def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
+def run_ims_export_task(
+    self,
+    image_id,
+    session_key,
+    host,
+    port,
+    secure=None,
+    owner_token=None,
+):
     """An IMS export task.
 
     Inputs: `image_id` OMERO image ID, `session_key`, `host`, `port`, `secure`. Output:
@@ -474,14 +702,14 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         Inputs: `status` (str) status, `extra_meta` (dict[str, Any] | None). Output:
         None.
         """
-        meta = {
-            "image_id": image_id,
-            "status": status,
-            "started_at": start_time,
-        }
-        if extra_meta:
-            meta.update(extra_meta)
-        self.update_state(state="STARTED", meta=meta)
+        _update_export_task_state(
+            self,
+            image_id,
+            start_time,
+            status,
+            extra_meta,
+            owner_token=owner_token,
+        )
 
     try:
         logger.info(
@@ -496,10 +724,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         # Update task state to show we're starting
         _update_task_state("connecting")
 
-        if use_job_service_session():
-            conn = _open_job_service_connection(host, port, secure=secure)
-        else:
-            conn = _open_session_connection(session_key, host, port, secure=secure)
+        conn = _open_export_connection(session_key, host, port, secure=secure)
 
         # Find the export script
         _update_task_state("finding_script")
@@ -541,22 +766,121 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
             self.request.id,
         )
 
-        return {
+        result = {
             "state": normalized_state,
             "outputs": _serialize_outputs(outputs),
             "error": None,
         }
+        if owner_token:
+            result["owner_token"] = owner_token
+        return result
 
     except Exception as exc:
         logger.exception("IMS export task failed: %s", exc)
+        if export_task_cancel_requested(self.request.id):
+            return _cancelled_task_result(owner_token=owner_token)
         failure_meta = _build_failure_meta(exc)
+        if owner_token:
+            failure_meta["owner_token"] = owner_token
         if isinstance(exc, IMSExportTaskError):
-            return {
+            result = {
                 "state": "FAILED",
                 "outputs": None,
                 "error": failure_meta["error"],
                 "public_error": True,
             }
+            if owner_token:
+                result["owner_token"] = owner_token
+            return result
+        self.update_state(state=states.FAILURE, meta=failure_meta)
+        raise
+    finally:
+        if conn:
+            try:
+                conn.close()
+                logger.debug("OMERO connection closed for image_id=%s", image_id)
+            except Exception as e:
+                logger.warning("Error closing OMERO connection: %s", e)
+
+
+@app.task(bind=True, name="omero_imaris_connector.run_ome_tiff_export_task")
+def run_ome_tiff_export_task(
+    self,
+    image_id,
+    session_key,
+    host,
+    port,
+    secure=None,
+    owner_token=None,
+):
+    """An OME-TIFF export task for Imaris File Converter handoff.
+
+    Inputs: `image_id` OMERO image ID, `session_key`, `host`, `port`, `secure`. Output:
+    `dict`.
+    """
+    conn = None
+    start_time = time.time()
+
+    def _update_task_state(
+        status: str, extra_meta: dict[str, Any] | None = None
+    ) -> None:
+        """Update the task state.
+
+        Inputs: `status`, `extra_meta`. Output: None.
+        """
+        _update_export_task_state(
+            self,
+            image_id,
+            start_time,
+            status,
+            extra_meta,
+            owner_token=owner_token,
+        )
+
+    try:
+        logger.info(
+            "OME-TIFF export task starting image_id=%s host=%s port=%s secure=%s task_id=%s",
+            image_id,
+            host,
+            port,
+            secure,
+            self.request.id,
+        )
+        _update_task_state("connecting")
+        conn = _open_export_connection(session_key, host, port, secure=secure)
+        outputs = _run_ome_tiff_export(
+            conn, image_id, status_callback=_update_task_state
+        )
+        logger.info(
+            "OME-TIFF export task completed image_id=%s task_id=%s",
+            image_id,
+            self.request.id,
+        )
+        result = {
+            "state": "FINISHED",
+            "outputs": _serialize_outputs(outputs),
+            "error": None,
+        }
+        if owner_token:
+            result["owner_token"] = owner_token
+        return result
+    except Exception as exc:
+        logger.exception("OME-TIFF export task failed: %s", exc)
+        if export_task_cancel_requested(self.request.id):
+            return _cancelled_task_result(owner_token=owner_token)
+        failure_meta = _build_failure_meta(exc)
+        if owner_token:
+            failure_meta["owner_token"] = owner_token
+        if isinstance(exc, OMEExportTaskError):
+            result = {
+                "state": "FAILED",
+                "outputs": None,
+                "error": failure_meta["error"],
+                "public_error": True,
+            }
+            if owner_token:
+                result["owner_token"] = owner_token
+            return result
         self.update_state(state=states.FAILURE, meta=failure_meta)
         raise
     finally:
