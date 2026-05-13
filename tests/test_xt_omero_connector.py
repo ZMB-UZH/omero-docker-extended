@@ -5118,6 +5118,138 @@ def test_rounded_button_redraw_omits_internal_horizontal_strokes():
     assert button._canvas.lines == []
 
 
+def test_stop_sign_button_uses_antialiased_image_background():
+    """Verify the Stop button uses a smoothed image background.
+
+    Inputs: repository fixtures. Output: fails on aliased stop-button regressions.
+    """
+    module = _load_xt_module()
+
+    class _Canvas:
+        """Canvas fake that records draw operations."""
+
+        def __init__(self):
+            """Create the fake canvas.
+
+            Inputs: none. Output: initializes draw-operation storage.
+            """
+            self.images = []
+            self.polygons = []
+            self.texts = []
+
+        @staticmethod
+        def winfo_width():
+            """Return fake width.
+
+            Inputs: none. Output: int.
+            """
+            return 90
+
+        @staticmethod
+        def winfo_height():
+            """Return fake height.
+
+            Inputs: none. Output: int.
+            """
+            return 34
+
+        @staticmethod
+        def cget(key):
+            """Return fake widget background.
+
+            Inputs: `key`. Output: color string.
+            """
+            return "#f0f0f0" if key == "bg" else ""
+
+        @staticmethod
+        def delete(_tag):
+            """Accept delete calls.
+
+            Inputs: `_tag`. Output: None.
+            """
+
+        def create_image(self, *args, **kwargs):
+            """Record image draw calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.images.append((args, kwargs))
+
+        def create_polygon(self, *args, **kwargs):
+            """Record polygon draw calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.polygons.append((args, kwargs))
+
+        def create_text(self, *args, **kwargs):
+            """Record text draw calls.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.texts.append((args, kwargs))
+
+    created_images = []
+
+    class _PhotoImage:
+        """PhotoImage fake that records pixel writes."""
+
+        def __init__(self, master=None, width=0, height=0):
+            """Create the fake image.
+
+            Inputs: optional master and dimensions. Output: None.
+            """
+            self.master = master
+            self.width = width
+            self.height = height
+            self.put_calls = []
+            created_images.append(self)
+
+        def put(self, *args, **kwargs):
+            """Record pixel writes.
+
+            Inputs: `*args`, `**kwargs`. Output: None.
+            """
+            self.put_calls.append((args, kwargs))
+
+    button = object.__new__(module._StopSignButton)
+    button._canvas = _Canvas()
+    button._bg = "#d93025"
+    button._fg = "#ffffff"
+    button._active_bg = "#b3261e"
+    button._active_fg = "#ffffff"
+    button._font = ("Arial", 9, "bold")
+    button._text = "Stop"
+    button._width = 90
+    button._height = 34
+    button._state = "normal"
+    button._pressed = False
+    button._hover = False
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(
+            module,
+            "tk",
+            types.SimpleNamespace(
+                DISABLED="disabled",
+                NORMAL="normal",
+                NW="nw",
+                PhotoImage=_PhotoImage,
+                TclError=ValueError,
+            ),
+        )
+        module._StopSignButton._redraw(button)
+    finally:
+        monkeypatch.undo()
+
+    assert len(created_images) == 1
+    assert created_images[0].put_calls
+    assert len(button._canvas.images) == 1
+    assert button._canvas.polygons == []
+    assert len(button._canvas.texts) == 1
+
+
 def test_tk_system_colors_are_resolved_before_photoimage_pixels():
     """Verify Tk system colors are converted before PhotoImage pixel output.
 

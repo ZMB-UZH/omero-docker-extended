@@ -12,6 +12,8 @@ repository. Use it before attempting speculative code changes.
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | OMERO converter job fails and Blitz logs `Cannot read configuration: omero.ims.export.dir` | Processor script subprocess did not receive the trusted IMS export environment | Verify the running `omero/processor.py` allowlist contains `OMERO_IMS_EXPORT_DIR` and `CONFIG_omero_managed_dir` |
 | Imaris converter async OME-TIFF export fails with `Image <id> not found` even though OMERO.web browsing shows the image | Background export joined the wrong effective OMERO session or group | Verify the task uses the requester session key before falling back to the job-service session |
+| Imaris converter async OME-TIFF export fails with `Permission denied: '/OMERO/ImarisExports/image_<id>/source'` | The web worker is using the server IMS export root for OME-TIFF staging | Verify OME-TIFF staging is under `${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source` |
+| OMERO.web calls return `403 Forbidden` immediately after a background export starts | A background task hard-closed the joined requester OMERO.web session during cleanup | Verify requester-session export gateways use non-hard close and job-service gateways remain hard-closed |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
 | IMS export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch, missing live Imaris handle, or unverified file-open handoff | Confirm the final IMS handoff reports an exact current-file match or a visible loaded dataset; enable `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY=true` only when testing the optional IcePy bridge |
@@ -166,7 +168,40 @@ Fix:
 
 - prefer the requesting user's OMERO session key for all background Imaris
   connector exports whenever one is available,
-- fall back to the job-service session only if no user session key was provided.
+- fall back to the job-service session only if no user session key was provided,
+- detach joined requester sessions during worker cleanup instead of hard-closing
+  them, because `BlitzGateway.close()` defaults to a hard session kill.
+
+### 6.1. Imaris converter OME-TIFF export failed with permission denied under IMS export root
+
+Observed behavior:
+
+- the `Imaris` converter async OME-TIFF task entered the Celery worker and found
+  the selected Image,
+- `_materialize_ome_tiff_source()` then tried to create
+  `/OMERO/ImarisExports/image_<id>/source`,
+- the OMERO.web worker user could not write there and the task failed with
+  `PermissionError: [Errno 13] Permission denied`,
+- subsequent worker attempts or browser refreshes could return `403 Forbidden`
+  if task cleanup hard-closed the joined requester session.
+
+Root cause:
+
+- `OMERO_IMS_EXPORT_DIR` is the server-side IMS export root used by the OMERO
+  script path,
+- selected Image OME-TIFF staging is a web-worker temporary artifact and must
+  follow the shared plugin temporary-data contract instead,
+- joined requester-session gateways must not be cleaned up with the default
+  hard close because the default OMERO gateway close kills the joined session.
+
+Fix:
+
+- stage selected Image OME-TIFF exports under
+  `${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source`,
+- keep download responses constrained to `OMERO_IMS_EXPORT_DIR` and that exact
+  OME-TIFF staging root,
+- close requester-session task gateways with non-hard cleanup and hard-close
+  only worker-owned job-service sessions.
 
 ### 7. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
 

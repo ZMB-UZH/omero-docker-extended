@@ -3,6 +3,7 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import json
+import shutil
 import sys
 import tempfile
 import types
@@ -17,6 +18,17 @@ class NoProcessorAvailable(Exception):
 
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
+
+
+@pytest.fixture(autouse=True)
+def _clean_test_runtime_root():
+    """Remove generated runtime files around each test.
+
+    Inputs: none. Output: yields for test execution.
+    """
+    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
+    yield
+    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
 
 
 def _install_omero_stub() -> None:
@@ -1099,6 +1111,52 @@ def test_build_download_response_prefers_safe_export_path(
             assert "safe export.ims" in response["Content-Disposition"]
         finally:
             response.close()
+
+
+def test_build_download_response_allows_ome_tiff_staging_root_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify OME-TIFF downloads are limited to the connector staging root.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on download-root regressions.
+    """
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_root = Path(tmpdir)
+        ims_export_root = tmp_root / "ims-exports"
+        staging_root = tmp_root / "tmp" / "omero-imaris-connector" / "ome-tiff-source"
+        staging_file = staging_root / "image_12" / "source" / "demo.ome.tif"
+        outside_file = tmp_root / "tmp" / "omero-imaris-connector" / "demo.ome.tif"
+        staging_file.parent.mkdir(parents=True)
+        outside_file.parent.mkdir(parents=True, exist_ok=True)
+        staging_file.write_bytes(b"ome")
+        outside_file.write_bytes(b"outside")
+        monkeypatch.setattr(imaris_service, "EXPORT_ROOT", str(ims_export_root))
+        monkeypatch.setattr(
+            imaris_service,
+            "get_ome_tiff_staging_root",
+            lambda create=False: staging_root,
+        )
+
+        response = imaris_service._build_download_response(
+            object(),
+            {"Export_Path": str(staging_file), "Export_Name": "../demo.ome.tif"},
+        )
+        outside = imaris_service._build_download_response(
+            object(),
+            {"Export_Path": str(outside_file), "Export_Name": "outside.ome.tif"},
+        )
+
+        try:
+            assert response["Content-Type"] == "application/octet-stream"
+            assert b"".join(response.streaming_content) == b"ome"
+            assert "demo.ome.tif" in response["Content-Disposition"]
+        finally:
+            response.close()
+        assert outside.status_code == 500
+        assert outside.content.decode("utf-8") == "IMS export path is invalid."
 
 
 def test_build_download_response_falls_back_to_file_annotation(

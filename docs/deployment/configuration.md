@@ -312,7 +312,9 @@ ${OMERO_TMP_PATH}/
 ├── omeroweb-omp-plugin/
 │   └── jobs/         # filename metadata job state
 └── omero-imaris-connector/
-    └── jobs/         # Imaris export process state
+    ├── jobs/            # Imaris export process state
+    ├── omero-cli/       # isolated OMERO CLI session/cache dirs
+    └── ome-tiff-source/ # OME-TIFF staging for Imaris converter handoff
 
 # server bootstrap temp namespace (separate from plugin namespaces)
 ${OMERO_CLI_USER}/

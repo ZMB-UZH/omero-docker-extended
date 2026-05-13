@@ -11,6 +11,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TMP_PATH_ENV = "OMERO_TMP_PATH"
+_PLUGIN_PACKAGE_PREFIXES = ("omeroweb_", "omero_")
+_NON_PLUGIN_PACKAGES = {"omero_plugin_common"}
 
 
 def _validate_path_component(value: str, *, label: str) -> str:
@@ -50,13 +52,18 @@ def get_tmp_base() -> Path:
     return Path(value)
 
 
-def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Path:
+def get_plugin_tmp_dir(
+    subdir: str | None = None,
+    *,
+    create: bool = False,
+    plugin: str | None = None,
+) -> Path:
     """Return a caller-namespaced temp path, creating it only on request.
 
-    Inputs: `subdir`, `create`. Output: `Path`.
+    Inputs: `subdir`, `create`, optional plugin namespace. Output: `Path`.
     """
     caller_plugin = _validate_path_component(
-        _detect_caller_plugin(),
+        plugin or _detect_caller_plugin(),
         label="plugin temporary directory",
     )
     path = get_tmp_base() / caller_plugin
@@ -68,7 +75,7 @@ def get_plugin_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Pa
 
 
 def _detect_caller_plugin() -> str:
-    """Return the hyphenated top-level ``omeroweb_*`` caller package.
+    """Return the hyphenated top-level OMERO plugin caller package.
 
     Inputs: none. Output: `str`.
     """
@@ -77,6 +84,8 @@ def _detect_caller_plugin() -> str:
         if module is None:
             continue
         top_package = module.__name__.split(".")[0]
-        if top_package.startswith("omeroweb_"):
+        if top_package in _NON_PLUGIN_PACKAGES:
+            continue
+        if top_package.startswith(_PLUGIN_PACKAGE_PREFIXES):
             return top_package.replace("_", "-")
     return "unknown"

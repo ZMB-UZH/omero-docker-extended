@@ -43,14 +43,17 @@ omero_imaris_connector/tasks.py   (Celery task: IMS or OME-TIFF export)
     ├─► _open_session_connection()    (join user's OMERO session)
     │   or _open_job_service_connection() (dedicated service account)
     │
-    ├─► _find_script_id()            (locate IMS_Export.py in OMERO script service)
+    ├─► IMS path: _find_script_id() and _run_script_via_omero_cli()
     │
-    └─► _run_script_via_omero_cli()  (`omero script launch` inside `omeroweb`)
+    └─► Imaris path: stage OME-TIFF under
+        ${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source
 ```
 
 The Celery worker runs inside the `omeroweb` container, managed by supervisord alongside OMERO.web.
 It must run as the OMERO.web runtime user, not as root, because the OMERO CLI
 refuses root execution to avoid corrupting OMERO user-directory permissions.
+Requester-session background tasks detach on cleanup so the OMERO.web browser
+session remains valid. Job-service tasks own their session and may hard-close it.
 
 ## Required runtime dependencies
 

@@ -10,7 +10,12 @@ from typing import Any, Callable, Iterator, TypedDict
 
 from omero.rtypes import rint
 
-from .config import get_export_poll_interval, get_export_timeout
+from .config import (
+    get_connector_tmp_dir,
+    get_export_poll_interval,
+    get_export_timeout,
+    get_ome_tiff_staging_root,
+)
 from omero_plugin_common.env_utils import (
     ENV_FILE_OMERO_CELERY,
     ENV_FILE_OMEROSERVER,
@@ -18,7 +23,6 @@ from omero_plugin_common.env_utils import (
     get_float_env,
     get_int_env,
 )
-from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +37,7 @@ EXPORT_ROOT = get_env(
 )
 EXPORT_TIMEOUT = get_export_timeout()
 EXPORT_POLL_INTERVAL = get_export_poll_interval()
-PROCESS_JOB_DIR = str(get_plugin_tmp_dir("jobs"))
+PROCESS_JOB_DIR = str(get_connector_tmp_dir("jobs"))
 SCRIPT_START_TIMEOUT = get_int_env(
     "OMERO_IMS_SCRIPT_START_TIMEOUT",
     env_file=ENV_FILE_OMERO_CELERY,
@@ -1247,6 +1251,51 @@ def _bool_from_request(value):
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _safe_download_roots() -> Iterator[str]:
+    """Yield real filesystem roots allowed for connector download responses.
+
+    Inputs: none. Output: iterator of real path strings.
+    """
+    roots = [EXPORT_ROOT]
+    try:
+        roots.append(str(get_ome_tiff_staging_root(create=False)))
+    except Exception:
+        logger.debug("OME-TIFF staging root unavailable for download validation.")
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            real_root = os.path.realpath(str(root))
+        except (TypeError, ValueError, OSError):
+            continue
+        if real_root in seen:
+            continue
+        seen.add(real_root)
+        yield real_root
+
+
+def _path_is_under_root(path_value: str, root_value: str) -> bool:
+    """Return whether a real path is under a real root.
+
+    Inputs: path and root. Output: bool.
+    """
+    return path_value == root_value or path_value.startswith(root_value + os.sep)
+
+
+def _safe_download_path(path_value):
+    """Return a normalized path only when it is in an allowed download root.
+
+    Inputs: export path. Output: normalized path string or None.
+    """
+    try:
+        export_path = os.path.realpath(str(path_value))
+    except (TypeError, ValueError, OSError):
+        return None
+    for root in _safe_download_roots():
+        if _path_is_under_root(export_path, root):
+            return export_path
+    return None
+
+
 def _build_download_response(conn, outputs, export_name=None):
     """Build the download response.
 
@@ -1266,15 +1315,14 @@ def _build_download_response(conn, outputs, export_name=None):
     )
 
     if export_path:
-        export_root = os.path.realpath(EXPORT_ROOT)
-        export_path = os.path.realpath(export_path)
-        if export_path.startswith(export_root + os.sep) and os.path.exists(export_path):
+        safe_export_path = _safe_download_path(export_path)
+        if safe_export_path and os.path.isfile(safe_export_path):
             filename = _sanitize_filename(
-                export_name or os.path.basename(export_path),
-                fallback=os.path.basename(export_path),
+                export_name or os.path.basename(safe_export_path),
+                fallback=os.path.basename(safe_export_path),
             )
             response = FileResponse(
-                open(export_path, "rb"),
+                open(safe_export_path, "rb"),
                 as_attachment=True,
                 filename=filename,
             )
@@ -1289,7 +1337,8 @@ def _build_download_response(conn, outputs, export_name=None):
     if not export_path:
         logger.error("IMS export outputs missing Export_Path and File_Annotation_Id")
         return HttpResponse("IMS export did not return a file path.", status=500)
-    if export_path and not os.path.exists(export_path):
+    safe_export_path = _safe_download_path(export_path)
+    if safe_export_path and not os.path.exists(safe_export_path):
         logger.error("IMS export path not found on server: %s", export_path)
         return HttpResponse("IMS export file not found on server.", status=404)
     logger.error("IMS export path invalid: %s", export_path)

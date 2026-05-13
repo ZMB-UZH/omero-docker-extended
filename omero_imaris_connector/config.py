@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from omero_plugin_common.env_utils import (
     ENV_FILE_OMERO_CELERY,
     get_bool_env,
@@ -6,6 +8,9 @@ from omero_plugin_common.env_utils import (
     get_int_env,
     require_env,
 )
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+
+IMARIS_CONNECTOR_TMP_NAMESPACE = "omero-imaris-connector"
 
 
 def use_celery() -> bool:
@@ -140,3 +145,23 @@ def get_export_poll_interval() -> float:
     return get_float_env(
         "OMERO_IMS_EXPORT_POLL_INTERVAL", env_file=ENV_FILE_OMERO_CELERY
     )
+
+
+def get_connector_tmp_dir(subdir: str | None = None, *, create: bool = False) -> Path:
+    """Return the connector-owned temporary directory.
+
+    Inputs: optional `subdir` and `create`. Output: `Path`.
+    """
+    return get_plugin_tmp_dir(
+        subdir,
+        create=create,
+        plugin=IMARIS_CONNECTOR_TMP_NAMESPACE,
+    )
+
+
+def get_ome_tiff_staging_root(*, create: bool = False) -> Path:
+    """Return the connector-owned OME-TIFF staging root.
+
+    Inputs: optional `create`. Output: `Path`.
+    """
+    return get_connector_tmp_dir("ome-tiff-source", create=create)
