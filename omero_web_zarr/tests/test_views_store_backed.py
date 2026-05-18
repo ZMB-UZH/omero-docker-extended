@@ -198,6 +198,70 @@ def _write_store(root):
     chunk_path.write_bytes(b"chunk-bytes")
 
 
+def _write_multiscale_store(root):
+    """Write a synthetic two-level OME-Zarr store.
+
+    Inputs: `root`. Output: None.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+    attrs = {
+        "multiscales": [
+            {
+                "version": "0.4",
+                "axes": [
+                    {"name": "t", "type": "time"},
+                    {"name": "c", "type": "channel"},
+                    {"name": "z", "type": "space"},
+                    {"name": "y", "type": "space"},
+                    {"name": "x", "type": "space"},
+                ],
+                "datasets": [
+                    {
+                        "path": "native",
+                        "coordinateTransformations": [
+                            {"type": "scale", "scale": [1, 1, 1, 1, 1]}
+                        ],
+                    },
+                    {
+                        "path": "overview",
+                        "coordinateTransformations": [
+                            {"type": "scale", "scale": [1, 1, 1, 2, 2]}
+                        ],
+                    },
+                ],
+            }
+        ],
+        "omero": {"channels": []},
+    }
+    (root / ".zattrs").write_text(json.dumps(attrs), encoding="utf-8")
+
+    for name, shape, payload in (
+        ("native", [1, 1, 1, 4, 4], b"native-chunk"),
+        ("overview", [1, 1, 1, 2, 2], b"overview-chunk"),
+    ):
+        level = root / name
+        level.mkdir()
+        (level / ".zarray").write_text(
+            json.dumps(
+                {
+                    "shape": shape,
+                    "chunks": shape,
+                    "dtype": "|u1",
+                    "compressor": None,
+                    "filters": None,
+                    "order": "C",
+                    "dimension_separator": "/",
+                    "zarr_format": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+        chunk_path = level / "0" / "0" / "0" / "0" / "0"
+        chunk_path.parent.mkdir(parents=True, exist_ok=True)
+        chunk_path.write_bytes(payload)
+
+
 def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
     """Verify store backed JSON response returns canonical metadata result shape.
 
@@ -346,6 +410,66 @@ def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
 
     assert response.status_code == 200
     assert json.loads(response.content) == root_payload
+
+
+def test_preview_routes_serve_store_backed_multiscale_levels_without_remapping(
+    tmp_path,
+):
+    """Verify preview routes expose every store-backed multiscale level.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in preview
+    route handling for non-numeric native multiscale dataset paths.
+    """
+    _write_multiscale_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=46, name="synthetic.ome.zarr")
+    conn = _FakeConn(image)
+
+    zattrs_response = views.preview_image_zattrs.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/preview/image/46.zarr/.zattrs"),
+        46,
+        conn=conn,
+    )
+    zattrs = json.loads(zattrs_response.content)
+
+    assert [item["path"] for item in zattrs["multiscales"][0]["datasets"]] == [
+        "native",
+        "overview",
+    ]
+    assert zattrs["multiscales"][0]["datasets"][1]["coordinateTransformations"] == [
+        {"type": "scale", "scale": [1, 1, 1, 2, 2]}
+    ]
+
+    native_zarray = views.preview_image_store_path.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/preview/image/46.zarr/native/.zarray"),
+        46,
+        store_path="native/.zarray",
+        conn=conn,
+    )
+    overview_zarray = views.preview_image_store_path.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/preview/image/46.zarr/overview/.zarray"),
+        46,
+        store_path="overview/.zarray",
+        conn=conn,
+    )
+
+    assert json.loads(native_zarray.content)["shape"] == [1, 1, 1, 4, 4]
+    assert json.loads(overview_zarray.content)["shape"] == [1, 1, 1, 2, 2]
+
+    native_chunk = views.preview_image_store_path.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/preview/image/46.zarr/native/0/0/0/0/0"),
+        46,
+        store_path="native/0/0/0/0/0",
+        conn=conn,
+    )
+    overview_chunk = views.preview_image_store_path.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/preview/image/46.zarr/overview/0/0/0/0/0"),
+        46,
+        store_path="overview/0/0/0/0/0",
+        conn=conn,
+    )
+
+    assert native_chunk.content == b"native-chunk"
+    assert overview_chunk.content == b"overview-chunk"
 
 
 def test_get_chunk_shape_preserves_yx_order_for_non_pyramid_images():

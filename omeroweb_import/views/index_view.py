@@ -48,6 +48,7 @@ from .core_functions import (
     _normalize_sem_edx_settings,
     _normalize_upload_relative_path,
     _prepare_uploaded_job_for_request_path_import,
+    _public_import_job_text_list,
     _refresh_job_status,
     _resolve_omero_host_port,
     _resolve_staged_target_path,
@@ -1652,7 +1653,7 @@ def _import_step(request, job_id, conn):
             "status": job.get("status"),
             "imported_bytes": job.get("imported_bytes", 0),
             "total_bytes": job.get("total_bytes", 0),
-            "messages": job.get("messages", []),
+            "messages": _public_import_job_text_list(job.get("messages", [])),
         }
     )
 
@@ -1859,8 +1860,11 @@ def job_status(request, job_id, conn=None, _url=None, **kwargs):
             "imported_bytes": job.get("imported_bytes", 0),
             "import_progress_bytes": job.get("import_progress_bytes", 0),
             "total_bytes": job.get("total_bytes", 0),
-            "errors": job.get("errors", []),
-            "messages": job.get("messages", []),
+            "errors": _public_import_job_text_list(
+                job.get("errors", []),
+                errors_only=True,
+            ),
+            "messages": _public_import_job_text_list(job.get("messages", [])),
             "compatibility_status": job.get("compatibility_status"),
             "compatibility_enabled": bool(job.get("compatibility_enabled", True)),
             "compatibility_checked": sum(

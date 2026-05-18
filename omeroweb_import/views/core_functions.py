@@ -249,6 +249,7 @@ JOB_LOCK_RETRY_SLEEP_MAX_SECONDS = 0.2
 ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
 ORPHAN_SUFFIX_LENGTH = 6
 ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
+_IMPORT_FAILURE_PREFIX = messages.job_error_with_path("", "")
 
 # --------------------------------------------------------------------------
 # JOB SERVICE ACCOUNT (for async background jobs across plugins)
@@ -3365,6 +3366,78 @@ def _sanitize_cli_output_for_logging(text: str) -> str:
     )
 
 
+def _collapse_public_import_text(text) -> str:
+    """Return single-line text for user-facing import job state.
+
+    Inputs: `text`. Output: `str`.
+    """
+    return " ".join(str(text or "").split())
+
+
+def _public_import_path(path) -> str:
+    """Return a browser-safe import path label.
+
+    Inputs: `path`. Output: `str`.
+    """
+    raw_text = _collapse_public_import_text(path).replace("\\", "/")
+    is_absolute = raw_text.startswith("/") or (len(raw_text) > 1 and raw_text[1] == ":")
+    text = raw_text.strip("/")
+    if not text:
+        return ""
+    if is_absolute:
+        return PurePosixPath(text).name
+    return str(PurePosixPath(text))
+
+
+def _public_import_error_text(message) -> str:
+    """Return browser-safe import error text.
+
+    Inputs: `message`. Output: `str`.
+    """
+    text = _collapse_public_import_text(message)
+    if text.startswith(_IMPORT_FAILURE_PREFIX):
+        return text.split(" - ", 1)[0]
+    if text:
+        return errors.import_failed()
+    return ""
+
+
+def _public_job_error_with_path(path, _detail=None) -> str:
+    """Return a browser-safe import failure message for a path.
+
+    Inputs: `path`, `_detail`. Output: `str`.
+    """
+    return messages.job_error_with_path(_public_import_path(path), "")
+
+
+def _public_import_job_text(message) -> str:
+    """Return safe browser-visible import job message text.
+
+    Inputs: `message`. Output: `str`.
+    """
+    text = _collapse_public_import_text(message)
+    if text.startswith(_IMPORT_FAILURE_PREFIX):
+        return _public_import_error_text(text)
+    return text
+
+
+def _public_import_job_text_list(values, *, errors_only: bool = False) -> list[str]:
+    """Return safe browser-visible import job text values.
+
+    Inputs: `values`, `errors_only` (bool). Output: `list`.
+    """
+    public_values = []
+    for value in values or []:
+        public_value = (
+            _public_import_error_text(value)
+            if errors_only
+            else _public_import_job_text(value)
+        )
+        if public_value:
+            public_values.append(public_value)
+    return public_values
+
+
 def _summarize_cli_error_text(
     stdout: str,
     stderr: str,
@@ -5249,6 +5322,7 @@ def _append_job_message(job: dict, message: str):
 
     Inputs: `job` (dict), `message` (str). Output: None.
     """
+    message = _public_import_job_text(message)
     if not message:
         return
     job.setdefault("messages", [])
@@ -7543,7 +7617,7 @@ def _import_zarr_via_cli(
         error_msg = (
             "Missing username or group name for managed-repository Zarr staging."
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7560,7 +7634,7 @@ def _import_zarr_via_cli(
         error_msg = (
             "Zarr source is not supported by the installed omero-cli-zarr runtime."
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7573,7 +7647,7 @@ def _import_zarr_via_cli(
         }
     if native_plan.validation_error:
         error_msg = native_plan.validation_error
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7595,7 +7669,7 @@ def _import_zarr_via_cli(
         error_msg = (
             prepare_error or "Failed to prepare a server-readable Zarr staging copy."
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7652,7 +7726,7 @@ def _import_zarr_via_cli(
             sanitize_log_value(rel_path),
             _sanitize_cli_output_for_logging(error_msg[:500]),
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7748,7 +7822,7 @@ def _import_zarr_via_cli(
             group_name=group_name,
             managed_path=managed_zarr,
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7769,7 +7843,7 @@ def _import_zarr_via_cli(
             group_name=group_name,
             managed_path=managed_zarr,
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7802,7 +7876,7 @@ def _import_zarr_via_cli(
         error_msg = "Native Zarr import failed metadata finalization: " + "; ".join(
             str(error) for error in metadata_errors[:3]
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -7837,7 +7911,7 @@ def _import_zarr_via_cli(
             "Native Zarr import failed post-import render verification: "
             + "; ".join(str(error) for error in render_errors[:3])
         )
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
@@ -8262,25 +8336,27 @@ def _import_job_entry(
     staged_path = entry.get("staged_path") or rel_path
     file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
     if staged_error:
+        job_error = _public_job_error_with_path(rel_path, staged_error)
         return {
             "covered_indexes": covered_indexes,
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
             "entry_error": staged_error,
-            "job_error": staged_error,
-            "job_message": staged_error,
+            "job_error": job_error,
+            "job_message": job_error,
         }
     if not file_path.exists():
         error_msg = errors.missing_staged_file(rel_path)
+        job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "covered_indexes": covered_indexes,
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
             "entry_error": error_msg,
-            "job_error": error_msg,
-            "job_message": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
         }
 
     # Allow callers (SEM-EDX) to override dataset selection.
@@ -8402,7 +8478,7 @@ def _import_job_entry(
     ) as background_session_key:
         if not background_session_key:
             error_msg = errors.missing_omero_connection_details()
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            job_error = _public_job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
@@ -8429,7 +8505,7 @@ def _import_job_entry(
                     "Native OME-Zarr routing metadata is missing for the "
                     "staged .zarr store."
                 )
-                job_error = messages.job_error_with_path(rel_path, error_msg)
+                job_error = _public_job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
                     "covered_indexes": covered_indexes,
@@ -8442,7 +8518,7 @@ def _import_job_entry(
                 }
             if native_plan.validation_error:
                 error_msg = native_plan.validation_error
-                job_error = messages.job_error_with_path(rel_path, error_msg)
+                job_error = _public_job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
                     "covered_indexes": covered_indexes,
@@ -8478,7 +8554,7 @@ def _import_job_entry(
             and zarr_scan_status == "error"
         ):
             error_msg = zarr_scan_details or "Compatibility check failed."
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            job_error = _public_job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
@@ -8498,7 +8574,7 @@ def _import_job_entry(
             and native_plan.validation_error
         ):
             error_msg = native_plan.validation_error
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            job_error = _public_job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
@@ -8514,7 +8590,7 @@ def _import_job_entry(
                 zarr_scan_details
                 or "Bio-Formats did not recognize the staged .zarr store."
             )
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            job_error = _public_job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
@@ -8610,7 +8686,7 @@ def _import_job_entry(
                 error_msg = _classify_import_failure(
                     str(stdout).strip(), str(stderr).strip()
                 )
-                job_error = messages.job_error_with_path(rel_path, error_msg)
+                job_error = _public_job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
                     "covered_indexes": covered_indexes,
@@ -8630,7 +8706,7 @@ def _import_job_entry(
                 summarize_process_output(stdout, stderr),
             )
             error_msg = errors.import_no_objects_created()
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            job_error = _public_job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
@@ -8763,7 +8839,7 @@ def _process_import_job(job_id: str):
             port = job.get("port")
             if not username or not host or not port:
                 job["status"] = "error"
-                job["errors"].append(errors.missing_omero_connection_details())
+                _append_job_error(job, errors.missing_omero_connection_details())
                 _save_job(job)
                 return
 
@@ -8793,7 +8869,7 @@ def _process_import_job(job_id: str):
             upload_root = _get_upload_root() / job_id
             if not upload_root.exists():
                 job["status"] = "error"
-                job["errors"].append(errors.upload_folder_missing_on_server())
+                _append_job_error(job, errors.upload_folder_missing_on_server())
                 _save_job(job)
                 return
 

@@ -100,6 +100,10 @@ arrays with `compressor: null`, `order: "C"`, and `dimension_separator: "/"`;
 chunk responses are the raw C-order bytes of the declared dtype. For
 store-backed images, `.zattrs`, `.zgroup`, `.zarray`, and chunk payloads are
 forwarded from the managed store unchanged.
+Vizarr receives the complete `multiscales[0].datasets` list, creates one
+browser-side Zarr loader per dataset, and Viv selects the requested pyramid
+level from the current viewport zoom. The OMERO preview endpoint does not
+resample, collapse, or rename pyramid levels.
 
 The plugin also decorates OMERO.web channel metadata from Zarr display metadata where available, including:
 
