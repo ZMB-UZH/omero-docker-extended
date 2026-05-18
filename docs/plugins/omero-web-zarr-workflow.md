@@ -84,6 +84,16 @@ classify the source by file name, extension, MIME type, or storage layout; it
 normalizes only root-relative `source=` values against the browser's actual
 public origin and redirects app assets to the pinned local Vizarr static tree or
 the validator upstream origin instead of proxying every asset through Gunicorn.
+The vendored Vizarr build keeps Viv's multiscale tile selection and switches
+raw intensity tile rendering to linear interpolation, matching OMERO.iviewer's
+interpolated display while still fetching native level `0` chunks at high zoom.
+
+For regular OMERO images that are not store-backed, the runtime NGFF endpoint
+uses the OMERO pixel pyramid when one exists. If OMERO has no pyramid for the
+image, the endpoint keeps level `0` at native resolution and advertises
+generated XY overview levels whose chunks are computed on demand from bounded
+primary-pixels tile reads. This keeps Vizarr on its normal multiscale WebGL path
+without file-name, extension, or storage-layout heuristics.
 
 ## Download workflow
 

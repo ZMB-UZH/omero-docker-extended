@@ -83,6 +83,10 @@ The `/zarr/vizarr/` and `/zarr/validator/` routes serve a thin OMERO-hosted laun
 - that pinned Vizarr build uses Viv/deck.gl WebGL rendering and Zarrita
   client-side Zarr access in the browser; OMERO.web does not server-render the
   viewer;
+- the vendored build keeps Viv's normal multiscale tile selection but renders
+  raw intensity tiles with linear interpolation, matching OMERO.iviewer when
+  interpolation is enabled instead of magnifying native pixels with hard
+  nearest-neighbor blocks;
 - the validator shell is fetched from its upstream static app origin and
   cached briefly in-process;
 - a `<base href="...">` tag is injected so the browser resolves the app's relative assets correctly;
@@ -97,9 +101,13 @@ This keeps launcher behavior generic while avoiding worker starvation from synch
 
 For non-store-backed images, the synthetic NGFF endpoint advertises Zarr v2
 arrays with `compressor: null`, `order: "C"`, and `dimension_separator: "/"`;
-chunk responses are the raw C-order bytes of the declared dtype. For
-store-backed images, `.zattrs`, `.zgroup`, `.zarray`, and chunk payloads are
-forwarded from the managed store unchanged.
+chunk responses are the raw C-order bytes of the declared dtype. If OMERO
+already provides a pixel pyramid, those levels are exposed directly. If OMERO
+does not provide a pyramid, the endpoint advertises bounded generated overview
+levels and builds those chunks on demand from primary-pixels tile reads; level
+`0` remains the native pixel data. For store-backed images, `.zattrs`,
+`.zgroup`, `.zarray`, and chunk payloads are forwarded from the managed store
+unchanged.
 Vizarr receives the complete `multiscales[0].datasets` list, creates one
 browser-side Zarr loader per dataset, and Viv selects the requested pyramid
 level from the current viewport zoom. The OMERO preview endpoint does not

@@ -1,0 +1,100 @@
+diff --git a/src/ZarrPixelSource.ts b/src/ZarrPixelSource.ts
+index 115a4b0..3a0fba8 100644
+--- a/src/ZarrPixelSource.ts
++++ b/src/ZarrPixelSource.ts
+@@ -168,6 +168,6 @@ function buildZarrSelection(
+   }
+   selection[labels.indexOf(X_AXIS_NAME)] = slices.x;
+   selection[labels.indexOf(Y_AXIS_NAME)] = slices.y;
+-  if (RGBA_CHANNEL_AXIS_NAME in labels) {
++  if (labels.includes(RGBA_CHANNEL_AXIS_NAME)) {
+     selection[labels.indexOf(RGBA_CHANNEL_AXIS_NAME)] = zarr.slice(null);
+   }
+   return selection;
+diff --git a/src/layers/viv-layers.ts b/src/layers/viv-layers.ts
+index 2959bbe..b26f5b4 100644
+--- a/src/layers/viv-layers.ts
++++ b/src/layers/viv-layers.ts
+@@ -1,8 +1,13 @@
+ /**
+  * Type-complete interfaces to Viv's core layers
+  *
+  * @module
+  */
+-import { ImageLayer as BaseImageLayer, MultiscaleImageLayer as BaseMultiscaleImageLayer } from "@hms-dbmi/viv";
+-
++import {
++  BitmapLayer,
++  ImageLayer as BaseImageLayer,
++  MultiscaleImageLayer as BaseMultiscaleImageLayer,
++  XRLayer,
++} from "@hms-dbmi/viv";
++
+ import type { Layer } from "deck.gl";
+@@ -25,5 +30,57 @@ export interface MultiscaleImageLayerProps extends BaseLayerProps {
+ export interface MultiscaleImageLayerProps extends BaseLayerProps {
+   loader: Array<ZarrPixelSource>;
+ }
+-
++
++function getImageSize(source: ZarrPixelSource) {
++  const lastIndex = source.shape.length - 1;
++  const width = source.shape[source.labels.indexOf("c") === lastIndex ? lastIndex - 1 : lastIndex];
++  const height = source.shape[source.labels.indexOf("c") === lastIndex ? lastIndex - 2 : lastIndex - 1];
++  return { height, width };
++}
++
++function isInterleaved(shape: number[]) {
++  const lastDimSize = shape[shape.length - 1];
++  return lastDimSize === 3 || lastDimSize === 4;
++}
++
++function renderSubLayersWithLinearIntensityInterpolation(props: any) {
++  const {
++    bbox: { left, top, right, bottom },
++    index: { x, y, z },
++  } = props.tile;
++  const { data, id, loader } = props;
++  if ([left, bottom, right, top].some((value) => value < 0) || !data) {
++    return null;
++  }
++
++  const base = loader[0];
++  const { height, width } = getImageSize(base);
++  const bounds = [
++    left,
++    data.height < base.tileSize ? height : bottom,
++    data.width < base.tileSize ? width : right,
++    top,
++  ];
++
++  if (isInterleaved(base.shape)) {
++    const { photometricInterpretation = 2 } = base.meta ?? {};
++    return new (BitmapLayer as any)(props, {
++      image: data,
++      photometricInterpretation,
++      bounds,
++      id: `tile-sub-layer-${bounds}-${id}`,
++      tileId: { x, y, z },
++      extensions: [],
++    });
++  }
++
++  return new (XRLayer as any)(props, {
++    channelData: data,
++    bounds,
++    id: `tile-sub-layer-${bounds}-${id}`,
++    tileId: { x, y, z },
++    interpolation: "linear",
++  });
++}
++
+ // @ts-expect-error - Viv does faithfully implement the Layer interface, just not captured in the types
+@@ -35,6 +92,6 @@ export class MultiscaleImageLayer
+   // biome-ignore lint/complexity/noUselessConstructor: Necessary for TypeScript to get the types
+   constructor(props: MultiscaleImageLayerProps) {
+     // @ts-expect-error - Viv's types are not correct
+-    super(props);
++    super({ ...props, renderSubLayers: renderSubLayersWithLinearIntensityInterpolation });
+   }
+ }

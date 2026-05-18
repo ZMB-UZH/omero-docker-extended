@@ -113,11 +113,24 @@ def _install_django_stubs() -> None:
     Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
     """
     django_module = types.ModuleType("django")
+    django_module.__path__ = []
+    django_core = types.ModuleType("django.core")
+    django_core.__path__ = []
+    django_core_cache = types.ModuleType("django.core.cache")
+    django_core_cache.cache = types.SimpleNamespace(
+        get=lambda *_args, **_kwargs: None,
+        set=lambda *_args, **_kwargs: None,
+        delete=lambda *_args, **_kwargs: None,
+    )
     django_http = types.ModuleType("django.http")
     django_http.JsonResponse = _JsonResponse
     django_http.HttpResponse = _HttpResponse
     django_http.HttpResponseBadRequest = _HttpResponseBadRequest
+    django_module.core = django_core
+    django_core.cache = django_core_cache
     sys.modules["django"] = django_module
+    sys.modules["django.core"] = django_core
+    sys.modules["django.core.cache"] = django_core_cache
     sys.modules["django.http"] = django_http
 
 

@@ -1410,7 +1410,8 @@ def get_safe_image_tile_size(image, conn=None):
         width, height = rendering_engine.getTileSize()
         return int(width), int(height)
     except Exception as exc:
-        if not is_known_tile_size_failure(exc):
+        missing_tile_method = isinstance(exc, AttributeError)
+        if not missing_tile_method and not is_known_tile_size_failure(exc):
             raise
         width, height = _fallback_tile_size(image, conn=conn)
         LOGGER.warning(
