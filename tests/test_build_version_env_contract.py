@@ -305,6 +305,18 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             '"/tmp/omero_web_zarr/static/omero_web_zarr/vendor/vizarr/${VIZARR_COMMIT}"',
             dockerfile_text,
         )
+        self.assertIn("OMEROWEB_ZARR_STATIC_SOURCE=", dockerfile_text)
+        self.assertIn("OMEROWEB_ZARR_STATIC_TARGET=", dockerfile_text)
+        self.assertIn('rm -rf "${OMEROWEB_ZARR_STATIC_TARGET}"', dockerfile_text)
+        self.assertIn('mkdir -p "${OMEROWEB_ZARR_STATIC_TARGET}"', dockerfile_text)
+        self.assertIn(
+            'cp -a "${OMEROWEB_ZARR_STATIC_SOURCE}/." "${OMEROWEB_ZARR_STATIC_TARGET}/"',
+            dockerfile_text,
+        )
+        self.assertIn(
+            'chown -R omero-web:omero-web "${OMEROWEB_ZARR_STATIC_TARGET}"',
+            dockerfile_text,
+        )
 
     def test_installation_script_generated_dot_env_includes_server_env_file(
         self,
