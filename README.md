@@ -367,41 +367,53 @@ bash installation/cleanup_build_containers.sh
 
 ### Storage quotas
 
-Storage quotas are enforced with ext4 project quotas. Admin Tools stores one
-quota per OMERO group; the host `omero-quota-enforcer` systemd path/timer maps
-that group directory in the configured `ManagedRepository` to an ext4 project
-and applies the block limit. Everything under that group directory counts
-toward the same quota. Data stored in another managed repository, on another
-filesystem, or through in-place import paths is outside this quota domain and
-is not counted by these limits.
+Storage quotas use Linux ext4 project quotas, not Docker volume limits. Admin
+Tools writes quota values to
+`${OMERO_USER_DATA_PATH}/.admin-tools/group-quotas.json`; the host
+`omero-quota-enforcer` systemd path/timer reads that file, assigns one ext4
+project ID to each existing
+`${OMERO_USER_DATA_PATH}/ManagedRepository/<group>` directory with `chattr`,
+and applies identical soft and hard block limits with `setquota -P`.
 
-The Quotas tab stays disabled until the OMERO user-data filesystem is `ext4`,
-has the ext4 `project` feature, and is mounted with `prjquota`. This is a
-storage change: schedule downtime, take a backup or snapshot first, and never
-force an unmount. If OMERO data is on `/` and the `project` feature is not
-already enabled, there is no safe host-agnostic SSH command that can unmount
-the running root filesystem to change it; use rescue media or move OMERO data
-to a separate ext4 filesystem. Quotas are enforced for normal OMERO/container
-writes; privileged host-root processes can still bypass Linux quota limits.
+Only the configured `ManagedRepository` under the current `OMERO_USER_DATA_PATH`
+is counted. Bytes stored in another managed repository, on another filesystem,
+or through in-place import paths are outside this quota domain and are not part
+of the limit calculation.
 
-On Debian 13 or Ubuntu 26.04 LTS, run this from the OMERO Docker Extended
-installation directory:
+Enablement is supported only on Debian 13 and Ubuntu 26.04 LTS, and only when
+the filesystem containing `OMERO_USER_DATA_PATH` is ext4. Before changing the
+host filesystem, take a backup or storage snapshot and plan downtime. If the
+data filesystem is mounted, the helper may stop the Compose stack, unmount or
+remount that filesystem, then start the stack again. It never uses forced or
+lazy unmounts. If `OMERO_USER_DATA_PATH` is on `/` and the ext4 `project`
+feature is not already enabled, the helper refuses to continue; enabling that
+feature for a running root filesystem requires rescue media or a separate ext4
+data filesystem.
+
+Run the same command on Debian 13 and Ubuntu 26.04 LTS from the OMERO Docker
+Extended installation directory:
 
 ```bash
 sudo scripts/enable-storage-quotas.sh --yes-i-have-a-backup
 ```
 
-The installer asks the same question during setup and defaults to `no`.
+The installer asks the same question during setup and defaults to `no`. The
+helper verifies `/etc/os-release`, installs required host packages, runs a
+disposable ext4 project-quota write-denial test, parses
+`installation_paths.env`, resolves `OMERO_USER_DATA_PATH`, verifies the active
+filesystem type, and matches exactly one active `/etc/fstab` entry. It appends
+`prjquota` only when neither `prjquota` nor `project` is already present, keeps
+all other mount options unchanged, and creates a timestamped `/etc/fstab`
+backup only when it edits that file. If project quotas are already active, it
+installs or refreshes only the enforcer units and does not tune, unmount,
+remount, or rewrite the filesystem.
 
-The command verifies the OS, installs the required packages, runs a disposable
-ext4 project-quota self-test, discovers `OMERO_USER_DATA_PATH`, confirms the
-target filesystem is ext4, adds the project-quota mount option to exactly one
-matching `/etc/fstab` entry without duplicating or replacing existing options,
-and installs the quota enforcer. If project quotas are already active, it does
-not tune, unmount, remount, or rewrite that filesystem. It refuses non-ext4
-filesystems, ambiguous or missing fstab entries, nested mounts, unsupported
-device references, and root filesystems that still need the ext4 `project`
-feature enabled.
+The helper exits before filesystem mutation for non-ext4 filesystems, missing
+or duplicate `/etc/fstab` matches, unsupported fstab source types, nested
+mounts below the data path, failed disposable quota self-tests, failed Compose
+preflight checks, and root filesystems that still need the ext4 `project`
+feature. Linux project quotas are enforced for normal OMERO and container
+writes; privileged host-root writes can bypass quota accounting.
 
 ### Reverse proxy
 
