@@ -287,6 +287,25 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             dockerfile_text,
         )
 
+    def test_omeroweb_dockerfile_installs_single_pinned_vizarr_build(self) -> None:
+        """Verify omeroweb dockerfile installs single pinned Vizarr build.
+
+        Inputs: repository fixtures. Output: fails on regressions in Vizarr static install guard.
+        """
+        dockerfile_text = self.read_text("docker/omero-web.Dockerfile")
+
+        self.assertIn("COPY third_party /tmp/third_party", dockerfile_text)
+        self.assertIn("find /tmp/third_party -mindepth 1 -maxdepth 1", dockerfile_text)
+        self.assertIn("Expected exactly one vendored Vizarr build", dockerfile_text)
+        self.assertIn("^[0-9a-f]{40}$", dockerfile_text)
+        self.assertIn(
+            "Vendored Vizarr build must not contain source maps", dockerfile_text
+        )
+        self.assertIn(
+            '"/tmp/omero_web_zarr/static/omero_web_zarr/vendor/vizarr/${VIZARR_COMMIT}"',
+            dockerfile_text,
+        )
+
     def test_installation_script_generated_dot_env_includes_server_env_file(
         self,
     ) -> None:

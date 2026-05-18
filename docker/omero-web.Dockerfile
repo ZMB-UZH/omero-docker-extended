@@ -168,6 +168,7 @@ COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
 COPY omero_imaris_connector /tmp/omero_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
 COPY omero_web_zarr /tmp/omero_web_zarr
+COPY third_party /tmp/third_party
 COPY docs/help /tmp/omero_plugin_help_docs
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 
@@ -183,6 +184,28 @@ RUN set -euo pipefail; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
     : "${OME_ZARR_PY_VERSION:?OME_ZARR_PY_VERSION must be provided from env/omeroserver.env}"; \
     : "${BIOFORMATS2RAW_VERSION:?BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env}"; \
+    mapfile -t VIZARR_BUILD_DIRS < <(find /tmp/third_party -mindepth 1 -maxdepth 1 -type d -name 'vizarr-*' | sort); \
+    if [[ "${#VIZARR_BUILD_DIRS[@]}" -ne 1 ]]; then \
+        echo "ERROR: Expected exactly one vendored Vizarr build under /tmp/third_party, found ${#VIZARR_BUILD_DIRS[@]}" >&2; \
+        exit 1; \
+    fi; \
+    VIZARR_BUILD_DIR="${VIZARR_BUILD_DIRS[0]}"; \
+    VIZARR_COMMIT="${VIZARR_BUILD_DIR##*/vizarr-}"; \
+    if [[ ! "${VIZARR_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then \
+        echo "ERROR: Vendored Vizarr directory must be named vizarr-<40-hex-commit>: ${VIZARR_BUILD_DIR}" >&2; \
+        exit 1; \
+    fi; \
+    if [[ ! -f "${VIZARR_BUILD_DIR}/dist/index.html" ]]; then \
+        echo "ERROR: Vendored Vizarr build is missing dist/index.html: ${VIZARR_BUILD_DIR}" >&2; \
+        exit 1; \
+    fi; \
+    if find "${VIZARR_BUILD_DIR}/dist" -type f -name '*.map' | grep -q .; then \
+        echo "ERROR: Vendored Vizarr build must not contain source maps: ${VIZARR_BUILD_DIR}" >&2; \
+        exit 1; \
+    fi; \
+    rm -rf /tmp/omero_web_zarr/static/omero_web_zarr/vendor/vizarr; \
+    mkdir -p /tmp/omero_web_zarr/static/omero_web_zarr/vendor/vizarr; \
+    cp -a "${VIZARR_BUILD_DIR}/dist" "/tmp/omero_web_zarr/static/omero_web_zarr/vendor/vizarr/${VIZARR_COMMIT}"; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
@@ -218,7 +241,16 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omero_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
-    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_tools /tmp/omeroweb_admin_tools /tmp/omero_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+    rm -rf \
+        /tmp/omeroweb_omp_plugin \
+        /tmp/omero_web_zarr \
+        /tmp/omeroweb_import \
+        /tmp/omeroweb_tools \
+        /tmp/omeroweb_admin_tools \
+        /tmp/omero_imaris_connector \
+        /tmp/omero_plugin_common \
+        /tmp/omero_plugin_help_docs \
+        /tmp/third_party
 
 RUN set -euo pipefail; \
     archive="/tmp/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip"; \

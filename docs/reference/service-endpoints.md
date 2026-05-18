@@ -114,7 +114,8 @@ Notes:
 - Preview routes forward the same NGFF payload as the raw routes under a separate URL namespace for OMERO.web launcher integration.
 - For non-store-backed images, preview routes delegate to the synthetic OMERO-backed NGFF responses.
 - Store-backed rendering and download routes apply only to images whose `externalInfo.lsid` resolves to a managed-repository Zarr store.
-- `/vizarr/` and `/validator/` serve a thin launcher shell from OMERO.web, normalize root-relative `source=` parameters against the browser's public origin, and redirect static assets to the upstream app origin instead of proxying every asset request through Gunicorn.
+- `/vizarr/` serves the pinned third-party vendored production build of `hms-dbmi/vizarr` commit `be7ccc260e848a2829873c8746f32b4f43599435`; the viewer remains client-side and hardware-accelerated through Vizarr's Viv/deck.gl WebGL stack.
+- `/vizarr/` and `/validator/` serve a thin launcher shell from OMERO.web, pass `source=` through without file-type inference, normalize root-relative sources against the browser's public origin, and redirect static assets to the pinned local Vizarr static tree or validator upstream origin instead of proxying every asset request through Gunicorn.
 
 ### Admin Tools Plugin
 

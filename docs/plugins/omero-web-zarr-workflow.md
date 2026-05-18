@@ -75,7 +75,15 @@ For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO R
 
 The OMERO.web right-panel preview page remains store-backed only. If an image is not store-backed, that page redirects back to the standard OMERO.web metadata preview. `Open with Vizarr` still targets the preview NGFF endpoint for all images, which is why the non-store-backed preview route delegation above matters.
 
-The `/zarr/vizarr/` and `/zarr/validator/` launchers are thin OMERO-hosted shells. They normalize root-relative `source=` parameters against the browser's actual public origin and redirect static app assets to the upstream app origin instead of proxying every asset through Gunicorn.
+The `/zarr/vizarr/` and `/zarr/validator/` launchers are thin OMERO-hosted
+shells. Vizarr is pinned to the third-party vendored production build of
+`hms-dbmi/vizarr` commit `be7ccc260e848a2829873c8746f32b4f43599435`, runs
+Viv/deck.gl WebGL rendering and Zarrita Zarr reads in the browser, and receives
+only authenticated Zarr endpoint URLs from OMERO.web. The launcher does not
+classify the source by file name, extension, MIME type, or storage layout; it
+normalizes only root-relative `source=` values against the browser's actual
+public origin and redirects app assets to the pinned local Vizarr static tree or
+the validator upstream origin instead of proxying every asset through Gunicorn.
 
 ## Download workflow
 
