@@ -351,8 +351,12 @@ RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
-    cp -a "${SITE_PACKAGES}/omero_web_zarr/static/omero_web_zarr/." /opt/omero/web/OMERO.web/var/static/omero_web_zarr/; \
-    chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var/static/omero_web_zarr
+    OMEROWEB_ZARR_STATIC_SOURCE="${SITE_PACKAGES}/omero_web_zarr/static/omero_web_zarr"; \
+    OMEROWEB_ZARR_STATIC_TARGET="/opt/omero/web/OMERO.web/var/static/omero_web_zarr"; \
+    rm -rf "${OMEROWEB_ZARR_STATIC_TARGET}"; \
+    mkdir -p "${OMEROWEB_ZARR_STATIC_TARGET}"; \
+    cp -a "${OMEROWEB_ZARR_STATIC_SOURCE}/." "${OMEROWEB_ZARR_STATIC_TARGET}/"; \
+    chown -R omero-web:omero-web "${OMEROWEB_ZARR_STATIC_TARGET}"
 
 # Backup static files so they can be restored if the host bind-mount shadows var/
 # -------------------------------------------------------------------------------
