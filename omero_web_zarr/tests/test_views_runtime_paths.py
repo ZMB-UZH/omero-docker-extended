@@ -1,7 +1,6 @@
 import json
 import os
 import warnings
-from pathlib import Path
 from types import SimpleNamespace
 
 import django
@@ -37,6 +36,14 @@ def _response_text(response) -> str:
     Inputs: `response` response object. Output: `str`.
     """
     return b"".join(response.streaming_content).decode("utf-8")
+
+
+def _response_bytes(response) -> bytes:
+    """Return the streaming response bytes.
+
+    Inputs: `response` response object. Output: bytes.
+    """
+    return b"".join(response.streaming_content)
 
 
 def test_lower_pyramid_plane_requires_image_connection(monkeypatch) -> None:
@@ -138,6 +145,37 @@ class _FakePrimaryPixels:
         _x, _y, width, height = tile
         dtype = views.PIXEL_TYPES[self._pixel_type]
         return np.full((height, width), self._tile_value, dtype=dtype)
+
+
+class _PatternPrimaryPixels(_FakePrimaryPixels):
+    """Test double for deterministic tile payloads."""
+
+    def __init__(self, pixel_type, array):
+        """Create `_PatternPrimaryPixels` with `pixel_type` and `array`.
+
+        Inputs: `pixel_type`, `array`. Output: None.
+        """
+        super().__init__(pixel_type)
+        self._array = np.asarray(array, dtype=views.PIXEL_TYPES[pixel_type])
+
+    def getTile(self, _z, _c, _t, tile):
+        """Return a deterministic crop for `_PatternPrimaryPixels`.
+
+        Inputs: `_z`, `_c`, `_t`, `tile`. Output: array crop.
+        """
+        x, y, width, height = tile
+        return self._array[y : y + height, x : x + width]
+
+
+class _BytePrimaryPixels(_PatternPrimaryPixels):
+    """Test double for byte-returning primary pixels."""
+
+    def getTile(self, _z, _c, _t, tile):
+        """Return deterministic raw bytes for `_BytePrimaryPixels`.
+
+        Inputs: `_z`, `_c`, `_t`, `tile`. Output: bytes.
+        """
+        return super().getTile(_z, _c, _t, tile).tobytes(order="C")
 
 
 class _FakeChannel:
@@ -425,24 +463,6 @@ class _FakeImage:
         return self._pixel_sizes.get("z")
 
 
-class _FakeChunkWriter:
-    """Test double for fake chunk writer."""
-
-    def __init__(self, root):
-        """Create `_FakeChunkWriter` with `root`.
-
-        Inputs: `root`. Output: None.
-        """
-        self.root = Path(root)
-
-    def __setitem__(self, _key, value):
-        """The item for the requested key.
-
-        Inputs: `_key`, `value`. Output: None.
-        """
-        (self.root / "0.0").write_bytes(value.tobytes())
-
-
 def test_index_and_image_zgroup_return_non_store_defaults(monkeypatch):
     """Verify index and image zgroup return non store defaults.
 
@@ -619,11 +639,6 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
     )
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
     monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
-    monkeypatch.setattr(
-        views,
-        "open_compat_array",
-        lambda path, **_kwargs: _FakeChunkWriter(path),
-    )
 
     response = views.image_chunk.__wrapped__(
         RequestFactory().get("/zarr/v0.4/image/41.zarr/0/1/1"),
@@ -635,7 +650,7 @@ def test_image_chunk_pads_edge_tiles_for_non_store_pyramids(monkeypatch):
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == "attachment; filename=0.0.0.1.1"
-    assert len(b"".join(response.streaming_content)) == 4
+    assert _response_bytes(response) == b"\x09\x00\x00\x00"
 
 
 def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch):
@@ -661,11 +676,6 @@ def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch)
     )
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
     monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
-    monkeypatch.setattr(
-        views,
-        "open_compat_array",
-        lambda path, **_kwargs: _FakeChunkWriter(path),
-    )
 
     response = views.image_chunk.__wrapped__(
         RequestFactory().get("/zarr/v0.4/image/42.zarr/1/0/0"),
@@ -676,34 +686,85 @@ def test_image_chunk_uses_raw_pixels_store_for_lower_pyramid_levels(monkeypatch)
     )
 
     assert response.status_code == 200
+    assert _response_bytes(response) == raw_tile
     assert ("setPixelsId", 17) in raw_store.calls
     assert ("setResolutionLevel", 0) in raw_store.calls
     assert raw_store.closed is True
 
 
-def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
-    """Verify image chunk builds runtime chunk indices for tcz axes.
+def test_image_chunk_returns_declared_uncompressed_runtime_bytes(monkeypatch):
+    """Verify image chunk returns declared uncompressed runtime bytes.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk builds runtime chunk indices for tcz axes.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk returns declared uncompressed runtime bytes.
     """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint16
+    )
+    pattern = np.array([[1, 257, 513], [1025, 2049, 4097]], dtype=np.uint16)
+    image = _FakeImage(
+        image_id=45,
+        size_y=2,
+        size_x=3,
+        primary_pixels=_PatternPrimaryPixels(pixel_type, pattern),
+    )
+    monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
 
-    class _RichFakeChunkWriter:
-        """Test double for rich fake chunk writer."""
+    zarray_response = views.image_zarray.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/45.zarr/0/.zarray"),
+        45,
+        0,
+        conn=_FakeConn(image),
+    )
+    chunk_response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/45.zarr/0/0/0"),
+        45,
+        0,
+        "0/0",
+        conn=_FakeConn(image),
+    )
 
-        def __init__(self, root):
-            """Create `_RichFakeChunkWriter` with `root`.
+    zarray = json.loads(zarray_response.content)
+    assert zarray["dtype"] == np.dtype(np.uint16).str
+    assert zarray["compressor"] is None
+    assert zarray["dimension_separator"] == "/"
+    assert chunk_response["Content-Length"] == str(pattern.nbytes)
+    assert _response_bytes(chunk_response) == pattern.tobytes(order="C")
 
-            Inputs: `root`. Output: None.
-            """
-            self.root = Path(root)
 
-        def __setitem__(self, _key, value):
-            """The item for the requested key.
+def test_image_chunk_accepts_byte_returning_primary_pixels(monkeypatch):
+    """Verify image chunk accepts byte-returning primary pixels.
 
-            Inputs: `_key`, `value`. Output: None.
-            """
-            (self.root / "0.0.0.0.0").write_bytes(value.tobytes())
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk accepts byte-returning primary pixels.
+    """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint8
+    )
+    pattern = np.array([[3, 4], [5, 6]], dtype=np.uint8)
+    image = _FakeImage(
+        image_id=46,
+        size_y=2,
+        size_x=2,
+        primary_pixels=_BytePrimaryPixels(pixel_type, pattern),
+    )
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
 
+    response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/46.zarr/0/0/0"),
+        46,
+        0,
+        "0/0",
+        conn=_FakeConn(image),
+    )
+
+    assert _response_bytes(response) == pattern.tobytes(order="C")
+
+
+def test_image_chunk_builds_runtime_chunk_name_for_tcz_axes(monkeypatch):
+    """Verify image chunk builds runtime chunk name for tcz axes.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in image chunk builds runtime chunk name.
+    """
     image = _FakeImage(
         image_id=44,
         size_z=1,
@@ -724,11 +785,6 @@ def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
     )
     monkeypatch.setattr(views, "get_image_shape", lambda image, level: (1, 1, 1, 2, 2))
     monkeypatch.setattr(views, "get_chunk_shape", lambda image: (1, 1, 1, 2, 2))
-    monkeypatch.setattr(
-        views,
-        "open_compat_array",
-        lambda path, **_kwargs: _RichFakeChunkWriter(path),
-    )
 
     response = views.image_chunk.__wrapped__(
         RequestFactory().get("/zarr/v0.4/image/44.zarr/0/0/0/0/0/0"),
@@ -740,6 +796,7 @@ def test_image_chunk_builds_runtime_chunk_indices_for_tcz_axes(monkeypatch):
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == "attachment; filename=0.0.0.0.0"
+    assert _response_bytes(response) == b"\x05\x05\x05\x05"
 
 
 def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
@@ -900,7 +957,7 @@ def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
         lambda *_args: (_ for _ in ()).throw(requests.RequestException("boom")),
     )
 
-    response = views.apps(RequestFactory().get("/zarr/vizarr/"), "vizarr", "")
+    response = views.apps(RequestFactory().get("/zarr/validator/"), "validator", "")
     redirect = views.apps(
         RequestFactory().get("/zarr/validator/assets/app.js"),
         "validator",

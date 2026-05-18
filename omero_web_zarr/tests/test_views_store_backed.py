@@ -1,9 +1,12 @@
 import os
 import json
+import re
 import warnings
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import django
 import numpy as np
@@ -26,6 +29,8 @@ warnings.filterwarnings(
 django.setup()
 
 from omero_web_zarr import views
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _response_text(response) -> str:
@@ -648,48 +653,206 @@ def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(
     assert target_path.exists() is False
 
 
-def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
-    """Verify apps serves base injected shell and redirects assets.
+def test_apps_serves_pinned_local_vizarr_shell_and_redirects_assets(monkeypatch):
+    """Verify apps serves pinned local Vizarr shell and redirects assets.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apps serves base injected shell and redirects assets.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apps serves pinned local vizarr shell and redirects assets.
     """
-
-    class _FakeResponse:
-        """Test double for fake response."""
-
-        text = "<html><head></head><body>vizarr</body></html>"
-
-        @staticmethod
-        def raise_for_status():
-            """Raise the configured HTTP error for this fake response.
-
-            Inputs: caller provides no extra arguments. Output: runs the fake behavior described above.
-            """
-            return None
-
+    views._read_local_app_shell.cache_clear()
     views._fetch_remote_app_shell.cache_clear()
-    monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
+    monkeypatch.setattr(
+        views.requests,
+        "get",
+        lambda *_args, **_kwargs: pytest.fail("Vizarr shell must be local"),
+    )
 
     shell_request = RequestFactory().get(
         "/zarr/vizarr/", {"source": "/zarr/v0.4/image/9.zarr"}
     )
     shell_response = views.apps(shell_request, "vizarr", "")
     shell_html = _response_text(shell_response)
+    base_url = views._APP_BASE_URLS["vizarr"]
 
     assert shell_response.status_code == 200
-    assert '<base href="https://hms-dbmi.github.io/vizarr/">' in shell_html
+    assert re.fullmatch(r"[0-9a-f]{40}", views.VIZARR_UPSTREAM_COMMIT)
+    assert base_url.endswith(
+        f"omero_web_zarr/vendor/vizarr/{views.VIZARR_UPSTREAM_COMMIT}/"
+    )
+    assert f'<base href="{base_url}">' in shell_html
+    assert "https://hms-dbmi.github.io/vizarr/" not in shell_html
     assert "window.location.origin" in shell_html
     assert "history.replaceState" in shell_html
     assert shell_response["Cache-Control"] == "private, max-age=300"
 
-    asset_request = RequestFactory().get("/zarr/vizarr/static/index.js")
-    asset_response = views.apps(asset_request, "vizarr", "static/index.js")
+    script_match = re.search(r'<script[^>]+src="\./([^"]+\.js)"', shell_html)
+    assert script_match is not None
+    script_name = script_match.group(1)
+
+    asset_request = RequestFactory().get(f"/zarr/vizarr/{script_name}")
+    asset_response = views.apps(asset_request, "vizarr", script_name)
 
     assert asset_response.status_code == 302
-    assert (
-        asset_response["Location"]
-        == "https://hms-dbmi.github.io/vizarr/static/index.js"
+    assert asset_response["Location"] == f"{base_url}{script_name}"
+
+
+def test_vizarr_static_pin_has_single_current_build():
+    """Verify Vizarr static pin has single current build.
+
+    Inputs: repository files. Output: fails on stale or duplicate Vizarr bundles.
+    """
+    vendor_root = REPO_ROOT / "third_party"
+    commit_dirs = sorted(
+        path.name.removeprefix("vizarr-")
+        for path in vendor_root.glob("vizarr-*")
+        if path.is_dir()
     )
+
+    assert len(commit_dirs) == 1
+    assert re.fullmatch(r"[0-9a-f]{40}", commit_dirs[0])
+    assert commit_dirs == [views.VIZARR_UPSTREAM_COMMIT]
+
+    package_static_root = REPO_ROOT / "omero_web_zarr/static/omero_web_zarr/vendor"
+    assert not package_static_root.exists()
+
+    build_root = vendor_root / f"vizarr-{views.VIZARR_UPSTREAM_COMMIT}" / "dist"
+    filenames = {path.name for path in build_root.iterdir() if path.is_file()}
+    assert "index.html" in filenames
+    assert any(name.startswith("index-") and name.endswith(".js") for name in filenames)
+    assert any(
+        name.startswith("vizarr-") and name.endswith(".js") for name in filenames
+    )
+    assert not any(name.endswith(".map") for name in filenames)
+    assert not any(
+        "sourceMappingURL" in path.read_text(encoding="utf-8")
+        for path in build_root.glob("*.js")
+    )
+
+    index_html = (build_root / "index.html").read_text(encoding="utf-8")
+    assert "https://hms-dbmi.github.io/vizarr/" not in index_html
+    assert "v0.3" not in index_html
+
+
+def test_local_app_static_helpers_cover_runtime_packaging_edges(monkeypatch):
+    """Verify local app static helpers cover runtime packaging edges.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in local Vizarr static helper path resolution.
+    """
+    monkeypatch.setattr(views, "static", lambda static_path: "https://cdn.invalid/app/")
+    assert views._local_static_url("unused") == "https://cdn.invalid/app/"
+
+    monkeypatch.setattr(views, "static", lambda static_path: "static/app/")
+    assert views._local_static_url("unused") == "/static/app/"
+
+    package_asset = views._local_app_shell_path("omero_web_zarr/openwith.js")
+    assert package_asset.is_file()
+
+    invalid_asset = views._local_app_shell_path(
+        f"{views._VIZARR_STATIC_PREFIX}../index.html"
+    )
+    assert invalid_asset == (
+        Path(views.__file__).resolve().parent
+        / "static"
+        / f"{views._VIZARR_STATIC_PREFIX}../index.html"
+    )
+
+    missing_asset = views._local_app_shell_path(
+        f"{views._VIZARR_STATIC_PREFIX}missing.html"
+    )
+    assert missing_asset == (
+        Path(views.__file__).resolve().parent
+        / "static"
+        / f"{views._VIZARR_STATIC_PREFIX}missing.html"
+    )
+
+
+def test_vizarr_vendor_discovery_requires_one_valid_build(monkeypatch, tmp_path):
+    """Verify Vizarr vendor discovery accepts one valid build and rejects none.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in Vizarr vendor discovery.
+    """
+    source_root = tmp_path / "source"
+    package_root = tmp_path / "package"
+    source_module = source_root / "omero_web_zarr" / "views.py"
+    package_module = package_root / "omero_web_zarr" / "views.py"
+    source_module.parent.mkdir(parents=True)
+    package_module.parent.mkdir(parents=True)
+    source_module.touch()
+    package_module.touch()
+
+    monkeypatch.setattr(views, "__file__", str(source_module))
+    assert views._source_tree_vizarr_dist_dir() is None
+
+    commit = "a" * 40
+    source_dist = source_root / "third_party" / f"vizarr-{commit}" / "dist"
+    source_dist.mkdir(parents=True)
+    (source_dist / "index.html").write_text("<html></html>", encoding="utf-8")
+    assert views._source_tree_vizarr_dist_dir() == source_dist
+
+    package_static_dir = (
+        package_module.parent
+        / "static"
+        / "omero_web_zarr"
+        / "vendor"
+        / "vizarr"
+        / commit
+    )
+    package_static_dir.mkdir(parents=True)
+    (package_static_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setattr(views, "__file__", str(package_module))
+    assert views._package_vizarr_static_dir() == package_static_dir
+
+
+def test_vizarr_vendor_commit_prefers_package_and_fails_when_missing(
+    monkeypatch, tmp_path
+):
+    """Verify Vizarr vendor commit discovery order and failure mode.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in Vizarr vendor commit discovery.
+    """
+    commit = "b" * 40
+    package_static_dir = tmp_path / commit
+    package_static_dir.mkdir()
+
+    monkeypatch.setattr(views, "_package_vizarr_static_dir", lambda: package_static_dir)
+    monkeypatch.setattr(
+        views,
+        "_source_tree_vizarr_dist_dir",
+        lambda: pytest.fail("packaged Vizarr build should be preferred"),
+    )
+    assert views._vizarr_vendor_commit() == commit
+
+    monkeypatch.setattr(views, "_package_vizarr_static_dir", lambda: None)
+    monkeypatch.setattr(views, "_source_tree_vizarr_dist_dir", lambda: None)
+    with pytest.raises(RuntimeError, match="Exactly one pinned vendored Vizarr build"):
+        views._vizarr_vendor_commit()
+
+
+def test_apps_fetches_remote_validator_shell(monkeypatch):
+    """Verify apps fetches remote validator shell.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apps fetches remote validator shell.
+    """
+
+    class _FakeResponse:
+        """Test double for fake response."""
+
+        text = "<html><head></head><body>validator</body></html>"
+
+        @staticmethod
+        def raise_for_status():
+            """Raise the configured HTTP error for this fake response.
+
+            Inputs: caller provides no extra arguments. Output: None.
+            """
+            return None
+
+    views._fetch_remote_app_shell.cache_clear()
+    monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
+
+    response = views.apps(RequestFactory().get("/zarr/validator/"), "validator", "")
+    html = _response_text(response)
+
+    assert '<base href="https://ome.github.io/ome-ngff-validator/">' in html
 
 
 def test_inject_launcher_head_replaces_existing_base_tag():
@@ -709,10 +872,10 @@ def test_inject_launcher_head_replaces_existing_base_tag():
     assert "window.location.origin" in updated
 
 
-def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
-    """Verify build app launch URL quotes root relative source.
+def test_build_app_launch_url_preserves_vizarr_source_variants(monkeypatch):
+    """Verify build app launch URL preserves Vizarr source variants.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build app launch URL quotes root relative source.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build app launch URL preserves Vizarr source variants.
     """
     monkeypatch.setattr(
         views,
@@ -720,9 +883,24 @@ def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
         lambda name, kwargs=None: f"/zarr/{kwargs['app']}/",
     )
 
-    url = views._build_app_launch_url("validator", "/zarr/v0.4/image/1101.zarr")
+    sources = (
+        "/zarr/v0.4/image/1101.zarr",
+        "https://example.org/data/sample.ome.zarr",
+        "https://example.org/data/sample.ome.zarr?token=a=b&profile=rgb#frag",
+        "ome-tiff://https://example.org/data/sample.ome.tif?series=0&channel=1",
+        "ref://https://example.org/data/reference.json?key=a+b&space=x y",
+    )
 
-    assert url == "/zarr/validator/?source=/zarr/v0.4/image/1101.zarr"
+    for source in sources:
+        launch_url = views._build_app_launch_url("vizarr", source)
+        parsed = urlsplit(launch_url)
+
+        assert parsed.path == "/zarr/vizarr/"
+        assert parse_qs(parsed.query) == {"source": [source]}
+
+    assert "%26profile%3Drgb%23frag" in views._build_app_launch_url(
+        "vizarr", sources[2]
+    )
 
 
 def test_store_backed_views_cover_missing_paths_and_preview_routes(

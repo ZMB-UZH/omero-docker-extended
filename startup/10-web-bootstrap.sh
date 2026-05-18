@@ -579,6 +579,15 @@ sync_static_assets() {
         echo "[web-bootstrap] ERROR: Vizarr static asset missing after static sync: ${static_dir}/omero_web_zarr/openwith.js" >&2
         exit 1
     fi
+
+    vizarr_vendor_dir="${static_dir}/omero_web_zarr/vendor/vizarr"
+    vizarr_index_count="$(
+        find "${vizarr_vendor_dir}" -mindepth 2 -maxdepth 2 -type f -name index.html 2>/dev/null | wc -l
+    )"
+    if [[ "${vizarr_index_count}" -ne 1 ]]; then
+        echo "[web-bootstrap] ERROR: expected exactly one pinned Vizarr static app under ${vizarr_vendor_dir}, found ${vizarr_index_count}" >&2
+        exit 1
+    fi
 }
 
 sync_static_assets

@@ -1,7 +1,6 @@
 import io
 import json
 import logging
-import os
 import re
 import tempfile
 import time
@@ -25,6 +24,7 @@ from django.http import (
     StreamingHttpResponse,
 )
 from django.shortcuts import redirect, render
+from django.templatetags.static import static
 from django.urls import reverse
 
 from omero.model.enums import PixelsTypedouble
@@ -49,7 +49,6 @@ from .utils import sanitize_download_basename
 from .utils import marshal_axes
 from .utils import marshal_axes_v3
 from .utils import is_store_metadata_path
-from .utils import open_compat_array
 from .utils import resolve_image_backing_zarr_store
 from .utils import resolve_local_zarr_file
 
@@ -92,9 +91,85 @@ class _UnlinkOnCloseFile:
             self._path.unlink(missing_ok=True)
 
 
+def _local_static_url(static_path):
+    """Return a stable app base URL for package static assets.
+
+    Inputs: `static_path`. Output: URL string.
+    """
+    static_url = static(static_path)
+    parsed = urlsplit(static_url)
+    if parsed.scheme or parsed.netloc or static_url.startswith("/"):
+        return static_url
+    return f"/{static_url}"
+
+
+def _source_tree_vizarr_dist_dir():
+    """Return the single source-tree Vizarr dist directory when present.
+
+    Inputs: no caller arguments. Output: `Path` or `None`.
+    """
+    third_party_root = Path(__file__).resolve().parents[1] / "third_party"
+    candidates = sorted(
+        path
+        for path in third_party_root.glob("vizarr-*")
+        if path.is_dir()
+        and re.fullmatch(r"vizarr-[0-9a-f]{40}", path.name)
+        and (path / "dist" / "index.html").is_file()
+    )
+    if len(candidates) == 1:
+        return candidates[0] / "dist"
+    return None
+
+
+def _package_vizarr_static_dir():
+    """Return the single packaged Vizarr static directory when present.
+
+    Inputs: no caller arguments. Output: `Path` or `None`.
+    """
+    static_root = (
+        Path(__file__).resolve().parent
+        / "static"
+        / "omero_web_zarr"
+        / "vendor"
+        / "vizarr"
+    )
+    candidates = sorted(
+        path
+        for path in static_root.glob("*")
+        if path.is_dir()
+        and re.fullmatch(r"[0-9a-f]{40}", path.name)
+        and (path / "index.html").is_file()
+    )
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _vizarr_vendor_commit():
+    """Return the pinned vendored Vizarr commit from package or source files.
+
+    Inputs: no caller arguments. Output: commit hash string. Raises: RuntimeError
+    when the vendored build is missing or ambiguous.
+    """
+    package_static_dir = _package_vizarr_static_dir()
+    if package_static_dir is not None:
+        return package_static_dir.name
+
+    source_dist_dir = _source_tree_vizarr_dist_dir()
+    if source_dist_dir is not None:
+        return source_dist_dir.parent.name.removeprefix("vizarr-")
+
+    raise RuntimeError("Exactly one pinned vendored Vizarr build is required")
+
+
+VIZARR_UPSTREAM_COMMIT = _vizarr_vendor_commit()
+_VIZARR_STATIC_PREFIX = f"omero_web_zarr/vendor/vizarr/{VIZARR_UPSTREAM_COMMIT}/"
 _APP_BASE_URLS = {
-    "vizarr": "https://hms-dbmi.github.io/vizarr/",
+    "vizarr": _local_static_url(_VIZARR_STATIC_PREFIX),
     "validator": "https://ome.github.io/ome-ngff-validator/",
+}
+_LOCAL_APP_SHELLS = {
+    "vizarr": _VIZARR_STATIC_PREFIX + "index.html",
 }
 _APP_SHELL_CACHE_SECONDS = 300
 
@@ -390,6 +465,27 @@ def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
     return image.getPrimaryPixels().getTile(z, c, t, tile)
 
 
+def _runtime_chunk_plane_array(plane, dtype, height, width):
+    """Return a 2D chunk plane array with the declared Zarr dtype.
+
+    Inputs: `plane`, `dtype`, `height`, `width`. Output: `numpy.ndarray`.
+    """
+    np_dtype = np.dtype(dtype)
+    if isinstance(plane, bytes | bytearray | memoryview):
+        plane_array = np.frombuffer(plane, dtype=np_dtype)
+    else:
+        plane_array = np.asarray(plane, dtype=np_dtype)
+    return plane_array.reshape((height, width))
+
+
+def _runtime_chunk_bytes(plane, dtype) -> bytes:
+    """Return uncompressed C-order chunk bytes for runtime-generated Zarr metadata.
+
+    Inputs: `plane`, `dtype`. Output: bytes.
+    """
+    return np.ascontiguousarray(plane, dtype=np.dtype(dtype)).tobytes(order="C")
+
+
 @login_required()
 def image_zarray(request, iid, level, conn=None, **kwargs):
     """Return the image zarray.
@@ -454,31 +550,13 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     tile = [tile_x, tile_y, tile_w, tile_h]
 
     plane = _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type)
+    plane = _runtime_chunk_plane_array(plane, np_type, tile_h, tile_w)
     if chunks[-1] != tile_w or chunks[-2] != tile_h:
-        plane2 = np.zeros((chunks[-2], chunks[-1]), dtype=plane.dtype)
+        plane2 = np.zeros((chunks[-2], chunks[-1]), dtype=np.dtype(np_type))
         plane2[0:tile_h, 0:tile_w] = plane
         plane = plane2
 
-    indices = []
-    for dim in "tcz":
-        if dim in axes:
-            indices.append(0)
-
-    data = b""
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        zarr_array = open_compat_array(
-            tmpdirname,
-            mode="w",
-            shape=chunks,
-            chunks=chunks,
-            dtype=plane.dtype,
-        )
-        zarr_array[tuple(indices)] = plane
-
-        indices.extend([0, 0])
-        chunk_path = os.path.join(tmpdirname, ".".join(str(size) for size in indices))
-        with open(chunk_path, "rb") as reader:
-            data = reader.read()
+    data = _runtime_chunk_bytes(plane, np_type)
 
     chunk_name = ".".join(str(dim) for dim in [t, c, z, y, x])
     rsp = FileResponse(
@@ -798,7 +876,7 @@ def _build_app_launch_url(app, source):
     """
     return (
         f"{reverse('zarr_app', kwargs={'app': app, 'url': ''})}"
-        f"?source={quote(source, safe='/:?=&')}"
+        f"?source={quote(source, safe='/:')}"
     )
 
 
@@ -847,6 +925,40 @@ def _fetch_remote_app_shell(base_url, _cache_bucket):
     return response.text
 
 
+@lru_cache(maxsize=16)
+def _read_local_app_shell(static_path, _cache_bucket):
+    """Read a repo-vendored app shell from a static asset path.
+
+    Inputs: `static_path`, `_cache_bucket`. Output: app shell text. Raises: OSError
+    when the vendored shell is missing.
+    """
+    shell_path = _local_app_shell_path(static_path)
+    return shell_path.read_text(encoding="utf-8")
+
+
+def _local_app_shell_path(static_path):
+    """Return a local app shell path for package or source-tree execution.
+
+    Inputs: `static_path`. Output: `Path`.
+    """
+    package_path = Path(__file__).resolve().parent / "static" / static_path
+    if package_path.is_file() or not static_path.startswith(_VIZARR_STATIC_PREFIX):
+        return package_path
+
+    relative_asset = Path(static_path.removeprefix(_VIZARR_STATIC_PREFIX))
+    if relative_asset.is_absolute() or any(
+        part in ("", ".", "..") for part in relative_asset.parts
+    ):
+        return package_path
+
+    source_dist_dir = _source_tree_vizarr_dist_dir()
+    if source_dist_dir is not None:
+        source_tree_path = source_dist_dir / relative_asset
+        if source_tree_path.is_file():
+            return source_tree_path
+    return package_path
+
+
 def apps(request, app, url):
     """Return the apps.
 
@@ -863,10 +975,13 @@ def apps(request, app, url):
 
     cache_bucket = int(time.time() // _APP_SHELL_CACHE_SECONDS)
     try:
-        html = _fetch_remote_app_shell(base_url, cache_bucket)
-    except requests.RequestException:
+        if app in _LOCAL_APP_SHELLS:
+            html = _read_local_app_shell(_LOCAL_APP_SHELLS[app], cache_bucket)
+        else:
+            html = _fetch_remote_app_shell(base_url, cache_bucket)
+    except (OSError, requests.RequestException):
         LOGGER.warning(
-            "Failed to fetch remote app shell for %s",
+            "Failed to load app shell for %s",
             sanitize_log_value(app),
             exc_info=True,
         )

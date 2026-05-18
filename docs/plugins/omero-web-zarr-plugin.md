@@ -78,12 +78,28 @@ standard built-in rendering pipeline applies without any zarr-specific patches.
 
 The `/zarr/vizarr/` and `/zarr/validator/` routes serve a thin OMERO-hosted launcher page:
 
-- the initial HTML shell is fetched from the upstream static app origin and cached briefly in-process;
+- Vizarr is served from the pinned third-party vendored production build of
+  `hms-dbmi/vizarr` commit `be7ccc260e848a2829873c8746f32b4f43599435`;
+- that pinned Vizarr build uses Viv/deck.gl WebGL rendering and Zarrita
+  client-side Zarr access in the browser; OMERO.web does not server-render the
+  viewer;
+- the validator shell is fetched from its upstream static app origin and
+  cached briefly in-process;
 - a `<base href="...">` tag is injected so the browser resolves the app's relative assets correctly;
-- root-relative `source=` parameters are normalized client-side against the browser's actual origin before the upstream app reads them, so reverse-proxy public HTTPS origins are preserved without server-side URL guessing;
-- static asset requests are redirected to the upstream origin instead of proxying every JS/CSS/font request through Gunicorn workers.
+- the launcher passes the `source=` value through to Vizarr without file-name,
+  extension, MIME-type, or storage-layout inference; root-relative sources are
+  normalized client-side against the browser's actual origin before Vizarr reads
+  them, so reverse-proxy public HTTPS origins are preserved without server-side
+  URL guessing;
+- static asset requests are redirected to the pinned local Vizarr static tree or to the validator upstream origin instead of proxying every JS/CSS/font request through Gunicorn workers.
 
 This keeps launcher behavior generic while avoiding worker starvation from synchronous per-asset proxying.
+
+For non-store-backed images, the synthetic NGFF endpoint advertises Zarr v2
+arrays with `compressor: null`, `order: "C"`, and `dimension_separator: "/"`;
+chunk responses are the raw C-order bytes of the declared dtype. For
+store-backed images, `.zattrs`, `.zgroup`, `.zarray`, and chunk payloads are
+forwarded from the managed store unchanged.
 
 The plugin also decorates OMERO.web channel metadata from Zarr display metadata where available, including:
 
