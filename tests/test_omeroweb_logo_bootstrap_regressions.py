@@ -63,6 +63,25 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
         )
         self.assertIn("install_branding_logo_fallback()", self.web_bootstrap_text)
         self.assertIn(
+            "clear_static_directory_for_backup_sync()", self.web_bootstrap_text
+        )
+        self.assertIn(
+            'clear_static_directory_for_backup_sync "${static_dir}"',
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
+            'find "${target_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +',
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
+            "Refusing unsafe static directory cleanup target",
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
+            "Refusing to clean symlinked static directory",
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
             'local branding_fallback_marker_path="${static_dir}/branding/.generated-logo-fallback"',
             self.web_bootstrap_text,
         )
