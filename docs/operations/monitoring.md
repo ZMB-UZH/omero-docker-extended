@@ -203,7 +203,7 @@ At startup the entrypoint auto-detects the host firewall backend:
 
 | Host OS                                  | Backend detected | Bouncer mode     | Protection scope                                                                                             |
 | ---------------------------------------- | ---------------- | ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| Ubuntu 24.04+, Debian 13+ (Trixie)       | nftables         | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
+| Ubuntu 26.04 LTS, Debian 13 (Trixie)     | nftables         | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
 | Older distributions with iptables-legacy | iptables         | `mode: iptables` | `INPUT` + `DOCKER-USER` chains                                                                               |
 
 For nftables mode the entrypoint adds supplementary FORWARD-hook chains referencing the bouncer's banned-IP sets so that Docker-bridged containers are also protected — the bouncer's built-in nftables mode only creates INPUT-hook chains.

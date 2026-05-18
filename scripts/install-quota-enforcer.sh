@@ -3,7 +3,7 @@
 # install-quota-enforcer.sh — Install the OMERO host-side quota enforcer
 #
 # Sets up systemd timer + service for ext4 project-quota enforcement.
-# Compatible with Ubuntu 24.04+ and Debian 13 (Trixie)+.
+# Compatible with Ubuntu 26.04 LTS and Debian 13 (Trixie).
 #
 # Usage:
 #   sudo ./install-quota-enforcer.sh /path/to/OMERO/data

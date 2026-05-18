@@ -7,7 +7,7 @@ ARG APPLY_SECURITY_HARDENING=0
 # Pre-install the firewall bouncer binary and both firewall backends at build
 # time so the entrypoint does not need network access for package installation.
 #
-# nftables: native backend on Ubuntu 24.04+ and Debian 13+ (Trixie).
+# nftables: native backend on Ubuntu 26.04 LTS and Debian 13 (Trixie).
 # iptables + ipset: legacy fallback for older host kernels.
 # Alpine 3.21 exposes the IPv6 frontend via the iptables package, so there is
 # no separate ip6tables package to install or pin here.

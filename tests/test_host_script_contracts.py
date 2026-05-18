@@ -47,6 +47,7 @@ def test_public_script_and_unit_entrypoints_remain_stable() -> None:
     Inputs: repository fixtures. Output: fails on regressions in public script and unit entrypoints remain stable integration.
     """
     expected = {
+        "enable-storage-quotas.sh",
         "install-quota-enforcer.sh",
         "install-tmp-cleaner.sh",
         "omero-host-service-lib.sh",
@@ -65,7 +66,29 @@ def test_public_script_and_unit_entrypoints_remain_stable() -> None:
         REPO_ROOT / "installation" / "installation_script.sh"
     ).read_text(encoding="utf-8")
     assert "scripts/install-quota-enforcer.sh" in installation_script
+    assert "scripts/enable-storage-quotas.sh" in installation_script
     assert "scripts/install-tmp-cleaner.sh" in installation_script
+
+
+def test_storage_quota_enablement_script_is_fail_closed() -> None:
+    """Verify storage quota enablement keeps destructive operations guarded.
+
+    Inputs: repository fixtures. Output: fails on regressions in quota enablement safety.
+    """
+    script = (SCRIPT_DIR / "enable-storage-quotas.sh").read_text(encoding="utf-8")
+
+    assert "--yes-i-have-a-backup" in script
+    assert "quota_self_test" in script
+    assert '[[ "${QUOTA_FSTYPE}" == "ext4" ]]' in script
+    assert "Root is ext4, but its 'project' feature is not enabled" in script
+    assert 'if "prjquota" not in options and "project" not in options:' in script
+    assert "matches > 1" in script
+    assert "validate_unmount_preconditions" in script
+    assert "preflight_compose_if_needed" in script
+    assert "mount_has_project_quota" in script
+    assert "setpriv --reuid 65534 --regid 65534 --clear-groups" in script
+    assert "ext4 project quotas are already enabled" in script
+    assert "OMERO_QUOTA_SKIP_COMPOSE" in script
 
 
 def test_host_timers_reschedule_after_reinstall_activation() -> None:

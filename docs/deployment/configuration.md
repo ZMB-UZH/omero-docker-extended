@@ -47,7 +47,7 @@ This repository expresses those OMERO properties in env files with the existing 
 - CrowdSec pre-installs the `cs-firewall-bouncer` binary plus both `nftables`
   and `iptables`/`ipset` backends at image build time
   (`docker/crowdsec.Dockerfile`). At container startup the entrypoint
-  auto-detects the host's firewall backend: on Ubuntu 24.04+ and Debian 13+
+  auto-detects the host's firewall backend: on Ubuntu 26.04 LTS and Debian 13
   (Trixie), which use nftables natively, the bouncer starts in
   `mode: nftables`, creating its own nftables tables (`crowdsec` / `crowdsec6`)
   with INPUT-hook chains at priority -10 and supplementary FORWARD-hook chains

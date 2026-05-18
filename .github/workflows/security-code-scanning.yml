@@ -17,7 +17,7 @@ jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for CodeQL analysis metadata on workflow runs.
       contents: read
@@ -83,7 +83,7 @@ jobs:
   trivy-filesystem:
     name: Trivy filesystem scan (SARIF)
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
@@ -132,7 +132,7 @@ jobs:
   semgrep:
     name: Semgrep SAST
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
@@ -178,7 +178,7 @@ jobs:
   bandit:
     name: Bandit Python security scan
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
@@ -363,7 +363,7 @@ jobs:
   hadolint-discover:
     name: Discover Dockerfiles
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       dockerfiles: ${{ steps.find.outputs.dockerfiles }}
     steps:
@@ -384,7 +384,7 @@ jobs:
     name: Hadolint (${{ matrix.dockerfile }})
     needs: hadolint-discover
     if: github.ref_name == github.event.repository.default_branch && needs.hadolint-discover.outputs.dockerfiles != '[]'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
@@ -428,7 +428,7 @@ jobs:
   devskim:
     name: DevSkim security lint
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
       contents: read
@@ -478,7 +478,7 @@ jobs:
   osv-scanner-audit:
     name: OSV scan scope audit
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -514,7 +514,7 @@ jobs:
 
   scorecard:
     name: OSSF Scorecard supply-chain security
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     if: github.ref_name == github.event.repository.default_branch
     permissions:
       contents: read
@@ -566,7 +566,7 @@ jobs:
       - osv-scanner
       - scorecard
     if: always() && github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read # Required to inspect this workflow run's code-scanning uploads.
       contents: read

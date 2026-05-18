@@ -113,7 +113,7 @@ class MypyIntegrationContractTests(TestCase):
             workflow["jobs"]["mypy"]["if"],
         )
         self.assertEqual("read", workflow["permissions"]["contents"])
-        self.assertEqual("ubuntu-24.04", workflow["jobs"]["mypy"]["runs-on"])
+        self.assertEqual("ubuntu-latest", workflow["jobs"]["mypy"]["runs-on"])
 
         steps = workflow["jobs"]["mypy"]["steps"]
         uses_values = [step.get("uses") for step in steps if "uses" in step]

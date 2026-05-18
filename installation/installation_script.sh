@@ -12,6 +12,7 @@ DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set 
 DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}" # plain progress is stable across terminal resize/reflow
 APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}" # set to 0/1 to override the prompt; empty defaults the prompt to yes
 ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
+ENABLE_STORAGE_QUOTAS="${ENABLE_STORAGE_QUOTAS:-0}" # set to 1 to prompt default yes for ext4 project-quota enablement
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -72,6 +73,7 @@ CROWDSEC_INSTALL_AUTO_RESTART_HELPER="${SCRIPT_DIR}/crowdsec_install_auto_restar
 CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
 CROWDSEC_INSTALL_BOOTSTRAP_STATUS=""
+STORAGE_QUOTAS_ENABLEMENT_RAN=0
 
 set -euo pipefail
 
@@ -2898,6 +2900,80 @@ resolve_start_containers_choice() {
     return 0
 }
 
+# Resolve storage quotas choice. Inputs: shell arguments and environment. Output: stdout text and command status.
+resolve_storage_quotas_choice() {
+    local reply=""
+    local override_choice="${STORAGE_QUOTAS_CHOICE:-}"
+    local prompt_hint="Y/n"
+    local prompt_default="n"
+    local default_choice="no"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                ENABLE_STORAGE_QUOTAS=1
+                echo "STORAGE_QUOTAS_CHOICE=${override_choice}: ext4 project-quota enablement requested."
+                return 0
+                ;;
+            n|no)
+                ENABLE_STORAGE_QUOTAS=0
+                echo "STORAGE_QUOTAS_CHOICE=${override_choice}: ext4 project-quota enablement skipped."
+                return 0
+                ;;
+            *)
+                echo "ERROR: STORAGE_QUOTAS_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    if ! validate_toggle_config "ENABLE_STORAGE_QUOTAS" "${ENABLE_STORAGE_QUOTAS}"; then
+        return 1
+    fi
+
+    if [ "${ENABLE_STORAGE_QUOTAS}" = "1" ]; then
+        prompt_default="Y"
+        default_choice="yes"
+    fi
+
+    reply="$(prompt_yes_no "Enable ext4 project quotas for OMERO user data? (requires ext4; may unmount a non-root data filesystem) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    if [ "${reply}" = "yes" ]; then
+        ENABLE_STORAGE_QUOTAS=1
+    else
+        ENABLE_STORAGE_QUOTAS=0
+    fi
+
+    return 0
+}
+
+# Run storage quota enablement if requested. Inputs: shell environment. Output: command status and side effects.
+run_storage_quota_enablement_if_requested() {
+    local enabler_path="${OMERO_INSTALLATION_PATH%/}/scripts/enable-storage-quotas.sh"
+
+    if [ "${ENABLE_STORAGE_QUOTAS}" != "1" ]; then
+        echo "Skipping ext4 project-quota enablement (default)."
+        return 0
+    fi
+
+    echo ""
+    echo "========================================"
+    echo "Enabling ext4 project quotas for OMERO"
+    echo "========================================"
+    echo ""
+
+    if [ ! -f "${enabler_path}" ]; then
+        echo "ERROR: Storage quota enablement script not found: ${enabler_path}" >&2
+        return 1
+    fi
+
+    chmod +x "${enabler_path}"
+    OMERO_QUOTA_CREATE_DATA_DIR=1 \
+    OMERO_QUOTA_INSTALLATION_PATHS_ENV="${SCRIPT_ENV_FILE}" \
+        "${enabler_path}" --yes-i-have-a-backup
+    STORAGE_QUOTAS_ENABLEMENT_RAN=1
+}
+
 if ! resolve_delete_images_choice; then
     exit 1
 fi
@@ -2987,6 +3063,10 @@ CROWDSEC_CONFIG_PATH="${OMERO_DATA_PATH%/}/crowdsec_config"
 # (This handles cases where the env file is from an older installation)
 if [ -z "${BUILDX_DATA_PATH:-}" ]; then
     BUILDX_DATA_PATH="${OMERO_DATA_PATH%/}/buildx_cache"
+fi
+
+if ! resolve_storage_quotas_choice; then
+    exit 1
 fi
 
 if declare -F install_transcript_publish_final_path_if_needed >/dev/null 2>&1; then
@@ -3144,6 +3224,16 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     exit 1
 fi
 
+OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
+
+write_installation_paths_env "${SCRIPT_ENV_FILE}"
+if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
+    echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
+    exit 1
+fi
+
+write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
+
 warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
 warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
@@ -3153,6 +3243,11 @@ if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then 
 if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_TMP_PATH}" "OMERO temp directory"; then exit 1; fi
+
+if ! run_storage_quota_enablement_if_requested; then
+    exit 1
+fi
+
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then exit 1; fi
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
@@ -3165,15 +3260,6 @@ if is_crowdsec_enabled; then
     if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
 fi
 
-OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
-
-write_installation_paths_env "${SCRIPT_ENV_FILE}"
-if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
-    echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
-    exit 1
-fi
-
-write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
 if ! run_runtime_env_contract_check "${OMERO_INSTALLATION_PATH%/}"; then
     exit 1
 fi
@@ -4338,7 +4424,12 @@ install_quota_enforcer_if_supported() {
     return 0
 }
 
-install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
+if [ "${STORAGE_QUOTAS_ENABLEMENT_RAN}" = "1" ]; then
+    echo ""
+    echo "Quota enforcer was installed during requested project-quota enablement."
+else
+    install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
+fi
 
 # Ensure .admin-tools directory exists and is writable by omeroweb container.
 # The quota enforcer installer creates this as root; the omeroweb container

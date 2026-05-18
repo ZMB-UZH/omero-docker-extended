@@ -17,7 +17,7 @@
 #   6. Optionally enrolls to the CrowdSec Console (free tier; skipped when
 #      CROWDSEC_ENROLL_KEY is empty or a placeholder value).
 #
-# Guaranteed host compatibility: Ubuntu 24.04+, Debian 13 (Trixie).
+# Guaranteed host compatibility: Ubuntu 26.04 LTS, Debian 13 (Trixie).
 # Both use nftables as the default kernel firewall backend.
 # ---------------------------------------------------------------------------
 set -eu
