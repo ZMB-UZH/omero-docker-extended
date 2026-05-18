@@ -500,6 +500,29 @@ install_branding_logo_fallback() {
     return 0
 }
 
+# Clear generated static assets before restoring backup. Inputs: target static directory. Output: command status and side effects.
+clear_static_directory_for_backup_sync() {
+    local target_dir="${1:-}"
+
+    if [[ -z "${target_dir}" || "${target_dir}" != /* || "${target_dir}" == "/" || "${target_dir}" == "/static" ]]; then
+        echo "[web-bootstrap] ERROR: Refusing unsafe static directory cleanup target: ${target_dir:-<empty>}" >&2
+        exit 1
+    fi
+
+    if [[ -L "${target_dir}" ]]; then
+        echo "[web-bootstrap] ERROR: Refusing to clean symlinked static directory: ${target_dir}" >&2
+        exit 1
+    fi
+
+    mkdir -p "${target_dir}"
+    if [[ ! -d "${target_dir}" ]]; then
+        echo "[web-bootstrap] ERROR: Static directory is not a directory after creation: ${target_dir}" >&2
+        exit 1
+    fi
+
+    find "${target_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+}
+
 # Sync static assets. Inputs: shell arguments and environment. Output: command status and side effects.
 sync_static_assets() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
@@ -535,15 +558,11 @@ sync_static_assets() {
     fi
 
     echo "[web-bootstrap] Synchronizing OMERO.web static assets into ${static_dir}"
-    mkdir -p "${static_dir}"
+    clear_static_directory_for_backup_sync "${static_dir}"
     cp -a "${static_backup_dir}/." "${static_dir}/"
 
     if id -u "${effective_runtime_user}" >/dev/null 2>&1; then
         chown -R "${effective_runtime_user}:${effective_runtime_group}" "${static_dir}" || true
-    fi
-
-    if ! branding_logo_fallback_enabled; then
-        return 0
     fi
 
     if [[ -n "${preserved_logo_path}" && -f "${preserved_logo_path}" ]]; then
@@ -555,6 +574,10 @@ sync_static_assets() {
             echo "[web-bootstrap] WARNING: Failed to restore preserved branding logo after static sync: ${branding_logo_path}" >&2
         fi
         rm -f "${preserved_logo_path}" || true
+    fi
+
+    if ! branding_logo_fallback_enabled; then
+        return 0
     fi
 
     if [[ ! -f "${branding_logo_path}" && -f "${local_logo_path}" ]]; then
