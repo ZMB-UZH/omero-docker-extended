@@ -190,6 +190,53 @@ def test_env_utils_and_tmp_utils_cover_sanitized_empty_and_missing_tmp_root(
         tmp_utils.get_tmp_base()
 
 
+def test_tmp_utils_detect_caller_plugin_skips_unknown_and_common_modules(
+    monkeypatch,
+) -> None:
+    """Verify tmp caller detection skips unresolved and shared-library frames.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in caller plugin
+    detection fallback behavior.
+    """
+    unresolved_frame = SimpleNamespace(name="unresolved")
+    common_frame = SimpleNamespace(name="common")
+    plugin_frame = SimpleNamespace(name="plugin")
+    monkeypatch.setattr(
+        tmp_utils.inspect,
+        "stack",
+        lambda: [
+            (unresolved_frame,),
+            (common_frame,),
+            (plugin_frame,),
+        ],
+    )
+
+    def fake_getmodule(frame):
+        """Return a fake module for caller-detection branch coverage.
+
+        Inputs: fake frame object. Output: fake module or None.
+        """
+        if frame is unresolved_frame:
+            return None
+        if frame is common_frame:
+            return SimpleNamespace(__name__="omero_plugin_common.tmp_utils")
+        return SimpleNamespace(__name__="omeroweb_tools.views.index_view")
+
+    monkeypatch.setattr(tmp_utils.inspect, "getmodule", fake_getmodule)
+
+    assert tmp_utils._detect_caller_plugin() == "omeroweb-tools"
+
+    monkeypatch.setattr(
+        tmp_utils.inspect,
+        "stack",
+        lambda: [
+            (unresolved_frame,),
+            (common_frame,),
+        ],
+    )
+    assert tmp_utils._detect_caller_plugin() == "unknown"
+
+
 def test_omero_helpers_cover_none_and_exception_fallback_paths() -> None:
     """Confirm OMERO helpers cover none and exception fallback paths exposes the expected failure.
 

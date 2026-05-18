@@ -1219,6 +1219,48 @@ def test_build_download_response_reports_missing_or_invalid_paths(
     assert absent.content.decode("utf-8") == "IMS export file not found on server."
 
 
+def test_safe_download_roots_and_paths_cover_fallback_guards(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Verify download-root guard fallbacks stay closed under discovery failures.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in
+    safe download-root validation fallback behavior.
+    """
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    monkeypatch.setattr(imaris_service, "EXPORT_ROOT", "bad-root")
+    monkeypatch.setattr(
+        imaris_service,
+        "get_ome_tiff_staging_root",
+        lambda create=False: (_ for _ in ()).throw(RuntimeError("not ready")),
+    )
+    monkeypatch.setattr(
+        imaris_service.os.path,
+        "realpath",
+        lambda value: (
+            (_ for _ in ()).throw(OSError("bad root"))
+            if value == "bad-root"
+            else str(value)
+        ),
+    )
+
+    assert list(imaris_service._safe_download_roots()) == []
+    assert imaris_service._safe_download_path("bad-root") is None
+
+    monkeypatch.setattr(imaris_service, "EXPORT_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        imaris_service,
+        "get_ome_tiff_staging_root",
+        lambda create=False: tmp_path,
+    )
+    monkeypatch.setattr(imaris_service.os.path, "realpath", lambda value: str(value))
+
+    assert list(imaris_service._safe_download_roots()) == [str(tmp_path)]
+
+
 def test_register_and_monitor_process_job_persists_running_and_finished_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
