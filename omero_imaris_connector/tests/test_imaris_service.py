@@ -1231,21 +1231,43 @@ def test_safe_download_roots_and_paths_cover_fallback_guards(
     _install_omero_stub()
     imaris_service = _import_imaris_service(monkeypatch)
 
+    def raise_staging_root_error(create: bool = False) -> Path:
+        """Raise the staging-root discovery error used by this regression test.
+
+        Inputs: `create` staging-root creation flag. Output: raises RuntimeError.
+        """
+        raise RuntimeError("not ready")
+
+    def guarded_realpath(value: str) -> str:
+        """Raise for the export root and resolve all other paths as strings.
+
+        Inputs: `value` path string. Output: resolved path string or OSError.
+        """
+        if value == "bad-root":
+            raise OSError("bad root")
+        return str(value)
+
+    def resolved_staging_root(create: bool = False) -> Path:
+        """Return the test staging root.
+
+        Inputs: `create` staging-root creation flag. Output: `Path`.
+        """
+        return tmp_path
+
+    def passthrough_realpath(value: str) -> str:
+        """Resolve the test path without filesystem access.
+
+        Inputs: `value` path string. Output: path string.
+        """
+        return str(value)
+
     monkeypatch.setattr(imaris_service, "EXPORT_ROOT", "bad-root")
     monkeypatch.setattr(
         imaris_service,
         "get_ome_tiff_staging_root",
-        lambda create=False: (_ for _ in ()).throw(RuntimeError("not ready")),
+        raise_staging_root_error,
     )
-    monkeypatch.setattr(
-        imaris_service.os.path,
-        "realpath",
-        lambda value: (
-            (_ for _ in ()).throw(OSError("bad root"))
-            if value == "bad-root"
-            else str(value)
-        ),
-    )
+    monkeypatch.setattr(imaris_service.os.path, "realpath", guarded_realpath)
 
     assert list(imaris_service._safe_download_roots()) == []
     assert imaris_service._safe_download_path("bad-root") is None
@@ -1254,9 +1276,9 @@ def test_safe_download_roots_and_paths_cover_fallback_guards(
     monkeypatch.setattr(
         imaris_service,
         "get_ome_tiff_staging_root",
-        lambda create=False: tmp_path,
+        resolved_staging_root,
     )
-    monkeypatch.setattr(imaris_service.os.path, "realpath", lambda value: str(value))
+    monkeypatch.setattr(imaris_service.os.path, "realpath", passthrough_realpath)
 
     assert list(imaris_service._safe_download_roots()) == [str(tmp_path)]
 
