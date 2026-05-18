@@ -157,6 +157,7 @@ class _PatternPrimaryPixels(_FakePrimaryPixels):
         """
         super().__init__(pixel_type)
         self._array = np.asarray(array, dtype=views.PIXEL_TYPES[pixel_type])
+        self.calls = []
 
     def getTile(self, _z, _c, _t, tile):
         """Return a deterministic crop for `_PatternPrimaryPixels`.
@@ -164,6 +165,7 @@ class _PatternPrimaryPixels(_FakePrimaryPixels):
         Inputs: `_z`, `_c`, `_t`, `tile`. Output: array crop.
         """
         x, y, width, height = tile
+        self.calls.append((x, y, width, height))
         return self._array[y : y + height, x : x + width]
 
 
@@ -543,6 +545,40 @@ def test_image_zattrs_builds_non_store_multiscales_for_pyramids(monkeypatch):
     }
 
 
+def test_image_zattrs_generates_runtime_overviews_for_non_pyramid_images(
+    monkeypatch,
+):
+    """Verify image zattrs generates runtime overviews for non pyramid images.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in runtime
+    overview metadata for ordinary OMERO-backed images.
+    """
+    image = _FakeImage(image_id=23, size_y=8, size_x=8)
+    monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
+    monkeypatch.setattr(
+        views, "channelMarshal", lambda channel: {"label": channel.label}
+    )
+
+    response = views.image_zattrs.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/23.zarr/.zattrs"),
+        23,
+        "0.4",
+        conn=_FakeConn(image),
+    )
+
+    payload = json.loads(response.content)
+    datasets = payload["multiscales"][0]["datasets"]
+    assert [dataset["path"] for dataset in datasets] == ["0", "1", "2", "3"]
+    assert views.get_image_shapes(image) == [[8, 8], [4, 4], [2, 2], [1, 1]]
+    assert datasets[3]["coordinateTransformations"] == [
+        {"type": "scale", "scale": [8.0, 8.0]}
+    ]
+    assert views.get_image_shapes(_FakeImage(image_id=24, size_y=1, size_x=2)) == [
+        [1, 2],
+        [1, 1],
+    ]
+
+
 def test_image_zattrs_v03_omits_transformations_and_rejects_unknown_version(
     monkeypatch,
 ):
@@ -732,6 +768,89 @@ def test_image_chunk_returns_declared_uncompressed_runtime_bytes(monkeypatch):
     assert _response_bytes(chunk_response) == pattern.tobytes(order="C")
 
 
+def test_image_chunk_generates_bounded_non_pyramid_overview_tiles(monkeypatch):
+    """Verify image chunk generates bounded non pyramid overview tiles.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in generated
+    overview chunk generation for ordinary OMERO-backed images.
+    """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint8
+    )
+    pattern = np.array(
+        [
+            [0, 2, 10, 12],
+            [4, 6, 14, 16],
+            [20, 22, 30, 32],
+            [24, 26, 34, 36],
+        ],
+        dtype=np.uint8,
+    )
+    primary_pixels = _PatternPrimaryPixels(pixel_type, pattern)
+    image = _FakeImage(
+        image_id=47,
+        size_y=4,
+        size_x=4,
+        primary_pixels=primary_pixels,
+    )
+    monkeypatch.setattr(views, "_store_backed_json_response", lambda *_args: None)
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
+    monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
+
+    zarray_response = views.image_zarray.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/47.zarr/1/.zarray"),
+        47,
+        1,
+        conn=_FakeConn(image),
+    )
+    chunk_response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/47.zarr/1/0/0"),
+        47,
+        1,
+        "0/0",
+        conn=_FakeConn(image),
+    )
+
+    zarray = json.loads(zarray_response.content)
+    assert zarray["shape"] == [2, 2]
+    assert zarray["chunks"] == [1, 1]
+    assert _response_bytes(chunk_response) == np.array([[3]], dtype=np.uint8).tobytes(
+        order="C"
+    )
+    assert primary_pixels.calls == [(0, 0, 2, 2)]
+
+
+def test_image_chunk_pads_generated_overview_edges(monkeypatch):
+    """Verify image chunk pads generated overview edges.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in generated overview edge padding.
+    """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint8
+    )
+    pattern = np.arange(9, dtype=np.uint8).reshape(3, 3)
+    image = _FakeImage(
+        image_id=49,
+        size_y=3,
+        size_x=3,
+        primary_pixels=_PatternPrimaryPixels(pixel_type, pattern),
+    )
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
+    monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
+
+    chunk_response = views.image_chunk.__wrapped__(
+        RequestFactory().get("/zarr/v0.4/image/49.zarr/1/1/1"),
+        49,
+        1,
+        "1/1",
+        conn=_FakeConn(image),
+    )
+
+    assert _response_bytes(chunk_response) == np.array([[8]], dtype=np.uint8).tobytes(
+        order="C"
+    )
+
+
 def test_image_chunk_accepts_byte_returning_primary_pixels(monkeypatch):
     """Verify image chunk accepts byte-returning primary pixels.
 
@@ -780,11 +899,13 @@ def test_image_chunk_builds_runtime_chunk_name_for_tcz_axes(monkeypatch):
     monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
     monkeypatch.setattr(
         views,
-        "marshal_axes_v3",
-        lambda current_image: ["t", "c", "z", "y", "x"],
+        "marshal_axes",
+        lambda current_image, version: ["t", "c", "z", "y", "x"],
     )
     monkeypatch.setattr(views, "get_image_shape", lambda image, level: (1, 1, 1, 2, 2))
-    monkeypatch.setattr(views, "get_chunk_shape", lambda image: (1, 1, 1, 2, 2))
+    monkeypatch.setattr(
+        views, "get_chunk_shape", lambda image, level=0: (1, 1, 1, 2, 2)
+    )
 
     response = views.image_chunk.__wrapped__(
         RequestFactory().get("/zarr/v0.4/image/44.zarr/0/0/0/0/0/0"),
@@ -815,6 +936,67 @@ def test_image_chunk_rejects_wrong_dimension_count(monkeypatch):
             "0/0/0",
             conn=_FakeConn(image),
         )
+
+
+def test_image_chunk_rejects_out_of_bounds_chunk_without_pixel_read(monkeypatch):
+    """Verify image chunk rejects out of bounds chunk without pixel read.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in chunk
+    bounds validation before OMERO pixel reads.
+    """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint8
+    )
+    primary_pixels = _PatternPrimaryPixels(pixel_type, np.zeros((4, 4), dtype=np.uint8))
+    image = _FakeImage(
+        image_id=48,
+        size_y=4,
+        size_x=4,
+        primary_pixels=primary_pixels,
+    )
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
+    monkeypatch.setattr(views, "get_safe_image_tile_size", lambda image: (2, 2))
+
+    with pytest.raises(Http404, match="chunk outside image bounds"):
+        views.image_chunk.__wrapped__(
+            RequestFactory().get("/zarr/v0.4/image/48.zarr/0/2/0"),
+            48,
+            0,
+            "2/0",
+            conn=_FakeConn(image),
+        )
+
+    assert primary_pixels.calls == []
+
+
+def test_image_chunk_rejects_inconsistent_axis_metadata_before_pixel_read(monkeypatch):
+    """Verify image chunk rejects inconsistent axis metadata before pixel read.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in axis and shape validation.
+    """
+    pixel_type = next(
+        key for key, dtype in views.PIXEL_TYPES.items() if dtype == np.uint8
+    )
+    primary_pixels = _PatternPrimaryPixels(pixel_type, np.zeros((4, 4), dtype=np.uint8))
+    image = _FakeImage(
+        image_id=50,
+        size_y=4,
+        size_x=4,
+        primary_pixels=primary_pixels,
+    )
+    monkeypatch.setattr(views, "_store_backed_chunk_response", lambda *_args: None)
+    monkeypatch.setattr(views, "marshal_axes", lambda *_args: ["z", "y", "x"])
+
+    with pytest.raises(Http404, match="metadata are inconsistent"):
+        views.image_chunk.__wrapped__(
+            RequestFactory().get("/zarr/v0.4/image/50.zarr/0/0/0/0"),
+            50,
+            0,
+            "0/0/0",
+            conn=_FakeConn(image),
+        )
+
+    assert primary_pixels.calls == []
 
 
 def test_image_store_path_and_preview_cover_store_and_non_store_paths(

@@ -47,7 +47,6 @@ from .utils import get_safe_image_tile_size
 from .utils import load_store_backed_image_node
 from .utils import sanitize_download_basename
 from .utils import marshal_axes
-from .utils import marshal_axes_v3
 from .utils import is_store_metadata_path
 from .utils import resolve_image_backing_zarr_store
 from .utils import resolve_local_zarr_file
@@ -307,13 +306,13 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
     if store_rsp is not None:
         return store_rsp
 
-    levels = [0]
     if image.requiresPixelsPyramid():
         rendering_engine = require_image_rendering_engine(image, initialize=True)
         res_descs = rendering_engine.getResolutionDescriptions()
         levels = list(range(len(res_descs)))
     else:
         rendering_engine = require_image_rendering_engine(image, initialize=True)
+        levels = list(range(len(get_image_shapes(image)))) if version != "0.3" else [0]
 
     datasets = [{"path": str(level)} for level in levels]
 
@@ -371,13 +370,60 @@ def get_image_shape(image, level):
     return shapes[level]
 
 
+def _runtime_base_shape(image):
+    """Return the runtime NGFF shape for OMERO-backed pixel data.
+
+    Inputs: `image`. Output: shape list with singleton T/C/Z removed and Y/X retained.
+    """
+    leading_shape = [
+        getattr(image, "getSize" + dim)()
+        for dim in ("TCZ")
+        if getattr(image, "getSize" + dim)() > 1
+    ]
+    return [*leading_shape, image.getSizeY(), image.getSizeX()]
+
+
+def _generated_overview_scale_limit(image):
+    """Return the largest bounded XY scale for generated overview chunks.
+
+    Inputs: `image`. Output: positive integer scale limit.
+    """
+    tile_w, tile_h = get_safe_image_tile_size(image)
+    size_y = image.getSizeY()
+    size_x = image.getSizeX()
+    y_limit = int(tile_h) if size_y > 1 else max(int(tile_w), int(tile_h))
+    x_limit = int(tile_w) if size_x > 1 else max(int(tile_w), int(tile_h))
+    return max(1, min(y_limit, x_limit))
+
+
+def _generated_overview_shapes(image, base_shape):
+    """Return generated overview shapes for a non-pyramid OMERO image.
+
+    Inputs: `image`, `base_shape`. Output: list of lower-resolution shape lists.
+    """
+    max_scale = _generated_overview_scale_limit(image)
+    base_y = int(base_shape[-2])
+    base_x = int(base_shape[-1])
+    leading_shape = list(base_shape[:-2])
+    shapes: list[list[int]] = []
+    scale = 2
+    while scale <= max_scale and (base_y > 1 or base_x > 1):
+        level_y = max(1, (base_y + scale - 1) // scale)
+        level_x = max(1, (base_x + scale - 1) // scale)
+        level_shape = [*leading_shape, level_y, level_x]
+        shapes.append(level_shape)
+        if level_y == 1 and level_x == 1:
+            break
+        scale *= 2
+    return shapes
+
+
 def get_image_shapes(image):
     """Return image shapes.
 
     Inputs: `image`. Output: `shapes`.
     """
-    shape = [getattr(image, "getSize" + dim)() for dim in ("TCZYX")]
-    base_shape = [size for size in shape if size > 1]
+    base_shape = _runtime_base_shape(image)
     shapes = [base_shape]
     if image.requiresPixelsPyramid():
         rendering_engine = require_image_rendering_engine(image, initialize=True)
@@ -387,24 +433,31 @@ def get_image_shapes(image):
             shape[-1] = level.sizeX
             shape[-2] = level.sizeY
             shapes.append(shape)
+    else:
+        shapes.extend(_generated_overview_shapes(image, base_shape))
     return shapes
 
 
-def get_chunk_shape(image):
+def get_chunk_shape(image, level=0):
     """Return chunk shape.
 
-    Inputs: `image`. Output: `chunks`.
+    Inputs: `image`, `level`. Output: `chunks`.
     """
     chunks = []
     for dim in "TCZ":
         if getattr(image, "getSize" + dim)() > 1:
             chunks.append(1)
+    shape = get_image_shape(image, int(level))
     if image.requiresPixelsPyramid():
         image.getZoomLevelScaling()
         width, height = get_safe_image_tile_size(image)
     else:
-        width = image.getSizeX()
-        height = image.getSizeY()
+        scale = 1 << int(level)
+        width, height = get_safe_image_tile_size(image)
+        width = max(1, int(width) // scale)
+        height = max(1, int(height) // scale)
+    width = max(1, min(int(width), int(shape[-1])))
+    height = max(1, min(int(height), int(shape[-2])))
     chunks.extend([height, width])
     return chunks
 
@@ -443,6 +496,93 @@ def _read_lower_pyramid_plane(
     return tile_array.reshape((tile_h, tile_w))
 
 
+def _read_primary_pixels_tile(image, z, c, t, tile, np_type):
+    """Read one primary-pixels tile as a typed two-dimensional array.
+
+    Inputs: `image`, `z`, `c`, `t`, `tile`, `np_type`. Output: `numpy.ndarray`.
+    """
+    tile_x, tile_y, tile_w, tile_h = tile
+    plane = image.getPrimaryPixels().getTile(z, c, t, [tile_x, tile_y, tile_w, tile_h])
+    return _runtime_chunk_plane_array(plane, np_type, tile_h, tile_w)
+
+
+def _read_primary_pixels_region(image, z, c, t, tile, np_type):
+    """Read a primary-pixels region using bounded OMERO tile requests.
+
+    Inputs: `image`, `z`, `c`, `t`, `tile`, `np_type`. Output: `numpy.ndarray`.
+    """
+    tile_x, tile_y, tile_w, tile_h = tile
+    max_w, max_h = get_safe_image_tile_size(image)
+    max_w = max(1, int(max_w))
+    max_h = max(1, int(max_h))
+    region = np.zeros((tile_h, tile_w), dtype=np.dtype(np_type))
+    for offset_y in range(0, tile_h, max_h):
+        read_h = min(max_h, tile_h - offset_y)
+        for offset_x in range(0, tile_w, max_w):
+            read_w = min(max_w, tile_w - offset_x)
+            sub_tile = [tile_x + offset_x, tile_y + offset_y, read_w, read_h]
+            region[offset_y : offset_y + read_h, offset_x : offset_x + read_w] = (
+                _read_primary_pixels_tile(image, z, c, t, sub_tile, np_type)
+            )
+    return region
+
+
+def _downsample_mean_tile(region, output_h, output_w, scale, dtype):
+    """Downsample a region to one generated overview chunk by mean pooling.
+
+    Inputs: `region`, `output_h`, `output_w`, `scale`, `dtype`. Output: array.
+    """
+    target_h = output_h * scale
+    target_w = output_w * scale
+    if region.shape != (target_h, target_w):
+        pad_h = target_h - region.shape[0]
+        pad_w = target_w - region.shape[1]
+        region = np.pad(region, ((0, pad_h), (0, pad_w)), mode="edge")
+
+    pooled = region.reshape(output_h, scale, output_w, scale).mean(axis=(1, 3))
+    np_dtype = np.dtype(dtype)
+    if np.issubdtype(np_dtype, np.integer):
+        info = np.iinfo(np_dtype)
+        pooled = np.clip(np.rint(pooled), info.min, info.max)
+    return np.asarray(pooled, dtype=np_dtype)
+
+
+def _read_generated_overview_plane(
+    image,
+    level,
+    z,
+    c,
+    t,
+    tile_x,
+    tile_y,
+    tile_w,
+    tile_h,
+    np_type,
+):
+    """Read one generated overview plane for a non-pyramid OMERO image.
+
+    Inputs: `image`, `level`, `z`, `c`, `t`, `tile_x`, `tile_y`, `tile_w`,
+    `tile_h`, `np_type`. Output: `numpy.ndarray`.
+    """
+    scale = 1 << int(level)
+    base_shape = get_image_shape(image, 0)
+    base_y = int(base_shape[-2])
+    base_x = int(base_shape[-1])
+    source_x = tile_x * scale
+    source_y = tile_y * scale
+    source_w = min(base_x - source_x, tile_w * scale)
+    source_h = min(base_y - source_y, tile_h * scale)
+    source = _read_primary_pixels_region(
+        image,
+        z,
+        c,
+        t,
+        [source_x, source_y, source_w, source_h],
+        np_type,
+    )
+    return _downsample_mean_tile(source, tile_h, tile_w, scale, np_type)
+
+
 def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
     """Read the runtime chunk plane.
 
@@ -451,6 +591,19 @@ def _read_runtime_chunk_plane(image, level, z, c, t, tile, np_type):
     tile_x, tile_y, tile_w, tile_h = tile
     if image.requiresPixelsPyramid() and level > 0:
         return _read_lower_pyramid_plane(
+            image,
+            level,
+            z,
+            c,
+            t,
+            tile_x,
+            tile_y,
+            tile_w,
+            tile_h,
+            np_type,
+        )
+    if level > 0:
+        return _read_generated_overview_plane(
             image,
             level,
             z,
@@ -500,7 +653,7 @@ def image_zarray(request, iid, level, conn=None, **kwargs):
         return store_rsp
 
     shape = get_image_shape(image, level)
-    chunks = get_chunk_shape(image)
+    chunks = get_chunk_shape(image, level)
 
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     np_type = PIXEL_TYPES[ptype]
@@ -522,7 +675,11 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     if store_rsp is not None:
         return store_rsp
 
-    axes = marshal_axes_v3(image)
+    version = kwargs.get("version", "0.4")
+    axes = [
+        axis["name"] if isinstance(axis, dict) else axis
+        for axis in marshal_axes(image, version)
+    ]
 
     if len(dims) != len(axes):
         raise Http404(
@@ -531,7 +688,9 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 
     level = int(level)
     shape = get_image_shape(image, level)
-    chunks = get_chunk_shape(image)
+    chunks = get_chunk_shape(image, level)
+    if len(shape) != len(axes) or len(chunks) != len(axes):
+        raise Http404("image axes and shape metadata are inconsistent")
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     np_type = PIXEL_TYPES[ptype]
 
@@ -545,6 +704,12 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     tile_h = chunks[-2]
     tile_x = x * tile_w
     tile_y = y * tile_h
+    chunk_bounds = zip(dims, chunks, shape)
+    if any(
+        dim_index * chunk_size >= axis_size
+        for dim_index, chunk_size, axis_size in chunk_bounds
+    ):
+        raise Http404("chunk outside image bounds")
     tile_w = min(shape[-1] - tile_x, tile_w)
     tile_h = min(shape[-2] - tile_y, tile_h)
     tile = [tile_x, tile_y, tile_w, tile_h]

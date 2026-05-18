@@ -855,6 +855,19 @@ def test_vizarr_static_pin_has_single_current_build():
     assert "https://hms-dbmi.github.io/vizarr/" not in index_html
     assert "v0.3" not in index_html
 
+    patch_root = vendor_root / f"vizarr-{views.VIZARR_UPSTREAM_COMMIT}" / "patches"
+    patch_text = (patch_root / "omero-linear-intensity-interpolation.patch").read_text(
+        encoding="utf-8"
+    )
+    assert "labels.includes(RGBA_CHANNEL_AXIS_NAME)" in patch_text
+    assert 'interpolation: "linear"' in patch_text
+
+    bundle_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in build_root.glob("vizarr-*.js")
+    )
+    assert "renderSubLayers:" in bundle_text
+    assert "interpolation:`linear`" in bundle_text
+
 
 def test_local_app_static_helpers_cover_runtime_packaging_edges(monkeypatch):
     """Verify local app static helpers cover runtime packaging edges.
