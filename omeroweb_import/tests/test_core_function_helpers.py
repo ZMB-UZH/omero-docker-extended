@@ -33,6 +33,60 @@ def test_append_job_messages_errors_and_txt_labels_trim_to_limit(monkeypatch) ->
     assert job["errors"] == ["error-2", "error-3"]
 
 
+def test_public_import_job_text_never_exposes_diagnostics() -> None:
+    """Verify browser-visible import job text cannot contain raw diagnostics.
+
+    Inputs: none. Output: fails on import job disclosure regressions.
+    """
+    raw_failure = (
+        "Import failure: synthetic_failure.ome.zarr - Using OMERO.java-5.6.17-ice36 "
+        "FILE_EXCEPTION: /server/runtime/path java.lang.IllegalArgumentException "
+        "at com.example.Reader.open(Reader.java:42)"
+    )
+    raw_message = "Using OMERO.java-5.6.17-ice36 /server/runtime/path"
+
+    assert core_functions._public_import_job_text_list([raw_failure]) == [
+        "Import failure: synthetic_failure.ome.zarr"
+    ]
+    assert core_functions._public_import_job_text_list(
+        [raw_failure, raw_message, ""],
+        errors_only=True,
+    ) == ["Import failure: synthetic_failure.ome.zarr", "Import failed."]
+    assert (
+        core_functions._public_job_error_with_path(
+            "folder/problematic.ome.tif",
+            raw_failure,
+        )
+        == "Import failure: folder/problematic.ome.tif"
+    )
+    assert (
+        core_functions._public_job_error_with_path(
+            r"C:\Users\operator\Desktop\problematic.zarr",
+            raw_failure,
+        )
+        == "Import failure: problematic.zarr"
+    )
+    assert (
+        core_functions._public_job_error_with_path(
+            "/server/runtime/path/problematic.tif",
+            raw_failure,
+        )
+        == "Import failure: problematic.tif"
+    )
+    assert core_functions._public_job_error_with_path("", raw_failure) == (
+        "Import failure: "
+    )
+    assert core_functions._public_import_job_text_list(["", None]) == []
+
+    job = {}
+    core_functions._append_job_error(job, raw_failure)
+    core_functions._append_job_message(job, raw_failure)
+    assert job == {
+        "errors": [raw_failure],
+        "messages": ["Import failure: synthetic_failure.ome.zarr"],
+    }
+
+
 def test_job_id_and_managed_path_helpers_enforce_managed_roots(
     monkeypatch, tmp_path
 ) -> None:

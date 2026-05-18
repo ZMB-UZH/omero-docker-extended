@@ -1733,6 +1733,61 @@ def test_chunk_import_confirm_prune_and_status_control_paths(tmp_path, monkeypat
     }
 
 
+def test_job_status_removes_internal_import_failure_details(monkeypatch):
+    """Verify job status never exposes importer diagnostics in public failures.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on browser-visible leak regressions.
+    """
+    job_id = _test_job_id("ef")
+    raw_failure = (
+        "Import failure: synthetic_failure.ome.zarr - Using OMERO.java-5.6.17-ice36 "
+        "FILE_EXCEPTION: /server/runtime/path java.lang.IllegalArgumentException "
+        "at com.example.Reader.open(Reader.java:42)"
+    )
+    raw_error = "Using OMERO.java-5.6.17-ice36 FILE_EXCEPTION: /server/runtime/path"
+    status_job = {
+        "status": "error",
+        "uploaded_bytes": 1,
+        "imported_bytes": 1,
+        "import_progress_bytes": 1,
+        "total_bytes": 1,
+        "errors": [raw_failure, raw_error],
+        "messages": [raw_failure, "Import success: clean.ome.tif"],
+        "compatibility_status": "compatible",
+        "compatibility_enabled": True,
+        "files": [],
+    }
+    monkeypatch.setattr(
+        index_view,
+        "_load_owned_job",
+        lambda request, conn, current_job_id, missing_error: (status_job, None),
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_uploaded_job_dataset_targets",
+        lambda current_job_id, current_job, conn: (current_job, None),
+    )
+
+    response = index_view.job_status(
+        RequestFactory().get("/"), job_id=job_id, conn=object()
+    )
+    payload = _payload(response)
+
+    assert payload["errors"] == [
+        "Import failure: synthetic_failure.ome.zarr",
+        "Import failed.",
+    ]
+    assert payload["messages"] == [
+        "Import failure: synthetic_failure.ome.zarr",
+        "Import success: clean.ome.tif",
+    ]
+    payload_text = json.dumps(payload)
+    assert "OMERO.java" not in payload_text
+    assert "FILE_EXCEPTION" not in payload_text
+    assert "server/runtime/path" not in payload_text
+    assert "Reader.java" not in payload_text
+
+
 def test_index_view_wrapper_and_chunk_error_edges_cover_persisted_state_failures(
     tmp_path, monkeypatch
 ):
