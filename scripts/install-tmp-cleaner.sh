@@ -7,7 +7,7 @@
 #   - /etc/systemd/system/omero-tmp-cleaner.service
 #   - /etc/systemd/system/omero-tmp-cleaner.timer
 #
-# Compatible with Ubuntu 24.04+ and Debian 13 (Trixie)+.
+# Compatible with Ubuntu 26.04 LTS and Debian 13 (Trixie).
 #
 # Usage:
 #   sudo ./install-tmp-cleaner.sh <OMERO_TMP_PATH>

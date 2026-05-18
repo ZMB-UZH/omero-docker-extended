@@ -76,7 +76,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery workers
-│   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 24.04 + Python 3.9)
+│   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 26.04 LTS)
 │   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
 │   ├── redis-sysctl-init.Dockerfile   #   Alpine sidecar for kernel parameter tuning
@@ -364,6 +364,44 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 # Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
 bash installation/cleanup_build_containers.sh
 ```
+
+### Storage quotas
+
+Storage quotas are enforced with ext4 project quotas. Admin Tools stores one
+quota per OMERO group; the host `omero-quota-enforcer` systemd path/timer maps
+that group directory in the configured `ManagedRepository` to an ext4 project
+and applies the block limit. Everything under that group directory counts
+toward the same quota. Data stored in another managed repository, on another
+filesystem, or through in-place import paths is outside this quota domain and
+is not counted by these limits.
+
+The Quotas tab stays disabled until the OMERO user-data filesystem is `ext4`,
+has the ext4 `project` feature, and is mounted with `prjquota`. This is a
+storage change: schedule downtime, take a backup or snapshot first, and never
+force an unmount. If OMERO data is on `/` and the `project` feature is not
+already enabled, there is no safe host-agnostic SSH command that can unmount
+the running root filesystem to change it; use rescue media or move OMERO data
+to a separate ext4 filesystem. Quotas are enforced for normal OMERO/container
+writes; privileged host-root processes can still bypass Linux quota limits.
+
+On Debian 13 or Ubuntu 26.04 LTS, run this from the OMERO Docker Extended
+installation directory:
+
+```bash
+sudo scripts/enable-storage-quotas.sh --yes-i-have-a-backup
+```
+
+The installer asks the same question during setup and defaults to `no`.
+
+The command verifies the OS, installs the required packages, runs a disposable
+ext4 project-quota self-test, discovers `OMERO_USER_DATA_PATH`, confirms the
+target filesystem is ext4, adds the project-quota mount option to exactly one
+matching `/etc/fstab` entry without duplicating or replacing existing options,
+and installs the quota enforcer. If project quotas are already active, it does
+not tune, unmount, remount, or rewrite that filesystem. It refuses non-ext4
+filesystems, ambiguous or missing fstab entries, nested mounts, unsupported
+device references, and root filesystems that still need the ext4 `project`
+feature enabled.
 
 ### Reverse proxy
 

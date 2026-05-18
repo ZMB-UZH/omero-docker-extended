@@ -168,7 +168,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             workflow["jobs"]["ruff"]["if"],
         )
         self.assertEqual("read", workflow["permissions"]["contents"])
-        self.assertEqual("ubuntu-24.04", workflow["jobs"]["ruff"]["runs-on"])
+        self.assertEqual("ubuntu-latest", workflow["jobs"]["ruff"]["runs-on"])
 
         steps = workflow["jobs"]["ruff"]["steps"]
         uses_values = [step.get("uses") for step in steps if "uses" in step]

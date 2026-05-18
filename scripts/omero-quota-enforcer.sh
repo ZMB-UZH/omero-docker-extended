@@ -6,7 +6,7 @@
 # ext4 project quotas on the host filesystem using chattr and setquota.
 #
 # Must run as root on the Docker host through systemd.
-# Compatible with Ubuntu 24.04+ and Debian 13 (Trixie)+.
+# Compatible with Ubuntu 26.04 LTS and Debian 13 (Trixie).
 #
 # Required host packages: e2fsprogs, quota, python3, util-linux
 # Required filesystem:    ext4 mounted with prjquota, project feature enabled

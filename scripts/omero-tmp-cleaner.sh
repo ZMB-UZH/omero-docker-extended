@@ -3,7 +3,7 @@
 # omero-tmp-cleaner.sh — Host-side cleanup for OMERO_TMP_PATH
 #
 # Deletes temporary artifacts older than a given age from the OMERO_TMP_PATH tree.
-# This is designed to be invoked by systemd (timer) on Ubuntu 24.04+ and Debian 13+.
+# This is designed to be invoked by systemd (timer) on Ubuntu 26.04 LTS and Debian 13.
 #
 # Safety properties:
 #   - Requires an explicit --tmp-dir argument (no defaults).

@@ -1467,7 +1467,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual("read", security_delta_job["permissions"]["contents"])
         self.assertEqual("read", security_delta_job["permissions"]["security-events"])
         self.assertNotIn("pull-requests", security_delta_job["permissions"])
-        self.assertEqual("ubuntu-24.04", security_delta_job["runs-on"])
+        self.assertEqual("ubuntu-latest", security_delta_job["runs-on"])
         self.assertEqual(
             [
                 "codeql",
@@ -1743,7 +1743,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             workflow["jobs"]["super-linter"]["if"],
         )
         self.assertEqual("read", workflow["permissions"]["contents"])
-        self.assertEqual("ubuntu-24.04", workflow["jobs"]["super-linter"]["runs-on"])
+        self.assertEqual("ubuntu-latest", workflow["jobs"]["super-linter"]["runs-on"])
 
         job_permissions = workflow["jobs"]["super-linter"]["permissions"]
         self.assertEqual("read", job_permissions["contents"])

@@ -2,9 +2,9 @@
 # Keeps Celery runtime separate from OMERO.web and OMERO.server images.
 
 ## Dedicated Celery worker image for OMERO Imaris exports
-## Ubuntu 24.04 base (NOT slim), pinned Python packages.
+## Ubuntu 26.04 LTS base (NOT slim), pinned Python packages.
 
-FROM ubuntu:24.04@sha256:84e77dee7d1bc93fb029a45e3c6cb9d8aa4831ccfcc7103d36e876938d28895b
+FROM ubuntu:26.04@sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64
 
 USER root
 
@@ -41,16 +41,17 @@ RUN set -euo pipefail; \
     add-apt-repository -y ppa:deadsnakes/ppa; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        "python3.9=$(require_apt_version python3.9)" \
-        "python3.9-dev=$(require_apt_version python3.9-dev)" \
-        "python3.9-venv=$(require_apt_version python3.9-venv)" \
-        "python3.9-distutils=$(require_apt_version python3.9-distutils)" \
+        "python3.10=$(require_apt_version python3.10)" \
+        "python3.10-dev=$(require_apt_version python3.10-dev)" \
+        "python3.10-venv=$(require_apt_version python3.10-venv)" \
+        "python3.10-distutils=$(require_apt_version python3.10-distutils)" \
         "gcc=$(require_apt_version gcc)" \
         "g++=$(require_apt_version g++)" \
         "libedit-dev=$(require_apt_version libedit-dev)" \
         "libbz2-dev=$(require_apt_version libbz2-dev)" \
         "libstdc++6=$(require_apt_version libstdc++6)" \
-        "libssl3=$(require_apt_version libssl3)"; \
+        "libssl3t64=$(require_apt_version libssl3t64)" \
+        "libssl-dev=$(require_apt_version libssl-dev)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
         apt-get upgrade -y --no-install-recommends; \
@@ -60,10 +61,11 @@ RUN set -euo pipefail; \
 
 # Create a venv to not depend on "system pip" state
 ENV VENV=/opt/venv
+# ZeroC Ice 3.6.5 ships legacy C sources that need POSIX declarations with GCC 15.
 RUN set -euo pipefail; \
-    python3.9 -m venv "$VENV"; \
+    python3.10 -m venv "$VENV"; \
     "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel; \
-    "$VENV/bin/python" -m pip install \
+    CFLAGS="-std=gnu17 -D_DEFAULT_SOURCE" "$VENV/bin/python" -m pip install \
         "celery==5.3.6" \
         "redis==5.0.8" \
         "omero-py==5.22.0"

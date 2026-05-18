@@ -68,7 +68,7 @@ class VultureIntegrationContractTests(TestCase):
             workflow["jobs"]["vulture"]["if"],
         )
         self.assertEqual("read", workflow["permissions"]["contents"])
-        self.assertEqual("ubuntu-24.04", workflow["jobs"]["vulture"]["runs-on"])
+        self.assertEqual("ubuntu-latest", workflow["jobs"]["vulture"]["runs-on"])
 
         steps = workflow["jobs"]["vulture"]["steps"]
         uses_values = [step.get("uses") for step in steps if "uses" in step]

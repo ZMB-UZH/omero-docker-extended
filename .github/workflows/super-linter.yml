@@ -15,7 +15,7 @@ jobs:
   super-linter:
     name: Super-Linter
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read # Required to pull the pinned Super-Linter container from GHCR.

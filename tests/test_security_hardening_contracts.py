@@ -106,6 +106,20 @@ class SecurityHardeningContractTests(unittest.TestCase):
                 re.DOTALL,
             ),
         )
+        self.assertRegex(
+            self.installation_script,
+            re.compile(
+                r"resolve_storage_quotas_choice\(\) \{.*?local prompt_default=\"n\".*?local default_choice=\"no\"",
+                re.DOTALL,
+            ),
+        )
+        self.assertIn(
+            "Enable ext4 project quotas for OMERO user data?",
+            self.installation_script,
+        )
+        self.assertIn("STORAGE_QUOTAS_CHOICE", self.installation_script)
+        self.assertNotIn("OMERO_QUOTA_SKIP_COMPOSE=1", self.installation_script)
+        self.assertIn("STORAGE_QUOTAS_ENABLEMENT_RAN", self.installation_script)
 
 
 if __name__ == "__main__":
