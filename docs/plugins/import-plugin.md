@@ -68,7 +68,7 @@ Related docs:
   (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`,
   `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and
   upgrades remain deliberate. The tracked example env now pins `ome-zarr` to
-  `0.15.0`. That upstream release deprecates legacy writer targets (`v01` to
+  `0.16.0`. Recent upstream releases deprecate legacy writer targets (`v01` to
   `v03`), but this repo uses `ome-zarr` only for detection and read-side
   inspection while the normalization write path stays repo-local, so the
   upgrade remains an environment/build decision rather than an in-code writer

@@ -13,6 +13,6 @@ psycopg2-binary==2.9.12
 numpy==2.4.4
 numcodecs==0.16.5
 matplotlib==3.10.8
-ome-zarr==0.15.0
+ome-zarr==0.16.0
 zarr==3.1.6
 tifffile==2026.3.3

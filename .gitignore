@@ -80,12 +80,12 @@ installation_paths.env
 .codex
 .venv
 /logo/logo.png
+venv/
+ENV/
 !env/
 env/*
 !env/*_example.env
 !installation_paths_example.env
-venv/
-ENV/
 env.bak/
 venv.bak/
 node_modules/

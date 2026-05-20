@@ -309,7 +309,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
                         OMERO_DROPBOX_VERSION=5.7.0
                         OMERO_CLI_ZARR_VERSION=0.8.0
-                        OME_ZARR_PY_VERSION=0.15.0
+                        OME_ZARR_PY_VERSION=0.16.0
                         BIOFORMATS2RAW_VERSION=0.11.0
                         BIOFORMATS_VERSION=8.5.0
                         OMERO_INSTALLATION_PATH="{temp_path}"
@@ -413,7 +413,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         DOCKER_BUILD_LOCAL_CACHE_MODE=min
                         OMERO_DROPBOX_VERSION=5.7.0
                         OMERO_CLI_ZARR_VERSION=0.8.0
-                        OME_ZARR_PY_VERSION=0.15.0
+                        OME_ZARR_PY_VERSION=0.16.0
                         BIOFORMATS2RAW_VERSION=0.11.0
                         BIOFORMATS_VERSION=8.5.0
                         OMERO_INSTALLATION_PATH="{temp_path}"

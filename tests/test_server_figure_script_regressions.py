@@ -29,7 +29,7 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             'ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"',
             self.dockerfile,
         )
-        self.assertIn('ARG OME_OMERO_FIGURE_REF="7.3.1"', self.dockerfile)
+        self.assertIn('ARG OME_OMERO_FIGURE_REF="7.4.1"', self.dockerfile)
         self.assertIn(
             "/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py",
             self.dockerfile,

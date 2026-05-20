@@ -66,7 +66,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_JOB_SERVICE_HOST=localhost", env_text)
         self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
-        self.assertIn("OME_ZARR_PY_VERSION=0.15.0", env_text)
+        self.assertIn("OME_ZARR_PY_VERSION=0.16.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
 
@@ -243,6 +243,38 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                     "sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659",
                     dockerfile_text,
                 )
+
+    def test_omero_base_images_use_current_verified_digests(self) -> None:
+        """Verify OMERO base images use current verified digests.
+
+        Inputs: repository fixtures. Output: fails on regressions in OMERO base image pins.
+        """
+        expected_from_by_path = {
+            "docker/omero-server.Dockerfile": (
+                "FROM openmicroscopy/omero-server:5.6.18@"
+                "sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f"
+            ),
+            "docker/omero-web.Dockerfile": (
+                "FROM openmicroscopy/omero-web-standalone:5.31.1@"
+                "sha256:eee6e0472dead6572f4da789202d2d4b7f55571904483d35930328a5f74ccb00"
+            ),
+        }
+        for relative_path, expected_from in expected_from_by_path.items():
+            with self.subTest(relative_path=relative_path):
+                dockerfile_text = self.read_text(relative_path)
+                self.assertIn(expected_from, dockerfile_text)
+
+    def test_omero_python_api_pin_matches_updated_server_stack(self) -> None:
+        """Verify OMERO Python API pins match the updated OMERO server stack.
+
+        Inputs: repository fixtures. Output: fails on stale omero-py pins.
+        """
+        expected_pin = '"omero-py==5.22.1"'
+        self.assertIn(expected_pin, self.read_text("docker/omero-web.Dockerfile"))
+        self.assertIn(
+            expected_pin,
+            self.read_text("docker/omero-celery-worker.Dockerfile"),
+        )
 
     def test_omeroserver_dockerfile_fails_closed_without_dropbox_version(self) -> None:
         """Confirm omeroserver dockerfile fails closed without dropbox version exposes the expected failure.

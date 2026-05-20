@@ -177,3 +177,8 @@ For OMERO.web proxying from your external reverse proxy (e.g., nginx managed via
 - Forward to `omeroweb` on `CONFIG_omero_web_application__server_port`.
 - Scheme: `http` (TLS terminates at the proxy).
 - Direct local access uses `OMERO_WEB_HOST_PORT`.
+
+Desktop clients that infer OMERO server discovery from OMERO.web URLs may not
+honor a nonstandard web port. For BIOP BigDataViewer OMERO loading, expose the
+same OMERO.web service through trusted HTTPS on port 443 for the hostname used
+in copied image URLs; leave `OMERO_WEB_HOST_PORT` for direct troubleshooting.
