@@ -68,7 +68,7 @@ RUN set -euo pipefail; \
     CFLAGS="-std=gnu17 -D_DEFAULT_SOURCE" "$VENV/bin/python" -m pip install \
         "celery==5.3.6" \
         "redis==5.0.8" \
-        "omero-py==5.22.0"
+        "omero-py==5.22.1"
 
 # Non-root runtime user
 RUN set -euo pipefail; \

@@ -221,6 +221,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / "docker" / "omero-web.Dockerfile"
         ).read_text(encoding="utf-8")
         self.assertIn("patch_omeroweb_logo_context.py", dockerfile_text)
+        self.assertIn("patch_omeroweb_api_servers.py", dockerfile_text)
 
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(
         self,

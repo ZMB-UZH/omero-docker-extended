@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.31.0@sha256:47e22f00e8466ca14247936b4d312a03ec48d883a12dd5a645aa93f60d2555d7
+FROM openmicroscopy/omero-web-standalone:5.31.1@sha256:eee6e0472dead6572f4da789202d2d4b7f55571904483d35930328a5f74ccb00
 
 # Run image build steps as root
 # -----------------------------
@@ -131,7 +131,7 @@ RUN set -euo pipefail; \
         exit 1; \
     fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.22.0"
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.22.1"
 
 ## Optional: remove build dependencies again to keep image smaller
 ## ---------------------------------------------------------------
@@ -170,6 +170,7 @@ COPY omero_plugin_common /tmp/omero_plugin_common
 COPY omero_web_zarr /tmp/omero_web_zarr
 COPY third_party /tmp/third_party
 COPY docs/help /tmp/omero_plugin_help_docs
+COPY docker/patch_omeroweb_api_servers.py /tmp/patch_omeroweb_api_servers.py
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 
 COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_fallback.py
@@ -269,16 +270,21 @@ RUN set -euo pipefail; \
     /usr/local/bin/bioformats2raw --help >/dev/null; \
     rm -f "${archive}"
 
-# Patch OMERO.web to keep optional top-logo context keys defined when unset.
-# This preserves the documented login-logo path while avoiding noisy debug
-# log entries from missing ome.logo_src / ome.logo_href lookups.
+# Patch OMERO.web API server discovery and keep optional top-logo context keys
+# defined when unset. The API patch makes `/api/v0/servers/` return the
+# request host for this deployment's configured OMERO endpoint, so desktop
+# clients can use either a LAN IP or DNS name without seeing Docker-only names.
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    API_VIEWS_PY="${SITE_PACKAGES}/omeroweb/api/views.py"; \
+    "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_api_servers.py "${API_VIEWS_PY}"; \
+    chown omero-web:omero-web "${API_VIEWS_PY}"; \
     DECORATORS_PY="${SITE_PACKAGES}/omeroweb/webclient/decorators.py"; \
     "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_logo_context.py "${DECORATORS_PY}"; \
     chown omero-web:omero-web "${DECORATORS_PY}"; \
+    rm -f /tmp/patch_omeroweb_api_servers.py; \
     rm -f /tmp/patch_omeroweb_logo_context.py
 
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var

@@ -571,6 +571,22 @@ Each reinstall replaces the repo-managed quota service, timer, and path units
 from the active installation paths after removing stale unit files, drop-ins,
 and target dependency links for those managed units.
 
+## OMERO.web Server Discovery
+
+OMERO.web exposes the configured OMERO.server endpoint at `/api/v0/servers/`.
+The repository image keeps `OMEROHOST` for internal container communication,
+but the API response returns the host used by the incoming OMERO.web request for
+that configured endpoint. This avoids leaking Docker-only names such as
+`omeroserver` to desktop clients. The advertised Ice port remains the configured
+`OMERO_PORT`.
+
+This does not replace publishing OMERO.web at the client-visible origin. Clients
+that derive discovery from an image URL must still be able to reach
+`/api/v0/servers/` at the host and scheme they infer. For the BIOP BigDataViewer
+OMERO loader, publish OMERO.web behind trusted HTTPS on port 443 for the
+hostname users open, then keep `OMERO_WEB_HOST_PORT` as the direct local
+troubleshooting port.
+
 ## Configuration Change Process (Recommended)
 
 1. Edit env files in version control.

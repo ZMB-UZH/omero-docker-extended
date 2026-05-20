@@ -2,7 +2,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-server:5.6.17@sha256:7bd34f1d40f139e36652b183ec29f612723ffdab6f80994c583aff09684740b0
+FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f
 
 # Run image build steps as root
 # -----------------------------
@@ -375,7 +375,7 @@ RUN set -euo pipefail; \
 # Relying on a runtime download here makes PDF export nondeterministic and can
 # leave OMERO.figure without Figure_To_Pdf.py when outbound network access fails.
 ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"
-ARG OME_OMERO_FIGURE_REF="7.3.1"
+ARG OME_OMERO_FIGURE_REF="7.4.1"
 RUN set -euo pipefail; \
     echo "Installing OMERO.Figure Figure_To_Pdf.py from ${OME_OMERO_FIGURE_REPO} @ ${OME_OMERO_FIGURE_REF}"; \
     rm -rf /tmp/ome-omero-figure; \
