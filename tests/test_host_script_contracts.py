@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -89,6 +90,54 @@ def test_storage_quota_enablement_script_is_fail_closed() -> None:
     assert "setpriv --reuid 65534 --regid 65534 --clear-groups" in script
     assert "ext4 project quotas are already enabled" in script
     assert "OMERO_QUOTA_SKIP_COMPOSE" in script
+
+
+def test_installation_script_reports_failed_storage_quota_enablement(
+    tmp_path: Path,
+) -> None:
+    """Verify failed quota enablement cannot be reported as installed.
+
+    Inputs: pytest provides `tmp_path`. Output: fails when the installer function
+    ignores a failing quota enabler because it is called from an `if !` context.
+    """
+    installation_script = (
+        REPO_ROOT / "installation" / "installation_script.sh"
+    ).read_text(encoding="utf-8")
+    function_match = re.search(
+        r"^run_storage_quota_enablement_if_requested\(\) \{\n.*?^}\n",
+        installation_script,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert function_match is not None
+
+    install_root = tmp_path / "install root"
+    scripts_dir = install_root / "scripts"
+    scripts_dir.mkdir(parents=True)
+    enabler = scripts_dir / "enable-storage-quotas.sh"
+    enabler.write_text("#!/usr/bin/env bash\necho quota-enabler-failed >&2\nexit 23\n")
+    enabler.chmod(0o755)
+
+    result = _run_bash(
+        f"""
+        set -euo pipefail
+        {function_match.group(0)}
+        OMERO_INSTALLATION_PATH={_sh(install_root)}
+        SCRIPT_ENV_FILE={_sh(tmp_path / "installation_paths.env")}
+        ENABLE_STORAGE_QUOTAS=1
+        STORAGE_QUOTAS_ENABLEMENT_RAN=0
+        if run_storage_quota_enablement_if_requested; then
+            printf 'status=success ran=%s\\n' "${{STORAGE_QUOTAS_ENABLEMENT_RAN}}"
+        else
+            printf 'status=failure code=%s ran=%s\\n' "$?" "${{STORAGE_QUOTAS_ENABLEMENT_RAN}}"
+        fi
+        """
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "quota-enabler-failed" in result.stderr
+    assert "ext4 project-quota enablement failed" in result.stderr
+    assert "status=failure code=1 ran=0" in result.stdout
+    assert "status=success" not in result.stdout
 
 
 def test_host_timers_reschedule_after_reinstall_activation() -> None:

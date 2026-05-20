@@ -2968,9 +2968,12 @@ run_storage_quota_enablement_if_requested() {
     fi
 
     chmod +x "${enabler_path}"
-    OMERO_QUOTA_CREATE_DATA_DIR=1 \
-    OMERO_QUOTA_INSTALLATION_PATHS_ENV="${SCRIPT_ENV_FILE}" \
-        "${enabler_path}" --yes-i-have-a-backup
+    if ! OMERO_QUOTA_CREATE_DATA_DIR=1 \
+        OMERO_QUOTA_INSTALLATION_PATHS_ENV="${SCRIPT_ENV_FILE}" \
+        "${enabler_path}" --yes-i-have-a-backup; then
+        echo "ERROR: ext4 project-quota enablement failed." >&2
+        return 1
+    fi
     STORAGE_QUOTAS_ENABLEMENT_RAN=1
 }
 
