@@ -847,13 +847,23 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
         "_build_bioformats2raw_command",
         lambda source_file, zarr_output, settings: [source_file, zarr_output],
     )
+    monkeypatch.setattr(core_functions, "_build_cli_env", lambda: {"TEST": "1"})
+    monkeypatch.setattr(
+        core_functions,
+        "_get_ngff_converter_timeout_seconds",
+        lambda: 123,
+    )
 
-    def _run(cmd, timeout):
+    def _run(cmd, timeout, env=None, start_new_session=False):
         """Return a fake conversion result for cmd and timeout.
 
-        Inputs: `cmd`, `timeout` timeout seconds. Output: `SimpleNamespace` result.
+        Inputs: `cmd`, `timeout`, `env`, `start_new_session`. Output:
+        `SimpleNamespace` result.
         Raises: AssertionError, RuntimeError, TimeoutExpired when validation or external
         """
+        assert env == {"TEST": "1"}
+        assert start_new_session is True
+        assert timeout == 123
         source_name = Path(cmd[0]).name
         zarr_output = Path(cmd[1])
         if source_name == "fail.lif":
@@ -915,7 +925,7 @@ def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_
     assert latest_job["files"][3]["ngff_converted"] is True
     assert latest_job["files"][4]["status"] == "error"
     assert (
-        "bioformats2raw timed out after 7200s for timeout.lif"
+        "bioformats2raw timed out after 123s for timeout.lif"
         in latest_job["files"][4]["errors"][0]
     )
     assert latest_job["files"][5]["status"] == "error"
@@ -961,7 +971,11 @@ def test_process_import_job_marks_ngff_converter_jobs_error_when_every_conversio
     monkeypatch.setattr(
         core_functions.subprocess,
         "run",
-        lambda cmd, timeout: SimpleNamespace(returncode=9, stdout="", stderr="broken"),
+        lambda cmd, **_kwargs: SimpleNamespace(
+            returncode=9,
+            stdout="",
+            stderr="broken",
+        ),
     )
 
     core_functions._process_import_job(job["job_id"])

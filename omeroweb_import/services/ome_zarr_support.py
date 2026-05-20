@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from itertools import product
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
 LOGGER = logging.getLogger(__name__)
@@ -193,7 +193,10 @@ def _inspect_single_ome_zarr_image(
         )
 
     display_name = str(multiscale.get("name") or "").strip()
-    format_version = str(multiscale.get("version") or "").strip() or None
+    format_version = (
+        str(multiscale.get("version") or metadata_payload.get("version") or "").strip()
+        or None
+    )
     zarr_format = _read_zarr_format_metadata(store_root, metadata_payload)
     axis_names, axis_units, axis_error = _extract_axes(multiscale.get("axes"))
     if axis_error:
@@ -233,13 +236,13 @@ def _inspect_single_ome_zarr_image(
             zarr_format=zarr_format,
         )
 
-    primary_dataset_path = str(primary_dataset.get("path") or "").strip().strip("/")
-    if not primary_dataset_path:
+    primary_dataset_path, path_error = _normalize_zarr_relative_path(
+        primary_dataset.get("path")
+    )
+    if path_error:
         return OMEZarrImageInspection(
             recognized=True,
-            support_error=(
-                "OME-Zarr primary dataset metadata is missing a readable dataset path."
-            ),
+            support_error=f"OME-Zarr primary dataset path is invalid: {path_error}",
             format_version=format_version,
             zarr_format=zarr_format,
         )
@@ -253,11 +256,23 @@ def _inspect_single_ome_zarr_image(
             else None
             for dataset_entry in dataset_entries
         ],
+        multiscale.get("coordinateTransformations"),
     )
     if scale_error:
         return OMEZarrImageInspection(
             recognized=True,
             support_error=scale_error,
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+
+    dataset_relative_paths, path_error = _extract_dataset_relative_paths(
+        metadata_payload
+    )
+    if path_error:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=path_error,
             format_version=format_version,
             zarr_format=zarr_format,
         )
@@ -277,12 +292,78 @@ def _inspect_single_ome_zarr_image(
             zarr_format=zarr_format,
         )
 
-    try:
-        shape = tuple(int(value) for value in array_metadata.get("shape", ()) or ())
-    except Exception:
-        shape = ()
-    dtype_name = _normalize_dtype_name(array_metadata.get("dtype", ""))
-    dataset_relative_paths = _extract_dataset_relative_paths(metadata_payload)
+    shape, shape_error = _extract_array_shape(array_metadata, len(axis_names))
+    if shape_error:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=shape_error,
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+    dimension_error = _validate_dimension_names(
+        array_metadata,
+        axis_names,
+        zarr_format,
+    )
+    if dimension_error:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=dimension_error,
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+    dtype_name, dtype_error = _normalize_dtype_name(
+        array_metadata.get("dtype", array_metadata.get("data_type"))
+    )
+    if dtype_error:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=dtype_error,
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+
+    for relative_path in dataset_relative_paths:
+        if relative_path == primary_dataset_path:
+            continue
+        level_metadata, level_error = _read_array_metadata_payload(
+            store_root,
+            relative_path,
+        )
+        if level_metadata is None:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=level_error
+                or "OME-Zarr dataset array metadata could not be read.",
+                format_version=format_version,
+                zarr_format=zarr_format,
+            )
+        _, level_shape_error = _extract_array_shape(level_metadata, len(axis_names))
+        if level_shape_error:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=(
+                    f"OME-Zarr array metadata for {relative_path} is invalid: "
+                    f"{level_shape_error}"
+                ),
+                format_version=format_version,
+                zarr_format=zarr_format,
+            )
+        level_dimension_error = _validate_dimension_names(
+            level_metadata,
+            axis_names,
+            zarr_format,
+        )
+        if level_dimension_error:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=(
+                    f"OME-Zarr array metadata for {relative_path} is invalid: "
+                    f"{level_dimension_error}"
+                ),
+                format_version=format_version,
+                zarr_format=zarr_format,
+            )
 
     version_text = ome_zarr_package_version()
     details = "OME-Zarr image detected by ome-zarr"
@@ -310,36 +391,52 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
 
     Inputs: `store_root` (Path). Output: `OMEZarrImageInspection`.
     """
-    series_dirs = sorted(
-        child
-        for child in store_root.iterdir()
-        if child.is_dir() and child.name.isdigit()
-    )
-    if not series_dirs:
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error=(
-                "bioformats2raw.layout=3 metadata was found, but the store does not "
-                "contain any numeric series directories to inspect with ome-zarr."
-            ),
+    series_paths, series_error = _bioformats2raw_series_paths(store_root)
+    if series_error:
+        return OMEZarrImageInspection(recognized=True, support_error=series_error)
+    if not series_paths:
+        numeric_dirs = sorted(
+            child
+            for child in store_root.iterdir()
+            if child.is_dir() and child.name.isdigit()
         )
+        if not numeric_dirs:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=(
+                    "bioformats2raw.layout=3 metadata was found, but the store "
+                    "does not contain any numeric series directories or OME "
+                    "series metadata to inspect with ome-zarr."
+                ),
+            )
 
-    series_numbers = [int(series_dir.name) for series_dir in series_dirs]
-    expected_numbers = list(range(series_numbers[-1] + 1))
-    if series_numbers != expected_numbers:
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error=(
-                "bioformats2raw.layout=3 stores must expose contiguous numeric "
-                "series directories starting at 0."
-            ),
-        )
+        series_numbers = [int(series_dir.name) for series_dir in numeric_dirs]
+        expected_numbers = list(range(series_numbers[-1] + 1))
+        if series_numbers != expected_numbers:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=(
+                    "bioformats2raw.layout=3 stores must expose contiguous numeric "
+                    "series directories starting at 0 when OME series metadata "
+                    "does not declare explicit image paths."
+                ),
+            )
+        series_paths = tuple(series_dir.name for series_dir in numeric_dirs)
 
     first_supported = None
     dataset_relative_paths: list[str] = []
     image_node_relative_paths: list[str] = []
     image_display_names: list[str] = []
-    for series_dir in series_dirs:
+    for series_path in series_paths:
+        series_dir = store_root / series_path
+        if not series_dir.is_dir():
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error=(
+                    f"Series {series_path} from bioformats2raw metadata is not "
+                    "a readable OME-Zarr image directory."
+                ),
+            )
         series_metadata, inspection = _load_root_ome_zarr_metadata(series_dir)
         if inspection is not None:
             error_text = (
@@ -348,14 +445,14 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             return OMEZarrImageInspection(
                 recognized=True,
                 support_error=(
-                    f"Series {series_dir.name} is not a supported "
+                    f"Series {series_path} is not a supported "
                     f"OME-Zarr image: {error_text}"
                 ),
             )
         if series_metadata is None:
             return OMEZarrImageInspection(
                 recognized=True,
-                support_error=f"Series {series_dir.name} did not expose OME-Zarr metadata.",
+                support_error=f"Series {series_path} did not expose OME-Zarr metadata.",
             )
         series_inspection = _inspect_single_ome_zarr_image(series_dir, series_metadata)
         if not series_inspection.supported:
@@ -366,24 +463,24 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
             return OMEZarrImageInspection(
                 recognized=True,
                 support_error=(
-                    f"Series {series_dir.name} is not a supported "
+                    f"Series {series_path} is not a supported "
                     f"OME-Zarr image: {error_text}"
                 ),
             )
         if first_supported is None:
             first_supported = series_inspection
-        image_node_relative_paths.append(series_dir.name)
+        image_node_relative_paths.append(series_path)
         if series_inspection.image_display_names:
             image_display_names.append(series_inspection.image_display_names[0])
         else:
             image_display_names.append("")
         if series_inspection.image_relative_paths:
             dataset_relative_paths.extend(
-                f"{series_dir.name}/{relative_path}"
+                f"{series_path}/{relative_path}"
                 for relative_path in series_inspection.image_relative_paths
             )
         else:
-            dataset_relative_paths.append(series_dir.name)
+            dataset_relative_paths.append(series_path)
 
     version_text = ome_zarr_package_version()
     details = "bioformats2raw.layout=3 OME-Zarr detected by ome-zarr"
@@ -401,6 +498,64 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
         image_node_relative_paths=tuple(image_node_relative_paths),
         image_display_names=tuple(image_display_names),
     )
+
+
+def _bioformats2raw_series_paths(
+    store_root: Path,
+) -> tuple[tuple[str, ...], Optional[str]]:
+    """Return series paths declared by bioformats2raw OME metadata.
+
+    Inputs: `store_root` (Path). Output: `(paths, error)`.
+    """
+    ome_payload, inspection = _load_root_ome_zarr_metadata(store_root / "OME")
+    if inspection is not None:
+        if inspection.recognized and inspection.support_error:
+            return (), inspection.support_error
+        return (), None
+    if not isinstance(ome_payload, dict) or "series" not in ome_payload:
+        return (), None
+
+    series_payload = ome_payload.get("series")
+    if not isinstance(series_payload, list) or not series_payload:
+        return (
+            (),
+            "bioformats2raw.layout=3 OME series metadata must be a non-empty list.",
+        )
+
+    paths = []
+    seen = set()
+    for raw_path in series_payload:
+        normalized, path_error = _normalize_zarr_relative_path(raw_path)
+        if path_error:
+            return (), f"Invalid bioformats2raw OME series path: {path_error}"
+        if normalized in seen:
+            return (), f"Duplicate bioformats2raw OME series path: {normalized}"
+        seen.add(normalized)
+        paths.append(normalized)
+    return tuple(paths), None
+
+
+def _normalize_zarr_relative_path(raw_path) -> tuple[str, Optional[str]]:
+    """Return a safe Zarr relative group path from metadata.
+
+    Inputs: `raw_path`. Output: `(path, error)`.
+    """
+    if not isinstance(raw_path, str):
+        return "", "series and dataset paths must be strings."
+    path_text = raw_path.strip()
+    if not path_text:
+        return "", "series paths must be non-empty strings."
+    if "\\" in path_text:
+        return "", f"{path_text!r} contains a backslash path separator."
+    pure_path = PurePosixPath(path_text)
+    if pure_path.is_absolute():
+        return "", f"{path_text!r} must be relative."
+    path_text = path_text.strip("/")
+    pure_path = PurePosixPath(path_text)
+    parts = pure_path.parts
+    if any(part in {"", ".", ".."} for part in parts):
+        return "", f"{path_text!r} contains an unsafe path component."
+    return "/".join(parts), None
 
 
 def _read_store_metadata_payload(
@@ -422,12 +577,36 @@ def _read_store_metadata_payload(
 
     try:
         with open(metadata_path, encoding="utf-8") as handle:
-            return json.load(handle), None
+            payload = json.load(handle)
     except (OSError, json.JSONDecodeError) as exc:
         return (
             None,
             f"Failed to read OME-Zarr metadata from {metadata_path.name}: {exc}",
         )
+    return _normalize_store_metadata_payload(payload, metadata_path.name)
+
+
+def _normalize_store_metadata_payload(
+    payload,
+    metadata_name: str,
+) -> tuple[object | None, Optional[str]]:
+    """Return OME metadata normalized across Zarr v2 and v3 containers.
+
+    Inputs: `payload`, `metadata_name` (str). Output: `(payload, error)`.
+    """
+    if not isinstance(payload, dict):
+        return payload, None
+    attributes = payload.get("attributes")
+    if not isinstance(attributes, dict) or "ome" not in attributes:
+        return payload, None
+    ome_payload = attributes.get("ome")
+    if not isinstance(ome_payload, dict):
+        return (
+            None,
+            f"Invalid OME-Zarr metadata payload in {metadata_name}: "
+            "attributes.ome must be a JSON object.",
+        )
+    return dict(ome_payload), None
 
 
 def _read_zarr_format_metadata(
@@ -463,7 +642,11 @@ def _read_array_metadata_payload(
     Inputs: `store_root` (Path), `relative_path` (str). Output: `tuple[Optional[dict],
     Optional[str]]`.
     """
-    array_root = store_root / relative_path
+    safe_relative_path, path_error = _normalize_zarr_relative_path(relative_path)
+    if path_error:
+        return None, f"OME-Zarr dataset path is invalid: {path_error}"
+
+    array_root = store_root / safe_relative_path
     metadata_path = None
     for candidate_name in (".zarray", "zarr.json"):
         candidate = array_root / candidate_name
@@ -474,7 +657,7 @@ def _read_array_metadata_payload(
     if metadata_path is None:
         return (
             None,
-            f"OME-Zarr dataset path is missing its array metadata: {relative_path}",
+            f"OME-Zarr dataset path is missing its array metadata: {safe_relative_path}",
         )
 
     try:
@@ -483,15 +666,77 @@ def _read_array_metadata_payload(
     except (OSError, json.JSONDecodeError) as exc:
         return (
             None,
-            f"Failed to read OME-Zarr array metadata for {relative_path}: {exc}",
+            f"Failed to read OME-Zarr array metadata for {safe_relative_path}: {exc}",
         )
 
     if not isinstance(payload, dict):
         return (
             None,
-            f"OME-Zarr array metadata for {relative_path} must be a JSON object.",
+            f"OME-Zarr array metadata for {safe_relative_path} must be a JSON object.",
         )
     return payload, None
+
+
+def _validate_dimension_names(
+    array_metadata: dict,
+    axis_names: list[str],
+    zarr_format: Optional[int],
+) -> Optional[str]:
+    """Return an error when Zarr dimension names disagree with NGFF axes.
+
+    Inputs: `array_metadata` (dict), `axis_names` (list[str]), `zarr_format`
+    (Optional[int]). Output: optional error text.
+    """
+    dimension_names = array_metadata.get("dimension_names")
+    if dimension_names is None:
+        if zarr_format == 3:
+            return (
+                "OME-Zarr v0.5/Zarr v3 arrays must declare dimension_names that "
+                "match the multiscale axes."
+            )
+        return None
+    if (
+        not isinstance(dimension_names, list)
+        or not all(isinstance(name, str) for name in dimension_names)
+        or [name.strip().lower() for name in dimension_names] != axis_names
+    ):
+        return "OME-Zarr primary array dimension_names must match the multiscale axes."
+    return None
+
+
+def _extract_array_shape(
+    array_metadata: dict,
+    axis_count: int,
+) -> tuple[tuple[int, ...], Optional[str]]:
+    """Return the primary array shape from metadata.
+
+    Inputs: `array_metadata` (dict), `axis_count` (int). Output: `(shape, error)`.
+    """
+    raw_shape = array_metadata.get("shape")
+    if not isinstance(raw_shape, list) or not raw_shape:
+        return (
+            (),
+            "OME-Zarr primary array shape must be a non-empty list that matches the image axes.",
+        )
+    if len(raw_shape) != axis_count:
+        return (
+            (),
+            "OME-Zarr primary array shape rank does not match the image axes.",
+        )
+    shape = []
+    for index, raw_value in enumerate(raw_shape):
+        if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+            return (
+                (),
+                f"OME-Zarr primary array shape axis index {index} must be a positive integer.",
+            )
+        if raw_value <= 0:
+            return (
+                (),
+                f"OME-Zarr primary array shape axis index {index} must be a positive integer.",
+            )
+        shape.append(raw_value)
+    return tuple(shape), None
 
 
 def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str]]:
@@ -507,43 +752,63 @@ def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str
     for axis in axes_payload:
         if not isinstance(axis, dict):
             return [], {}, "OME-Zarr axes must be described by metadata objects."
-        axis_name = str(axis.get("name") or "").strip().lower()
+        raw_axis_name = axis.get("name")
+        if not isinstance(raw_axis_name, str):
+            return [], {}, "OME-Zarr axes must include string axis names."
+        axis_name = raw_axis_name.strip().lower()
         if not axis_name:
             return [], {}, "OME-Zarr axes must include non-empty axis names."
+        if axis_name in axis_names:
+            return [], {}, "OME-Zarr axes must include unique axis names."
         axis_names.append(axis_name)
-        axis_unit = str(axis.get("unit") or "").strip()
+        raw_axis_unit = axis.get("unit")
+        if raw_axis_unit is not None and not isinstance(raw_axis_unit, str):
+            return [], {}, "OME-Zarr axis units must be strings when present."
+        axis_unit = (raw_axis_unit or "").strip()
         if axis_unit:
             axis_units[axis_name] = axis_unit
     return axis_names, axis_units, None
 
 
-def _extract_dataset_relative_paths(metadata_payload: dict) -> tuple[str, ...]:
+def _extract_dataset_relative_paths(
+    metadata_payload: dict,
+) -> tuple[tuple[str, ...], Optional[str]]:
     """Extract the dataset relative paths.
 
-    Inputs: `metadata_payload` (dict). Output: `tuple[str, ...]`.
+    Inputs: `metadata_payload` (dict). Output: `(paths, error)`.
     """
     paths = []
     for multiscale_entry in metadata_payload.get("multiscales") or []:
         if not isinstance(multiscale_entry, dict):
-            continue
+            return (), "OME-Zarr multiscale metadata is malformed."
         for dataset_entry in multiscale_entry.get("datasets") or []:
             if not isinstance(dataset_entry, dict):
-                continue
-            dataset_path = str(dataset_entry.get("path") or "").strip().strip("/")
-            if dataset_path:
-                paths.append(dataset_path)
-    return tuple(dict.fromkeys(paths))
+                return (), "OME-Zarr multiscale dataset metadata is malformed."
+            dataset_path, path_error = _normalize_zarr_relative_path(
+                dataset_entry.get("path")
+            )
+            if path_error:
+                return (
+                    (),
+                    f"OME-Zarr multiscale dataset path is invalid: {path_error}",
+                )
+            paths.append(dataset_path)
+    if not paths:
+        return (), "OME-Zarr metadata is missing multiscale dataset paths."
+    return tuple(dict.fromkeys(paths)), None
 
 
 def _extract_physical_sizes(
     axis_names: list[str],
     axis_units: dict[str, str],
     transforms_payload,
+    multiscale_transforms_payload=None,
 ) -> tuple[dict[str, tuple[float, str]], Optional[str]]:
     """Extract the physical sizes.
 
     Inputs: `axis_names` (list[str]), `axis_units` (dict[str, str]),
-    `transforms_payload`. Output: `tuple[dict[str, tuple[float, str]], Optional[str]]`.
+    `transforms_payload`, `multiscale_transforms_payload`. Output:
+    `tuple[dict[str, tuple[float, str]], Optional[str]]`.
     """
     if not isinstance(transforms_payload, list) or not transforms_payload:
         return (
@@ -559,42 +824,164 @@ def _extract_physical_sizes(
             "OME-Zarr coordinate transformations for the primary resolution level are malformed.",
         )
 
-    scale_values = None
-    for transform in primary_transforms:
-        if not isinstance(transform, dict) or transform.get("type") != "scale":
-            continue
-        scale_values = transform.get("scale")
-        break
-
-    if not isinstance(scale_values, list) or len(scale_values) != len(axis_names):
-        return {}, "OME-Zarr primary scale metadata does not match the image axes."
+    primary_scale, scale_error = _extract_scale_values(
+        primary_transforms,
+        len(axis_names),
+        "primary",
+        required=True,
+    )
+    if scale_error:
+        return {}, scale_error
+    for level_index, level_transforms in enumerate(transforms_payload[1:], start=1):
+        _, scale_error = _extract_scale_values(
+            level_transforms,
+            len(axis_names),
+            f"dataset level {level_index}",
+            required=True,
+        )
+        if scale_error:
+            return {}, scale_error
+    multiscale_scale, scale_error = _extract_scale_values(
+        multiscale_transforms_payload,
+        len(axis_names),
+        "multiscale",
+        required=False,
+    )
+    if scale_error:
+        return {}, scale_error
+    scale_values = [
+        primary_scale[index] * multiscale_scale[index]
+        for index in range(len(axis_names))
+    ]
 
     physical_sizes = {}
     for index, axis_name in enumerate(axis_names):
         if axis_name not in {"x", "y", "z"}:
             continue
-        try:
-            numeric_value = float(scale_values[index])
-        except (TypeError, ValueError):
-            return {}, f"OME-Zarr scale value for axis {axis_name!r} is not numeric."
-        if numeric_value <= 0:
-            return {}, f"OME-Zarr scale value for axis {axis_name!r} must be positive."
-        physical_sizes[axis_name] = (numeric_value, axis_units.get(axis_name, ""))
+        physical_sizes[axis_name] = (
+            scale_values[index],
+            axis_units.get(axis_name, ""),
+        )
 
     return physical_sizes, None
 
 
-def _normalize_dtype_name(raw_dtype) -> str:
+def _extract_scale_values(
+    transforms_payload,
+    axis_count: int,
+    label: str,
+    *,
+    required: bool,
+) -> tuple[list[float], Optional[str]]:
+    """Return the composed scale values for one transform list.
+
+    Inputs: `transforms_payload`, `axis_count` (int), `label` (str), `required` (bool).
+    Output: `(scale_values, error)`.
+    """
+    identity = [1.0] * axis_count
+    if transforms_payload is None:
+        if required:
+            return (
+                identity,
+                "OME-Zarr primary scale metadata does not match the image axes.",
+            )
+        return identity, None
+    if not isinstance(transforms_payload, list):
+        return (
+            identity,
+            f"OME-Zarr {label} coordinate transformations are malformed.",
+        )
+    if not transforms_payload:
+        return (
+            identity,
+            f"OME-Zarr {label} scale metadata does not match the image axes.",
+        )
+
+    scale_values = list(identity)
+    saw_scale = False
+    saw_translation = False
+    for transform in transforms_payload:
+        if not isinstance(transform, dict):
+            return (
+                identity,
+                f"OME-Zarr {label} coordinate transformations are malformed.",
+            )
+        transform_type = transform.get("type")
+        if transform_type == "translation":
+            if not saw_scale:
+                return (
+                    identity,
+                    f"OME-Zarr {label} translation metadata must follow scale metadata.",
+                )
+            translation = transform.get("translation")
+            if not isinstance(translation, list) or len(translation) != axis_count:
+                return (
+                    identity,
+                    f"OME-Zarr {label} translation metadata does not match the image axes.",
+                )
+            if any(
+                isinstance(value, bool) or not isinstance(value, (int, float))
+                for value in translation
+            ):
+                return (
+                    identity,
+                    f"OME-Zarr {label} translation metadata must contain numeric values.",
+                )
+            if saw_translation:
+                return (
+                    identity,
+                    f"OME-Zarr {label} coordinate transformations contain multiple translations.",
+                )
+            saw_translation = True
+            continue
+        if transform_type != "scale":
+            return (
+                identity,
+                f"OME-Zarr {label} coordinate transformation type {transform_type!r} "
+                "is not supported for native image import.",
+            )
+        if saw_scale:
+            return (
+                identity,
+                f"OME-Zarr {label} coordinate transformations contain multiple scales.",
+            )
+        raw_scale = transform.get("scale")
+        if not isinstance(raw_scale, list) or len(raw_scale) != axis_count:
+            return (
+                identity,
+                f"OME-Zarr {label} scale metadata does not match the image axes.",
+            )
+        for index, raw_value in enumerate(raw_scale):
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                return (
+                    identity,
+                    f"OME-Zarr scale value for axis index {index} is not numeric.",
+                )
+            numeric_value = float(raw_value)
+            if numeric_value <= 0:
+                return (
+                    identity,
+                    f"OME-Zarr scale value for axis index {index} must be positive.",
+                )
+            scale_values[index] *= numeric_value
+        saw_scale = True
+
+    return scale_values, None
+
+
+def _normalize_dtype_name(raw_dtype) -> tuple[str, Optional[str]]:
     """Normalize the dtype name.
 
-    Inputs: `raw_dtype`. Output: `str`.
+    Inputs: `raw_dtype`. Output: `(dtype, error)`.
     """
+    if raw_dtype is None:
+        return "", "OME-Zarr primary array dtype metadata is missing."
     try:
         import numpy as np
 
-        return np.dtype(raw_dtype).name
+        return np.dtype(raw_dtype).name, None
     except Exception:
-        return str(raw_dtype or "").strip()
+        return "", "OME-Zarr primary array dtype metadata is invalid."
 
 
 def _native_ome_zarr_gzip_level() -> int:
@@ -637,15 +1024,24 @@ def _rewrite_problematic_native_image_arrays(
     gzip_spec = {"id": "gzip", "level": gzip_level}
 
     for relative_path in inspection.image_relative_paths:
-        array_dir = store_root / relative_path
+        safe_relative_path, path_error = _normalize_zarr_relative_path(relative_path)
+        if path_error:
+            return f"OME-Zarr dataset path is invalid: {path_error}"
+        array_dir = store_root / safe_relative_path
         zarray_path = array_dir / ".zarray"
         if not zarray_path.is_file():
-            return f"OME-Zarr dataset path is missing its .zarray metadata: {relative_path}"
+            return (
+                "OME-Zarr dataset path is missing its .zarray metadata: "
+                f"{safe_relative_path}"
+            )
 
         try:
             metadata_payload = json.loads(zarray_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            return f"Failed to read OME-Zarr array metadata for {relative_path}: {exc}"
+            return (
+                "Failed to read OME-Zarr array metadata for "
+                f"{safe_relative_path}: {exc}"
+            )
 
         compressor_spec = metadata_payload.get("compressor")
         if not isinstance(compressor_spec, dict):
@@ -656,7 +1052,7 @@ def _rewrite_problematic_native_image_arrays(
         try:
             source_codec = numcodecs.get_codec(compressor_spec)
         except Exception as exc:
-            return f"Failed to load OME-Zarr compressor for {relative_path}: {exc}"
+            return f"Failed to load OME-Zarr compressor for {safe_relative_path}: {exc}"
 
         for chunk_path in _iter_zarr_chunk_files(array_dir):
             try:
@@ -673,7 +1069,10 @@ def _rewrite_problematic_native_image_arrays(
         try:
             zarray_path.write_text(json.dumps(metadata_payload), encoding="utf-8")
         except OSError as exc:
-            return f"Failed to update OME-Zarr compressor metadata for {relative_path}: {exc}"
+            return (
+                "Failed to update OME-Zarr compressor metadata for "
+                f"{safe_relative_path}: {exc}"
+            )
 
     return None
 
@@ -720,35 +1119,36 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
     ):
         return None
 
-    z_axis_index = None
-    yx_indices = []
-    for i, axis in enumerate(axes):
-        if not isinstance(axis, dict):
-            continue
-        name = str(axis.get("name") or "").strip().lower()
-        if name == "z":
-            z_axis_index = i
-        elif name in ("y", "x"):
-            yx_indices.append(i)
+    axis_names, _, axis_error = _extract_axes(axes)
+    if (
+        axis_error
+        or "z" not in axis_names
+        or "y" not in axis_names
+        or "x" not in axis_names
+    ):
+        return None
+    z_axis_index = axis_names.index("z")
+    yx_indices = [axis_names.index("y"), axis_names.index("x")]
 
-    if z_axis_index is None or len(yx_indices) < 2:
+    if not isinstance(datasets[0], dict) or not isinstance(datasets[1], dict):
+        return None
+    s0_path, path_error = _normalize_zarr_relative_path(datasets[0].get("path"))
+    if path_error:
+        return None
+    s1_path, path_error = _normalize_zarr_relative_path(datasets[1].get("path"))
+    if path_error:
         return None
 
-    s0_path = datasets[0].get("path", "")
-    s1_path = datasets[1].get("path", "")
-    s0_zarray = store_root / s0_path / ".zarray"
-    s1_zarray = store_root / s1_path / ".zarray"
-    if not s0_zarray.is_file() or not s1_zarray.is_file():
+    ndim = len(axis_names)
+    s0_metadata, _ = _read_array_metadata_payload(store_root, s0_path)
+    s1_metadata, _ = _read_array_metadata_payload(store_root, s1_path)
+    if s0_metadata is None or s1_metadata is None:
         return None
-
-    try:
-        s0_shape = json.loads(s0_zarray.read_text(encoding="utf-8")).get("shape", [])
-        s1_shape = json.loads(s1_zarray.read_text(encoding="utf-8")).get("shape", [])
-    except (OSError, json.JSONDecodeError):
+    s0_shape, shape_error = _extract_array_shape(s0_metadata, ndim)
+    if shape_error:
         return None
-
-    ndim = len(axes)
-    if len(s0_shape) != ndim or len(s1_shape) != ndim:
+    s1_shape, shape_error = _extract_array_shape(s1_metadata, ndim)
+    if shape_error:
         return None
 
     if s0_shape[z_axis_index] == s1_shape[z_axis_index]:
@@ -822,12 +1222,18 @@ def _read_zarr_v2_array(array_dir: Path, metadata: dict):
     """
     import numpy as np
 
-    try:
-        shape = tuple(int(value) for value in metadata["shape"])
-        chunks = tuple(int(value) for value in metadata["chunks"])
-        dtype = np.dtype(metadata["dtype"])
-    except Exception as exc:
-        raise RuntimeError(f"invalid zarr array metadata: {exc}") from exc
+    raw_shape = metadata.get("shape")
+    shape_axis_count = len(raw_shape) if isinstance(raw_shape, list) else 0
+    shape, shape_error = _extract_array_shape(metadata, shape_axis_count)
+    if shape_error:
+        raise RuntimeError(f"invalid zarr array metadata: {shape_error}")
+    chunks = _extract_positive_int_sequence(
+        metadata.get("chunks"), len(shape), "chunks"
+    )
+    dtype_name, dtype_error = _normalize_dtype_name(metadata.get("dtype"))
+    if dtype_error:
+        raise RuntimeError(f"invalid zarr array metadata: {dtype_error}")
+    dtype = np.dtype(dtype_name)
 
     fill_value = metadata.get("fill_value", 0)
     filters_spec = metadata.get("filters")
@@ -874,6 +1280,54 @@ def _read_zarr_v2_array(array_dir: Path, metadata: dict):
         data[tuple(chunk_slices)] = chunk_array[tuple(chunk_crop)]
 
     return data
+
+
+def _extract_positive_int_sequence(raw_values, expected_length: int, label: str):
+    """Return a positive integer tuple from JSON metadata.
+
+    Inputs: `raw_values`, `expected_length` (int), `label` (str). Output: tuple[int].
+    Raises: RuntimeError when metadata is malformed.
+    """
+    if not isinstance(raw_values, list) or len(raw_values) != expected_length:
+        raise RuntimeError(f"{label} must match the array rank")
+    values = []
+    for index, raw_value in enumerate(raw_values):
+        if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+            raise RuntimeError(f"{label} axis index {index} must be a positive integer")
+        if raw_value <= 0:
+            raise RuntimeError(f"{label} axis index {index} must be a positive integer")
+        values.append(raw_value)
+    return tuple(values)
+
+
+def _extract_translation_values(
+    transforms_payload,
+    axis_count: int,
+) -> tuple[Optional[list[float]], Optional[str]]:
+    """Return the optional translation transform from NGFF metadata.
+
+    Inputs: `transforms_payload`, `axis_count` (int). Output: `(translation, error)`.
+    """
+    if not isinstance(transforms_payload, list):
+        return None, "s0 coordinate transformations are malformed."
+    translation_values = None
+    for transform in transforms_payload:
+        if not isinstance(transform, dict):
+            return None, "s0 coordinate transformations are malformed."
+        if transform.get("type") != "translation":
+            continue
+        raw_translation = transform.get("translation")
+        if not isinstance(raw_translation, list) or len(raw_translation) != axis_count:
+            return None, "s0 translation metadata does not match the image axes."
+        values = []
+        for raw_value in raw_translation:
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                return None, "s0 translation metadata must contain numeric values."
+            values.append(float(raw_value))
+        if translation_values is not None:
+            return None, "s0 coordinate transformations contain multiple translations."
+        translation_values = values
+    return translation_values, None
 
 
 def _regenerate_xy_only_pyramid(
@@ -926,16 +1380,16 @@ def _regenerate_xy_only_pyramid(
         except OSError:
             LOGGER.debug("Suppressed OSError writing .zarray metadata", exc_info=True)
 
-    s0_transforms = datasets[0].get("coordinateTransformations", [])
-    s0_scale = None
-    s0_translation = None
-    for t in s0_transforms:
-        if isinstance(t, dict) and t.get("type") == "scale":
-            s0_scale = list(t["scale"])
-        elif isinstance(t, dict) and t.get("type") == "translation":
-            s0_translation = list(t["translation"])
-    if s0_scale is None or len(s0_scale) != ndim:
-        return "Cannot regenerate pyramid: s0 scale transform is missing or malformed."
+    s0_transforms = datasets[0].get("coordinateTransformations")
+    s0_scale, scale_error = _extract_scale_values(
+        s0_transforms,
+        ndim,
+        "s0",
+        required=True,
+    )
+    if scale_error:
+        return f"Cannot regenerate pyramid: {scale_error}"
+    s0_translation, _ = _extract_translation_values(s0_transforms, ndim)
 
     try:
         s0_data = _read_zarr_v2_array(store_root / s0_path, s0_meta)
@@ -947,7 +1401,12 @@ def _regenerate_xy_only_pyramid(
     )
 
     for ds in datasets[1:]:
-        old_dir = store_root / ds["path"]
+        if not isinstance(ds, dict):
+            return "Cannot regenerate pyramid: dataset metadata is malformed."
+        old_path, path_error = _normalize_zarr_relative_path(ds.get("path"))
+        if path_error:
+            return f"Cannot regenerate pyramid: dataset path is invalid: {path_error}"
+        old_dir = store_root / old_path
         if old_dir.is_dir():
             shutil.rmtree(old_dir)
 
@@ -980,7 +1439,11 @@ def _regenerate_xy_only_pyramid(
                 + (current_scale[ax_i] * (downscale_factor - 1)) / 2
             )
 
-        level_path = datasets[level_idx]["path"]
+        level_path, path_error = _normalize_zarr_relative_path(
+            datasets[level_idx].get("path")
+        )
+        if path_error:
+            return f"Cannot regenerate pyramid: dataset path is invalid: {path_error}"
         level_dir = store_root / level_path
         error = _write_zarr_v2_level(
             level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec

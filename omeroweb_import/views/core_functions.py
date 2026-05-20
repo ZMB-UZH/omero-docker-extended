@@ -3281,6 +3281,8 @@ FAILED_IMPORT_RETENTION_SECONDS_DEFAULT = 48 * 60 * 60
 FAILED_IMPORT_RETENTION_SECONDS_ENV = "OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS"
 LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT = 2 * 60 * 60
 LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS"
+NGFF_CONVERTER_TIMEOUT_SECONDS_DEFAULT = IMPORT_TIMEOUT_SECONDS_DEFAULT
+NGFF_CONVERTER_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS"
 SCRIPT_START_TIMEOUT_SECONDS_DEFAULT = 180
 SCRIPT_START_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS"
 SCRIPT_START_RETRY_SECONDS_DEFAULT = 5
@@ -3310,6 +3312,19 @@ def _get_local_import_scan_timeout_seconds() -> int:
         LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT,
         30,
         24 * 60 * 60,
+    )
+
+
+def _get_ngff_converter_timeout_seconds() -> int:
+    """Return NGFF converter subprocess timeout seconds.
+
+    Inputs: none. Output: `int`.
+    """
+    return _get_env_int(
+        NGFF_CONVERTER_TIMEOUT_SECONDS_ENV,
+        NGFF_CONVERTER_TIMEOUT_SECONDS_DEFAULT,
+        60,
+        7 * 24 * 60 * 60,
     )
 
 
@@ -8928,6 +8943,7 @@ def _process_import_job(job_id: str):
                 ngff_settings = _normalize_ngff_converter_settings(
                     job.get("ngff_converter_settings") or {}
                 )
+                ngff_timeout_seconds = _get_ngff_converter_timeout_seconds()
                 _append_job_message(
                     job,
                     "OME-NGFF converter (OME-Zarr): starting conversion",
@@ -8978,7 +8994,9 @@ def _process_import_job(job_id: str):
                     try:
                         result = subprocess.run(
                             cmd,
-                            timeout=7200,
+                            timeout=ngff_timeout_seconds,
+                            env=_build_cli_env(),
+                            start_new_session=True,
                         )
                         stdout_text = result.stdout or ""
                         stderr_text = result.stderr or ""
@@ -9051,7 +9069,8 @@ def _process_import_job(job_id: str):
                     except subprocess.TimeoutExpired:
                         entry["status"] = "error"
                         entry.setdefault("errors", []).append(
-                            f"bioformats2raw timed out after 7200s for {rel_path}"
+                            "bioformats2raw timed out after "
+                            f"{ngff_timeout_seconds}s for {rel_path}"
                         )
                         conversion_errors += 1
                         _append_job_error(

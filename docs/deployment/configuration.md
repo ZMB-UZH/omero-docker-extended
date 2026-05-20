@@ -522,6 +522,8 @@ level used when the disposable managed-repository handoff copy must rewrite
 Blosc-backed image arrays for render-safe native import. Those normalizations
 apply only to the ephemeral handoff copy, never to the browser-staged source
 tree.
+`OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS` controls the per-file
+`bioformats2raw` subprocess timeout for the NGFF converter special method.
 
 Two feature flags control the alternative zarr import and rendering mechanisms:
 
