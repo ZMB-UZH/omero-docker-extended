@@ -100,7 +100,7 @@ flowchart TD
 ### 7. Metadata finalization
 
 - After import, the plugin resolves each created image back to its backing Zarr store through `externalInfo.lsid`.
-- It reads canonical source metadata and persists physical pixel sizes on the OMERO `Pixels` object.
+- It reads canonical source metadata, composes dataset-level and multiscale-level NGFF scale transforms, and persists physical pixel sizes on the OMERO `Pixels` object.
 - Unit normalization is applied before persistence so shorthand NGFF units such as `nm` and `µm` are stored in OMERO-compatible form.
 
 ### 8. Post-import validation

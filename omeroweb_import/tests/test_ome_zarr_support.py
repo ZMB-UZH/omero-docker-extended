@@ -11,11 +11,16 @@ from omeroweb_import.services.ome_zarr_support import (
     OME_ZARR_IMPORT_KIND_IMAGE,
     OME_ZARR_NATIVE_GZIP_LEVEL_ENV,
     OMEZarrImageInspection,
+    _extract_array_shape,
     _extract_axes,
     _extract_physical_sizes,
+    _extract_scale_values,
     _has_3d_pyramid_downsampling,
     _native_ome_zarr_gzip_level,
     _ome_zarr_runtime,
+    _bioformats2raw_series_paths,
+    _normalize_store_metadata_payload,
+    _normalize_zarr_relative_path,
     _read_array_metadata_payload,
     _read_store_metadata_payload,
     _read_zarr_format_metadata,
@@ -184,6 +189,368 @@ def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
     assert ome_zarr_package_version()
 
 
+def test_inspect_ome_zarr_image_composes_multiscale_scale(
+    tmp_path: Path,
+) -> None:
+    """Verify multiscale-level scale is composed with dataset scale.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in NGFF scale
+    composition.
+    """
+    store = tmp_path / "composed.ome.zarr"
+    _write_text(
+        store / ".zattrs",
+        {
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "z", "type": "space", "unit": "micrometer"},
+                        {"name": "y", "type": "space", "unit": "micrometer"},
+                        {"name": "x", "type": "space", "unit": "micrometer"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {"type": "scale", "scale": [10.0, 2.0, 3.0]},
+                            ],
+                        }
+                    ],
+                    "coordinateTransformations": [
+                        {"type": "scale", "scale": [0.1, 4.0, 5.0]},
+                        {"type": "translation", "translation": [0.0, 0.0, 0.0]},
+                    ],
+                }
+            ]
+        },
+    )
+    _write_text(store / ".zgroup", {"zarr_format": 2})
+    _write_text(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [4, 8, 16],
+            "chunks": [1, 4, 4],
+            "dtype": "|u1",
+            "compressor": None,
+            "fill_value": 0,
+            "filters": None,
+            "order": "C",
+        },
+    )
+
+    inspection = inspect_ome_zarr_image(store)
+
+    assert inspection.supported is True
+    assert inspection.physical_sizes == {
+        "z": (1.0, "micrometer"),
+        "y": (8.0, "micrometer"),
+        "x": (15.0, "micrometer"),
+    }
+
+
+def test_inspect_ome_zarr_image_reads_zarr_v3_attributes_ome_metadata(
+    tmp_path: Path,
+) -> None:
+    """Verify Zarr v3 attributes.ome metadata is inspected.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in v0.5
+    metadata handling.
+    """
+    store = tmp_path / "v05.ome.zarr"
+    _write_text(
+        store / "zarr.json",
+        {
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": {
+                "ome": {
+                    "version": "0.5",
+                    "multiscales": [
+                        {
+                            "name": "v05-image",
+                            "axes": [
+                                {
+                                    "name": "y",
+                                    "type": "space",
+                                    "unit": "micrometer",
+                                },
+                                {
+                                    "name": "x",
+                                    "type": "space",
+                                    "unit": "micrometer",
+                                },
+                            ],
+                            "datasets": [
+                                {
+                                    "path": "0",
+                                    "coordinateTransformations": [
+                                        {
+                                            "type": "scale",
+                                            "scale": [0.25, 0.5],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+        },
+    )
+    _write_text(
+        store / "0" / "zarr.json",
+        {
+            "zarr_format": 3,
+            "node_type": "array",
+            "shape": [8, 16],
+            "data_type": "uint16",
+            "dimension_names": ["y", "x"],
+        },
+    )
+
+    inspection = inspect_ome_zarr_image(store)
+
+    assert inspection.supported is True
+    assert inspection.format_version == "0.5"
+    assert inspection.zarr_format == 3
+    assert inspection.dtype_name == "uint16"
+    assert inspection.shape == (8, 16)
+    assert inspection.image_display_names == ("v05-image",)
+    assert inspection.physical_sizes == {
+        "y": (0.25, "micrometer"),
+        "x": (0.5, "micrometer"),
+    }
+
+
+def test_inspect_ome_zarr_image_uses_declared_non_spatial_dimensions(
+    tmp_path: Path,
+) -> None:
+    """Verify time and channel axes are read from metadata without assumptions.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in
+    metadata-driven non-spatial dimension handling.
+    """
+    store = tmp_path / "tczyx.ome.zarr"
+    _write_text(
+        store / ".zattrs",
+        {
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "t", "type": "time", "unit": "second"},
+                        {"name": "c", "type": "channel"},
+                        {"name": "z", "type": "space", "unit": "micrometer"},
+                        {"name": "y", "type": "space", "unit": "micrometer"},
+                        {"name": "x", "type": "space", "unit": "micrometer"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {
+                                    "type": "scale",
+                                    "scale": [0.5, 1.0, 3.0, 0.25, 0.125],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    _write_text(store / ".zgroup", {"zarr_format": 2})
+    _write_text(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [2, 3, 4, 64, 128],
+            "chunks": [1, 1, 1, 32, 32],
+            "dtype": "|u1",
+        },
+    )
+
+    inspection = inspect_ome_zarr_image(store)
+
+    assert inspection.supported is True
+    assert inspection.shape == (2, 3, 4, 64, 128)
+    assert inspection.physical_sizes == {
+        "z": (3.0, "micrometer"),
+        "y": (0.25, "micrometer"),
+        "x": (0.125, "micrometer"),
+    }
+
+    no_z_store = tmp_path / "cyx.ome.zarr"
+    _write_text(
+        no_z_store / ".zattrs",
+        {
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [
+                        {"name": "c", "type": "channel"},
+                        {"name": "y", "type": "space", "unit": "nanometer"},
+                        {"name": "x", "type": "space", "unit": "nanometer"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {"type": "scale", "scale": [1.0, 40.0, 50.0]}
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    _write_text(no_z_store / ".zgroup", {"zarr_format": 2})
+    _write_text(
+        no_z_store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [4, 32, 64],
+            "chunks": [1, 32, 32],
+            "dtype": "|u1",
+        },
+    )
+
+    inspection = inspect_ome_zarr_image(no_z_store)
+
+    assert inspection.supported is True
+    assert inspection.shape == (4, 32, 64)
+    assert inspection.physical_sizes == {
+        "y": (40.0, "nanometer"),
+        "x": (50.0, "nanometer"),
+    }
+
+
+def test_inspect_ome_zarr_image_rejects_dimension_mismatches(
+    tmp_path: Path,
+) -> None:
+    """Confirm dimension metadata mismatches are rejected.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in dimension
+    validation.
+    """
+    store = tmp_path / "bad-shape.ome.zarr"
+    _write_text(
+        store / ".zattrs",
+        {
+            "multiscales": [
+                {
+                    "version": "0.4",
+                    "axes": [{"name": "y"}, {"name": "x"}],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {"type": "scale", "scale": [1.0, 1.0]}
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    _write_text(store / ".zgroup", {"zarr_format": 2})
+    _write_text(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [1, 2, 3],
+            "chunks": [1, 2, 3],
+            "dtype": "|u1",
+        },
+    )
+    assert "shape rank does not match" in (
+        inspect_ome_zarr_image(store).support_error or ""
+    )
+
+    _write_text(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [2, 3],
+            "chunks": [2, 3],
+            "dtype": "|u1",
+            "dimension_names": ["x", "y"],
+        },
+    )
+    assert "dimension_names must match" in (
+        inspect_ome_zarr_image(store).support_error or ""
+    )
+
+    _write_text(
+        store / "0" / ".zarray",
+        {
+            "zarr_format": 2,
+            "shape": [2, 3],
+            "chunks": [2, 3],
+            "dtype": "|u1",
+            "dimension_names": ["y", 1],
+        },
+    )
+    assert "dimension_names must match" in (
+        inspect_ome_zarr_image(store).support_error or ""
+    )
+
+    zarr_v3_store = tmp_path / "missing-dim-names.ome.zarr"
+    _write_text(
+        zarr_v3_store / "zarr.json",
+        {
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": {
+                "ome": {
+                    "version": "0.5",
+                    "multiscales": [
+                        {
+                            "axes": [{"name": "y"}, {"name": "x"}],
+                            "datasets": [
+                                {
+                                    "path": "0",
+                                    "coordinateTransformations": [
+                                        {"type": "scale", "scale": [1.0, 1.0]}
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+        },
+    )
+    _write_text(
+        zarr_v3_store / "0" / "zarr.json",
+        {"zarr_format": 3, "node_type": "array", "shape": [2, 3]},
+    )
+    assert "must declare dimension_names" in (
+        inspect_ome_zarr_image(zarr_v3_store).support_error or ""
+    )
+
+
+def test_array_shape_helper_rejects_ambiguous_metadata() -> None:
+    """Verify array shape metadata is validated instead of inferred.
+
+    Inputs: none. Output: fails on regressions in array shape validation.
+    """
+    assert _extract_array_shape({"shape": [1, 2, 3]}, 3) == ((1, 2, 3), None)
+    for metadata in (
+        {},
+        {"shape": []},
+        {"shape": [1, 2]},
+        {"shape": [1, "2", 3]},
+        {"shape": [1, True, 3]},
+        {"shape": [1, 0, 3]},
+    ):
+        shape, error = _extract_array_shape(metadata, 3)
+        assert shape == ()
+        assert error
+
+
 def test_inspect_ome_zarr_image_rejects_plate_layout(tmp_path: Path) -> None:
     """Confirm inspect ome Zarr image rejects plate layout is rejected at the boundary.
 
@@ -265,6 +632,91 @@ def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) ->
     assert inspection.kind == OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW
     assert inspection.verify_lsid_prefix is True
     assert inspection.image_relative_paths == ("0/0", "1/0")
+
+
+def test_inspect_ome_zarr_image_accepts_bioformats2raw_ome_series_paths(
+    tmp_path: Path,
+) -> None:
+    """Verify bioformats2raw explicit OME series paths are honored.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in
+    metadata-driven series routing.
+    """
+    store = tmp_path / "bf2raw-series.ome.zarr"
+    _write_text(
+        store / "zarr.json",
+        {
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": {"ome": {"version": "0.5", "bioformats2raw.layout": 3}},
+        },
+    )
+    _write_text(
+        store / "OME" / "zarr.json",
+        {
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": {
+                "ome": {
+                    "version": "0.5",
+                    "series": ["date/user/first", "date/user/second"],
+                }
+            },
+        },
+    )
+
+    for series_path in ("date/user/first", "date/user/second"):
+        _write_text(
+            store / series_path / ".zattrs",
+            {
+                "multiscales": [
+                    {
+                        "version": "0.4",
+                        "name": series_path.rsplit("/", 1)[-1],
+                        "axes": [
+                            {"name": "y", "type": "space", "unit": "nanometer"},
+                            {"name": "x", "type": "space", "unit": "nanometer"},
+                        ],
+                        "datasets": [
+                            {
+                                "path": "0",
+                                "coordinateTransformations": [
+                                    {"type": "scale", "scale": [10.0, 20.0]},
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+        _write_text(store / series_path / ".zgroup", {"zarr_format": 2})
+        _write_text(
+            store / series_path / "0" / ".zarray",
+            {
+                "zarr_format": 2,
+                "shape": [5, 10],
+                "chunks": [5, 10],
+                "dtype": "|u1",
+                "compressor": None,
+                "fill_value": 0,
+                "filters": None,
+                "order": "C",
+            },
+        )
+
+    inspection = inspect_ome_zarr_image(store)
+
+    assert inspection.supported is True
+    assert inspection.kind == OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW
+    assert inspection.image_node_relative_paths == (
+        "date/user/first",
+        "date/user/second",
+    )
+    assert inspection.image_relative_paths == (
+        "date/user/first/0",
+        "date/user/second/0",
+    )
+    assert inspection.image_display_names == ("first", "second")
 
 
 def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
@@ -355,6 +807,13 @@ def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) ->
     assert payload is None
     assert "Failed to read OME-Zarr metadata" in (error or "")
 
+    payload, error = _normalize_store_metadata_payload(
+        {"attributes": {"ome": ["bad"]}},
+        "zarr.json",
+    )
+    assert payload is None
+    assert "attributes.ome must be a JSON object" in (error or "")
+
     (store / ".zattrs").write_text(json.dumps({"multiscales": []}), encoding="utf-8")
     (store / "zarr.json").write_text(json.dumps({"zarr_format": 3}), encoding="utf-8")
     assert _read_zarr_format_metadata(store, {"multiscales": []}) == 3
@@ -369,7 +828,11 @@ def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) ->
     assert axis_error is None
 
     _, _, axis_error = _extract_axes([{"unit": "nm"}])
-    assert "non-empty axis names" in (axis_error or "")
+    assert "string axis names" in (axis_error or "")
+    _, _, axis_error = _extract_axes([{"name": "x"}, {"name": "x"}])
+    assert "unique axis names" in (axis_error or "")
+    _, _, axis_error = _extract_axes([{"name": "x", "unit": 7}])
+    assert "axis units must be strings" in (axis_error or "")
 
     sizes, size_error = _extract_physical_sizes(
         ["z", "y", "x"],
@@ -396,6 +859,174 @@ def test_metadata_helpers_report_missing_and_invalid_payloads(tmp_path: Path) ->
         [[{"type": "scale", "scale": [10.0, -1.0, 30.0]}]],
     )
     assert "must be positive" in (size_error or "")
+
+
+def test_scale_and_series_metadata_helpers_cover_edge_cases(tmp_path: Path) -> None:
+    """Verify scale composition and series metadata helper edge cases.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in NGFF helper
+    validation.
+    """
+    assert _extract_scale_values(None, 2, "optional", required=False) == (
+        [1.0, 1.0],
+        None,
+    )
+    assert "primary scale metadata" in (
+        _extract_scale_values(None, 2, "primary", required=True)[1] or ""
+    )
+    assert "malformed" in (
+        _extract_scale_values("bad", 2, "primary", required=False)[1] or ""
+    )
+    assert "primary scale metadata" in (
+        _extract_scale_values([], 2, "primary", required=True)[1] or ""
+    )
+    assert "optional scale metadata" in (
+        _extract_scale_values([], 2, "optional", required=False)[1] or ""
+    )
+    assert "malformed" in (
+        _extract_scale_values(["bad"], 2, "primary", required=False)[1] or ""
+    )
+    assert "translation metadata" in (
+        _extract_scale_values(
+            [{"type": "translation", "translation": [1.0]}],
+            2,
+            "primary",
+            required=False,
+        )[1]
+        or ""
+    )
+    assert "not supported" in (
+        _extract_scale_values(
+            [{"type": "affine", "affine": []}],
+            2,
+            "primary",
+            required=False,
+        )[1]
+        or ""
+    )
+    assert "scale metadata does not match" in (
+        _extract_scale_values(
+            [{"type": "scale", "scale": [1.0]}],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+    assert "axis index 1 is not numeric" in (
+        _extract_scale_values(
+            [{"type": "scale", "scale": [1.0, "bad"]}],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+    assert "axis index 1 must be positive" in (
+        _extract_scale_values(
+            [{"type": "scale", "scale": [1.0, 0.0]}],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+    assert "multiple scales" in (
+        _extract_scale_values(
+            [
+                {"type": "scale", "scale": [2.0, 3.0]},
+                {"type": "scale", "scale": [5.0, 7.0]},
+            ],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+    assert _extract_scale_values(
+        [
+            {"type": "scale", "scale": [2.0, 3.0]},
+            {"type": "translation", "translation": [5.0, 7.0]},
+        ],
+        2,
+        "primary",
+        required=True,
+    ) == ([2.0, 3.0], None)
+    assert "must follow scale" in (
+        _extract_scale_values(
+            [
+                {"type": "translation", "translation": [5.0, 7.0]},
+                {"type": "scale", "scale": [2.0, 3.0]},
+            ],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+    assert "multiple translations" in (
+        _extract_scale_values(
+            [
+                {"type": "scale", "scale": [2.0, 3.0]},
+                {"type": "translation", "translation": [5.0, 7.0]},
+                {"type": "translation", "translation": [11.0, 13.0]},
+            ],
+            2,
+            "primary",
+            required=True,
+        )[1]
+        or ""
+    )
+
+    sizes, error = _extract_physical_sizes(
+        ["z", "y", "x"],
+        {"z": "micrometer", "y": "micrometer", "x": "micrometer"},
+        [[{"type": "scale", "scale": [10.0, 2.0, 3.0]}]],
+        [{"type": "scale", "scale": [0.1, 4.0, 5.0]}],
+    )
+    assert error is None
+    assert sizes == {
+        "z": (1.0, "micrometer"),
+        "y": (8.0, "micrometer"),
+        "x": (15.0, "micrometer"),
+    }
+    _, error = _extract_physical_sizes(
+        ["y", "x"],
+        {},
+        [[{"type": "scale", "scale": [1.0, 1.0]}]],
+        [{"type": "scale", "scale": [1.0]}],
+    )
+    assert "multiscale scale metadata does not match" in (error or "")
+
+    assert _normalize_zarr_relative_path("nested/series") == (
+        "nested/series",
+        None,
+    )
+    for raw_path in ("", 7, "bad\\path", "/absolute", "nested/../series"):
+        normalized, path_error = _normalize_zarr_relative_path(raw_path)
+        assert normalized == ""
+        assert path_error
+
+    store = tmp_path / "series-cases.ome.zarr"
+    assert _bioformats2raw_series_paths(store) == ((), None)
+
+    _write_text(store / "OME" / ".zattrs", {"not_series": []})
+    assert _bioformats2raw_series_paths(store) == ((), None)
+
+    _write_text(store / "OME" / ".zattrs", {"attributes": {"ome": ["bad"]}})
+    assert "attributes.ome" in (_bioformats2raw_series_paths(store)[1] or "")
+
+    _write_text(store / "OME" / ".zattrs", {"series": []})
+    assert "non-empty list" in (_bioformats2raw_series_paths(store)[1] or "")
+
+    _write_text(store / "OME" / ".zattrs", {"series": ["one", "one"]})
+    assert "Duplicate" in (_bioformats2raw_series_paths(store)[1] or "")
+
+    _write_text(store / "OME" / ".zattrs", {"series": ["../bad"]})
+    assert "Invalid" in (_bioformats2raw_series_paths(store)[1] or "")
+
+    _write_text(store / "OME" / ".zattrs", {"series": [7]})
+    assert "must be strings" in (_bioformats2raw_series_paths(store)[1] or "")
 
 
 def test_native_gzip_level_helper_and_runtime_contract(monkeypatch) -> None:

@@ -30,6 +30,7 @@ Related docs:
 - OMERO CLI import and import preflight checks run with `--depth 15` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
 - Long-running OMERO CLI imports use `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` with a 24-hour default so very large structured datasets are not aborted by a short plugin-side subprocess timeout.
+- NGFF converter subprocesses use `OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS` with a 24-hour default so large `bioformats2raw` conversions stay environment-driven instead of relying on a fixed deadline.
 - Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
 - Browser uploads without an explicit Dataset override route top-level/base-path
   files into a generated `Orphaned_images_base_path_import_<suffix>` Dataset.
@@ -137,8 +138,9 @@ Related docs:
 - **Zarr helper startup retries**: if OMERO script processors are temporarily not ready, the managed-repository helper launch retries for `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` with a sleep interval of `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` before the import is failed.
 - **Native Zarr metadata finalization**: after `omero zarr import`, the plugin
   reopens each created Image through `externalInfo.lsid`, parses the source
-  metadata with the installed `omero-cli-zarr` runtime, and persists canonical
-  pixel sizes onto OMERO's `Pixels` object. This closes a real gap in the
+  metadata with the installed `omero-cli-zarr` runtime, composes dataset-level
+  and multiscale-level NGFF scale transforms, and persists canonical pixel
+  sizes onto OMERO's `Pixels` object. This closes a real gap in the
   runtime's API-created image path, where renderable NGFF imports can still
   arrive without persisted `PhysicalSizeX/Y/Z`. The plugin also normalizes
   shorthand NGFF length units such as `nm` and `µm` before saving, because the
@@ -310,6 +312,7 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS`           | OMERO CLI keepalive interval for long-running imports (default `30`)                                                                                                                                                    |
 | `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS`      | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`)                                                                                                                                             |
 | `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS`          | Per-import subprocess timeout in seconds (default `86400`)                                                                                                                                                              |
+| `OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS`  | Per-file NGFF converter subprocess timeout in seconds (default `86400`)                                                                                                                                                 |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS`    | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable`                                                                                                                                      |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`      | Sleep interval between managed-repository helper launch retries                                                                                                                                                         |
 | `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT`         | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
