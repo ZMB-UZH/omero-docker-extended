@@ -344,10 +344,9 @@ Create deployment-local runtime files by copying these templates and removing `_
 - This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files that operators manage locally.
 - The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
-### Lifecycle commands
+### Basic docker commands
 
-```bash
-# Stop services without removing resources
+# Stop services without removing containers
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env stop
 
 # Stop and remove containers
@@ -356,12 +355,9 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 # Follow logs for a specific service
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f omeroweb
 
-# Rebuild a single service
+# Rebuild a single container
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build omeroweb
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d omeroweb
-# Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
-bash installation/cleanup_build_containers.sh
-```
 
 ### Storage quotas
 
