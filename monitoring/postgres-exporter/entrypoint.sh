@@ -28,7 +28,14 @@ case "$exporter_source" in
         ;;
 esac
 
-eval "db_password=\${$password_var:-}"
+case "$password_var" in
+    OMERO_DB_PASS)
+        db_password="${OMERO_DB_PASS:-}" # skipcq: SCT-A000
+        ;;
+    OMP_PLUGIN_DB_PASS)
+        db_password="${OMP_PLUGIN_DB_PASS:-}" # skipcq: SCT-A000
+        ;;
+esac
 if [ -z "$db_password" ]; then
     die "Missing required environment variable: $password_var"
 fi

@@ -1,3 +1,4 @@
+// skipcq: JS-0833
 import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 

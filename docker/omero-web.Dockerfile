@@ -222,7 +222,7 @@ RUN set -euo pipefail; \
         matplotlib \
         pytest==7.4.4 \
         psycopg2-binary==2.9.12 \
-        celery==5.3.6 \
+        celery==5.6.3 \
         redis==5.0.8 \
         "django-redis>=5.4.0" \
         omero-fpbioimage \

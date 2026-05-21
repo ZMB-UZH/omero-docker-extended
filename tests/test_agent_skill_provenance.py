@@ -68,6 +68,29 @@ class AgentSkillProvenanceTests(TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported fetch host"):
             agent_skill_provenance.fetch_text("https://github.com/x/y")
 
+    def test_strip_local_scanner_annotations_preserves_upstream_text(self) -> None:
+        """Verify scanner annotations can be stripped from vendored skill text.
+
+        Inputs: sample text. Output: fails on provenance normalization regressions.
+        """
+        local_text = "\n".join(
+            (
+                "before",
+                "# skipcq: SCT-A000",
+                "python_line()",
+                "  // skipcq: JS-0833",
+                "js_line();",
+                "<!-- skipcq: SCT-1000 -->",
+                "after",
+                "",
+            )
+        )
+
+        self.assertEqual(
+            "before\npython_line()\njs_line();\nafter\n",
+            agent_skill_provenance.strip_local_scanner_annotations(local_text),
+        )
+
     def test_fetch_text_uses_curl_for_allowed_upstream_raw_urls(self) -> None:
         """Verify fetch text uses curl for allowed upstream raw URLs.
 

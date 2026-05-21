@@ -549,12 +549,20 @@ def test_run_ome_tiff_export_keeps_staged_file_private(monkeypatch):
         export_path.chmod(0o666)
         return str(export_path)
 
+    def safe_filename(_name, fallback="image"):
+        """Return a deterministic safe export name for the fake script module.
+
+        Inputs: ignored, plus fallback matching the public helper signature. Output: filename stem.
+        """
+        _ = fallback
+        return "demo"
+
     fake_script = types.SimpleNamespace(
         _get_export_root=lambda conn: pytest.fail(
             "OME-TIFF staging must not use OMERO_IMS_EXPORT_DIR"
         ),
-        _safe_filename=lambda name, fallback: "demo",
-        _materialize_ome_tiff_source=materialize_ome_tiff_source,
+        safe_filename=safe_filename,
+        materialize_ome_tiff_source=materialize_ome_tiff_source,
     )
     image = types.SimpleNamespace(getName=lambda: "demo")
     conn = types.SimpleNamespace(getObject=lambda kind, image_id: image)

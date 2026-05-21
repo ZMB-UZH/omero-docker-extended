@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # =============================================================================
 # enable-storage-quotas.sh - Enable host ext4 project quotas for OMERO data.
 #
@@ -60,7 +61,7 @@ require_command() {
 
 # Parse CLI arguments. Inputs: shell arguments. Output: command status.
 parse_args() {
-    if [[ $# -eq 1 && "$1" == "--help" ]]; then
+    if [ "$#" -eq 1 ] && [ "$1" = "--help" ]; then
         usage
         exit 0
     fi
@@ -164,14 +165,10 @@ quota_self_test() (
     mounted=0
     chmod 0755 "${workdir}"
 
-    # Clean up the disposable self-test mount. Inputs: none. Output: side effects.
-    cleanup() {
-        if [[ "${mounted}" -eq 1 ]]; then
-            "${SUDO[@]}" umount "${mountpoint}" >/dev/null 2>&1 || true
-        fi
-        rm -rf -- "${workdir}"
-    }
-    trap cleanup EXIT
+    trap 'if [[ "${mounted}" -eq 1 ]]; then
+        "${SUDO[@]}" umount "${mountpoint}" >/dev/null 2>&1 || true
+    fi
+    rm -rf -- "${workdir}"' EXIT
 
     mkdir -p "${mountpoint}"
     truncate -s 128M "${image}"
@@ -295,7 +292,7 @@ for line in lines:
         updated.append(line)
         continue
     matches += 1
-    options_token = fields[3].group(0)
+    options_token = fields[3].group(0)  # skipcq: SCT-A000
     options = options_token.split(",")
     if "prjquota" not in options and "project" not in options:
         replacement = ",".join([*options, "prjquota"])
@@ -329,7 +326,7 @@ PY
 }
 
 # Restore services/mounts after a failing mutation. Inputs: shell exit status. Output: side effects.
-cleanup_on_error() {
+cleanup_on_error() { # skipcq: SH-2329 - invoked through the EXIT trap in enable_project_quotas.
     local status=$?
     if [[ "${FSTAB_CHANGED}" -eq 1 && -n "${FSTAB_BACKUP_PATH}" && -f "${FSTAB_BACKUP_PATH}" ]]; then
         "${SUDO[@]}" cp -a -- "${FSTAB_BACKUP_PATH}" /etc/fstab || true
@@ -414,13 +411,11 @@ discover_quota_target() {
     FSTAB_SOURCE=""
     FSTAB_TARGET=""
     FSTAB_FSTYPE=""
-    FSTAB_OPTIONS=""
     mapfile -t discovery_fields < <(discover_fstab_entry "${OMERO_DATA_DIR}")
     if [[ "${#discovery_fields[@]}" -eq 4 ]]; then
         FSTAB_SOURCE="${discovery_fields[0]}"
         FSTAB_TARGET="${discovery_fields[1]}"
         FSTAB_FSTYPE="${discovery_fields[2]}"
-        FSTAB_OPTIONS="${discovery_fields[3]}"
     elif [[ "${#discovery_fields[@]}" -ne 0 ]]; then
         die "Unable to parse the /etc/fstab entry that owns OMERO_USER_DATA_PATH."
     fi
@@ -454,13 +449,13 @@ discover_quota_target() {
     [[ -b "${QUOTA_DEVICE}" ]] || die "Resolved OMERO data device is not a block device: ${QUOTA_DEVICE}"
 
     QUOTA_FSTYPE="$("${SUDO[@]}" blkid -o value -s TYPE "${QUOTA_DEVICE}")"
-    [[ "${QUOTA_FSTYPE}" == "ext4" ]] || {
+    [ "${QUOTA_FSTYPE}" = "ext4" ] || {
         die "The OMERO data filesystem must be ext4 before quotas can be enabled."
     }
 
     if [[ "${QUOTA_WAS_MOUNTED}" -eq 1 ]]; then
         active_fstype="$(findmnt -M "${QUOTA_TARGET}" -no FSTYPE)"
-        [[ "${active_fstype}" == "ext4" ]] || die "The active OMERO data mount is '${active_fstype}', not ext4."
+        [ "${active_fstype}" = "ext4" ] || die "The active OMERO data mount is '${active_fstype}', not ext4."
     fi
 
     info "OMERO data: ${OMERO_DATA_DIR}"
@@ -500,7 +495,7 @@ enable_project_quotas() {
         mount_project_present=1
     fi
 
-    if [[ "${project_feature_present}" -eq 0 && "${QUOTA_TARGET}" == "/" ]]; then
+    if [ "${project_feature_present}" -eq 0 ] && [ "${QUOTA_TARGET}" = "/" ]; then
         die "Root is ext4, but its 'project' feature is not enabled. Run from rescue media or use a separate ext4 data filesystem."
     fi
 
@@ -590,6 +585,6 @@ main() {
     enable_project_quotas
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

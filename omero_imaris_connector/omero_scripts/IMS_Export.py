@@ -109,6 +109,14 @@ def _get_export_root(conn):
     return export_root
 
 
+def get_export_root(conn):
+    """Return export root from trusted server runtime configuration.
+
+    Inputs: OMERO connection. Output: configured export root path.
+    """
+    return _get_export_root(conn)
+
+
 def _safe_filename(name, fallback="image"):
     """Return safe filename.
 
@@ -134,6 +142,14 @@ def _safe_filename(name, fallback="image"):
     if not name:
         name = fallback
     return name
+
+
+def safe_filename(name, fallback="image"):
+    """Return a filesystem-safe export filename.
+
+    Inputs: candidate name and fallback. Output: safe filename string.
+    """
+    return _safe_filename(name, fallback=fallback)
 
 
 def _ensure_bioformats_jar(install_dir):
@@ -779,6 +795,14 @@ def _materialize_ome_tiff_source(conn, image, image_id, export_root):
                     )
     print("ERROR: OMERO OME-TIFF export did not produce a readable source file")
     return None
+
+
+def materialize_ome_tiff_source(conn, image, image_id, export_root):
+    """Materialize a converter-readable OME-TIFF source through OMERO APIs.
+
+    Inputs: OMERO connection, image, image id, and export root. Output: path or None.
+    """
+    return _materialize_ome_tiff_source(conn, image, image_id, export_root)
 
 
 def _remove_intermediate_source(path):

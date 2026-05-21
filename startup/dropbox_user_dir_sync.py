@@ -36,6 +36,8 @@ class SyncError(RuntimeError):
 
 @dataclass(frozen=True)
 class SyncConfig:
+    """Validated DropBox synchronization settings."""
+
     host: str
     port: int
     secure: bool
@@ -53,6 +55,8 @@ class SyncConfig:
 
 @dataclass(frozen=True)
 class SyncResult:
+    """Summary counters from one DropBox synchronization pass."""
+
     root: Path
     eligible_users: int
     created: int
@@ -63,6 +67,8 @@ class SyncResult:
 
 @dataclass(frozen=True)
 class RootState:
+    """Filesystem state for the configured DropBox root."""
+
     stat: os.stat_result
     created: bool
 
@@ -450,8 +456,10 @@ def sync(config: SyncConfig) -> SyncResult:
             result = ensure_user_directory(root, root_real, username, config, uid, gid)
         except Exception as exc:
             failed += 1
+            safe_username = sanitize_for_log(username)
             print(
-                f"ERROR failed to ensure DropBox directory for {sanitize_for_log(username)!r}: {exc}",
+                f"ERROR failed to ensure DropBox directory for {safe_username!r}: "
+                f"{exc}",
                 file=sys.stderr,
             )
             continue

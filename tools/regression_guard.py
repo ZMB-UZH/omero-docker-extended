@@ -896,7 +896,10 @@ CATALOG: tuple[Rule, ...] = (
         id="RG013",
         severity="medium",
         title="Floating or untagged image reference in Compose / Dockerfile / workflow",
-        fix="Pin to an explicit version tag or digest; do not use latest, stable, edge, main, master, nightly, rolling, or current aliases.",
+        fix=(
+            "Pin to an explicit version tag or digest; do not use latest, stable, "
+            "edge, main, master, nightly, rolling, or current aliases."
+        ),
         scanner="hadolint/DL3007+trivy",
         closed_history=4,
         applies_to=(

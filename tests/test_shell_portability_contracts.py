@@ -69,6 +69,78 @@ class ShellPortabilityContractTests(unittest.TestCase):
 
         self.assertFalse(offenders, msg=f"Bash regex operator remains: {offenders}")
 
+    def test_tracked_shell_scripts_avoid_posix_single_bracket_double_equals(
+        self,
+    ) -> None:
+        """Verify tracked shell scripts avoid POSIX `[ ... == ... ]` comparisons.
+
+        Inputs: repository fixtures. Output: fails when tracked shell scripts use `==`
+        inside POSIX single-bracket tests.
+        """
+        git_path = shutil.which("git")
+        self.assertIsNotNone(git_path)
+        result = subprocess.run(
+            [
+                git_path,
+                "ls-files",
+                "*.sh",
+                "*.bash",
+                "github_pull_project_bash_example",
+                "helper_scripts_debian/*",
+            ],
+            cwd=self.repo_root,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+        single_bracket_double_equals = re.compile(r"(?<!\[)\[\s+[^\]\n]*==[^\]\n]*\]")
+        offenders: dict[str, list[str]] = {}
+        for relative_path in result.stdout.splitlines():
+            path = self.repo_root / relative_path
+            if not path.is_file():
+                continue
+            matches = [
+                f"{line_number}: {line.strip()}"
+                for line_number, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(),
+                    start=1,
+                )
+                if single_bracket_double_equals.search(line)
+            ]
+            if matches:
+                offenders[relative_path] = matches
+
+        self.assertFalse(
+            offenders,
+            msg=f"POSIX single-bracket tests still use ==: {offenders}",
+        )
+
+    def test_deepsource_shell_reported_scripts_declare_bash_mode(self) -> None:
+        """Confirm analyzer-targeted scripts keep an explicit Bash contract.
+
+        Inputs: repository fixtures. Output: asserts scanner-reported Bash scripts keep
+        their explicit shell analyzer directive.
+        """
+        reported_paths = (
+            "scripts/enable-storage-quotas.sh",
+            "startup/10-web-bootstrap.sh",
+            "installation/installation_script.sh",
+            "startup/60-default-web-config.sh",
+            "startup/40-start-tools-celery-worker.sh",
+            "startup/40-start-imaris-celery-worker.sh",
+        )
+        for relative_path in reported_paths:
+            with self.subTest(relative_path=relative_path):
+                lines = (
+                    (self.repo_root / relative_path)
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                )
+                self.assertGreaterEqual(len(lines), 2)
+                self.assertEqual("# shellcheck shell=bash", lines[1])
+
     def test_ext4_quota_enforcer_matches_group_names_literally(self) -> None:
         """Verify ext4 quota enforcer matches group names literally.
 

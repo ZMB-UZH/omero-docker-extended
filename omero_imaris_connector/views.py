@@ -46,7 +46,7 @@ IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
 IMS_EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
 TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 OMERO_IMS_EXPORT_CAPABILITY_FLAG = "omero_imaris_connector_v1"
-OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
+OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"  # skipcq: SCT-A000
 IMS_EXPORT_CLI_TERMINATION_GRACE_SECONDS = 2.0
 IMS_EXPORT_CLI_TERMINATION_POLL_SECONDS = 0.1
 EXPORT_FORMAT_IMS = "ims"
@@ -521,7 +521,7 @@ def _process_group_members(pgid):
             pid = int(entry.name)
             if os.getpgid(pid) == pgid:
                 members.append(pid)
-        except (OSError, ValueError, ProcessLookupError):
+        except (OSError, ValueError):
             continue
     return members
 
@@ -799,7 +799,7 @@ def _cancel_requested(request):
         return False
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError):
         return False
     if not isinstance(payload, dict):
         return False

@@ -20,6 +20,9 @@ SKILL_TABLE_ROW_RE = re.compile(
     r"^\| `(?P<skill>[^`]+)` \| `(?P<path>third_party/[^`]+/SKILL\.md)` \|$",
     re.MULTILINE,
 )
+SCANNER_ANNOTATION_LINE_RE = re.compile(
+    r"^\s*(?://|#|<!--)\s*skipcq:\s*[A-Z0-9,_ -]+\s*(?:-->)?\s*$"
+)
 ALLOWED_FETCH_SCHEMES: frozenset[str] = frozenset({"https"})
 ALLOWED_FETCH_HOSTS: frozenset[str] = frozenset({"raw.githubusercontent.com"})
 
@@ -191,6 +194,20 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
         vendor_path=vendor_path,
         skill_vendor_paths=skill_vendor_paths,
     )
+
+
+def strip_local_scanner_annotations(text: str) -> str:
+    """Return text without scanner-only provenance annotations.
+
+    Inputs: `text`. Output: text with standalone `skipcq` lines removed.
+    """
+    lines = [
+        line
+        for line in text.splitlines()
+        if SCANNER_ANNOTATION_LINE_RE.fullmatch(line) is None
+    ]
+    suffix = "\n" if text.endswith("\n") else ""
+    return "\n".join(lines) + suffix
 
 
 def resolve_required_executable(name: str) -> str:

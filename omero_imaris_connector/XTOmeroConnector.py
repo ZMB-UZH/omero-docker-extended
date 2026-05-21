@@ -179,7 +179,7 @@ NATIVE_BRIDGE_REVALIDATE_AFTER = 30.0
 IMARIS_OPEN_VERIFY_TIMEOUT = 10.0
 IMARIS_OPEN_VERIFY_INTERVAL = 0.25
 OMERO_IMS_EXPORT_CAPABILITY_FLAG = "omero_imaris_connector_v1"
-OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"
+OMERO_IMS_EXPORT_CAPABILITY_KEY = "omero_ims_export_capability"  # skipcq: SCT-A000
 OMERO_CONNECTOR_WINDOW_WIDTH = 1180
 OMERO_CONNECTOR_WINDOW_HEIGHT = 760
 MINIMUM_WINDOWS_MAJOR = 10
@@ -297,7 +297,8 @@ CONNECTOR_HELP_SECTIONS = (
         (
             "Choose the folder where the downloaded files should be saved.",
             "Files keep the selected OMERO image names by default.",
-            "If names already exist in that folder, you can replace them, keep both copies, or cancel before anything starts.",
+            "If names already exist in that folder, you can replace them, "
+            "keep both copies, or cancel before anything starts.",
         ),
     ),
     (
@@ -2447,7 +2448,7 @@ def _configure_xt_console_visibility(show_log_enabled):
     try:
         import ctypes
 
-        windll = getattr(ctypes, "windll")
+        windll = getattr(ctypes, "windll")  # skipcq: PTC-W0034
         kernel32 = windll.kernel32
         user32 = windll.user32
         console_window = kernel32.GetConsoleWindow()
@@ -3560,10 +3561,10 @@ def _antialiased_stop_sign_image(
     return image
 
 
-def _omero_logomark_photo_image(master, size=64):
+def _omero_logomark_photo_image(master):
     """Return the embedded OME/OMERO logomark as a Tk PhotoImage.
 
-    Inputs: Tk master and square size. Output: PhotoImage.
+    Inputs: Tk master. Output: PhotoImage.
     """
     return tk.PhotoImage(
         master=master,
@@ -5222,12 +5223,12 @@ def _imaris_vendor_entry_executable_path(vendor_root, entry):
 
     Inputs: `vendor_root`, `entry`. Output: path string or None.
     """
-    if not entry.lower().startswith("imaris"):
-        return None
     candidate = os.path.join(vendor_root, entry, "Imaris.exe")
-    if not _is_supported_imaris_install_path(candidate):
-        return None
-    return candidate
+    if entry.lower().startswith("imaris") and _is_supported_imaris_install_path(
+        candidate
+    ):
+        return candidate
+    return None
 
 
 def _iter_imaris_vendor_executable_candidates():
@@ -5331,9 +5332,12 @@ def _find_imaris_file_converter_executable():
         return None
     for candidate in _iter_imaris_file_converter_executable_candidates():
         path = _existing_regular_file_path(candidate)
-        if path is not None and path.name.lower() == "imarisfileconverter.exe":
-            if _is_supported_imaris_install_path(path):
-                return str(path)
+        if (
+            path is not None
+            and path.name.lower() == "imarisfileconverter.exe"
+            and _is_supported_imaris_install_path(path)
+        ):
+            return str(path)
     return None
 
 
@@ -5556,8 +5560,6 @@ def _iter_native_bridge_python_executables():
     if os.name != "nt":
         return
 
-    import subprocess
-
     current = _resolve_python_executable_candidate(sys.executable)
     current_key = os.path.normcase(os.path.normpath(current)) if current else ""
     seen = set()
@@ -5656,18 +5658,18 @@ def _cleanup_native_bridge_helper_file(helper_path):
         _xt_debug(f"Native bridge helper cleanup failed: {type(exc).__name__}: {exc}")
 
 
-def _native_bridge_open_action(stdout, payload):
+def _native_bridge_open_action():
     """Return a log phrase for successful native bridge open output.
 
-    Inputs: `stdout`, `payload` payload. Output: `str`.
+    Inputs: none. Output: `str`.
     """
     return "completed IMS open request in the current Imaris session"
 
 
-def _log_native_bridge_stdout(stdout, context, payload):
+def _log_native_bridge_stdout(stdout, context):
     """Log sanitized native bridge stdout.
 
-    Inputs: `stdout`, `context`, `payload`. Output: None.
+    Inputs: `stdout`, `context`. Output: None.
     """
     if not stdout:
         return
@@ -5676,10 +5678,7 @@ def _log_native_bridge_stdout(stdout, context, payload):
             f"Native bridge runner ({context}) resolved the current Imaris session"
         )
     elif stdout in {"BRIDGE_RUNNER_OPENED", "BRIDGE_RUNNER_OPENED_MANY"}:
-        _xt_debug(
-            f"Native bridge runner ({context}) "
-            f"{_native_bridge_open_action(stdout, payload)}"
-        )
+        _xt_debug(f"Native bridge runner ({context}) {_native_bridge_open_action()}")
     elif stdout == "BRIDGE_RUNNER_HANDLE_UNAVAILABLE":
         _xt_debug(
             f"Native bridge runner ({context}) could not resolve the current Imaris session"
@@ -5740,8 +5739,6 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
     if resolved_python is None:
         return False
 
-    import subprocess
-
     _xt_debug(f"Trying native Imaris bridge runner ({context}) with {resolved_python}")
     helper_path = None
     try:
@@ -5771,7 +5768,7 @@ def _run_native_bridge_helper(python_executable, payload, context, timeout):
 
     stdout = (completed.stdout or "").strip()
     stderr = (completed.stderr or "").strip()
-    _log_native_bridge_stdout(stdout, context, payload)
+    _log_native_bridge_stdout(stdout, context)
     _log_native_bridge_stderr(stderr, context)
     _xt_debug(f"Native bridge runner ({context}) exit code: {completed.returncode}")
     return completed.returncode == 0
@@ -6581,10 +6578,10 @@ class _CancellableHTTPResponse:
                 chunk_size_text = line.split(b";", 1)[0].strip()
                 try:
                     self._chunk_remaining = int(chunk_size_text, 16)
-                except ValueError as exc:
+                except ValueError as chunk_size_error:
                     raise http.client.HTTPException(
                         "Invalid chunked response from OMERO.web."
-                    ) from exc
+                    ) from chunk_size_error
                 if self._chunk_remaining == 0:
                     self._consume_chunk_trailers()
                     self._chunk_done = True
@@ -6791,10 +6788,10 @@ def _resolve_imaris_application(
     return None
 
 
-def _log_direct_imaris_resolution_failure(exc):
+def _log_direct_imaris_resolution_failure(error):
     """Log direct Imaris handle resolution failure without disabled IcePy noise.
 
-    Inputs: `exc`. Output: None.
+    Inputs: exception. Output: None.
     """
     version_info = ".".join(str(part) for part in sys.version_info[:3])
     if not _native_imaris_bridge_enabled():
@@ -6805,7 +6802,7 @@ def _log_direct_imaris_resolution_failure(exc):
         return
     _xt_debug(
         "Direct Imaris XT bridge is unavailable in this Python: "
-        f"{exc}. Current Python={version_info}. "
+        f"{error}. Current Python={version_info}. "
         "The connector will use the compatible native bridge runner if available."
     )
 
@@ -8484,7 +8481,8 @@ class OMEROWebClient:
                             poll_payload = json.loads(poll_body)
                         except json.JSONDecodeError as exc:
                             raise RuntimeError(
-                                "OMERO converter IMS export poll failed: server returned a non-JSON response. "
+                                "OMERO converter IMS export poll failed: server returned "
+                                "a non-JSON response. "
                                 "Please verify the OMERO.web Imaris connector is healthy."
                             ) from exc
 
@@ -10167,7 +10165,8 @@ class OMEROBrowserDialog:
             )
             return False
 
-    def _browser_search_placeholder(self, key):
+    @staticmethod
+    def _browser_search_placeholder(key):
         """Return placeholder text for a browser search entry.
 
         Inputs: `key`. Output: placeholder text.
@@ -11734,7 +11733,8 @@ class OMEROBrowserDialog:
         self.imaris = None
         return _coerce_imaris_id(getattr(self, "imaris_id", None)) is not None
 
-    def _has_imaris_converter_handoff_target(self):
+    @staticmethod
+    def _has_imaris_converter_handoff_target():
         """Return whether selected-image exports can be submitted to Imaris.
 
         Inputs: none. Output: bool.
@@ -12472,13 +12472,12 @@ class OMEROBrowserDialog:
                 f"Using Imaris handle type={type(self.imaris).__name__} for file open"
             )
 
-        if self.imaris is not None:
-            if open_file_in_imaris(
-                downloaded_file,
-                self.imaris,
-                require_ims=require_ims,
-            ):
-                return True
+        if self.imaris is not None and open_file_in_imaris(
+            downloaded_file,
+            self.imaris,
+            require_ims=require_ims,
+        ):
+            return True
 
         if not native_bridge_enabled:
             return False
@@ -12578,13 +12577,12 @@ class OMEROBrowserDialog:
                 "application id is available for batch handoff"
             )
 
-        if self.imaris is not None:
-            if open_files_in_imaris(
-                downloaded_files,
-                self.imaris,
-                require_ims=require_ims,
-            ):
-                return True
+        if self.imaris is not None and open_files_in_imaris(
+            downloaded_files,
+            self.imaris,
+            require_ims=require_ims,
+        ):
+            return True
 
         if not native_bridge_enabled:
             return False
@@ -12948,7 +12946,7 @@ class OMEROBrowserDialog:
         client = None
         try:
             client = OMEROWebClient(host, port, username, password, scheme=scheme)
-            del password
+            del password  # skipcq: PTC-W0043
             if not client.connect():
                 self._clear_client_session_state(client)
                 self._invoke_on_ui_thread(
@@ -14252,13 +14250,14 @@ class OMEROBrowserDialog:
             return filename
         raise RuntimeError(f"Unsupported converter: {converter}")
 
-    def _planned_download_filenames(self, images, converter):
+    @staticmethod
+    def _planned_download_filenames(images, converter):
         """Return intended local filenames for the selected import.
 
         Inputs: `images`, `converter`. Output: list of filename strings.
         """
         return [
-            self._download_filename_for_image(img, converter)
+            OMEROBrowserDialog._download_filename_for_image(img, converter)
             for img in list(images or [])
             if isinstance(img, dict)
         ]
@@ -14361,7 +14360,8 @@ class OMEROBrowserDialog:
         planned_names_seen.add(safe_filename)
         return duplicate_policy
 
-    def _selected_image_export_key(self, file_path):
+    @staticmethod
+    def _selected_image_export_key(file_path):
         """Return a stable key for a tracked selected-image export path.
 
         Inputs: `file_path`. Output: key string or empty string.

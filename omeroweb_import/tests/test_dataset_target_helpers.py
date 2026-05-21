@@ -530,7 +530,6 @@ def test_request_path_dataset_preparation_links_path_targets_to_selected_project
     Inputs: pytest provides `monkeypatch`. Output: fails on selected-Project
     Dataset preparation regressions.
     """
-
     created_targets = []
 
     def get_or_create_dataset(conn, name, dataset_map, project_id=None):

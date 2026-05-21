@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # Override omero.web.server_list with OMEROHOST if set.
 
 set -euo pipefail
@@ -27,11 +28,14 @@ resolve_omero_bin() {
     fi
 
     if [[ -n "${configured_venv}" ]]; then
-        if [[ "${configured_venv}" == /* ]]; then
-            configured_root="${configured_venv}"
-        else
-            configured_root="${web_root%/}/${configured_venv}"
-        fi
+        case "${configured_venv}" in
+            /*)
+                configured_root="${configured_venv}"
+                ;;
+            *)
+                configured_root="${web_root%/}/${configured_venv}"
+                ;;
+        esac
     fi
 
     if [[ -n "${configured_root}" && -x "${configured_root}/bin/omero" ]]; then

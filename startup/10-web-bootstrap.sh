@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 ################################################################################
 # OMERO.web Bootstrap Script
 ################################################################################
@@ -504,10 +505,12 @@ install_branding_logo_fallback() {
 clear_static_directory_for_backup_sync() {
     local target_dir="${1:-}"
 
-    if [[ -z "${target_dir}" || "${target_dir}" != /* || "${target_dir}" == "/" || "${target_dir}" == "/static" ]]; then
-        echo "[web-bootstrap] ERROR: Refusing unsafe static directory cleanup target: ${target_dir:-<empty>}" >&2
-        exit 1
-    fi
+    case "${target_dir}" in
+        "" | "/" | "/static" | [!/]*)
+            echo "[web-bootstrap] ERROR: Refusing unsafe static directory cleanup target: ${target_dir:-<empty>}" >&2
+            exit 1
+            ;;
+    esac
 
     if [[ -L "${target_dir}" ]]; then
         echo "[web-bootstrap] ERROR: Refusing to clean symlinked static directory: ${target_dir}" >&2

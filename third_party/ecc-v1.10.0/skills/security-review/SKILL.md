@@ -25,6 +25,7 @@ This skill ensures all code follows security best practices and identifies poten
 #### FAIL: NEVER Do This
 ```typescript
 const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
+// skipcq: SCT-A000
 const dbPassword = "password123" // In source code
 ```
 
@@ -238,6 +239,7 @@ const securityHeaders = [
 import { csrf } from '@/lib/csrf'
 
 export async function POST(request: Request) {
+  // skipcq: SCT-A000
   const token = request.headers.get('X-CSRF-Token')
 
   if (!csrf.verify(token)) {

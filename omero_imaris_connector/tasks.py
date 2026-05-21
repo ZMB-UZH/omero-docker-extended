@@ -677,7 +677,7 @@ def _run_ome_tiff_export(conn, image_id, status_callback=None):
     ims_export_script = _ims_export_script_module()
     export_root = get_ome_tiff_staging_root(create=True)
     export_name = (
-        ims_export_script._safe_filename(
+        ims_export_script.safe_filename(
             image.getName(),
             fallback=f"omero_image_{int(image_id)}",
         )
@@ -685,7 +685,7 @@ def _run_ome_tiff_export(conn, image_id, status_callback=None):
     )
     if status_callback is not None:
         status_callback("running_export", {"export_name": export_name})
-    export_path = ims_export_script._materialize_ome_tiff_source(
+    export_path = ims_export_script.materialize_ome_tiff_source(
         conn,
         image,
         int(image_id),
