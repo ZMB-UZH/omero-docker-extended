@@ -209,21 +209,21 @@ Useful commands (host):
 
 ## Key routes
 
-| Route                                            | Method | Purpose                                                  |
-| ------------------------------------------------ | ------ | -------------------------------------------------------- |
-| `/omeroweb_import/`                              | GET    | Main upload page                                         |
-| `/omeroweb_import/projects/`                     | GET    | List accessible projects                                 |
-| `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root                      |
-| `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)               |
-| `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)                        |
-| `/omeroweb_import/upload/<str:job_id>/`          | POST   | Transfer files to the job directory                      |
-| `/omeroweb_import/import/<str:job_id>/`          | POST   | Trigger OMERO CLI import for uploaded files              |
-| `/omeroweb_import/confirm/<str:job_id>/`         | POST   | Confirm import completion                                |
-| `/omeroweb_import/prune/<str:job_id>/`           | POST   | Remove temporary upload files                            |
-| `/omeroweb_import/status/<str:job_id>/`          | GET    | Poll job status                                          |
-| `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                             |
-| `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter)   |
-| `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter)   |
+| Route                                            | Method | Purpose                                                |
+| ------------------------------------------------ | ------ | ------------------------------------------------------ |
+| `/omeroweb_import/`                              | GET    | Main upload page                                       |
+| `/omeroweb_import/projects/`                     | GET    | List accessible projects                               |
+| `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root                    |
+| `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)             |
+| `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)                      |
+| `/omeroweb_import/upload/<str:job_id>/`          | POST   | Transfer files to the job directory                    |
+| `/omeroweb_import/import/<str:job_id>/`          | POST   | Trigger OMERO CLI import for uploaded files            |
+| `/omeroweb_import/confirm/<str:job_id>/`         | POST   | Confirm import completion                              |
+| `/omeroweb_import/prune/<str:job_id>/`           | POST   | Remove temporary upload files                          |
+| `/omeroweb_import/status/<str:job_id>/`          | GET    | Poll job status                                        |
+| `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                           |
+| `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter) |
+| `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter) |
 
 ## Typical user workflow
 
@@ -313,7 +313,7 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS`      | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`)                                                                                                                                             |
 | `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS`          | Per-import subprocess timeout in seconds (default `86400`)                                                                                                                                                              |
 | `OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS`  | Per-file NGFF converter subprocess timeout in seconds (default `86400`)                                                                                                                                                 |
-| `BIOFORMATS2RAW_CLI`                               | Optional runtime path override for the `bioformats2raw` executable used by the NGFF converter; defaults to `/usr/local/bin/bioformats2raw` in the image                                                                  |
+| `BIOFORMATS2RAW_CLI`                               | Optional runtime path override for the `bioformats2raw` executable used by the NGFF converter; defaults to `/usr/local/bin/bioformats2raw` in the image                                                                 |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS`    | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable`                                                                                                                                      |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`      | Sleep interval between managed-repository helper launch retries                                                                                                                                                         |
 | `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT`         | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
