@@ -28,7 +28,7 @@ observability stack, automated database maintenance, and deployment/update
 tooling. Every service runs in separate Docker containers with explicit health
 checks, pinned image versions, and environment variable driven configuration.
 
-> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility or behavior must be verified by the user/administrator.
+> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility and behavior must be verified by the system administrator.
 
 For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
