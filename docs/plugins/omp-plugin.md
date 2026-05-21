@@ -30,7 +30,7 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 | `/omeroweb_omp_plugin/start_delete_plugin_job/`        | POST   | Start delete plugin-owned annotations job                                 |
 | `/omeroweb_omp_plugin/delete_all/`                     | POST   | Delete all MapAnnotations from selected images (direct, non-job)          |
 | `/omeroweb_omp_plugin/delete_plugin/`                  | POST   | Delete plugin-owned MapAnnotations from selected images (direct, non-job) |
-| `/omeroweb_omp_plugin/progress/<job_id>/`              | GET    | Poll job progress                                                         |
+| `/omeroweb_omp_plugin/progress/<str:job_id>/`          | GET    | Poll job progress                                                         |
 | `/omeroweb_omp_plugin/varsets/`                        | GET    | List saved variable sets                                                  |
 | `/omeroweb_omp_plugin/varsets/save/`                   | POST   | Save a variable set                                                       |
 | `/omeroweb_omp_plugin/varsets/load/`                   | POST   | Load a variable set                                                       |

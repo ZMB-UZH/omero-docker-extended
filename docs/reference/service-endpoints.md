@@ -50,7 +50,7 @@ Base: `/omeroweb_omp_plugin/`
 | `/start_delete_plugin_job/` | Start delete plugin-owned annotations job |
 | `/delete_all/` | Delete all MapAnnotations (direct, non-job) |
 | `/delete_plugin/` | Delete plugin-owned MapAnnotations (direct, non-job) |
-| `/progress/<job_id>/` | Poll job progress |
+| `/progress/<str:job_id>/` | Poll job progress |
 | `/varsets/`, `/varsets/save/`, `/varsets/load/`, `/varsets/delete/` | Variable set CRUD |
 | `/ai-credentials/`, `/ai-credentials/save/`, `/ai-credentials/test/`, `/ai-credentials/models/` | AI credential management |
 | `/user-settings/save/` | Save user preferences |
@@ -65,15 +65,15 @@ Base: `/omeroweb_import/`
 | --- | --- |
 | `/` | Main upload page |
 | `/start/` | Create upload session |
-| `/upload/<job_id>/` | Transfer files |
-| `/import/<job_id>/` | Trigger OMERO import |
-| `/confirm/<job_id>/` | Confirm import completion |
-| `/prune/<job_id>/` | Remove temporary files |
-| `/status/<job_id>/` | Poll job status |
+| `/upload/<str:job_id>/` | Transfer files |
+| `/import/<str:job_id>/` | Trigger OMERO import |
+| `/confirm/<str:job_id>/` | Confirm import completion |
+| `/prune/<str:job_id>/` | Remove temporary files |
+| `/status/<str:job_id>/` | Poll job status |
 | `/projects/` | List accessible projects |
 | `/root-status/` | Check if current user is OMERO root |
 | `/user-settings/save/` | Save upload preferences |
-| `/special-method-settings/save/`, `/load/` | SEM-EDX method settings |
+| `/special-method-settings/save/`, `/special-method-settings/load/` | SEM-EDX method settings |
 | `/help/` | Help Markdown document download |
 
 ### Tools Plugin
@@ -87,9 +87,10 @@ Base: `/omeroweb_tools/`
 | `/enhanced-search/` | Enhanced search UI |
 | `/enhanced-search/sync/` | Request scope index refresh |
 | `/enhanced-search/sync-state/` | Fetch current sync-state table |
+| `/enhanced-search/settings/` | Save enhanced-search UI and indexing settings |
 | `/enhanced-search/saved-queries/save/` | Save current query for the logged-in user |
 | `/enhanced-search/saved-queries/delete/` | Delete a saved query |
-| `/enhanced-search/saved-queries/<query_id>/` | Re-open a saved query |
+| `/enhanced-search/saved-queries/<int:query_id>/` | Re-open a saved query |
 | `/help/` | Tools HTML help |
 
 ### OMERO.web Zarr Plugin
@@ -103,8 +104,16 @@ Base: `/zarr/`
 | `/download/image/<image_id>/original/` | Download original managed-repository Zarr store as a zip archive |
 | `/download/image/<image_id>/metadata/` | Download consolidated metadata manifest for the managed store |
 | `/download/image/<image_id>/ome-tiff/` | Create and download OME-TIFF directly from the managed store |
-| `/v0.4/image/<image_id>.zarr/...` | Raw authenticated NGFF contract that exposes the underlying managed store |
-| `/v0.4/preview/image/<image_id>.zarr/...` | Preview-safe NGFF contract for browser viewing and Vizarr integration |
+| `/v0.3/image/<image_id>.zarr/.zattrs`, `/v0.4/image/<image_id>.zarr/.zattrs` | Raw root attributes |
+| `/v0.3/image/<image_id>.zarr/.zgroup`, `/v0.4/image/<image_id>.zarr/.zgroup` | Raw root group metadata |
+| `/v0.3/image/<image_id>.zarr/<level>/.zarray`, `/v0.4/image/<image_id>.zarr/<level>/.zarray` | Raw array metadata |
+| `/v0.3/image/<image_id>.zarr/<level>/<chunk>`, `/v0.4/image/<image_id>.zarr/<level>/<chunk>` | Raw generated or store-backed chunk bytes |
+| `/v0.3/image/<image_id>.zarr/<store_path>`, `/v0.4/image/<image_id>.zarr/<store_path>` | Raw managed-store metadata or file path |
+| `/v0.4/preview/image/<image_id>.zarr/.zattrs` | Preview root attributes |
+| `/v0.4/preview/image/<image_id>.zarr/.zgroup` | Preview root group metadata |
+| `/v0.4/preview/image/<image_id>.zarr/<level>/.zarray` | Preview array metadata |
+| `/v0.4/preview/image/<image_id>.zarr/<level>/<chunk>` | Preview chunk bytes |
+| `/v0.4/preview/image/<image_id>.zarr/<store_path>` | Preview managed-store metadata or file path |
 | `/vizarr/` | Vizarr launcher page |
 | `/validator/` | NGFF validator launcher page |
 
@@ -127,8 +136,8 @@ Base: `/omeroweb_admin_tools/`
 | `/root-status/` | Check if current user is OMERO root |
 | `/logs/`, `/logs/data/`, `/logs/internal-labels/` | Log exploration and data |
 | `/resource-monitoring/`, `/resource-monitoring/data/` | Container stats and system info |
-| `/resource-monitoring/grafana-proxy/<subpath>` | Grafana API proxy |
-| `/resource-monitoring/prometheus-proxy/<subpath>` | Prometheus API proxy |
+| `/resource-monitoring/grafana-proxy/`, `/resource-monitoring/grafana-proxy/<path:subpath>` | Grafana API proxy |
+| `/resource-monitoring/prometheus-proxy/`, `/resource-monitoring/prometheus-proxy/<path:subpath>` | Prometheus API proxy |
 | `/storage/`, `/storage/data/` | Storage analytics |
 | `/storage/quota/data/` | Fetch persisted group quota state |
 | `/storage/quota/update/` | Update quota values |

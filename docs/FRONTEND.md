@@ -30,3 +30,9 @@ Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` 
 - The admin tools plugin uses root-only guards for administrator surfaces; the Tools plugin uses `require_non_root_user` on mutating endpoints and blocks root users from executing the regular-user workflow.
 - When changing UI workflows, include a validation plan in `docs/exec-plans/active/`.
 - Document user-facing behavior changes in the relevant `docs/plugins/` guide.
+- For host-side Vite/Vitest preview tooling, use
+  `tools/frontend_preview_tooling.py`. It installs the wrapper under
+  `${XDG_CACHE_HOME:-$HOME/.cache}/omero-agent-frontend-preview` unless
+  `OMERO_AGENT_FRONTEND_TOOLING_DIR` is set, and installs pinned Node.js under
+  `${XDG_DATA_HOME:-$HOME/.local/share}/omero-agent-node/...` unless
+  `OMERO_AGENT_NODE_DIR` is set.

@@ -990,12 +990,45 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         self.assertIn("`OMERO_WEB_UPLOAD_CONCURRENCY`", import_doc)
         self.assertIn("`OMERO_WEB_UPLOAD_BATCH_FILES`", import_doc)
+        self.assertIn("`BIOFORMATS2RAW_CLI`", import_doc)
         self.assertIn("derived from `OMERO_TMP_PATH`", import_doc)
         self.assertIn("`data/.omero-cli-home`", import_doc)
         self.assertIn("not a plugin override", import_doc)
         self.assertNotIn("`UPLOAD_CONCURRENT_LIMIT`", import_doc)
         self.assertNotIn("`UPLOAD_BATCH_SIZE`", import_doc)
         self.assertNotIn("${OMERO_IMPORT_PATH}/.omero-cli-home", import_doc)
+
+    def test_imaris_connector_docs_cover_local_xt_env_contract(self) -> None:
+        """Verify Imaris connector docs cover local XT env variables.
+
+        Inputs: repository fixtures. Output: fails on Imaris connector doc drift.
+        """
+        plugin_doc = self.read_text("docs/plugins/imaris-connector-plugin.md")
+        expected_fragments = (
+            "`IMARIS_EXE`",
+            "`IMARIS_HOME`",
+            "`OMERO_WEB_HOST` / `OMERO_HOST` / `OMEROHOST`",
+            "`OMERO_WEB_PORT` / `OMERO_WEB_PUBLIC_PORT` / `OMERO_PORT`",
+            "`OMERO_USER` / `OMERO_USERNAME`",
+            "`OMERO_IMARIS_EXPORT_DIR`",
+            "`OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES`",
+            "`OMERO_IMARIS_UPLOAD_CHUNK_BYTES`",
+            "`OMERO_IMARIS_MULTI_DOWNLOAD_WORKERS`",
+            "`OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX`",
+            "`OMERO_IMARIS_HTTP_RETRY_ATTEMPTS`",
+            "`OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS`",
+            "`OMERO_IMARIS_REFRESH_TIMEOUT_SECONDS`",
+            "`OMERO_IMARIS_REFRESH_RETRY_ATTEMPTS`",
+            "`OMERO_IMARIS_REFRESH_RETRY_DELAY_SECONDS`",
+            "`OMERO_IMARIS_HEALTH_PING_INTERVAL_SECONDS`",
+            "`OMERO_IMARIS_HEALTH_PING_TIMEOUT_SECONDS`",
+            "`OMERO_IMARIS_HEALTH_PING_RETRY_ATTEMPTS`",
+            "`OMERO_IMARIS_HEALTH_PING_RETRY_DELAY_SECONDS`",
+            "`IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY`",
+        )
+        for fragment in expected_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, plugin_doc)
 
     def test_frontend_docs_cover_current_template_packages(self) -> None:
         """Check frontend docs cover current template packages renders the expected surface.
@@ -1065,6 +1098,111 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         for service_name in expected_services:
             with self.subTest(service_name=service_name):
                 self.assertIn(f"`{service_name}`", endpoint_text)
+
+    def test_service_endpoint_route_tables_match_current_urlconfs(self) -> None:
+        """Verify service endpoint route tables match current URLconf contracts.
+
+        Inputs: repository fixtures. Output: fails on regressions in endpoint route docs.
+        """
+        endpoint_text = self.read_text("docs/reference/service-endpoints.md")
+        expected_routes = (
+            "/special-method-settings/save/",
+            "/special-method-settings/load/",
+            "/enhanced-search/settings/",
+            "/enhanced-search/saved-queries/<int:query_id>/",
+            "/progress/<str:job_id>/",
+            "/upload/<str:job_id>/",
+            "/import/<str:job_id>/",
+            "/confirm/<str:job_id>/",
+            "/prune/<str:job_id>/",
+            "/status/<str:job_id>/",
+            "/v0.3/image/<image_id>.zarr/.zattrs",
+            "/v0.4/image/<image_id>.zarr/.zattrs",
+            "/v0.3/image/<image_id>.zarr/.zgroup",
+            "/v0.4/image/<image_id>.zarr/.zgroup",
+            "/v0.4/preview/image/<image_id>.zarr/.zattrs",
+            "/v0.4/preview/image/<image_id>.zarr/.zgroup",
+            "/v0.4/preview/image/<image_id>.zarr/<level>/.zarray",
+            "/v0.4/preview/image/<image_id>.zarr/<level>/<chunk>",
+            "/resource-monitoring/grafana-proxy/",
+            "/resource-monitoring/grafana-proxy/<path:subpath>",
+            "/resource-monitoring/prometheus-proxy/",
+            "/resource-monitoring/prometheus-proxy/<path:subpath>",
+        )
+        for route in expected_routes:
+            with self.subTest(route=route):
+                self.assertIn(route, endpoint_text)
+        self.assertNotIn("`/special-method-settings/save/`, `/load/`", endpoint_text)
+        plugin_route_text = "\n".join(
+            self.read_text(path)
+            for path in (
+                "docs/plugins/omp-plugin.md",
+                "docs/plugins/omp-plugin-workflow.md",
+                "docs/plugins/import-plugin.md",
+                "docs/plugins/tools-plugin.md",
+            )
+        )
+        for stale_route in (
+            "/progress/<job_id>",
+            "/upload/<job_id>",
+            "/confirm/<job_id>",
+            "/enhanced-search/saved-queries/<query_id>",
+            "/resource-monitoring/grafana-proxy/<subpath>",
+        ):
+            with self.subTest(stale_route=stale_route):
+                self.assertNotIn(stale_route, plugin_route_text)
+
+    def test_admin_quota_docs_match_host_side_enforcer_model(self) -> None:
+        """Verify admin quota docs match the host-side enforcer model.
+
+        Inputs: repository fixtures. Output: fails on quota documentation drift.
+        """
+        plugin_text = self.read_text("docs/plugins/admin-tools-plugin.md")
+        workflow_text = self.read_text("docs/plugins/admin-tools-workflow.md")
+        combined_text = f"{plugin_text}\n{workflow_text}"
+
+        self.assertNotIn("ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", combined_text)
+        self.assertNotIn("background loop applies it", workflow_text)
+        self.assertIn("The host `omero-quota-enforcer` systemd", plugin_text)
+        self.assertIn("host-side `omero-quota-enforcer`", workflow_text)
+        self.assertIn("does not invoke\n`chattr` or `setquota` directly", plugin_text)
+        self.assertIn("/OMERO/.admin-tools/group-quotas.json", plugin_text)
+        self.assertIn("/OMERO/.admin-tools/quota/projects", plugin_text)
+        self.assertIn("/OMERO/.admin-tools/quota/projid", plugin_text)
+        self.assertIn("quota-enforcer-installed", plugin_text)
+        legacy_tmp_quota_path = "/".join(("", "tmp", "omero-admin-tools", "quota"))
+        self.assertNotIn(legacy_tmp_quota_path, plugin_text)
+
+    def test_admin_tools_docs_match_runtime_env_contract(self) -> None:
+        """Verify Admin Tools docs cover runtime env knobs used by code.
+
+        Inputs: repository fixtures. Output: fails on Admin Tools env doc drift.
+        """
+        plugin_text = self.read_text("docs/plugins/admin-tools-plugin.md")
+        expected_fragments = (
+            "`ADMIN_TOOLS_GRAFANA_DASHBOARD_UID`",
+            "`ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG`",
+            "`ADMIN_TOOLS_GRAFANA_PUBLIC_URL`",
+            "`ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL`",
+            "`ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME`",
+            "`ADMIN_TOOLS_DOCKER_SOCKET`",
+            "`ADMIN_TOOLS_COMPOSE_PROJECT_NAME`",
+            "`GRAFANA_HOST_PORT`",
+            "`PROMETHEUS_HOST_PORT`",
+            "`ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS`",
+            "`ADMIN_TOOLS_OMERO_SERVER_HOST`",
+            "`ADMIN_TOOLS_OMERO_BLITZ_PORT`",
+            "`ADMIN_TOOLS_OMERO_SECURE_PORT`",
+            "`ADMIN_TOOLS_OMERO_WEB_HOST`",
+            "`ADMIN_TOOLS_OMERO_WEB_PORT`",
+            "`ADMIN_TOOLS_OMERO_WEB_PATH`",
+            "`ADMIN_TOOLS_OMERO_WEB_HEALTH_URL`",
+            "`/omeroweb_admin_tools/resource-monitoring/grafana-proxy/`",
+            "`/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/`",
+        )
+        for fragment in expected_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, plugin_text)
 
     def test_monitoring_docs_match_prometheus_probe_counts(self) -> None:
         """Verify monitoring docs match prometheus probe counts.

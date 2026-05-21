@@ -123,6 +123,32 @@ Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env
 - `OMERO_WEB_JOB_SERVICE_USERNAME` / `OMERO_JOB_SERVICE_USERNAME`
 - `OMERO_WEB_JOB_SERVICE_PASS` / `OMERO_JOB_SERVICE_PASS`
 
+Local XT connector environment variables (read by
+`omero_imaris_connector/XTOmeroConnector.py` in the client-side Imaris process):
+
+| Variable | Purpose |
+| --- | --- |
+| `IMARIS_EXE` | Optional exact `Imaris.exe` candidate checked after saved connector settings |
+| `IMARIS_HOME` | Optional Imaris installation directory containing `Imaris.exe` |
+| `OMERO_WEB_HOST` / `OMERO_HOST` / `OMEROHOST` | Default host shown in the connector login dialog |
+| `OMERO_WEB_PORT` / `OMERO_WEB_PUBLIC_PORT` / `OMERO_PORT` | Default port shown in the connector login dialog |
+| `OMERO_USER` / `OMERO_USERNAME` | Default username shown in the connector login dialog |
+| `OMERO_IMARIS_EXPORT_DIR` | Optional non-GUI download/export staging directory; the GUI selected local path remains authoritative |
+| `OMERO_IMARIS_DOWNLOAD_CHUNK_BYTES` | Bounded HTTP download buffer size, default `8388608`, clamped to `65536`-`67108864` |
+| `OMERO_IMARIS_UPLOAD_CHUNK_BYTES` | Bounded multipart upload buffer size, default `1048576`, clamped to `65536`-`67108864` |
+| `OMERO_IMARIS_MULTI_DOWNLOAD_WORKERS` | Optional cap for parallel selected-image downloads |
+| `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` | Force timestamped unique filenames for non-GUI downloads instead of replacing same-name files |
+| `OMERO_IMARIS_HTTP_RETRY_ATTEMPTS` | Transient HTTP retry attempts, default `3`, clamped to `1`-`10` |
+| `OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS` | Delay between transient HTTP retries, default `2.0`, clamped to `0.0`-`30.0` |
+| `OMERO_IMARIS_REFRESH_TIMEOUT_SECONDS` | Timeout for each project/dataset/image refresh request, default `30`, clamped to `5`-`300` |
+| `OMERO_IMARIS_REFRESH_RETRY_ATTEMPTS` | Refresh retry attempts, default `3`, clamped to `1`-`10` |
+| `OMERO_IMARIS_REFRESH_RETRY_DELAY_SECONDS` | Delay between refresh retries, default `2.0`, clamped to `0.0`-`30.0` |
+| `OMERO_IMARIS_HEALTH_PING_INTERVAL_SECONDS` | Read-only session health ping interval, default `30`, clamped to `5`-`3600` |
+| `OMERO_IMARIS_HEALTH_PING_TIMEOUT_SECONDS` | Health ping timeout, default `10`, clamped to `2`-`120` |
+| `OMERO_IMARIS_HEALTH_PING_RETRY_ATTEMPTS` | Failed health pings before declaring the connection lost, default `3`, clamped to `1`-`10` |
+| `OMERO_IMARIS_HEALTH_PING_RETRY_DELAY_SECONDS` | Delay between failed health pings, default `1.0`, clamped to `0.0`-`30.0` |
+| `IMARIS_OMERO_CONNECTOR_ENABLE_ICEPY` | Optional experimental native Imaris bridge flag; keep unset/false for normal XT operation |
+
 ## Operator checklist
 
 - Confirm Celery worker process health: `docker compose logs omeroweb | grep celery`

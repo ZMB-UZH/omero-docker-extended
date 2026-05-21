@@ -270,7 +270,8 @@ Common utilities shared across all plugins:
 This workflow mirrors the intended deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update workflow script.
 
 **1.** Prepare the installation root (assumed path: `/opt/omero`; change according to your needs):
-```
+
+```bash
 sudo mkdir -p /opt/omero/env
 cd /opt/omero
 ```
@@ -295,7 +296,8 @@ Then, create runtime copies by removing the `_example` suffix where applicable (
 An experimental Debian 13 docker installation script exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
 
 Upon completion, verify Docker runtime health:
-```
+
+```bash
 systemctl status docker
 systemctl status containerd
 docker --version
@@ -304,7 +306,8 @@ docker compose ps
 ```
 
 **4.** Prepare and execute the pull/update workflow script:
-```
+
+```bash
 cd /opt/omero
 sudo chown root:root github_pull_project_bash
 sudo chmod +x github_pull_project_bash
@@ -316,6 +319,7 @@ The script prompts for installation parameters (defaults are available), install
 The pull/update script also saves a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data path.
 
 **5.** After a successful installation, run:
+
 - Portainer: <http://localhost:9000> (set admin password on first login)
 - OMERO.web: <http://localhost:4090>
 
@@ -343,7 +347,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 ### Basic docker commands
 
-```
+```bash
 # Stop all services without removing containers
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env stop
 
@@ -385,7 +389,8 @@ data filesystem.
 
 Run the same command on Debian 13 and Ubuntu 26.04 LTS from the OMERO Docker
 Extended installation directory:
-```
+
+```bash
 sudo scripts/enable-storage-quotas.sh --yes-i-have-a-backup
 ```
 

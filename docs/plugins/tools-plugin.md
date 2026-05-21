@@ -52,7 +52,7 @@ This plugin has a strict write boundary:
 | `/omeroweb_tools/enhanced-search/settings/` | POST | Save current user's enhanced-search UI and indexing settings |
 | `/omeroweb_tools/enhanced-search/saved-queries/save/` | POST | Save current query for the user |
 | `/omeroweb_tools/enhanced-search/saved-queries/delete/` | POST | Delete a saved query |
-| `/omeroweb_tools/enhanced-search/saved-queries/<query_id>/` | GET | Re-open a saved query |
+| `/omeroweb_tools/enhanced-search/saved-queries/<int:query_id>/` | GET | Re-open a saved query |
 | `/omeroweb_tools/help/` | GET | Render Tools HTML help |
 
 ## Code structure

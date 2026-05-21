@@ -21,7 +21,7 @@ flowchart TD
     E --> G
 
     G --> H[Persist quota to group-quotas.json atomically]
-    H --> I[Background reconciliation loop picks up change]
+    H --> I[OMERO.web reconciliation loop validates quota state]
 
     I --> J{ManagedRepository template starts with %group%/%user%/?}
     J -->|No| K[Quotas tab disabled with incompatibility warning]
@@ -29,20 +29,21 @@ flowchart TD
 
     L --> M{Group directory exists under OMERO_DATA_DIR?}
     M -->|No| N[Quota stays pending — OMERO.server must create directory first]
-    M -->|Yes| O[Run ext4 project-quota enforcer]
+    M -->|Yes| O[Mark group configured in quota state]
 
-    O --> P[Resolve or assign stable project ID for group]
-    P --> Q[Update mapping files: projects and projid]
-    Q --> R[chattr -p: assign project ID to group directory]
-    R --> S[chattr +P: enable project inheritance]
-    S --> T[setquota -P: set hard block quota on mount point]
-    T --> U[Log enforcement result to quota state]
+    O --> P[Host systemd path/timer runs omero-quota-enforcer]
+    P --> Q[Resolve or assign stable project ID for group]
+    Q --> R[Update mapping files: projects and projid]
+    R --> S[chattr -p: assign project ID to group directory]
+    S --> T[chattr +P: enable project inheritance]
+    T --> U[setquota -P: set hard block quota on mount point]
+    U --> V[Log enforcement result to systemd journal]
 
-    U --> V{Quota deleted from Admin Tools?}
-    V -->|Yes| W[Clear stale project mappings]
-    W --> X[Reset stale project quotas: setquota -P id 0 0 0 0]
-    X --> Y[Remove stale project-id attributes: chattr -R -p 0]
-    V -->|No| Z[Reconciliation complete for this group]
+    V --> W{Quota deleted from Admin Tools?}
+    W -->|Yes| X[Clear stale project mappings]
+    X --> Y[Reset stale project quotas: setquota -P id 0 0 0 0]
+    Y --> Z[Remove stale project-id attributes: chattr -R -p 0]
+    W -->|No| AA[Enforcement complete for this group]
 ```
 
 ## Workflow diagram — Log exploration
@@ -77,7 +78,7 @@ flowchart TD
 
 ### 2. Resource monitoring
 
-- Embedded Grafana dashboards are served through an authenticated reverse proxy (`/resource-monitoring/grafana-proxy/<subpath>`).
+- Embedded Grafana dashboards are served through an authenticated reverse proxy (`/resource-monitoring/grafana-proxy/<path:subpath>`).
 - The Grafana proxy rewrites `appSubUrl`, `appUrl`, cookie paths, and auth headers so Grafana sessions work correctly behind the plugin route.
 - The Grafana proxy is the documented CSRF exemption in this plugin: OMERO.web
   root authentication still gates the route, and Grafana validates its own
@@ -89,7 +90,9 @@ flowchart TD
 ### 3. Storage analytics
 
 - The Storage page shows disk usage by user and group from OMERO API data.
-- Quota reconciliation state (actual usage vs. configured quota, enforcement logs) is included in the response from `/storage/data/`.
+- Quota reconciliation state (actual usage vs. configured quota plus
+  configured/pending group logs) is included in the response from
+  `/storage/data/`.
 
 ### 4. Quota management
 
@@ -101,7 +104,11 @@ flowchart TD
 ### 5. ext4 project-quota enforcement
 
 - A background reconciliation loop (`startup/61-storage-quota-reconcile-loop.sh`) runs every `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` (default 60).
-- For each group with a configured quota, the enforcer:
+- The OMERO.web loop validates root safety, compatibility, and group presence,
+  then records configured or pending state. It does not run `chattr` or
+  `setquota` directly.
+- The host-side `omero-quota-enforcer` systemd path/timer reads
+  `group-quotas.json`. For each group with a configured quota, the enforcer:
   1. Validates that the target directory exists and is inside the detected mount point.
   2. Resolves or assigns a stable project ID (minimum `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN`).
   3. Updates mapping files (`projects` and `projid`).
@@ -119,7 +126,9 @@ flowchart TD
 ## Design rules
 
 - All endpoints enforce root-only access.
-- Quota enforcement is decoupled from the UI: the web endpoint persists state; the background loop applies it.
+- Quota enforcement is decoupled from the UI: the web endpoint persists state,
+  the OMERO.web background loop reconciles configured/pending status, and the
+  host-side `omero-quota-enforcer` applies ext4 project quotas.
 - The quota state schema is versioned; unknown future versions fail loudly.
 - Grafana proxy rewrites are intentionally restricted to known boot-settings and cookie-path patterns.
 - Log severity normalization is deterministic and does not depend on external log format configuration.

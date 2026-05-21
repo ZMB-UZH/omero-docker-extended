@@ -3,7 +3,7 @@
 Investigation conducted on 2026-04-12 for the repository-wide question of
 whether the Python-heavy portions of this codebase can be accelerated through
 fully automatic conversion, Cython, or another runtime/compiler approach.
-Repository file counts were refreshed on 2026-05-20.
+Repository file counts were refreshed on 2026-05-21.
 
 ## Goal
 
@@ -38,7 +38,7 @@ Answer four architecture questions before any implementation work:
 - Production Python files: `151`
 - Production Python lines: `79,292`
 - Test Python files: `179`
-- Test Python lines: `125,824`
+- Test Python lines: `125,962`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.

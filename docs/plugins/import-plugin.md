@@ -216,11 +216,11 @@ Useful commands (host):
 | `/omeroweb_import/root-status/`                  | GET    | Check if current user is OMERO root                      |
 | `/omeroweb_import/help/`                         | GET    | Serve plugin help documentation (Markdown)               |
 | `/omeroweb_import/start/`                        | POST   | Create a new upload session (job)                        |
-| `/omeroweb_import/upload/<job_id>/`              | POST   | Transfer files to the job directory                      |
-| `/omeroweb_import/import/<job_id>/`              | POST   | Trigger OMERO CLI import for uploaded files              |
-| `/omeroweb_import/confirm/<job_id>/`             | POST   | Confirm import completion                                |
-| `/omeroweb_import/prune/<job_id>/`               | POST   | Remove temporary upload files                            |
-| `/omeroweb_import/status/<job_id>/`              | GET    | Poll job status                                          |
+| `/omeroweb_import/upload/<str:job_id>/`          | POST   | Transfer files to the job directory                      |
+| `/omeroweb_import/import/<str:job_id>/`          | POST   | Trigger OMERO CLI import for uploaded files              |
+| `/omeroweb_import/confirm/<str:job_id>/`         | POST   | Confirm import completion                                |
+| `/omeroweb_import/prune/<str:job_id>/`           | POST   | Remove temporary upload files                            |
+| `/omeroweb_import/status/<str:job_id>/`          | GET    | Poll job status                                          |
 | `/omeroweb_import/user-settings/save/`           | POST   | Save user upload preferences                             |
 | `/omeroweb_import/special-method-settings/save/` | POST   | Save special method settings (SEM-EDX, NGFF converter)   |
 | `/omeroweb_import/special-method-settings/load/` | POST   | Load special method settings (SEM-EDX, NGFF converter)   |
@@ -244,13 +244,13 @@ The same job lifecycle can be driven by external clients such as
 
 1. `POST /omeroweb_import/start/` with `files`, `compatibility_enabled`, and
    `dataset_name_override`.
-2. Stream each file to `/omeroweb_import/upload/<job_id>/` with the existing
+2. Stream each file to `/omeroweb_import/upload/<str:job_id>/` with the existing
    chunked upload fields (`relative_path`, `chunk_start`, `chunk_end`,
    `file_size`, `is_last_chunk`).
-3. `POST /omeroweb_import/import/<job_id>/` to start the OMERO-side import.
-4. Poll `/omeroweb_import/status/<job_id>/` until `status=done` or
+3. `POST /omeroweb_import/import/<str:job_id>/` to start the OMERO-side import.
+4. Poll `/omeroweb_import/status/<str:job_id>/` until `status=done` or
    `status=awaiting_confirmation`.
-5. If `confirmation_required=true`, `POST /omeroweb_import/confirm/<job_id>/`
+5. If `confirmation_required=true`, `POST /omeroweb_import/confirm/<str:job_id>/`
    and continue polling.
 
 When `dataset_name_override` is present and no `project_id` is supplied, the
@@ -313,6 +313,7 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS`      | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`)                                                                                                                                             |
 | `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS`          | Per-import subprocess timeout in seconds (default `86400`)                                                                                                                                                              |
 | `OMERO_WEB_UPLOAD_NGFF_CONVERTER_TIMEOUT_SECONDS`  | Per-file NGFF converter subprocess timeout in seconds (default `86400`)                                                                                                                                                 |
+| `BIOFORMATS2RAW_CLI`                               | Optional runtime path override for the `bioformats2raw` executable used by the NGFF converter; defaults to `/usr/local/bin/bioformats2raw` in the image                                                                  |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS`    | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable`                                                                                                                                      |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`      | Sleep interval between managed-repository helper launch retries                                                                                                                                                         |
 | `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT`         | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
@@ -353,7 +354,7 @@ Zarr managed-repository staging also depends on shared server-side configuration
 ## Large-file behavior
 
 - Small files continue to upload as normal multipart requests.
-- Files larger than the browser-side request ceiling are sliced into bounded chunks before they are sent to `/omeroweb_import/upload/<job_id>/`.
+- Files larger than the browser-side request ceiling are sliced into bounded chunks before they are sent to `/omeroweb_import/upload/<str:job_id>/`.
 - The upload endpoint validates chunk offsets and file sizes and returns JSON errors for server-side failures, avoiding raw HTML error pages in the UI when possible.
 - The final upload request no longer performs grouped dry-run dataset planning inline; that work runs in the background import worker so large structured uploads do not die at the HTTP worker timeout boundary.
 - Before the background import starts, the request path pre-creates any missing dataset targets from the persisted logical import-unit plan when available; this keeps background workers off the live browser session while preserving grouped/package routing across formats.
