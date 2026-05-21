@@ -255,6 +255,7 @@ Common utilities shared across all plugins:
 > OMERO Docker Extended is currently in beta stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
 
 ### Prerequisites
+
 - Root access on the Linux host.
 - 64-bit Linux distribution. Verified on Debian 13 (Trixie) on amd64.
 - Hardware baseline:
@@ -275,6 +276,7 @@ cd /opt/omero
 ```
 
 **2.** Copy the following from the repository into `/opt/omero`:
+
 - `installation_paths_example.env`
 - `docker-compose.yml`
 - `env/` directory
@@ -313,11 +315,11 @@ The script prompts for installation parameters (defaults are available), install
 
 The pull/update script also saves a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data path.
 
-After a successful run:
+**5.** After a successful installation, run:
 - Portainer: <http://localhost:9000> (set admin password on first login)
 - OMERO.web: <http://localhost:4090>
 
-Log in to OMERO.web using the root password configured in `env/omero_secrets.env`.
+Log in to OMERO.web using the root credential configured in `env/omero_secrets.env`.
 
 ### Configuration files
 
@@ -383,8 +385,7 @@ data filesystem.
 
 Run the same command on Debian 13 and Ubuntu 26.04 LTS from the OMERO Docker
 Extended installation directory:
-
-```bash
+```
 sudo scripts/enable-storage-quotas.sh --yes-i-have-a-backup
 ```
 
