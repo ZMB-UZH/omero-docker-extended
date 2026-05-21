@@ -346,6 +346,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 ### Basic docker commands
 
+```
 # Stop services without removing containers
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env stop
 
@@ -358,6 +359,7 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 # Rebuild a single container
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build omeroweb
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d omeroweb
+```
 
 ### Storage quotas
 
