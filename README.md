@@ -321,16 +321,16 @@ The pull/update script also saves a full terminal transcript of the visible sess
 
 Log in to OMERO.web using the root credential configured in `env/omero_secrets.env`.
 
-### Configuration files
+### Environment configuration files
 
 | File | Scope |
 | --- | --- |
-| `installation_paths_example.env` | Template for all host filesystem paths |
-| `env/omeroserver_example.env` | Template for server DB, Java heap, script processors, security |
-| `env/omeroweb_example.env` | Template for web app registration, plugin config, admin tool endpoints, upload settings |
+| `installation_paths_example.env` | Template for all required filesystem paths during installation |
+| `env/omeroserver_example.env` | Template for server DB, Java heap, script processors, security, and all other OMERO.server settings |
+| `env/omeroweb_example.env` | Template for web app registration, plugin config, admin tool endpoints, upload, and all other OMERO.web settings |
 | `env/omero-celery_example.env` | Template for Celery broker URL, queue name, timeouts, worker concurrency |
-| `env/grafana_example.env` | Template for Grafana admin credentials and authentication settings |
-| `env/omero_secrets_example.env` | Template for all credentials/secrets (must never be committed as runtime file) |
+| `env/grafana_example.env` | Template for Grafana admin and other settings |
+| `env/omero_secrets_example.env` | Template for all credentials/secrets (must never be committed, should remain as a host-only file) |
 
 Create deployment-local runtime files by copying these templates and removing `_example` in your target host path.
 
