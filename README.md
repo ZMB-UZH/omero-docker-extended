@@ -255,7 +255,6 @@ Common utilities shared across all plugins:
 > OMERO Docker Extended is currently in beta stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
 
 ### Prerequisites
-
 - Root access on the Linux host.
 - 64-bit Linux distribution. Verified on Debian 13 (Trixie) on amd64.
 - Hardware baseline:
@@ -267,36 +266,34 @@ Common utilities shared across all plugins:
 
 ### Recommended installation workflow
 
-This workflow mirrors the intended deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update helper.
+This workflow mirrors the intended deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update workflow script.
 
-```bash
-# Prepare the installation root
+**1.** Prepare the installation root (assumed path: `/opt/omero`; change according to your needs):
+```
 sudo mkdir -p /opt/omero/env
 cd /opt/omero
 ```
 
-Copy the following from this repository into `/opt/omero`:
-
+**2.** Copy the following from the repository into `/opt/omero`:
 - `installation_paths_example.env`
 - `docker-compose.yml`
 - `env/` directory
 - `helper_scripts_debian/` directory
 - `github_pull_project_bash_example`
 
-Then create runtime copies by removing the `_example` suffix where applicable (`installation_paths.env`, `github_pull_project_bash`, etc.). Keep installation-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull workflow.
+Then, create runtime copies by removing the `_example` suffix where applicable (`installation_paths.env`, `github_pull_project_bash`, etc.). Keep installation-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull/update workflow.
 
 > IMPORTANT!
 > **Mandatory credential setup before first installation**
 >
 > Open `/opt/omero/env/omero_secrets.env` (the non-example renamed file) and replace the right-hand side of every empty variable with strong unique credentials (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services. It is recommended that you use a password manager for maximum security in your everyday web browsing activities.
 
-Install Docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
+**3.** Install Docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
 
 An experimental Debian 13 docker installation script exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
 
-Verify Docker runtime health:
-
-```bash
+Upon completion, verify Docker runtime health:
+```
 systemctl status docker
 systemctl status containerd
 docker --version
@@ -304,25 +301,23 @@ docker compose version
 docker compose ps
 ```
 
-Prepare and execute the pull/install helper:
-
-```bash
+**4.** Prepare and execute the pull/update workflow script:
+```
 cd /opt/omero
 sudo chown root:root github_pull_project_bash
 sudo chmod +x github_pull_project_bash
 sudo bash ./github_pull_project_bash
 ```
 
-The helper updates project files, prompts for installation parameters (defaults are available), and starts the full stack. Installation duration depends on host CPU and disk performance.
+The script prompts for installation parameters (defaults are available), installs/updates all necessary files, and finally starts the full stack upon choice. Installation duration depends on host CPU and disk performance, and is optimized for multi-threaded systems.
 
-The pull/install helpers also save a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data root.
+The pull/update script also saves a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data path.
 
 After a successful run:
-
 - Portainer: <http://localhost:9000> (set admin password on first login)
 - OMERO.web: <http://localhost:4090>
 
-Log in to OMERO.web using the root credentials configured in `env/omero_secrets.env`.
+Log in to OMERO.web using the root password configured in `env/omero_secrets.env`.
 
 ### Configuration files
 
