@@ -250,20 +250,20 @@ Common utilities shared across all plugins:
 <summary><h2>Deployment</h2></summary>
 
 > WARNING!
-> **Early alpha version**
+> **Beta version**
 >
-> OMERO Docker Extended is currently in an early alpha stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
+> OMERO Docker Extended is currently in beta stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
 
 ### Prerequisites
 
-- Root (or equivalent sudo) access on the Linux host.
+- Root access on the Linux host.
 - 64-bit Linux distribution. Verified on Debian 13 (Trixie) on amd64.
 - Hardware baseline:
-  - CPU: minimum 8 cores for small multi-user operation
+  - CPU: minimum 8 cores for few-user operation
   - RAM: minimum 16 GB (32 GB recommended)
 - Docker Engine and Docker Compose plugin installed on the host.
-- Host storage paths prepared with correct filesystem permissions.
-- Network access to GitHub configured if using the pull-based update workflow (`github_pull_project_bash_example`).
+- Host storage paths with adequate filesystem permissions.
+- Network access to GitHub configured if using the pull-based update workflow (see `github_pull_project_bash_example`).
 
 ### Recommended installation workflow
 
@@ -283,12 +283,12 @@ Copy the following from this repository into `/opt/omero`:
 - `helper_scripts_debian/` directory
 - `github_pull_project_bash_example`
 
-Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep site-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull workflow.
+Then create runtime copies by removing the `_example` suffix where applicable (`installation_paths.env`, `github_pull_project_bash`, etc.). Keep installation-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull workflow.
 
 > IMPORTANT!
-> **Mandatory credential rotation before first start**
+> **Mandatory credential setup before first installation**
 >
-> Open `/opt/omero/env/omero_secrets.env` (the non-example runtime file) and replace every placeholder secret (`CHANGEME...`) with strong unique values (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services.
+> Open `/opt/omero/env/omero_secrets.env` (the non-example renamed file) and replace the right-hand side of every empty variable with strong unique credentials (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services. It is recommended that you use a password manager for maximum security in your everyday web browsing activities.
 
 Install Docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
 
