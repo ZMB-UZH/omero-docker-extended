@@ -110,6 +110,10 @@ Examples:
 - Put OMERO auth flags before the subcommand.
 - Resolve the active virtualenv first. `OMERO_WEB_VENV` may be relative inside
   the container; do not assume an absolute `/opt/omero/web/venv-*` path.
+  `startup/50-config.py` also accepts explicit `OMERO_WEB_OMERO_BIN`/`OMERO_BIN`,
+  `OMERO_WEB_PYTHON_BIN`/`PYTHON_BIN`, and
+  `OMERO_CONFIG_GLOB`/`OMERO_WEB_CONFIG_GLOB` overrides for startup
+  validation, but normal probes should discover the active runtime path first.
 - For OMERO.web import validation, authenticate as a regular OMERO user; the Import plugin intentionally blocks `root`.
 - If repository modules are missing inside a container, switch to the runtime virtualenv instead of retrying plain `python3`.
 
@@ -164,6 +168,10 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   `python3 tools/run_local_workflow_gates.py --setup-only` and use
   `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`
   for targeted pytest commands.
+- `tools/run_local_workflow_gates.py` writes scanner artifacts under
+  `${LOCAL_WORKFLOW_GATE_ARTIFACT_DIR:-.cache/local-workflow-gates}` and
+  auto-detects the remote default branch; set `DEFAULT_BRANCH` only when local
+  Super-Linter cannot resolve the repository default branch.
 - If full runtime verification is blocked, use direct-module or syntax validation only as an explicit fallback and report that limitation accurately.
 - After rebuilding `omeroweb`, verify existing plugin temp subtrees under `OMERO_TMP_PATH` inside the live container. `startup/10-web-bootstrap.sh` is expected to repair non-server top-level plugin trees such as `omeroweb-import/` back to the OMERO.web runtime UID before supervisord drops privileges.
 

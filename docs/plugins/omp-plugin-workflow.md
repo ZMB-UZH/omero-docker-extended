@@ -97,7 +97,7 @@ Three separator modes are supported:
 
 ### 6. Chunked job execution
 
-- The client polls `/progress/<job_id>/` repeatedly.
+- The client polls `/progress/<str:job_id>/` repeatedly.
 - Each poll processes a configurable batch of images (default chunk size: 5, user-adjustable 1–100).
 - A portalocker file lock prevents concurrent poll requests from processing the same batch.
 - Job state (index, totals, logs) is persisted to JSON between polls.
