@@ -290,11 +290,9 @@ Then create runtime copies by removing the `_example` suffix where applicable (f
 >
 > Open `/opt/omero/env/omero_secrets.env` (the non-example runtime file) and replace every placeholder secret (`CHANGEME...`) with strong unique values (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services.
 
-Install Docker using the official documentation for your OS:
+Install Docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
 
-- Debian: <https://docs.docker.com/engine/install/debian/>
-
-An experimental Debian helper exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
+An experimental Debian 13 docker installation script exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
 
 Verify Docker runtime health:
 
