@@ -42,19 +42,19 @@ For the official OMERO documentation, release notes, and guides, your first poin
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
+- Import plugin (`omeroweb_import`)
+- Tools plugin (`omeroweb_tools`) / Enhanced search
 - Admin tools (`omeroweb_admin_tools`)
 
 ## 🛠️ Works partially / under active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
-- Import plugin (`omeroweb_import`)
-- Tools plugin (`omeroweb_tools`) / Enhanced search
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
 ## 🐢 Not working yet / progressing slowly / planned
 
-- Additional user-facing Tools entries beyond Enhanced search
+- Additional Tools entries beyond Enhanced search
 
 </details>
 
