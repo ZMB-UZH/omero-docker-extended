@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 
 # Configuration
 # -------------
@@ -153,9 +154,9 @@ is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
     local legacy_placeholder_prefix="CHANGE"
 
-    if [[ -z "${key}" \
-        || "${key}" == "${legacy_placeholder_prefix}VALUE2" \
-        || "${key}" == "${legacy_placeholder_prefix}VALUE3" ]]; then
+    if [ -z "${key}" ] \
+        || [ "${key}" = "${legacy_placeholder_prefix}VALUE2" ] \
+        || [ "${key}" = "${legacy_placeholder_prefix}VALUE3" ]; then
         return 1
     fi
 
@@ -305,7 +306,7 @@ load_installation_paths_env() {
                 continue
                 ;;
             [A-Za-z_]*=*)
-                env_key="${env_line%%=*}"
+                env_key="${env_line%%=*}" # skipcq: SCT-A000
                 env_value="${env_line#*=}"
                 if ! is_shell_variable_name "${env_key}"; then
                     echo "ERROR: Invalid environment variable name in ${env_file_path}: ${env_key}" >&2

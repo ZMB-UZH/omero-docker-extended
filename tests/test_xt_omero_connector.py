@@ -2864,7 +2864,8 @@ def test_load_appends_observed_folder_after_confirmation_before_worker(
             """
             events.append(("thread", target.__name__, args, daemon))
 
-        def start(self):
+        @staticmethod
+        def start():
             """Record thread start.
 
             Inputs: none. Output: None.
@@ -2944,7 +2945,8 @@ def test_load_with_append_disabled_does_not_touch_arena(tmp_path, monkeypatch):
             Inputs: ignored. Output: None.
             """
 
-        def start(self):
+        @staticmethod
+        def start():
             """Record start.
 
             Inputs: none. Output: None.
@@ -2987,7 +2989,8 @@ def test_load_observed_folder_append_failure_logs_and_continues(tmp_path, monkey
             Inputs: ignored. Output: None.
             """
 
-        def start(self):
+        @staticmethod
+        def start():
             """Record start.
 
             Inputs: none. Output: None.
@@ -4607,13 +4610,15 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
             """
             self.disabled = False
 
-        def update_idletasks(self):
+        @staticmethod
+        def update_idletasks():
             """Accept idle flush.
 
             Inputs: none. Output: None.
             """
 
-        def after(self, _delay, callback):
+        @staticmethod
+        def after(_delay, callback):
             """Run scheduled callbacks immediately.
 
             Inputs: `_delay`, `callback`. Output: callback return value.
@@ -4630,14 +4635,16 @@ def test_failed_connection_keeps_visible_password_for_user_retry(monkeypatch):
             self.disabled = bool(value)
             focus_events.append(("disabled", self.disabled))
 
-        def lift(self):
+        @staticmethod
+        def lift():
             """Record window raise.
 
             Inputs: none. Output: None.
             """
             focus_events.append("lift")
 
-        def focus_force(self):
+        @staticmethod
+        def focus_force():
             """Record forced focus restoration.
 
             Inputs: none. Output: None.
@@ -5532,7 +5539,7 @@ def test_converter_selector_remains_wired_in_connection_settings_panel():
     )
     assert "if can_attempt_imaris_handoff and self.client:" not in source
     assert "def _has_imaris_handoff_target(self):" in source
-    assert "def _has_imaris_converter_handoff_target(self):" in source
+    assert "def _has_imaris_converter_handoff_target():" in source
 
 
 def test_path_row_alignment_matches_refresh_to_entry_height():
@@ -5988,7 +5995,15 @@ def test_connector_info_close_button_destroys_only_child_window(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on child-window close regressions.
     """
     module = _load_xt_module()
-    captured = {"button_command": None}
+
+    def _missing_button_command():
+        """Fail when the info close callback is not captured.
+
+        Inputs: none. Output: raises AssertionError.
+        """
+        raise AssertionError("button command was not captured")
+
+    captured = {"button_command": _missing_button_command}
     windows = []
 
     class _Root:
@@ -6033,7 +6048,8 @@ def test_connector_info_close_button_destroys_only_child_window(monkeypatch):
             """
             return 300
 
-        def wait_window(self, window):
+        @staticmethod
+        def wait_window(window):
             """Simulate clicking the info child close button while waiting.
 
             Inputs: `window`. Output: None.
@@ -6210,7 +6226,15 @@ def test_connector_help_close_button_destroys_only_child_window(monkeypatch):
     Inputs: pytest provides `monkeypatch`. Output: fails on child-window close regressions.
     """
     module = _load_xt_module()
-    captured = {"button_command": None, "labels": []}
+
+    def _missing_button_command():
+        """Fail when the help close callback is not captured.
+
+        Inputs: none. Output: raises AssertionError.
+        """
+        raise AssertionError("button command was not captured")
+
+    captured = {"button_command": _missing_button_command, "labels": []}
     windows = []
 
     class _Root:
@@ -6255,7 +6279,8 @@ def test_connector_help_close_button_destroys_only_child_window(monkeypatch):
             """
             return 300
 
-        def wait_window(self, window):
+        @staticmethod
+        def wait_window(window):
             """Simulate clicking the help child close button while waiting.
 
             Inputs: `window`. Output: None.
@@ -7053,10 +7078,18 @@ def test_export_folder_to_omero_requires_existing_selector_path(tmp_path, monkey
         lambda title, message: errors.append((title, message)),
         raising=False,
     )
+
+    def _select_missing_folder(**_kwargs):
+        """Return a selected folder path that does not exist.
+
+        Inputs: ignored keyword arguments. Output: missing folder path string.
+        """
+        return str(missing_folder)
+
     monkeypatch.setattr(
         module.filedialog,
         "askdirectory",
-        lambda **_kwargs: str(missing_folder),
+        _select_missing_folder,
         raising=False,
     )
 
@@ -7196,8 +7229,16 @@ def test_stop_current_operation_releases_ui_and_cleans_server_job(monkeypatch):
     dialog._connected = True
     dialog.converter_var = _FakeVar("Imaris")
     dialog.connect_btn = object()
+
+    def _cancel_folder_export_job(payload):
+        """Record folder export cancellation payload.
+
+        Inputs: payload. Output: None.
+        """
+        cancelled_jobs.append(payload)
+
     dialog.client = types.SimpleNamespace(
-        cancel_folder_export_job=lambda payload: cancelled_jobs.append(payload)
+        cancel_folder_export_job=_cancel_folder_export_job
     )
     dialog._set_status = lambda text, color="#ecf0f1": statuses.append((text, color))
     dialog._restore_idle_connection_indicator = lambda: calls.append("indicator")
@@ -9179,7 +9220,8 @@ def test_cancellable_http_get_closes_socket_when_stopped_before_headers(monkeypa
             self.sent.extend(payload)
             return len(payload)
 
-        def recv(self, _size):
+        @staticmethod
+        def recv(_size):
             """Fail if the test reaches a real read.
 
             Inputs: `_size`. Output: never.
@@ -12799,7 +12841,7 @@ def test_xt_console_log_mirrors_command_window_output_to_settings_log(
     assert module._XT_RUNTIME_STATE.log_path == str(log_path)
     assert "visible connector message" in log_path.read_text(encoding="utf-8")
 
-    monkeypatch.setattr(builtins, "input", lambda: "")
+    monkeypatch.setattr(builtins, "input", str)
     module._xt_wait_for_enter_to_close()
     captured = capsys.readouterr()
     log_text = log_path.read_text(encoding="utf-8")
@@ -12943,9 +12985,34 @@ def test_xt_entrypoint_restores_console_interrupt_guard_after_ctrl_c(monkeypatch
             """
             raise KeyboardInterrupt
 
-    monkeypatch.setattr(module, "_windows_platform_status", lambda: _Status())
-    monkeypatch.setattr(module, "_xt_log_path", lambda: "xt.log")
-    monkeypatch.setattr(module, "_install_xt_console_interrupt_guard", lambda: "guard")
+    def _windows_platform_status():
+        """Return supported Windows status for entrypoint testing.
+
+        Inputs: none. Output: status object.
+        """
+        return _Status()
+
+    def _xt_log_path():
+        """Return a deterministic log path.
+
+        Inputs: none. Output: path string.
+        """
+        return "xt.log"
+
+    def _install_xt_console_interrupt_guard():
+        """Return a deterministic console interrupt guard token.
+
+        Inputs: none. Output: guard token string.
+        """
+        return "guard"
+
+    monkeypatch.setattr(module, "_windows_platform_status", _windows_platform_status)
+    monkeypatch.setattr(module, "_xt_log_path", _xt_log_path)
+    monkeypatch.setattr(
+        module,
+        "_install_xt_console_interrupt_guard",
+        _install_xt_console_interrupt_guard,
+    )
     monkeypatch.setattr(
         module,
         "_restore_xt_console_interrupt_guard",

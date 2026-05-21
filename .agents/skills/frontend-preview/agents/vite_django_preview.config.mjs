@@ -1,3 +1,4 @@
+// skipcq: JS-0833
 import { promises as fs } from 'node:fs';
 import { basename, dirname, extname, resolve } from 'node:path';
 import { createRequire } from 'node:module';

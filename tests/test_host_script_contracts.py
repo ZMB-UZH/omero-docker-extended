@@ -80,7 +80,7 @@ def test_storage_quota_enablement_script_is_fail_closed() -> None:
 
     assert "--yes-i-have-a-backup" in script
     assert "quota_self_test" in script
-    assert '[[ "${QUOTA_FSTYPE}" == "ext4" ]]' in script
+    assert '[ "${QUOTA_FSTYPE}" = "ext4" ]' in script
     assert "Root is ext4, but its 'project' feature is not enabled" in script
     assert 'if "prjquota" not in options and "project" not in options:' in script
     assert "matches > 1" in script

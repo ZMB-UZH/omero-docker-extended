@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Perform environment assignment is name start char. Inputs: shell arguments and environment. Output: command status and side effects.
 
 _env_assignment_is_name_start_char() {

@@ -68,12 +68,21 @@ def main(argv: list[str] | None = None) -> int:
             sources.raw_skill_url(skill_name),
             timeout=args.timeout,
         )
-        if local_text != upstream_text:
+        normalized_local_text = agent_skill_provenance.strip_local_scanner_annotations(
+            local_text
+        )
+        if normalized_local_text != upstream_text:
             failures.append(
                 f"Vendored upstream mismatch for {skill_name}: {vendor_path}"
             )
             continue
-        print(f"OK vendored upstream snapshot matches {skill_name}")
+        if local_text == upstream_text:
+            print(f"OK vendored upstream snapshot matches {skill_name}")
+        else:
+            print(
+                "OK vendored upstream snapshot matches "
+                f"{skill_name} after scanner annotations"
+            )
 
     if failures:
         for failure in failures:

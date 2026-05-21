@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck shell=bash
 
 set -euo pipefail
 
@@ -17,11 +18,14 @@ resolve_web_venv_dir() {
     local candidate=""
 
     if [[ -n "${configured_venv}" ]]; then
-        if [[ "${configured_venv}" == /* ]]; then
-            candidate="${configured_venv}"
-        else
-            candidate="${web_root%/}/${configured_venv}"
-        fi
+        case "${configured_venv}" in
+            /*)
+                candidate="${configured_venv}"
+                ;;
+            *)
+                candidate="${web_root%/}/${configured_venv}"
+                ;;
+        esac
         if [[ -d "${candidate}" ]]; then
             printf '%s\n' "${candidate}"
             return 0

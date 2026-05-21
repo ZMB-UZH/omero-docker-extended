@@ -1173,8 +1173,9 @@ build_target_overrides() {
 run_buildx_bake_serial_fallback() {
     local original_targets="${DOCKER_BUILD_TARGETS}"
     local target=""
-    local target_count="$(count_build_targets)"
+    local target_count
 
+    target_count="$(count_build_targets)"
     if [ "${target_count}" -le 1 ]; then
         return 1
     fi

@@ -66,7 +66,7 @@ RUN set -euo pipefail; \
     python3.10 -m venv "$VENV"; \
     "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel; \
     CFLAGS="-std=gnu17 -D_DEFAULT_SOURCE" "$VENV/bin/python" -m pip install \
-        "celery==5.3.6" \
+        "celery==5.6.3" \
         "redis==5.0.8" \
         "omero-py==5.22.1"
 

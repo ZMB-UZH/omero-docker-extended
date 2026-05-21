@@ -37,10 +37,8 @@ is_true() {
 
 # Return whether placeholder value. Inputs: shell arguments and environment. Output: success or failure status.
 is_placeholder_value() {
-    local legacy_placeholder_prefix="CHANGE"
-
     case "${1:-}" in
-        "${legacy_placeholder_prefix}VALUE"*) return 0 ;;
+        CHANGEVALUE*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -463,8 +461,6 @@ crowdsec_has_install_enrollment_done_marker() {
 
 # Mark crowdsec install enrollment done. Inputs: shell arguments and environment. Output: command status and side effects.
 mark_crowdsec_install_enrollment_done() {
-    local marker_path=""
-
     marker_path="$(crowdsec_install_enrollment_done_marker_path)"
     mkdir -p "$(dirname "${marker_path}")"
     : > "${marker_path}"
@@ -473,9 +469,9 @@ mark_crowdsec_install_enrollment_done() {
 
 # Configure console enrollment. Inputs: shell arguments and environment. Output: command status and side effects.
 configure_console_enrollment() {
-    local enroll_key="${CROWDSEC_ENROLL_KEY:-}"
-    local engine_name="${CROWDSEC_ENGINE_NAME:-}"
-    local clean_token=""
+    enroll_key="${CROWDSEC_ENROLL_KEY:-}"
+    engine_name="${CROWDSEC_ENGINE_NAME:-}"
+    clean_token=""
 
     if [ -z "${enroll_key}" ] || is_placeholder_value "${enroll_key}"; then
         echo "CROWDSEC_ENROLL_KEY is empty or a placeholder."

@@ -7,9 +7,21 @@ import sys
 from pathlib import Path
 
 
-OLD_BLOCK = """        if settings.TOP_LOGO:\n            context[\"ome\"][\"logo_src\"] = settings.TOP_LOGO\n        if settings.TOP_LOGO_LINK:\n            context[\"ome\"][\"logo_href\"] = settings.TOP_LOGO_LINK\n"""
+OLD_BLOCK = (
+    "        if settings.TOP_LOGO:\n"
+    '            context["ome"]["logo_src"] = settings.TOP_LOGO\n'
+    "        if settings.TOP_LOGO_LINK:\n"
+    '            context["ome"]["logo_href"] = settings.TOP_LOGO_LINK\n'
+)
 
-NEW_BLOCK = """        context[\"ome\"].setdefault(\"logo_src\", \"\")\n        context[\"ome\"].setdefault(\"logo_href\", \"\")\n        if settings.TOP_LOGO:\n            context[\"ome\"][\"logo_src\"] = settings.TOP_LOGO\n        if settings.TOP_LOGO_LINK:\n            context[\"ome\"][\"logo_href\"] = settings.TOP_LOGO_LINK\n"""
+NEW_BLOCK = (
+    '        context["ome"].setdefault("logo_src", "")\n'
+    '        context["ome"].setdefault("logo_href", "")\n'
+    "        if settings.TOP_LOGO:\n"
+    '            context["ome"]["logo_src"] = settings.TOP_LOGO\n'
+    "        if settings.TOP_LOGO_LINK:\n"
+    '            context["ome"]["logo_href"] = settings.TOP_LOGO_LINK\n'
+)
 
 
 def main() -> int:

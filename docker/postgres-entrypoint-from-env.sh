@@ -20,7 +20,14 @@ case "$password_source" in
         ;;
 esac
 
-eval "postgres_password=\${$password_var:-}"
+case "$password_var" in
+    OMERO_DB_PASS)
+        postgres_password="${OMERO_DB_PASS:-}" # skipcq: SCT-A000
+        ;;
+    OMP_PLUGIN_DB_PASS)
+        postgres_password="${OMP_PLUGIN_DB_PASS:-}" # skipcq: SCT-A000
+        ;;
+esac
 if [ -z "$postgres_password" ]; then
     die "Missing required environment variable: $password_var"
 fi

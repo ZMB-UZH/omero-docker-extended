@@ -9,6 +9,11 @@ This document records the pinned upstream AI Agent material vendored into this r
 - Release commit: `846ffb75da9a5f4e677d927af1ad4a1951652267`
 - Local vendor path: `third_party/ecc-v1.10.0/`
 - License: MIT (`third_party/ecc-v1.10.0/LICENSE`)
+- DeepSource-only `skipcq` annotation lines may appear in selected vendored
+  skill files to suppress false-positive secret findings in instructional
+  examples. `tools/verify_agent_skill_provenance.py` strips only those
+  standalone scanner annotations before comparing the vendored text with the
+  pinned upstream release.
 
 ## Selected upstream skills
 

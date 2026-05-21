@@ -697,7 +697,7 @@ def test_export_job_owner_registry_rejects_other_sessions(monkeypatch):
         "set",
         lambda key, value, timeout=None: records.setdefault(key, value),
     )
-    monkeypatch.setattr(views.cache, "get", lambda key: records.get(key))
+    monkeypatch.setattr(views.cache, "get", records.get)
     monkeypatch.setattr(views, "_get_session_key", lambda conn: conn.session_key)
 
     job_id = "celery-task-123"

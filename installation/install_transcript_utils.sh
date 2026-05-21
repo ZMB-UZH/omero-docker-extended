@@ -4,7 +4,10 @@ _INSTALL_TRANSCRIPT_UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _ENV_ASSIGNMENT_HELPER_PATH="${_INSTALL_TRANSCRIPT_UTILS_DIR}/env_assignment_utils.sh"
 if [ ! -r "${_ENV_ASSIGNMENT_HELPER_PATH}" ]; then
     echo "ERROR: Missing env assignment helper: ${_ENV_ASSIGNMENT_HELPER_PATH}" >&2
-    return 1 2>/dev/null || exit 1
+    if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+        return 1
+    fi
+    exit 1
 fi
 # shellcheck disable=SC1090
 . "${_ENV_ASSIGNMENT_HELPER_PATH}"
@@ -47,7 +50,7 @@ install_transcript_load_paths_env_value() {
                         return 1
                     fi
                     printf -v "${env_key}" '%s' "${resolved_value}"
-                    export "${env_key}"
+                    export "${env_key?}"
                     ;;
             esac
         done < "${env_file_path}"

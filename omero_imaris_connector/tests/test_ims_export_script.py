@@ -305,7 +305,8 @@ def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
             """
             self.value = value
 
-        def resolve(self, strict=False):
+        @staticmethod
+        def resolve(strict=False):
             """Raise path resolution failure.
 
             Inputs: `strict`. Output: none. Raises: OSError.
@@ -848,16 +849,6 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         is None
     )
 
-    class _EscapingManagedRoot:
-        """Test double for a managed root whose joined path escapes containment."""
-
-        def __truediv__(self, _part):
-            """Return an escaping candidate for any joined path part.
-
-            Inputs: `_part`. Output: `_EscapingCandidate`.
-            """
-            return _EscapingCandidate()
-
     class _EscapingCandidate:
         """Test double for a candidate path that rejects containment checks."""
 
@@ -868,12 +859,23 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
             """
             return self
 
-        def relative_to(self, _root):
+        @staticmethod
+        def relative_to(_root):
             """Raise containment failure.
 
             Inputs: `_root`. Output: none. Raises: ValueError.
             """
             raise ValueError("escapes")
+
+    class _EscapingManagedRoot:
+        """Test double for a managed root whose joined path escapes containment."""
+
+        def __truediv__(self, _part):
+            """Return an escaping candidate for any joined path part.
+
+            Inputs: `_part`. Output: `_EscapingCandidate`.
+            """
+            return _EscapingCandidate()
 
     assert (
         module._managed_original_file_path(

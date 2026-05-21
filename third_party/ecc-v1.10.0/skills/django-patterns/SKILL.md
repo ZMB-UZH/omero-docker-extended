@@ -58,6 +58,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+# skipcq: SCT-A000
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = False
 ALLOWED_HOSTS = []
@@ -350,6 +351,7 @@ class ProductCreateSerializer(serializers.ModelSerializer):
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
 
+    # skipcq: SCT-A000
     password = serializers.CharField(
         write_only=True,
         required=True,
@@ -373,6 +375,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Create user with hashed password."""
         validated_data.pop('password_confirm')
+        # skipcq: SCT-A000
         password = validated_data.pop('password')
         user = User.objects.create(**validated_data)
         user.set_password(password)
@@ -510,6 +513,7 @@ class OrderService:
         # Integration with payment gateway
         payment = PaymentGateway.charge(
             amount=order.total_price,
+            # skipcq: SCT-A000
             token=payment_data['token']
         )
 
@@ -560,6 +564,7 @@ from django.core.cache import cache
 
 def get_featured_products():
     """Get featured products with caching."""
+    # skipcq: SCT-A000
     cache_key = 'featured_products'
     products = cache.get(cache_key)
 
@@ -576,6 +581,7 @@ def get_featured_products():
 from django.core.cache import cache
 
 def get_popular_categories():
+    # skipcq: SCT-A000
     cache_key = 'popular_categories'
     categories = cache.get(cache_key)
 
