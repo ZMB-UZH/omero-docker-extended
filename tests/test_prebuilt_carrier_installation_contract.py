@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from iter_test_helpers import next_or_fail
 
+import ast
 import gzip
 import io
 import os
@@ -536,6 +537,35 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                         "environment.deployment must be false"
                     )
         self.assertEqual([], offenders)
+
+    def test_release_workflow_embedded_python_blocks_parse(self) -> None:
+        """Verify workflow heredoc Python is syntactically valid.
+
+        Inputs: release workflow fixture. Output: parses each Python heredoc block.
+        """
+        workflow_text = self.read_text(".github/workflows/release-prebuilt-carrier.yml")
+        workflow = yaml.safe_load(workflow_text)
+        release_steps = workflow["jobs"]["release"]["steps"]
+        parsed_blocks = 0
+
+        for step in release_steps:
+            run_script = step.get("run", "")
+            lines = run_script.splitlines()
+            for index, line in enumerate(lines):
+                if "python3 - <<'PY'" not in line:
+                    continue
+                block: list[str] = []
+                for candidate in lines[index + 1 :]:
+                    if candidate == "PY":
+                        break
+                    block.append(candidate)
+                else:
+                    self.fail(f"Unterminated Python heredoc in step {step['name']}")
+                parsed_blocks += 1
+                with self.subTest(step=step["name"], block=parsed_blocks):
+                    ast.parse("\n".join(block) + "\n")
+
+        self.assertGreater(parsed_blocks, 0)
 
     def test_release_workflow_builds_hardened_flattened_bundle_from_compose(
         self,
