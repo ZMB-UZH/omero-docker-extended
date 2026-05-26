@@ -94,6 +94,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                 :
             }}
             INSTALLATION_AUTOMATION_MODE=0
+            PREBUILT_IMAGE_MODE=disabled
             {joined_blocks}
             {body}
             """,

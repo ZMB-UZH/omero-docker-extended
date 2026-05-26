@@ -1976,6 +1976,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             (self.repo_root / ".github" / "workflows").glob("*.yml")
         )
         for workflow_path in workflow_paths:
+            if workflow_path.name == "release-prebuilt-carrier.yml":
+                continue
             workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
             triggers = workflow.get(True, {})
             with self.subTest(workflow=workflow_path.name):

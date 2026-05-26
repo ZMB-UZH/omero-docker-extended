@@ -226,7 +226,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.15.12", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.15.14", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

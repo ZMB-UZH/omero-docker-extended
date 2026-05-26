@@ -163,7 +163,7 @@ services:
       - no-new-privileges:true
 
   path-usage-exporter:
-    image: path-usage-exporter:custom
+    image: ${PATH_USAGE_EXPORTER_IMAGE:-path-usage-exporter:custom}
     build:
       context: .
       dockerfile: docker/path-usage-exporter.Dockerfile
@@ -361,7 +361,7 @@ services:
       - no-new-privileges:true
 
   omeroserver:
-    image: omeroserver:custom
+    image: ${OMERO_SERVER_IMAGE:-omeroserver:custom}
     build:
       context: .
       dockerfile: docker/omero-server.Dockerfile
@@ -420,7 +420,7 @@ services:
       - no-new-privileges:true
 
   redis-sysctl-init:
-    image: redis-sysctl-init:custom
+    image: ${REDIS_SYSCTL_INIT_IMAGE:-redis-sysctl-init:custom}
     build:
       context: .
       dockerfile: docker/redis-sysctl-init.Dockerfile
@@ -469,7 +469,7 @@ services:
       - no-new-privileges:true
 
   omeroweb:
-    image: omeroweb:custom
+    image: ${OMERO_WEB_IMAGE:-omeroweb:custom}
     build:
       context: .
       dockerfile: docker/omero-web.Dockerfile
@@ -561,7 +561,7 @@ services:
       - no-new-privileges:true
 
   pg-maintenance:
-    image: pg-maintenance:custom
+    image: ${PG_MAINTENANCE_IMAGE:-pg-maintenance:custom}
     build:
       context: .
       dockerfile: docker/pg-maintenance.Dockerfile
@@ -603,7 +603,7 @@ services:
       - no-new-privileges:true
 
   crowdsec:
-    image: crowdsec:custom
+    image: ${CROWDSEC_IMAGE:-crowdsec:custom}
     build:
       context: .
       dockerfile: docker/crowdsec.Dockerfile

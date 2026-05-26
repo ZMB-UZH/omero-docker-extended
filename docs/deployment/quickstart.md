@@ -60,7 +60,51 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 
 If `.env` is missing, omit only `--env-file .env` from that command.
 
-## 2) Build Images
+## 2) Easy Installation From a Prebuilt Carrier Image
+
+The easy installation path consumes a single manually released Docker Hub
+carrier image instead of building Dockerfiles on the installation host. The
+carrier image tag and GitHub release tag are the same Docker-compatible SemVer
+pre-release string, for example `0.1.0-beta.1`.
+
+From an installation root that already has reviewed runtime env files:
+
+```bash
+bash installation/easy_installation_script.sh
+```
+
+The first easy-installer prompt asks which prebuilt release version to install.
+Use the exact GitHub release tag, which also matches the Docker Hub carrier
+image tag. `installation/easy_installation_script.sh` then delegates to the
+canonical installer with `PREBUILT_IMAGE_MODE=require`. It removes only the
+three build-image questions from the interactive flow:
+
+- `Enable Buildx compressed build workflow?`
+- `Flatten final images into single-layer outputs?`
+- `Enable Docker image security hardening?`
+
+Those three release-build settings are enforced by the manual release workflow
+before publishing the carrier. The easy installer still asks the remaining
+installation questions and still uses the same host paths, runtime env files,
+UID/GID discovery, permission checks, data-path snapshots, container startup,
+and post-start validation flow as the standard installer. If the carrier cannot
+be pulled, verified, extracted, or loaded, the easy installation exits with an
+error and does not run `docker compose build`.
+
+The carrier stores a manifest and a compressed Docker image archive. The loader
+verifies the manifest schema, release value, runtime-image references, archive
+size, uncompressed Docker-save size, and archive SHA-256 before `docker load`.
+It checks free space under both `OMERO_TMP_PATH` and Docker's root directory,
+then verifies each required image tag exists in the local Docker daemon. The
+final Compose startup uses `--no-build`.
+
+For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
+
+```bash
+PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.sh
+```
+
+## 3) Build Images
 
 ```bash
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env build
@@ -97,7 +141,7 @@ Notes:
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
 - OMERO.web and OMERO.server image builds now harden Rocky package retrieval by
   default: retry transient `dnf` metadata/package fetch failures (for example
-  mirror `500/504` responses), prefer Rocky `mirrorlist` as a fallback only
+  mirror `500/504` responses), try Rocky `mirrorlist` only
   after the first `dnf` failure, then clean metadata/cache before retrying so
   transient mirror errors can recover without changing first-attempt behavior.
   The default profile is intentionally strict: 3 attempts, no inter-attempt
@@ -126,15 +170,15 @@ Notes:
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
 - `DOCKER_BUILDX_KEEP_BUILDER` defaults to `0`, so the installation/build helper removes the temporary Buildx builder, any BuildKit containers, and builder-owned volumes after a Buildx run. Set `DOCKER_BUILDX_KEEP_BUILDER=1` only if you explicitly want to preserve that state between runs.
-- In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
+- In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper switches to serial per-target `buildx bake` execution.
 - Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
 - Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
 - Local cache export now writes each target into a per-run staging directory and atomically swaps it into place only after a successful build, preventing unbounded stale cache growth from interrupted/failed exports.
 - Set `DOCKER_BUILD_LOCAL_CACHE_MODE=max` only when you explicitly need full cache graph export despite the higher risk of long export phases.
-- If retries still fail with cache-export transport errors, the helper automatically performs one fallback build with local cache export disabled for that run (compression remains enabled).
+- If retries still fail with cache-export transport errors, the helper automatically performs one final build with local cache export disabled for that run (compression remains enabled).
 - Image compression settings (`DOCKER_BUILD_COMPRESSION_TYPE`, `DOCKER_BUILD_COMPRESSION_LEVEL`, `force-compression=true`) are unchanged by local cache mode; compressed image output remains enabled.
 - When `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` and `DOCKER_BUILD_PUSH_IMAGES=1`, the helper pushes the flattened final images via `docker push` after the flatten step. This preserves the single-layer result, but Buildx-specific output compression settings do not apply to that final publish step.
-- The installation workflow prompts whether to enable the compressed Buildx mode during each interactive run (default: `No`). If you disable it, the script falls back to `docker compose build`.
+- The installation workflow prompts whether to enable the compressed Buildx mode during each interactive run (default: `No`). If you disable it, the script uses `docker compose build`.
 - Immediately after the `Use build cache?` prompt, the installation workflow asks whether to flatten final images into single-layer outputs (default: `No`). In unattended automation, the same default applies unless you explicitly set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1`. Run:
 - If you answer **No** to the installation prompt `Use build cache?`, the installer later prints a cache-cleanup notice just before the rebuild starts and performs deterministic local cache cleanup:
   - always prunes Docker builder cache (`docker builder prune -a -f`),
@@ -184,13 +228,13 @@ APPLY_SECURITY_HARDENING=1 bash installation/installation_script.sh
 
 If you also want the optional CVE report, add `ENABLE_VULNERABILITY_SCAN=1`. See `docs/SECURITY.md` for details.
 
-## 3) Start the Platform
+## 4) Start the Platform
 
 ```bash
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env up -d
 ```
 
-## 4) Verify Service Health
+## 5) Verify Service Health
 
 ```bash
 docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps
@@ -198,7 +242,7 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 
 Verify all required services are `healthy` or `running`.
 
-## 5) Basic Connectivity Checks
+## 6) Basic Connectivity Checks
 
 ```bash
 container="$(docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env ps -q omeroweb)"
