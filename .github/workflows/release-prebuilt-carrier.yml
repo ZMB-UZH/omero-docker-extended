@@ -308,6 +308,27 @@ jobs:
             echo "Release target ref ${RELEASE_TARGET_REF} moved from ${GITHUB_SHA} to ${target_ref_sha}." >&2
             exit 1
           fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${RELEASE_VERSION}" \
+            -f "sha=${GITHUB_SHA}" \
+            >/dev/null
+          echo "RELEASE_TAG_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
+          created_tag_type="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.type'
+          )"
+          created_tag_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.sha'
+          )"
+          [ "${created_tag_type}" = "commit" ] || {
+            echo "Created release tag ${RELEASE_VERSION} is ${created_tag_type}, expected commit." >&2
+            exit 1
+          }
+          [ "${created_tag_sha}" = "${GITHUB_SHA}" ] || {
+            echo "Created release tag ${RELEASE_VERSION} points to ${created_tag_sha}, expected ${GITHUB_SHA}." >&2
+            exit 1
+          }
           cat > dist/release-notes.md <<EOF
           Prebuilt carrier image:
 
@@ -324,28 +345,8 @@ jobs:
             --notes-file dist/release-notes.md \
             --draft \
             --prerelease \
+            --verify-tag \
             --latest=false
-          created_tag_type="$(
-            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
-              --jq '.object.type'
-          )"
-          created_tag_sha="$(
-            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
-              --jq '.object.sha'
-          )"
-          if [ "${created_tag_type}" = "tag" ]; then
-            created_tag_sha="$(
-              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${created_tag_sha}" \
-                --jq '.object.sha'
-            )"
-          elif [ "${created_tag_type}" != "commit" ]; then
-            echo "Created release tag ${RELEASE_VERSION} is ${created_tag_type}, expected commit or tag." >&2
-            exit 1
-          fi
-          [ "${created_tag_sha}" = "${GITHUB_SHA}" ] || {
-            echo "Created release tag ${RELEASE_VERSION} points to ${created_tag_sha}, expected ${GITHUB_SHA}." >&2
-            exit 1
-          }
           echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
 
       - name: Build and push single carrier image
@@ -442,17 +443,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" != "1" ]; then
-            exit 0
-          fi
           if [ -z "${RELEASE_VERSION:-}" ]; then
             exit 0
           fi
-          release_is_draft="$(
-            gh release view "${RELEASE_VERSION}" \
-              --json isDraft \
-              --jq '.isDraft' 2>/dev/null || true
-          )"
-          if [ "${release_is_draft}" = "true" ]; then
-            gh release delete "${RELEASE_VERSION}" --yes --cleanup-tag
+          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" = "1" ]; then
+            release_is_draft="$(
+              gh release view "${RELEASE_VERSION}" \
+                --json isDraft \
+                --jq '.isDraft' 2>/dev/null || true
+            )"
+            if [ "${release_is_draft}" = "true" ]; then
+              gh release delete "${RELEASE_VERSION}" --yes --cleanup-tag
+            fi
+          fi
+          if [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" >/dev/null
+            fi
           fi
