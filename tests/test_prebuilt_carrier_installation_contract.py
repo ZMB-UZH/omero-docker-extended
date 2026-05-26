@@ -120,7 +120,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertIn('docker cp "${container_name}:${BUNDLE_CONTAINER_PATH}"', loader)
         self.assertIn("runtime_images_archive", loader)
-        self.assertIn("runtime_images_archive_sha256", loader)
+        self.assertIn("image_archive_sha256", loader)
         self.assertIn("runtime_images_uncompressed_bytes", loader)
         self.assertIn("docker info -f '{{.DockerRootDir}}'", loader)
         self.assertIn("hashlib.sha256()", loader)
@@ -146,7 +146,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             release_job["if"],
         )
         self.assertEqual("dockerhub-release", release_job["environment"])
-        self.assertEqual("write", workflow["permissions"]["contents"])
+        self.assertEqual("read", workflow["permissions"]["contents"])
+        self.assertEqual("write", release_job["permissions"]["contents"])
         self.assertEqual("${{ inputs.runner_label }}", release_job["runs-on"])
         self.assertEqual(
             "ubuntu-latest",
@@ -189,7 +190,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertIn('docker save "${compose_images[@]}"', workflow_text)
         self.assertIn("tools/write_prebuilt_runtime_archive.py", workflow_text)
-        self.assertIn("runtime_images_archive_sha256", workflow_text)
+        self.assertIn("image_archive_sha256", workflow_text)
         self.assertIn("runtime_images_uncompressed_bytes", workflow_text)
         self.assertIn("df -h /", workflow_text)
         self.assertIn("docker system df", workflow_text)
@@ -271,6 +272,18 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             self.assertEqual(len(payload), raw_bytes)
             self.assertEqual(f"{len(payload)}\n", bytes_path.read_text())
             self.assertEqual(payload, gzip.decompress(archive_path.read_bytes()))
+
+    def test_prebuilt_carrier_image_declares_non_root_healthcheck(self) -> None:
+        """Verify carrier image security metadata is explicit.
+
+        Inputs: carrier Dockerfile fixture. Output: asserts non-root healthcheck.
+        """
+        dockerfile = self.read_text("docker/prebuilt-carrier.Dockerfile")
+
+        self.assertIn("USER carrier", dockerfile)
+        self.assertIn("HEALTHCHECK", dockerfile)
+        self.assertIn("test -r /omero-prebuilt/prebuilt-manifest.json", dockerfile)
+        self.assertIn("test -r /omero-prebuilt/runtime-images.tar.gz", dockerfile)
 
     def test_new_prebuilt_files_do_not_contain_build_substitution_wording(self) -> None:
         """Verify prebuilt files do not describe local build substitution.

@@ -118,9 +118,9 @@ runtime_images_archive = manifest.get("runtime_images_archive")
 if runtime_images_archive != "runtime-images.tar.gz":
     raise SystemExit("Carrier manifest runtime_images_archive must be runtime-images.tar.gz.")
 
-expected_sha256 = manifest.get("runtime_images_archive_sha256")
+expected_sha256 = manifest.get("image_archive_sha256")
 if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
-    raise SystemExit("Carrier manifest must include runtime_images_archive_sha256.")
+    raise SystemExit("Carrier manifest must include image_archive_sha256.")
 
 runtime_images_archive_bytes = manifest.get("runtime_images_archive_bytes")
 if (
@@ -186,7 +186,7 @@ manifest_path = Path(sys.argv[1])
 bundle_path = Path(sys.argv[2])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-expected_sha256 = manifest["runtime_images_archive_sha256"]
+expected_sha256 = manifest["image_archive_sha256"]
 digest = hashlib.sha256()
 with bundle_path.open("rb") as handle:
     for chunk in iter(lambda: handle.read(1024 * 1024), b""):
