@@ -44,13 +44,20 @@ jobs:
 
       - name: Resolve release metadata
         env:
+          GH_TOKEN: ${{ github.token }}
           REQUESTED_RELEASE_VERSION: ${{ inputs.release_version }}
           REQUESTED_DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
         run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/tags" \
+            --jq '.[].name' \
+            | sort -u > dist/existing-release-tags.txt
           python3 tools/prebuilt_release_metadata.py \
             --requested-version "${REQUESTED_RELEASE_VERSION}" \
             --requested-docker-repository "${REQUESTED_DOCKER_REPOSITORY}" \
             --default-docker-repository "${DEFAULT_DOCKER_REPOSITORY}" \
+            --existing-tags-file dist/existing-release-tags.txt \
             --repo-root "${GITHUB_WORKSPACE}"
 
       - name: Report runner storage before build
@@ -64,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
             echo "Release tag already exists: ${RELEASE_VERSION}" >&2
             exit 1
           fi
@@ -278,6 +285,69 @@ jobs:
           )
           PY
 
+      - name: Create GitHub draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TARGET_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          target_ref_type="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${RELEASE_TARGET_REF}" \
+              --jq '.object.type'
+          )"
+          target_ref_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${RELEASE_TARGET_REF}" \
+              --jq '.object.sha'
+          )"
+          [ "${target_ref_type}" = "commit" ] || {
+            echo "Release target ref ${RELEASE_TARGET_REF} is ${target_ref_type}, expected commit." >&2
+            exit 1
+          }
+          [ -n "${target_ref_sha}" ] || { echo "Release target ref is missing: ${RELEASE_TARGET_REF}" >&2; exit 1; }
+          if [ "${target_ref_sha}" != "${GITHUB_SHA}" ]; then
+            echo "Release target ref ${RELEASE_TARGET_REF} moved from ${GITHUB_SHA} to ${target_ref_sha}." >&2
+            exit 1
+          fi
+          cat > dist/release-notes.md <<EOF
+          Prebuilt carrier image:
+
+          ${CARRIER_IMAGE}
+
+          This release contains the source archive and the single Docker carrier image manifest.
+          EOF
+          gh release create "${RELEASE_VERSION}" \
+            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
+            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
+            "dist/prebuilt-manifest.json" \
+            --target "${RELEASE_TARGET_REF}" \
+            --title "${RELEASE_VERSION}" \
+            --notes-file dist/release-notes.md \
+            --draft \
+            --prerelease \
+            --latest=false
+          created_tag_type="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.type'
+          )"
+          created_tag_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.sha'
+          )"
+          if [ "${created_tag_type}" = "tag" ]; then
+            created_tag_sha="$(
+              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${created_tag_sha}" \
+                --jq '.object.sha'
+            )"
+          elif [ "${created_tag_type}" != "commit" ]; then
+            echo "Created release tag ${RELEASE_VERSION} is ${created_tag_type}, expected commit or tag." >&2
+            exit 1
+          fi
+          [ "${created_tag_sha}" = "${GITHUB_SHA}" ] || {
+            echo "Created release tag ${RELEASE_VERSION} points to ${created_tag_sha}, expected ${GITHUB_SHA}." >&2
+            exit 1
+          }
+          echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
+
       - name: Build and push single carrier image
         run: |
           set -euo pipefail
@@ -302,23 +372,87 @@ jobs:
           docker rm -f "${cid}" >/dev/null
           cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
 
-      - name: Create GitHub release
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TARGET_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "${RELEASE_VERSION}" \
+            --draft=false \
+            --prerelease
+          created_tag_type="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.type'
+          )"
+          created_tag_sha="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
+              --jq '.object.sha'
+          )"
+          if [ "${created_tag_type}" = "tag" ]; then
+            created_tag_sha="$(
+              gh api "repos/${GITHUB_REPOSITORY}/git/tags/${created_tag_sha}" \
+                --jq '.object.sha'
+            )"
+          elif [ "${created_tag_type}" != "commit" ]; then
+            echo "Created release tag ${RELEASE_VERSION} is ${created_tag_type}, expected commit or tag." >&2
+            exit 1
+          fi
+          [ "${created_tag_sha}" = "${GITHUB_SHA}" ] || {
+            echo "Created release tag ${RELEASE_VERSION} points to ${created_tag_sha}, expected ${GITHUB_SHA}." >&2
+            exit 1
+          }
+          gh release view "${RELEASE_VERSION}" \
+            --json tagName,targetCommitish,isDraft,isPrerelease,assets,url \
+            > dist/github-release-verified.json
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          release = json.loads(Path("dist/github-release-verified.json").read_text())
+          expected_assets = {
+              f"omero-docker-extended-{os.environ['RELEASE_VERSION']}-source.tar.gz",
+              f"omero-docker-extended-{os.environ['RELEASE_VERSION']}-source.tar.gz.sha256",
+              "prebuilt-manifest.json",
+          }
+          actual_assets = {asset["name"] for asset in release.get("assets", [])}
+          errors = []
+          if release.get("tagName") != os.environ["RELEASE_VERSION"]:
+              errors.append("tag name mismatch")
+          if release.get("targetCommitish") != os.environ["RELEASE_TARGET_REF"]:
+              errors.append("target ref mismatch")
+          if release.get("isDraft"):
+              errors.append("release is still a draft")
+          if not release.get("isPrerelease"):
+              errors.append("release is not marked as a prerelease")
+          missing_assets = sorted(expected_assets - actual_assets)
+          if missing_assets:
+              errors.append(f"missing release asset(s): {', '.join(missing_assets)}")
+          if errors:
+              raise SystemExit("; ".join(errors))
+          print(f"Published GitHub prerelease {release['url']}")
+          PY
+
+      - name: Delete draft GitHub release after failed carrier publish
+        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cat > dist/release-notes.md <<EOF
-          Prebuilt carrier image:
-
-          ${CARRIER_IMAGE}
-
-          This release contains the source archive and the single Docker carrier image manifest.
-          EOF
-          gh release create "${RELEASE_VERSION}" \
-            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
-            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
-            "dist/prebuilt-manifest.json" \
-            --target "${GITHUB_SHA}" \
-            --title "${RELEASE_VERSION}" \
-            --notes-file dist/release-notes.md \
-            --latest=false
+          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" != "1" ]; then
+            exit 0
+          fi
+          if [ -z "${RELEASE_VERSION:-}" ]; then
+            exit 0
+          fi
+          release_is_draft="$(
+            gh release view "${RELEASE_VERSION}" \
+              --json isDraft \
+              --jq '.isDraft' 2>/dev/null || true
+          )"
+          if [ "${release_is_draft}" = "true" ]; then
+            gh release delete "${RELEASE_VERSION}" --yes --cleanup-tag
+          fi

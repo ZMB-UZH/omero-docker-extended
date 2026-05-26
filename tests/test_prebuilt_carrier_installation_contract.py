@@ -115,6 +115,54 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             script.index("resolve_flatten_final_image_choice", prompt_start),
         )
 
+    def test_prebuilt_and_standard_installers_share_runtime_flow_after_image_step(
+        self,
+    ) -> None:
+        """Verify prebuilt mode remains interchangeable with standard installs.
+
+        Inputs: installer fixture. Output: asserts shared env, path, and startup flow.
+        """
+        script = self.read_text("installation/installation_script.sh")
+
+        required_order = [
+            'if ! load_installation_paths_env "${SCRIPT_ENV_FILE}"; then',
+            "for required_runtime_env_file in",
+            "if ! validate_prebuilt_image_mode; then",
+            'if [ "${PREBUILT_IMAGE_MODE}" = "require" ]; then',
+            'OMERO_INSTALLATION_PATH="$(prompt_for_preparable_path',
+            'write_installation_paths_env "${SCRIPT_ENV_FILE}"',
+            "if ! run_image_build; then",
+            'compose_up_with_retries "${COMPOSE_FILE}"',
+        ]
+        previous = -1
+        for marker in required_order:
+            with self.subTest(marker=marker):
+                current = script.index(marker, previous + 1)
+                self.assertGreater(current, previous)
+                previous = current
+
+        prebuilt_branch_start = script.index(
+            'if [ "${PREBUILT_IMAGE_MODE}" = "require" ]; then'
+        )
+        prebuilt_branch_end = script.index(
+            'echo "PREBUILT_IMAGE_MODE=require: using release-built images',
+            prebuilt_branch_start,
+        )
+        prebuilt_prompt_window = script[prebuilt_branch_start:prebuilt_branch_end]
+        self.assertNotIn("write_installation_paths_env", prebuilt_prompt_window)
+        self.assertNotIn("load_installation_paths_env", prebuilt_prompt_window)
+        self.assertNotIn("docker compose", prebuilt_prompt_window)
+
+        self.assertIn("return $?", script[script.index("run_prebuilt_image_load") :])
+        self.assertIn(
+            'if [ "${PREBUILT_IMAGE_MODE:-disabled}" = "require" ]; then\n'
+            "        compose_up_args+=(--no-build)\n"
+            "    fi",
+            script,
+        )
+        self.assertNotIn("PREBUILT_IMAGE_MODE=disabled", script)
+        self.assertNotIn("unset PREBUILT_IMAGE_MODE", script)
+
     def test_prebuilt_loader_validates_manifest_checksum_and_loaded_images(
         self,
     ) -> None:
@@ -176,6 +224,12 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertFalse(checkout_step["with"]["persist-credentials"])
 
         self.assertIn("tools/prebuilt_release_metadata.py", workflow_text)
+        self.assertIn(
+            'gh api --paginate "repos/${GITHUB_REPOSITORY}/tags"', workflow_text
+        )
+        self.assertIn(
+            "--existing-tags-file dist/existing-release-tags.txt", workflow_text
+        )
         self.assertIn("--requested-version", workflow_text)
         self.assertIn("--requested-docker-repository", workflow_text)
         self.assertIn("--latest=false", workflow_text)
@@ -229,6 +283,44 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn('-t "${CARRIER_IMAGE}"', workflow_text)
         self.assertIn("docker run --rm", workflow_text)
         self.assertIn("gh release create", workflow_text)
+        self.assertIn("Create GitHub draft release", workflow_text)
+        self.assertIn("Publish GitHub release", workflow_text)
+        self.assertIn(
+            "Delete draft GitHub release after failed carrier publish",
+            workflow_text,
+        )
+        self.assertIn("RELEASE_TARGET_REF: ${{ github.ref_name }}", workflow_text)
+        self.assertIn(
+            '"repos/${GITHUB_REPOSITORY}/git/ref/heads/${RELEASE_TARGET_REF}"',
+            workflow_text,
+        )
+        self.assertIn(
+            '"repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}"',
+            workflow_text,
+        )
+        self.assertIn(
+            '"repos/${GITHUB_REPOSITORY}/git/tags/${created_tag_sha}"',
+            workflow_text,
+        )
+        self.assertIn('--target "${RELEASE_TARGET_REF}"', workflow_text)
+        self.assertIn("--draft", workflow_text)
+        self.assertIn("--draft=false", workflow_text)
+        self.assertIn("--prerelease", workflow_text)
+        self.assertIn("if: failure()", workflow_text)
+        self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN=1", workflow_text)
+        self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN:-0", workflow_text)
+        self.assertIn("--json isDraft", workflow_text)
+        self.assertIn("--cleanup-tag", workflow_text)
+        self.assertIn(
+            "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url",
+            workflow_text,
+        )
+        self.assertIn('release.get("tagName")', workflow_text)
+        self.assertIn('release.get("targetCommitish")', workflow_text)
+        self.assertIn('release.get("isDraft")', workflow_text)
+        self.assertIn('release.get("isPrerelease")', workflow_text)
+        self.assertNotIn('--target "${GITHUB_SHA}"', workflow_text)
+        self.assertNotIn("git ls-remote", workflow_text)
 
     def test_release_metadata_helper_generates_professional_beta_versions(self) -> None:
         """Verify release helper keeps GitHub and Docker tags aligned.
@@ -279,6 +371,30 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 ["--validate-release-version", "0.9.0-beta.1"]
             ),
         )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tags_path = Path(temp_dir) / "tags.txt"
+            tags_path.write_text(
+                "0.9.0-beta.1\nnot-a-release\n0.8.0\n", encoding="utf-8"
+            )
+            self.assertEqual(
+                ["0.8.0", "0.9.0-beta.1", "not-a-release"],
+                prebuilt_release_metadata.read_existing_tags_file(tags_path),
+            )
+            self.assertEqual(
+                0,
+                prebuilt_release_metadata.main(
+                    [
+                        "--requested-version",
+                        "",
+                        "--requested-docker-repository",
+                        "",
+                        "--default-docker-repository",
+                        "strmt7/omero-docker-extended",
+                        "--existing-tags-file",
+                        str(tags_path),
+                    ]
+                ),
+            )
 
     def test_archive_writer_creates_deterministic_gzip_and_raw_byte_count(
         self,
@@ -309,11 +425,27 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         Inputs: carrier Dockerfile fixture. Output: asserts non-root healthcheck.
         """
         dockerfile = self.read_text("docker/prebuilt-carrier.Dockerfile")
+        readme = self.read_text("README.md")
+        quickstart = self.read_text("docs/deployment/quickstart.md")
+        normalized_quickstart = " ".join(quickstart.split())
 
         self.assertIn("USER carrier", dockerfile)
         self.assertIn("HEALTHCHECK", dockerfile)
+        self.assertIn("mkdir -p /omero-prebuilt", dockerfile)
+        self.assertIn("chmod 0555 /omero-prebuilt", dockerfile)
+        self.assertIn(
+            "COPY --chown=carrier:carrier --chmod=0444 runtime-images.tar.gz",
+            dockerfile,
+        )
+        self.assertNotIn("chown -R carrier:carrier /omero-prebuilt", dockerfile)
+        self.assertNotIn("chmod 0444 /omero-prebuilt/runtime-images.tar.gz", dockerfile)
         self.assertIn("test -r /omero-prebuilt/prebuilt-manifest.json", dockerfile)
         self.assertIn("test -r /omero-prebuilt/runtime-images.tar.gz", dockerfile)
+        self.assertIn(
+            "The release workflow flattens the bundled runtime service images", readme
+        )
+        self.assertIn("must not duplicate the archive", readme)
+        self.assertIn("exactly one large archive copy layer", normalized_quickstart)
 
     def test_new_prebuilt_files_do_not_contain_build_substitution_wording(self) -> None:
         """Verify prebuilt files do not describe local build substitution.

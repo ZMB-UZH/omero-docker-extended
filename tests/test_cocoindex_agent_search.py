@@ -21,7 +21,7 @@ def test_package_pin_and_hashes_are_exact() -> None:
     Inputs: repository fixtures. Output: fails on regressions in package pin and hashes are exact.
     """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
-        "cocoindex-code[full]==0.2.32"
+        "cocoindex-code[full]==0.2.33"
     )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
 
@@ -672,6 +672,7 @@ def test_multiple_repositories_share_one_install_but_use_separate_indexes(
         f"{cocoindex_agent_search.PACKAGE_NAME}-"
         f"{cocoindex_agent_search.PACKAGE_VERSION}"
     )
+    assert context_one.mcp_launcher == artifact_root / "bin" / "cocoindex-code-mcp"
     assert context_one.runtime_dir == artifact_root / "runtime" / "digest-one"
     assert context_two.runtime_dir == artifact_root / "runtime" / "digest-two"
     assert context_one.db_dir == artifact_root / "db" / "digest-one"
@@ -763,6 +764,29 @@ def test_mcp_config_can_pin_repo_for_static_clients(tmp_path: Path) -> None:
         cocoindex_agent_search.REPO_ROOT_ENV: str(context.repo_root),
     }
     assert "cwd" not in payload
+
+
+def test_mcp_launcher_is_host_stable_and_environment_driven(tmp_path: Path) -> None:
+    """Verify the MCP launcher stays host-stable and environment-driven.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on stale absolute launcher regressions.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path / "repo",
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+
+    launcher = cocoindex_agent_search.ensure_mcp_launcher(context)
+
+    assert launcher == context.mcp_launcher
+    launcher_text = launcher.read_text(encoding="utf-8")
+    assert cocoindex_agent_search.REPO_ROOT_ENV in launcher_text
+    assert "tools/cocoindex_agent_search.py" in launcher_text
+    assert str(context.repo_root) not in launcher_text
+    assert str(context.mirror_repo) not in launcher_text
+    assert launcher.stat().st_mode & 0o777 == 0o700
 
 
 def test_install_command_does_not_hash_worktree(
@@ -976,12 +1000,12 @@ def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None
     ]
 
 
-def test_mcp_install_uses_workspace_pinned_codex_registration(
+def test_mcp_install_uses_host_stable_codex_launcher(
     tmp_path: Path,
 ) -> None:
-    """Verify MCP install uses workspace pinned codex registration.
+    """Verify MCP install uses host-stable Codex launcher.
 
-    Inputs: pytest provides `tmp_path`. Output: fails on regressions in MCP install uses workspace pinned codex registration.
+    Inputs: pytest provides `tmp_path`. Output: fails on stale absolute wrapper regressions.
     """
     context = cocoindex_agent_search.CocoIndexContext(
         repo_root=tmp_path,
@@ -1019,10 +1043,8 @@ def test_mcp_install_uses_workspace_pinned_codex_registration(
         f"{cocoindex_agent_search.ARTIFACT_ROOT_ENV}={context.artifact_root}" in command
     )
     assert f"{cocoindex_agent_search.REPO_ROOT_ENV}={context.repo_root}" in command
-    assert command[command.index("--") + 1] == "python3"
-    assert command[command.index("--") + 2] == str(
-        Path(cocoindex_agent_search.__file__).resolve()
-    )
+    assert command[command.index("--") + 1] == str(context.mcp_launcher)
+    assert command[command.index("--") + 2] == "mcp"
 
 
 def test_codex_mcp_server_matches_expected_requires_pinned_args_env_and_timeouts(
@@ -1039,9 +1061,8 @@ def test_codex_mcp_server_matches_expected_requires_pinned_args_env_and_timeouts
         mirror_digest="abc",
     )
     expected = cocoindex_agent_search.expected_codex_mcp_server(context)
-    assert expected["command"] == "python3"
+    assert expected["command"] == str(context.mcp_launcher)
     assert expected["args"] == [
-        str(Path(cocoindex_agent_search.__file__).resolve()),
         "mcp",
     ]
     assert expected["env"] == {
@@ -1069,6 +1090,23 @@ def test_codex_mcp_server_matches_expected_requires_pinned_args_env_and_timeouts
 
     config["mcp_servers"]["cocoindex-code"] = expected.copy()
     config["mcp_servers"]["cocoindex-code"]["cwd"] = "/other/repo"
+    assert not cocoindex_agent_search.codex_mcp_server_matches_expected(
+        config, expected
+    )
+
+    stale_launcher = (
+        context.repo_root.parent
+        / "removed-clone"
+        / "tools"
+        / "cocoindex_agent_search.py"
+    )
+    config["mcp_servers"]["cocoindex-code"] = {
+        "command": "python3",
+        "args": [str(stale_launcher), "mcp"],
+        "env": expected["env"],
+        "startup_timeout_sec": expected["startup_timeout_sec"],
+        "tool_timeout_sec": expected["tool_timeout_sec"],
+    }
     assert not cocoindex_agent_search.codex_mcp_server_matches_expected(
         config, expected
     )
@@ -2159,7 +2197,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":'
             '{"tools":[{"name":"search"},{"name":"status"}]}}\n'
         ),
@@ -2177,7 +2215,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         include_search=False,
     ) == {
         "server_name": "cocoindex-code",
-        "server_version": "0.2.32",
+        "server_version": "0.2.33",
         "tools": ["search", "status"],
     }
     assert mocked_run.call_args.args[0] == [
@@ -2213,7 +2251,7 @@ def test_mcp_stdio_smoke_include_search_fails_on_tool_error(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"missing index"}],"isError":true}}\n'
@@ -2248,7 +2286,7 @@ def test_mcp_stdio_smoke_include_search_records_success(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.32"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"File: AGENTS.md:1"}],"isError":false}}\n'

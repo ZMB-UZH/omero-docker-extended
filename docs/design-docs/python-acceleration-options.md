@@ -3,7 +3,7 @@
 Investigation conducted on 2026-04-12 for the repository-wide question of
 whether the Python-heavy portions of this codebase can be accelerated through
 fully automatic conversion, Cython, or another runtime/compiler approach.
-Repository file counts were refreshed on 2026-05-21.
+Repository file counts were refreshed on 2026-05-26.
 
 ## Goal
 
@@ -36,9 +36,9 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `153`
-- Production Python lines: `79,637`
+- Production Python lines: `79,700`
 - Test Python files: `180`
-- Test Python lines: `126,430`
+- Test Python lines: `126,601`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
@@ -48,7 +48,7 @@ strategy would mostly compile tests unless the build is carefully filtered.
 - `omero_imaris_connector/XTOmeroConnector.py`: `15,251` lines
 - `omeroweb_import/views/core_functions.py`: `9,974` lines
 - `omeroweb_admin_tools/views/index_view.py`: `3,423` lines
-- `tools/cocoindex_agent_search.py`: `3,070` lines
+- `tools/cocoindex_agent_search.py`: `3,114` lines
 - `omeroweb_import/views/index_view.py`: `1,881` lines
 - `omero_web_zarr/integration.py`: `1,801` lines
 - `omeroweb_tools/services/enhanced_search_service.py`: `1,687` lines
@@ -62,6 +62,7 @@ strategy would mostly compile tests unless the build is carefully filtered.
 - `omero_imaris_connector/views.py`: `1,288` lines
 - `tools/env_safety_guard.py`: `1,247` lines
 - `omeroweb_omp_plugin/views/index_view.py`: `1,216` lines
+- `omero_web_zarr/views.py`: `1,160` lines
 - `omeroweb_import/services/omero/sem_edx_parser.py`: `1,117` lines
 
 ### Dominant runtime patterns

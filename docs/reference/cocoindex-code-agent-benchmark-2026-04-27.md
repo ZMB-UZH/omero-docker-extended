@@ -19,19 +19,20 @@ search.
 
 ## Package Evidence
 
-- Package: `cocoindex-code[full]==0.2.32`
-- PyPI latest observed on 2026-05-05: `0.2.32`
-- Wheel: `cocoindex_code-0.2.32-py3-none-any.whl`
-- Wheel upload: `2026-04-27T07:19:43.737589Z`
+- Package: `cocoindex-code[full]==0.2.33`
+- PyPI latest observed on 2026-05-26: `0.2.33`
+- Wheel: `cocoindex_code-0.2.33-py3-none-any.whl`
+- Wheel upload: `2026-05-08T16:52:52.384703Z`
 - Wheel SHA256:
-  `2749689bff4f1ac5bfa555c6ddaa1fe9055165c0e61184c819e6339eabf6a6f2`
-- Source upload: `2026-04-27T07:19:45.269188Z`
+  `b1105ea6152bd489545551a40fb075de4dea62bf3af264105657a12de0e1a8f9`
+- Source upload: `2026-05-08T16:52:53.910099Z`
 - Source SHA256:
-  `7844441f074bc5c304cb598d721dc0c6cd36fde904ab42a51e9be96488809108`
-- Installed dependency freeze: `109` packages, SHA256
-  `d88b2991f04845e3b9e43ae5b26b16077342e959eb3db99c59323a809c224002`
-- Upstream `v0.2.31...v0.2.32` changes observed on 2026-05-05: Svelte
-  and Vue support, plus Claude documentation cleanup.
+  `ad871a0cb44e327f3fec4945d18530ffbde921056c56d9ccc2d4f1f68b0511d9`
+- Installed dependency freeze: `110` packages, SHA256
+  `460ab6b92d3f0ab2c8920eb03268bcb78e282598e4562bd9b5be3f554e85d9bf`
+- Upstream `v0.2.32...v0.2.33` changes observed on 2026-05-26: lazy-loaded
+  server, pathspec, and protocol imports to reduce cold CLI startup. Local
+  `ccc --help` through the pinned 0.2.33 venv completed in `0.178s`.
 - Open upstream MCP-related issues observed on 2026-05-05 include non-JSON stdio
   output and sqlite-vec extension-loading failures; this repo's raw `mcp-smoke`
   checks fail on non-JSON stdout, JSON-RPC error payloads, stale registration,
@@ -40,8 +41,9 @@ search.
   processes can otherwise remain after index/search commands. The wrapper now
   reuses pre-existing daemons, records ownership of daemons it starts, and stops
   only those owned daemons after CLI and MCP operations.
-- Sources: [PyPI 0.2.32](https://pypi.org/project/cocoindex-code/0.2.32/),
-  [GitHub compare](https://github.com/cocoindex-io/cocoindex-code/compare/v0.2.31...v0.2.32),
+- Sources: [PyPI 0.2.33](https://pypi.org/project/cocoindex-code/0.2.33/),
+  [GitHub release 0.2.33](https://github.com/cocoindex-io/cocoindex-code/releases/tag/v0.2.33),
+  [GitHub compare](https://github.com/cocoindex-io/cocoindex-code/compare/v0.2.32...v0.2.33),
   [GitHub issues](https://github.com/cocoindex-io/cocoindex-code/issues)
 
 ## Commands
@@ -64,7 +66,9 @@ and the `rg` baseline:
 
 - Shared host root: `${XDG_DATA_HOME:-~/.local/share}/agent-cocoindex-code`
 - Shared venv:
-  `agent-cocoindex-code/venv/cocoindex-code-0.2.32`
+  `agent-cocoindex-code/venv/cocoindex-code-0.2.33`
+- Codex launcher:
+  `agent-cocoindex-code/bin/cocoindex-code-mcp`
 - Per-repository mirror:
   `agent-cocoindex-code/mirrors/<content-digest>/repo`
 - Per-repository database:
@@ -74,10 +78,13 @@ and the `rg` baseline:
 - Live checkout artifact rule: no `.cocoindex_code/` is written into the repo.
 
 Codex MCP recognition was verified: `codex mcp get cocoindex-code` returned an
-enabled stdio server using `python3`, an absolute workspace-pinned wrapper path,
-and `AGENT_COCOINDEX_REPO` for the target checkout. A second `mcp-install`
-reported the server already configured, and `codex mcp list` showed exactly one
-`cocoindex-code` entry.
+enabled stdio server using the host-stable
+`agent-cocoindex-code/bin/cocoindex-code-mcp` launcher and
+`AGENT_COCOINDEX_REPO` for the target checkout. `mcp-install` repaired a stale
+temporary-clone registration, and `codex mcp list` showed exactly one
+`cocoindex-code` entry. Direct stdio probing through that launcher negotiated
+protocol `2025-06-18` and listed the `search` tool without building or
+refreshing an index.
 
 ## Final Benchmark Result
 

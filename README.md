@@ -340,6 +340,11 @@ manifest and compressed archive checksum, loads the bundled runtime image tags
 into Docker with `docker load`, then starts the normal multi-container Compose
 deployment with `--no-build`.
 
+The release workflow flattens the bundled runtime service images before they
+are written into `runtime-images.tar.gz`. The carrier image itself remains a
+normal Docker image with small metadata/setup layers plus one large archive
+layer; it must not duplicate the archive in a later permission-fix layer.
+
 This path does not switch to the build workflow if the carrier cannot be pulled, verified, extracted, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
 
 Run the easy installer from an updated installation root. The first prompt asks
@@ -356,11 +361,18 @@ explicitly instead of relying on a prompt.
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
 Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
-repository secrets before running it. The job runs in the
-`dockerhub-release` GitHub Actions environment, so repository owners can add
-environment protection rules without changing the secret names. The
-`DOCKERHUB_TOKEN` value must be a Docker Hub access token with write access to
-the carrier repository; do not store a Docker Hub account password there.
+repository secrets before running it. The workflow uses GitHub Actions'
+built-in `GITHUB_TOKEN` with job-scoped `contents: write` permission to create
+the GitHub release; no separate GitHub PAT secret is required when repository
+Actions settings allow workflow write permissions. The release targets the
+default branch ref, creates a draft GitHub prerelease with source artifacts,
+pushes and verifies the carrier image, then publishes the prerelease. If the
+carrier publish fails after the draft was created, the workflow deletes that
+draft release and its tag. The job runs in the `dockerhub-release` GitHub
+Actions environment, so repository owners can add environment protection rules
+without changing the secret names. The `DOCKERHUB_TOKEN` value must be a Docker
+Hub access token with write access to the carrier repository; do not store a
+Docker Hub account password there.
 
 **5.** After a successful installation, run:
 
@@ -506,8 +518,9 @@ symbol, scanner-count, or already-small searches. Its wrapper keeps the pinned
 host install under XDG data paths or `AGENT_COCOINDEX_HOME`, with
 per-repository mirrors, databases, and runtime directories outside the live
 checkout and no `.cocoindex_code/` there. The Codex installer writes a
-workspace-pinned host-local wrapper path
-and repairs stale same-name entries instead of adding duplicates. The wrapper
+host-stable launcher under `AGENT_COCOINDEX_HOME`, pins the target checkout with
+`AGENT_COCOINDEX_REPO`, and repairs stale same-name entries instead of adding
+duplicates. The wrapper
 reuses matching daemons, starts one only when needed, and stops only daemons it
 started itself so `ccc run-daemon` processes do not linger after CLI or MCP
 checks. After MCP install or launcher changes, agents verify the stdio
@@ -515,7 +528,7 @@ handshake, raw protocol probes, and tool listing with
 `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
 only against an existing active index. If it cold-indexes, agents tell the user
 once that the first search can take several minutes; later searches reuse the
-external cache. The mirror asks CocoIndex Code 0.2.32 to include every
+external cache. The mirror asks CocoIndex Code 0.2.33 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

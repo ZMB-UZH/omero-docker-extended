@@ -10,8 +10,10 @@
   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job runs in the
   `dockerhub-release` GitHub Actions environment for optional protection rules,
   `DOCKERHUB_TOKEN` is documented as a Docker Hub access token for
-  two-factor-authenticated accounts, and release write permissions are scoped
-  to the release job.
+  two-factor-authenticated accounts, release write permissions are scoped to
+  the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
+  a branch-targeted draft prerelease before publishing it after carrier-image
+  verification.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
   `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to
@@ -32,9 +34,20 @@
 - Reduced prebuilt-carrier release runner storage pressure by disabling
   ephemeral Buildx local-cache export in the manual release workflow and by
   flattening each serially built target before the next target is built.
+- Eliminated the prebuilt carrier's duplicate runtime-archive layer by applying
+  carrier ownership and read-only permissions at `COPY` time instead of
+  mutating the large archive in a later Dockerfile layer. The runtime service
+  images inside `runtime-images.tar.gz` are the flattened images; the carrier
+  itself intentionally remains a small normal image wrapper around one large
+  archive layer.
 - Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.
+- Updated the repo-local CocoIndex Code wrapper to `0.2.33` after upstream
+  release review. Codex MCP installation now writes a host-stable launcher
+  under `AGENT_COCOINDEX_HOME` and pins the checkout through
+  `AGENT_COCOINDEX_REPO`, so stale temporary-clone paths are repaired by
+  `mcp-install` instead of breaking Codex startup.
 
 ## 2026-05-12 Import and Imaris Connector Hardening
 

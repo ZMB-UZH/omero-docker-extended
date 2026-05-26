@@ -25,10 +25,11 @@ from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
-PACKAGE_VERSION = "0.2.32"
+PACKAGE_VERSION = "0.2.33"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
 MCP_PYTHON_COMMAND = "python3"
+MCP_LAUNCHER_NAME = "cocoindex-code-mcp"
 MCP_JSONRPC_VERSION = "2.0"
 MCP_SEARCH_TOOL_NAME = "search"
 ARTIFACT_ROOT_ENV = "AGENT_COCOINDEX_HOME"
@@ -114,6 +115,14 @@ class CocoIndexContext:
         Inputs: none. Output: `Path`.
         """
         return self.artifact_root / "venv" / f"{PACKAGE_NAME}-{PACKAGE_VERSION}"
+
+    @property
+    def mcp_launcher(self) -> Path:
+        """Return the host-stable Codex MCP launcher path.
+
+        Inputs: none. Output: `Path`.
+        """
+        return self.artifact_root / "bin" / MCP_LAUNCHER_NAME
 
     @property
     def ccc_bin(self) -> Path:
@@ -858,6 +867,41 @@ def wrapper_script_arg(*, pin_repo: bool) -> str:
         return str(script_path)
     script_repo = discover_git_root_candidate(script_path)
     return script_path.relative_to(script_repo).as_posix()
+
+
+def render_mcp_launcher() -> str:
+    """Return the host-stable MCP launcher script.
+
+    Inputs: none. Output: POSIX shell script text.
+    """
+    return f"""#!/bin/sh
+set -eu
+if [ -z "${{{REPO_ROOT_ENV}:-}}" ]; then
+  echo "ERROR: {REPO_ROOT_ENV} is required for {MCP_SERVER_NAME}." >&2
+  exit 2
+fi
+wrapper="${{{REPO_ROOT_ENV}%/}}/tools/cocoindex_agent_search.py"
+if [ ! -f "${{wrapper}}" ]; then
+  echo "ERROR: {MCP_SERVER_NAME} wrapper is missing at ${{wrapper}}." >&2
+  exit 2
+fi
+exec {MCP_PYTHON_COMMAND} "${{wrapper}}" "$@"
+"""
+
+
+def ensure_mcp_launcher(context: CocoIndexContext) -> Path:
+    """Write the host-stable Codex MCP launcher if needed.
+
+    Inputs: `context`. Output: launcher `Path`.
+    """
+    launcher = context.mcp_launcher
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    content = render_mcp_launcher()
+    existing = launcher.read_text(encoding="utf-8") if launcher.exists() else None
+    if existing != content:
+        atomic_write_text(launcher, content)
+    launcher.chmod(0o700)
+    return launcher
 
 
 @contextmanager
@@ -2355,8 +2399,8 @@ def expected_codex_mcp_server(context: CocoIndexContext) -> dict[str, object]:
     Inputs: `context`. Output: `dict[str, object]`.
     """
     return {
-        "command": MCP_PYTHON_COMMAND,
-        "args": [wrapper_script_arg(pin_repo=True), "mcp"],
+        "command": str(context.mcp_launcher),
+        "args": ["mcp"],
         "env": {
             ARTIFACT_ROOT_ENV: str(context.artifact_root),
             REPO_ROOT_ENV: str(context.repo_root),
@@ -2566,6 +2610,7 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
     context = resolve_mcp_handshake_context()
     codex = resolve_required_executable("codex")
     config_path = codex_config_path()
+    ensure_mcp_launcher(context)
     expected = expected_codex_mcp_server(context)
     existing = run_command(
         [codex, "mcp", "get", MCP_SERVER_NAME], cwd=context.repo_root
@@ -2594,8 +2639,7 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
             f"{REPO_ROOT_ENV}={context.repo_root}",
             MCP_SERVER_NAME,
             "--",
-            MCP_PYTHON_COMMAND,
-            wrapper_script_arg(pin_repo=True),
+            str(context.mcp_launcher),
             "mcp",
         ],
         cwd=context.repo_root,

@@ -69,7 +69,8 @@ Opt-in compression skills are advisory only. They never override risk handling, 
   pinned install under XDG data paths or `AGENT_COCOINDEX_HOME`, keep
   per-repository external mirrors and databases outside the live checkout,
   repair stale same-name Codex MCP entries instead of adding duplicates, use a
-  host-local workspace-pinned Codex command, verify MCP changes with
+  host-stable Codex launcher under `AGENT_COCOINDEX_HOME` with the checkout
+  pinned by `AGENT_COCOINDEX_REPO`, verify MCP changes with
   `python3 tools/cocoindex_agent_search.py mcp-smoke`, reuse matching daemons,
   stop only daemons the wrapper starts itself, and keep MCP search read-only
   against an existing active index. Cold install, mirror, daemon, and
@@ -78,7 +79,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
   worktrees unless the caller uses the matching explicit dirty flag. If it
   cold-indexes, tell the user once that the first search can take several
   minutes and then uses the external cache. Its mirror asks CocoIndex Code
-  0.2.32 to include every Git-visible mirrored file pattern; CocoIndex indexes
+  0.2.33 to include every Git-visible mirrored file pattern; CocoIndex indexes
   text-decodable content and skips undecodable binary files, so do not add
   repo-specific language rewrites or file-type exclusions without a tested,
   documented configuration contract. Use direct `rg` first only for precise

@@ -100,6 +100,12 @@ It checks free space under both `OMERO_TMP_PATH` and Docker's root directory,
 then verifies each required image tag exists in the local Docker daemon. The
 final Compose startup uses `--no-build`.
 
+Flattening in the release workflow applies to the bundled runtime service
+images inside `runtime-images.tar.gz`. The Docker Hub carrier remains a normal
+container image with small metadata/setup layers and exactly one large archive
+copy layer; a second full-size layer for ownership or mode changes is a release
+defect.
+
 For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
 
 ```bash
@@ -109,10 +115,17 @@ PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.s
 Carrier releases are created from the GitHub Actions panel with the manual
 `release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` as repository secrets before dispatching that workflow. The
-release job runs in the `dockerhub-release` GitHub Actions environment, so
-environment protection rules can be added later without changing secret names.
-The `DOCKERHUB_TOKEN` value must be a Docker Hub access token with write access
-to the carrier repository; do not use a Docker Hub account password.
+workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
+permission to create the GitHub release; no separate GitHub PAT secret is
+required when repository Actions settings allow workflow write permissions. The
+release targets the default branch ref, creates a draft GitHub prerelease with
+source artifacts, pushes and verifies the carrier image, then publishes the
+prerelease. If the carrier publish fails after the draft was created, the
+workflow deletes that draft release and its tag. The release job runs in the
+`dockerhub-release` GitHub Actions environment, so environment protection rules
+can be added later without changing secret names. The `DOCKERHUB_TOKEN` value
+must be a Docker Hub access token with write access to the carrier repository;
+do not use a Docker Hub account password.
 
 ## 3) Build Images
 
