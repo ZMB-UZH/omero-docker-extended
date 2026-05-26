@@ -21,7 +21,9 @@ TARGET_VERSION="1.0.0"
 BIOFORMATS_SUBDIR="bioformats"
 BIOFORMATS_JAR_NAME="bioformats_package.jar"
 : "${BIOFORMATS_VERSION:?BIOFORMATS_VERSION must be set in env/omeroserver.env}"
-BIOFORMATS_URL="https://downloads.openmicroscopy.org/bio-formats/${BIOFORMATS_VERSION}/artifacts/${BIOFORMATS_JAR_NAME}"
+BIOFORMATS_ARTIFACT_NAME="bioformats_package-${BIOFORMATS_VERSION}.jar"
+BIOFORMATS_URL="https://artifacts.openmicroscopy.org/artifactory/maven/ome/bioformats_package/${BIOFORMATS_VERSION}/${BIOFORMATS_ARTIFACT_NAME}"
+BIOFORMATS_SHA256_URL="${BIOFORMATS_URL}.sha256"
 BIOFORMATS_MIN_SIZE_BYTES=10000000
 BIOFORMATS_JAR="${INSTALL_DIR}/${BIOFORMATS_SUBDIR}/${BIOFORMATS_JAR_NAME}"
 BIOFORMATS_CACHE_DIR="${INSTALL_DIR}/artifacts/${BIOFORMATS_SUBDIR}"
@@ -104,6 +106,47 @@ copy_bioformats_jar() {
         fail "Integrity verification failed while copying ${source_path} to ${destination_path}"
     fi
     mv -f "${tmp_path}" "${destination_path}"
+}
+
+# Download Bio-Formats jar and verify the published checksum. Inputs: shell arguments and environment. Output: command status and side effects.
+download_bioformats_jar() {
+    local destination_path="$1"
+    local sha256_path="${destination_path}.sha256.remote"
+    local tmp_path="${destination_path}.download"
+    local expected_sha
+    local actual_sha
+
+    rm -f "${tmp_path}" "${sha256_path}"
+    if ! curl -L --fail --retry 5 --retry-delay 3 --max-time 1800 \
+        --connect-timeout 20 --speed-time 30 --speed-limit 1024 \
+        "${BIOFORMATS_URL}" \
+        -o "${tmp_path}"; then
+        rm -f "${tmp_path}" "${sha256_path}"
+        fail "Failed to download ${BIOFORMATS_ARTIFACT_NAME}"
+    fi
+
+    if ! curl -L --fail --retry 5 --retry-delay 3 --max-time 300 \
+        --connect-timeout 20 --speed-time 30 --speed-limit 1024 \
+        "${BIOFORMATS_SHA256_URL}" \
+        -o "${sha256_path}"; then
+        rm -f "${tmp_path}" "${sha256_path}"
+        fail "Failed to download ${BIOFORMATS_ARTIFACT_NAME}.sha256"
+    fi
+
+    expected_sha="$(awk '{print tolower($1)}' "${sha256_path}")"
+    if ! is_lowercase_sha256_hex "${expected_sha}"; then
+        rm -f "${tmp_path}" "${sha256_path}"
+        fail "Invalid SHA-256 manifest for ${BIOFORMATS_ARTIFACT_NAME}"
+    fi
+
+    actual_sha="$(sha256sum "${tmp_path}" | awk '{print $1}')"
+    if [[ "${actual_sha}" != "${expected_sha}" ]]; then
+        rm -f "${tmp_path}" "${sha256_path}"
+        fail "Bio-Formats jar checksum mismatch for ${BIOFORMATS_ARTIFACT_NAME}"
+    fi
+
+    mv -f "${tmp_path}" "${destination_path}"
+    rm -f "${sha256_path}"
 }
 
 # Install imarisconvert wrapper. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -215,14 +258,9 @@ sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
 
 # Download bioformats jar
 mkdir -p bioformats
-if ! curl -L --fail --retry 5 --retry-delay 3 --max-time 1800 \
-    --connect-timeout 20 --speed-time 30 --speed-limit 1024 \
-    "${BIOFORMATS_URL}" \
-    -o bioformats/bioformats_package.jar; then
-    fail "Failed to download bioformats_package.jar"
-fi
+download_bioformats_jar "bioformats/bioformats_package.jar"
 
-# Validate Bio-Formats jar (must be large; real file is ~80–90 MB)
+# Validate Bio-Formats jar before build consumes it.
 if ! is_valid_bioformats_jar bioformats/bioformats_package.jar; then
     echo "ERROR: bioformats_package.jar download failed or is invalid" >&2
     ls -lh bioformats/bioformats_package.jar >&2 || true

@@ -166,3 +166,26 @@ def test_imarisconvert_build_time_mode_repairs_wrapper_and_cache_without_network
     assert os.access(wrapper_path, os.X_OK)
     assert (cache_dir / "bioformats_package.jar").is_file()
     assert (cache_dir / "bioformats_package.jar.sha256").is_file()
+
+
+def test_imarisconvert_download_uses_versioned_ome_artifactory_with_checksum():
+    """Verify ImarisConvert build downloads Bio-Formats from OME Artifactory.
+
+    Inputs: repository fixtures. Output: fails on regressions in Bio-Formats
+    artifact source or checksum validation.
+    """
+    script_text = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "downloads.openmicroscopy.org/bio-formats" not in script_text
+    assert (
+        "https://artifacts.openmicroscopy.org/artifactory/maven/ome/"
+        "bioformats_package/${BIOFORMATS_VERSION}/${BIOFORMATS_ARTIFACT_NAME}"
+        in script_text
+    )
+    assert (
+        'BIOFORMATS_ARTIFACT_NAME="bioformats_package-${BIOFORMATS_VERSION}.jar"'
+        in script_text
+    )
+    assert 'BIOFORMATS_SHA256_URL="${BIOFORMATS_URL}.sha256"' in script_text
+    assert "curl -L --fail --retry 5 --retry-delay 3 --max-time 300" in script_text
+    assert "Bio-Formats jar checksum mismatch" in script_text

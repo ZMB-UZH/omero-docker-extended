@@ -65,9 +65,11 @@ session remains valid. Job-service tasks own their session and may hard-close it
   image build. `startup/51-install-imarisconvert.sh` verifies the build artifact
   at container start.
 - Bio-Formats JAR is downloaded and provisioned automatically at image build
-  time by `startup/51-install-imarisconvert.sh` at
-  `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`, with an
-  internal local repair copy at
+  time by `startup/51-install-imarisconvert.sh` from OME Artifactory's
+  versioned Maven artifact for `ome/bioformats_package`, verified against the
+  published `.sha256` checksum, and installed at
+  `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`. The same script
+  also maintains an internal local repair copy at
   `/opt/omero/imarisconvert/artifacts/bioformats/bioformats_package.jar`;
   `IMS_Export.py` can restore from that copy but refuses ad-hoc runtime network
   download for security. The Bio-Formats version is controlled exclusively by
