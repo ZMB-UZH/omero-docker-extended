@@ -348,7 +348,9 @@ explicitly instead of relying on a prompt.
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
 Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as secrets
-in the `dockerhub-release` GitHub environment before running it.
+in the `dockerhub-release` GitHub environment before running it. The
+`DOCKERHUB_TOKEN` value must be a Docker Hub access token with write access to
+the carrier repository; do not store a Docker Hub account password there.
 
 **5.** After a successful installation, run:
 
