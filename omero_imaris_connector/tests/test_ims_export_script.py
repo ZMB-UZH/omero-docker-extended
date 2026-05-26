@@ -178,6 +178,7 @@ def test_safe_filename_and_checksum_helpers_cover_edge_cases(
     checksum_path = tmp_path / "bioformats.sha256"
 
     assert module._safe_filename(None) == "image"
+    assert module.safe_filename(" unsafe/name ") == "unsafe_name"
     assert module._safe_filename("../unsafe\x00name?.ims") == ".._unsafename_.ims"
     assert len(module._safe_filename("x" * 250)) == 200
 
@@ -261,6 +262,9 @@ def test_export_root_and_checksum_helpers_require_config_and_cover_altsep(
         )
     )
     assert module._get_export_root(conn) == export_root
+    assert config_service.calls == [module._CONFIG_IMS_EXPORT_DIR]
+    config_service.calls.clear()
+    assert module.get_export_root(conn) == export_root
     assert config_service.calls == [module._CONFIG_IMS_EXPORT_DIR]
 
     env_export_root = str(tmp_path / "env-exports")
@@ -969,7 +973,7 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
         getName=lambda: "demo.ome.tif",
         exportOmeTiff=lambda bufsize: (8, iter([b"ome-", b"tiff"])),
     )
-    source = module._materialize_ome_tiff_source(
+    source = module.materialize_ome_tiff_source(
         object(), image, 7, str(tmp_path / "exports")
     )
     assert source is not None

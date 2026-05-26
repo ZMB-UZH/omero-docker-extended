@@ -75,6 +75,7 @@ cython_debug/
 
 # Deployment-local configuration and runtime data
 .env
+!.env_example
 installation_paths.env
 .env_backups/
 .codex

@@ -57,6 +57,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         cls.installation_script = (
             REPO_ROOT / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
+        cls.dot_env_example = (REPO_ROOT / ".env_example").read_text(encoding="utf-8")
 
     @staticmethod
     def _last_user(dockerfile_text: str) -> str:
@@ -296,18 +297,28 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertNotIn("${REDIS_MAXMEMORY_POLICY:-", service_text)
         self.assertNotIn("${REDIS_DATA_TMPFS_SIZE:-", service_text)
 
-    def test_installer_writes_redis_tuning_without_shell_fallback_expansion(
+    def test_installer_writes_redis_tuning_from_tracked_dot_env_template(
         self,
     ) -> None:
-        """Verify installer writes redis tuning without shell fallback expansion.
+        """Verify installer writes redis tuning from tracked dot env template.
 
-        Inputs: repository fixtures. Output: fails on regressions in installer writes redis tuning without shell fallback expansion.
+        Inputs: repository fixtures. Output: fails on regressions in installer writes redis tuning from tracked dot env template.
         """
-        self.assertIn("REDIS_SAVE_POLICY=\n", self.installation_script)
-        self.assertIn("REDIS_APPENDONLY=no\n", self.installation_script)
-        self.assertIn("REDIS_MAXMEMORY=512mb\n", self.installation_script)
-        self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", self.installation_script)
-        self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", self.installation_script)
+        self.assertIn("REDIS_SAVE_POLICY=\n", self.dot_env_example)
+        self.assertIn("REDIS_APPENDONLY=no\n", self.dot_env_example)
+        self.assertIn("REDIS_MAXMEMORY=512mb\n", self.dot_env_example)
+        self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", self.dot_env_example)
+        self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", self.dot_env_example)
+        self.assertIn(
+            'dot_env_template_path="${REPO_ROOT_DIR}/.env_example"',
+            self.installation_script,
+        )
+        self.assertIn(
+            "render_compose_dot_env_template_assignments", self.installation_script
+        )
+        self.assertIn("read_env_assignment_from_file", self.installation_script)
+        self.assertIn("${template_assignments}", self.installation_script)
+        self.assertNotIn("resolve_compose_dot_env_value", self.installation_script)
         self.assertNotIn(
             "REDIS_SAVE_POLICY=${REDIS_SAVE_POLICY:-", self.installation_script
         )

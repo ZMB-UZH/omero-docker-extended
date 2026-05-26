@@ -6,10 +6,12 @@
   a source archive, builds hardened flattened runtime images, bundles the
   Compose image set into one Docker Hub carrier image, verifies the carrier
   contents, and creates a GitHub release with the same SemVer pre-release tag
-  as the Docker image tag. Docker Hub credentials are scoped to the
-  `dockerhub-release` GitHub environment, `DOCKERHUB_TOKEN` is documented as a
-  Docker Hub access token for two-factor-authenticated accounts, and release
-  write permissions are scoped to the release job.
+  as the Docker image tag. Docker Hub credentials use repository secrets named
+  `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job runs in the
+  `dockerhub-release` GitHub Actions environment for optional protection rules,
+  `DOCKERHUB_TOKEN` is documented as a Docker Hub access token for
+  two-factor-authenticated accounts, and release write permissions are scoped
+  to the release job.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
   `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to
@@ -20,6 +22,9 @@
 - Kept standard installation behavior intact by preserving the existing image
   defaults in `docker-compose.yml` while allowing the custom image references to
   be supplied through environment variables.
+- Moved generated `.env` Redis defaults into tracked `.env_example`; the
+  installer now preserves deployment-local `.env` Redis values while rendering
+  Compose-only keys from the tracked template contract.
 - Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.

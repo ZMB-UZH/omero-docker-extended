@@ -90,6 +90,16 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("APPLY_SECURITY_HARDENING=1", script)
         self.assertIn("compose_up_args+=(--no-build)", script)
 
+        host_env_load = script.index(
+            'if ! load_installation_paths_env "${SCRIPT_ENV_FILE}"; then'
+        )
+        runtime_env_load = script.index("for required_runtime_env_file in")
+        prebuilt_mode_validation = script.index(
+            "if ! validate_prebuilt_image_mode; then"
+        )
+        self.assertLess(host_env_load, prebuilt_mode_validation)
+        self.assertLess(runtime_env_load, prebuilt_mode_validation)
+
         prompt_start = script.index("if ! validate_prebuilt_image_mode; then")
         self.assertIn('if [ "${PREBUILT_IMAGE_MODE}" != "require" ]; then', script)
         self.assertLess(
@@ -169,9 +179,24 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("--requested-version", workflow_text)
         self.assertIn("--requested-docker-repository", workflow_text)
         self.assertIn("--latest=false", workflow_text)
+        self.assertIn(".env_example", workflow_text)
+        self.assertIn("installation_paths_example.env", workflow_text)
+        self.assertIn('glob("*_example.env")', workflow_text)
+        self.assertIn("shutil.copyfile(source, target)", workflow_text)
         self.assertIn("DOCKERHUB_TOKEN", workflow_text)
         self.assertIn("--password-stdin", workflow_text)
         self.assertNotIn("DOCKERHUB_ACCESS_TOKEN", workflow_text)
+        self.assertIn(
+            "from tools.env_safety_guard import resolve_env_references",
+            workflow_text,
+        )
+        self.assertIn("resolve_env_references(value, env_values)", workflow_text)
+        self.assertIn("Unresolved synthetic environment reference", workflow_text)
+        self.assertNotIn('env_values["REDIS_SAVE_POLICY"] =', workflow_text)
+        self.assertNotIn('env_values["REDIS_APPENDONLY"] =', workflow_text)
+        self.assertNotIn('env_values["REDIS_MAXMEMORY"] =', workflow_text)
+        self.assertNotIn('env_values["REDIS_MAXMEMORY_POLICY"] =', workflow_text)
+        self.assertNotIn('env_values["REDIS_DATA_TMPFS_SIZE"] =', workflow_text)
 
     def test_release_workflow_builds_hardened_flattened_bundle_from_compose(
         self,

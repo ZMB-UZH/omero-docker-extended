@@ -122,6 +122,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── docker_image_analysis.sh
 ├── supervisord.conf                   # Process manager: OMERO.web + co-located Celery workers
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
+├── .env_example                       # Template: Compose interpolation defaults mirrored into generated .env
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
 ├── docs/                              # Full documentation set (see docs/index.md)
@@ -282,12 +283,19 @@ cd /opt/omero
 **2.** Copy the following from the repository into `/opt/omero`:
 
 - `installation_paths_example.env`
+- `.env_example`
 - `docker-compose.yml`
 - `env/` directory
 - `helper_scripts_debian/` directory
 - `github_pull_project_bash_example`
 
-Then, create runtime copies by removing the `_example` suffix where applicable (`installation_paths.env`, `github_pull_project_bash`, etc.). Keep installation-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull/update workflow.
+Then, create runtime copies by removing the `_example` suffix where applicable
+(`installation_paths.env`, `github_pull_project_bash`, etc.). The installer
+generates `.env` from deployment-local values and renders Compose-only keys
+from `.env_example` while preserving existing generated `.env` assignments.
+Keep installation-specific settings in non-example runtime files; non-example
+runtime files are authoritative and are not overwritten by the pull/update
+workflow.
 
 > IMPORTANT!
 > **Mandatory credential setup before first installation**
@@ -347,8 +355,10 @@ tag. Do not use `latest`. For unattended runs, set `PREBUILT_IMAGE_RELEASE`
 explicitly instead of relying on a prompt.
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
-Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as secrets
-in the `dockerhub-release` GitHub environment before running it. The
+Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
+repository secrets before running it. The job runs in the
+`dockerhub-release` GitHub Actions environment, so repository owners can add
+environment protection rules without changing the secret names. The
 `DOCKERHUB_TOKEN` value must be a Docker Hub access token with write access to
 the carrier repository; do not store a Docker Hub account password there.
 
@@ -363,6 +373,7 @@ Log in to OMERO.web using the root credential configured in `env/omero_secrets.e
 
 | File | Scope |
 | --- | --- |
+| `.env_example` | Template for Compose-only interpolation defaults mirrored into generated `.env`; existing `.env` values are preserved by the installer |
 | `installation_paths_example.env` | Template for all required filesystem paths during installation |
 | `env/omeroserver_example.env` | Template for server DB, Java heap, script processors, security, and all other OMERO.server settings |
 | `env/omeroweb_example.env` | Template for web app registration, plugin config, admin tool endpoints, upload, and all other OMERO.web settings |

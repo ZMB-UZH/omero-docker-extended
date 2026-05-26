@@ -130,8 +130,13 @@ jobs:
           import shutil
           from pathlib import Path
 
+          from tools.env_safety_guard import resolve_env_references
+
           root = Path.cwd()
-          copied = [(root / "installation_paths_example.env", root / "installation_paths.env")]
+          copied = [
+              (root / ".env_example", root / ".env"),
+              (root / "installation_paths_example.env", root / "installation_paths.env"),
+          ]
           copied.extend(
               (path, path.with_name(path.name.replace("_example.env", ".env")))
               for path in sorted((root / "env").glob("*_example.env"))
@@ -155,6 +160,19 @@ jobs:
 
           env_values["OMERO_INSTALLATION_PATH"] = str(root)
           env_values.setdefault("COMPOSE_PROFILES", "sysctl-init,crowdsec")
+          for key, value in list(env_values.items()):
+              try:
+                  env_values[key] = resolve_env_references(value, env_values)
+              except ValueError as exc:
+                  raise SystemExit(
+                      f"Unsafe synthetic environment value for {key}: {exc}"
+                  ) from exc
+          unresolved = {
+              key: value for key, value in env_values.items() if "${" in value
+          }
+          if unresolved:
+              names = ", ".join(sorted(unresolved))
+              raise SystemExit(f"Unresolved synthetic environment reference(s): {names}")
 
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
               for key, value in sorted(env_values.items()):
