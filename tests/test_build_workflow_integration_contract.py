@@ -1845,7 +1845,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "codecov/codecov-action@cddd853df119a48c5be31a973f8cd97e12e35e16",
+            "codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354",
             upload_step["uses"],
         )
         self.assertEqual(
@@ -1884,7 +1884,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if step.get("name") == "Run Trivy vulnerability scan"
         )
         self.assertEqual(
-            "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8",
+            "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
             trivy_step["uses"],
         )
 

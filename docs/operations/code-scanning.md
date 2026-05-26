@@ -81,6 +81,9 @@ GitHub security workflow; use it to catch reproducible failures before push.
 The tests workflow pins the Codecov CLI version instead of using Codecov's
 `latest` default; update that pin only after verifying the replacement
 version's published signature.
+When refreshing GitHub Action pins, verify the version tag and the archive
+download for the exact commit SHA. For annotated tags, pin the peeled commit
+ref (`refs/tags/<tag>^{}`), not the tag object SHA.
 
 ## Codecov Coverage Scope
 
