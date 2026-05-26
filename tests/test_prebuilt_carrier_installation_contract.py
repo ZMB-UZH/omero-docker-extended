@@ -86,6 +86,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("run_prebuilt_image_load()", script)
         self.assertIn("run_prebuilt_image_load\n        return $?", script)
         self.assertIn("USE_BUILDX_COMPRESSED_BUILD=0", script)
+        self.assertIn("USE_CACHE_BUILD=1", script)
         self.assertIn("DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1", script)
         self.assertIn("APPLY_SECURITY_HARDENING=1", script)
         self.assertIn("compose_up_args+=(--no-build)", script)
@@ -106,7 +107,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             script.index(
                 "PREBUILT_IMAGE_MODE=require: using release-built images", prompt_start
             ),
-            script.index("if ! resolve_cache_build_choice", prompt_start),
+            script.index(
+                'if [ "${PREBUILT_IMAGE_MODE}" != "require" ]; then', prompt_start
+            ),
         )
         self.assertLess(
             script.index(
@@ -114,6 +117,47 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             ),
             script.index("resolve_flatten_final_image_choice", prompt_start),
         )
+
+    def test_easy_installation_prompt_count_matches_prebuilt_contract(self) -> None:
+        """Verify easy installation keeps exactly ten interactive prompts.
+
+        Inputs: installer fixtures. Output: confirms the prebuilt prompt list size.
+        """
+        standard_prompts = [
+            "Delete all container images?",
+            "Enable Buildx compressed build workflow?",
+            "Use build cache?",
+            "Flatten final images into single-layer outputs?",
+            "Enable Docker image security hardening?",
+            "Enable Docker Scout vulnerability scanning?",
+            "Start containers after build?",
+            "OMERO installation path",
+            "OMERO database path",
+            "OMERO plugin database path",
+            "OMERO data path",
+            "OMERO tmp path",
+            "Enable ext4 project quotas for OMERO user data?",
+        ]
+        skipped_for_prebuilt = {
+            "Enable Buildx compressed build workflow?",
+            "Use build cache?",
+            "Flatten final images into single-layer outputs?",
+            "Enable Docker image security hardening?",
+        }
+        easy_prompts = ["Which prebuilt release version should be installed?"] + [
+            prompt for prompt in standard_prompts if prompt not in skipped_for_prebuilt
+        ]
+
+        script = self.read_text("installation/installation_script.sh")
+        easy_script = self.read_text("installation/easy_installation_script.sh")
+
+        for prompt in standard_prompts:
+            with self.subTest(prompt=prompt):
+                self.assertIn(prompt, script)
+        self.assertIn(easy_prompts[0], easy_script)
+        self.assertEqual(13, len(standard_prompts))
+        self.assertEqual(10, len(easy_prompts))
+        self.assertNotIn("Use build cache?", easy_prompts)
 
     def test_prebuilt_and_standard_installers_share_runtime_flow_after_image_step(
         self,

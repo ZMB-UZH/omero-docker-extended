@@ -78,20 +78,22 @@ bash installation/easy_installation_script.sh
 The first easy-installer prompt asks which prebuilt release version to install.
 Use the exact GitHub release tag, which also matches the Docker Hub carrier
 image tag. `installation/easy_installation_script.sh` then delegates to the
-canonical installer with `PREBUILT_IMAGE_MODE=require`. It removes only the
-three build-image questions from the interactive flow:
+canonical installer with `PREBUILT_IMAGE_MODE=require`. It removes the local
+build-only questions from the interactive flow:
 
 - `Enable Buildx compressed build workflow?`
+- `Use build cache?`
 - `Flatten final images into single-layer outputs?`
 - `Enable Docker image security hardening?`
 
-Those three release-build settings are enforced by the manual release workflow
-before publishing the carrier. The easy installer still asks the remaining
-installation questions and still uses the same host paths, runtime env files,
-UID/GID discovery, permission checks, data-path snapshots, container startup,
-and post-start validation flow as the standard installer. If the carrier cannot
-be pulled, verified, extracted, or loaded, the easy installation exits with an
-error and does not run `docker compose build`.
+The three release-build settings are enforced by the manual release workflow
+before publishing the carrier; the build-cache setting has no local build to
+control in strict prebuilt mode. The easy installer asks ten questions total,
+including the first release-version prompt, and still uses the same host paths,
+runtime env files, UID/GID discovery, permission checks, data-path snapshots,
+container startup, and post-start validation flow as the standard installer. If
+the carrier cannot be pulled, verified, extracted, or loaded, the easy
+installation exits with an error and does not run `docker compose build`.
 
 The carrier stores a manifest and a compressed Docker image archive. The loader
 verifies the manifest schema, release value, runtime-image references, archive

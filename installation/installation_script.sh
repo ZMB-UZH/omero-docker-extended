@@ -3160,17 +3160,20 @@ fi
 
 if [ "${PREBUILT_IMAGE_MODE}" = "require" ]; then
     USE_BUILDX_COMPRESSED_BUILD=0
+    USE_CACHE_BUILD=1
     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1
     APPLY_SECURITY_HARDENING=1
-    echo "PREBUILT_IMAGE_MODE=require: using release-built images; skipping Buildx, flattening, and security-hardening prompts."
+    echo "PREBUILT_IMAGE_MODE=require: using release-built images; skipping Buildx, build-cache, flattening, and security-hardening prompts."
 else
     if ! resolve_buildx_compressed_build_choice; then
         exit 1
     fi
 fi
 
-if ! resolve_cache_build_choice; then
-    exit 1
+if [ "${PREBUILT_IMAGE_MODE}" != "require" ]; then
+    if ! resolve_cache_build_choice; then
+        exit 1
+    fi
 fi
 
 if [ "${PREBUILT_IMAGE_MODE}" != "require" ]; then
