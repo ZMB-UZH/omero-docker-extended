@@ -320,6 +320,10 @@ Good:
 Required rules:
 
 - Pin GitHub Actions to full commit SHAs.
+- When refreshing a pin from a version tag, resolve annotated tags to the
+  peeled commit ref (`refs/tags/<tag>^{}`) and verify the pinned SHA can be
+  downloaded from the action repository's archive endpoint. Do not use the
+  annotated tag object SHA as a `uses:` pin.
 - Pin base images to exact tags or digests; never use `:latest`.
 - Run as a non-root user unless the runtime contract genuinely requires root. If root is required, document why inline.
 - Treat workflow expressions, artifact names, branch names, and pull-request metadata as untrusted input.
