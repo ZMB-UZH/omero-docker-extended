@@ -143,7 +143,7 @@ edits with `rg`, file reads, and tests in the real checkout.
 
 When CocoIndex reports a cold semantic index, agents should tell the user once
 in one short sentence that the first search can take several minutes and later
-searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.32
+searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.33
 to include every Git-visible mirrored file pattern instead of upstream's
 extension list. CocoIndex indexes text-decodable content and skips undecodable
 binary files, so agents must not claim semantic search inside arbitrary binary
@@ -168,9 +168,10 @@ set `AGENT_COCOINDEX_REPO` for a workspace-scoped static configuration. Do not
 claim compatibility with clients that cannot run local stdio MCP servers, set
 environment variables, and allow long tool timeouts. Codex can use
 `python3 tools/cocoindex_agent_search.py mcp-install`, which registers or
-repairs the same server name without duplicating it, writes a host-local
-workspace-pinned wrapper command plus `AGENT_COCOINDEX_REPO`, and writes
-explicit per-server startup/tool timeouts. The MCP
+repairs the same server name without duplicating it, writes a host-stable
+launcher under `AGENT_COCOINDEX_HOME`, pins the target checkout with
+`AGENT_COCOINDEX_REPO`, and writes explicit per-server startup/tool timeouts.
+The MCP
 server itself stays lightweight through initialize and tool-list requests. MCP
 search may only query an existing active index; cold install, mirror, daemon,
 and index work requires an explicit CLI command outside the MCP request path.

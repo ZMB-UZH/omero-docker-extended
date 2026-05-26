@@ -164,6 +164,19 @@ def list_remote_tags(repo_root: Path) -> list[str]:
     return sorted(tags)
 
 
+def read_existing_tags_file(path: Path) -> list[str]:
+    """Read tag names from a line-oriented file.
+
+    Inputs: `path`. Output: sorted unique tag names.
+    """
+    tags = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        tag = line.strip()
+        if tag:
+            tags.add(tag)
+    return sorted(tags)
+
+
 def resolve_release_metadata(
     *,
     requested_version: str,
@@ -209,6 +222,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--requested-version", default="")
     parser.add_argument("--requested-docker-repository", default="")
     parser.add_argument("--default-docker-repository", default="")
+    parser.add_argument("--existing-tags-file", type=Path, default=None)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--github-env", type=Path, default=None)
     return parser.parse_args(argv)
@@ -226,11 +240,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if not args.default_docker_repository:
             raise ValueError("--default-docker-repository is required.")
+        existing_tags = (
+            read_existing_tags_file(args.existing_tags_file)
+            if args.existing_tags_file is not None
+            else list_remote_tags(args.repo_root)
+        )
         release_version, docker_repository, carrier_image = resolve_release_metadata(
             requested_version=args.requested_version,
             requested_docker_repository=args.requested_docker_repository,
             default_docker_repository=args.default_docker_repository,
-            existing_tags=list_remote_tags(args.repo_root),
+            existing_tags=existing_tags,
         )
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

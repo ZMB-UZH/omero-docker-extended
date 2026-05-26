@@ -42,8 +42,8 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 - Repository: `cocoindex-io/cocoindex-code`
 - Upstream native installation command:
   `pipx install 'cocoindex-code[full]'`
-- Observed upstream `main` commit during install verification:
-  `51ea6efea1878ca1b412b155adedbadc1dd611ad`
+- Verified upstream release tag:
+  `v0.2.33` at `d429632c5eb9e2cfe8b0e02487fe5fa966082057`
 - Local path: `.agents/skills/cocoindex-code-search/`
 - Integration rule: keep one repository-local CocoIndex workflow and generate
   MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a

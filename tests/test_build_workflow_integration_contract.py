@@ -1845,7 +1845,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2",
+            "codecov/codecov-action@cddd853df119a48c5be31a973f8cd97e12e35e16",
             upload_step["uses"],
         )
         self.assertEqual(
@@ -1875,7 +1875,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.161.0@sha256:326e5f41cc972bb423b764a14febbb62bbad29ee1c01820805d077dd868fea48",
+            "semgrep/semgrep:1.163.0@sha256:bc8b15e245d7bd392bcadce7ef4db36601b375fab35bfd8070ed8ae3d7824c74",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -1884,7 +1884,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if step.get("name") == "Run Trivy vulnerability scan"
         )
         self.assertEqual(
-            "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+            "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8",
             trivy_step["uses"],
         )
 
