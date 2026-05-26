@@ -12,6 +12,10 @@ For OMERO configuration property names, defaults, and semantics, use the officia
 
 This repository expresses those OMERO properties in env files with the existing `CONFIG_omero_...` naming pattern already present in the tracked examples. Example: the official `omero.pixeldata.threads` property maps to `CONFIG_omero_pixeldata_threads`.
 
+- `.env_example` -> generated `.env`: Compose-only interpolation defaults that
+  are needed before service-level `env_file:` loading. The installer renders
+  this tracked template into generated `.env` while preserving deployment-local
+  generated `.env` assignments that already exist.
 - `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions, including `OMERO_DATA_DIR` for the in-container OMERO data root.
 - **CRITICAL:** The `omeroserver` service in `docker-compose.yml` **must** pass
   `OMERO_DATA_DIR` and `OMERO_DIR` into its container environment block. These
@@ -36,13 +40,12 @@ This repository expresses those OMERO properties in env files with the existing 
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 - `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets). The tracked example keeps secret values empty; deployment-local values must be non-empty except for intentionally optional fields such as CrowdSec enrollment.
-- Redis memory sizing is interpolated from the generated `.env` file. The
-  installer writes `REDIS_MAXMEMORY=512mb`,
-  `REDIS_MAXMEMORY_POLICY=allkeys-lru`, `REDIS_DATA_TMPFS_SIZE=512m`,
-  `REDIS_APPENDONLY=no`, and an empty `REDIS_SAVE_POLICY`. Change Redis runtime
-  sizing by editing those generated `.env` assignments. Compose treats the
-  Redis keys as required env-file inputs; missing keys fail with an explicit
-  interpolation error instead of falling back inside `docker-compose.yml`.
+- Redis memory sizing is interpolated from generated `.env`. The default Redis
+  assignments live in tracked `.env_example`, and the installer preserves
+  deployment-local `.env` values when regenerating the file. Change Redis
+  runtime sizing by editing the generated `.env` assignments. Compose treats
+  the Redis keys as required env-file inputs; missing keys fail with an
+  explicit interpolation error instead of a default inside `docker-compose.yml`.
 - `CONFIG_omero_pixeldata_threads` (in `env/omeroserver*.env`) sets OMERO's `omero.pixeldata.threads` property. The official OMERO docs list a default of `2`; this repository tracks `4` to increase concurrent pixel-pyramid work via the same env-driven server configuration path.
 - CrowdSec pre-installs the `cs-firewall-bouncer` binary plus both `nftables`
   and `iptables`/`ipset` backends at image build time

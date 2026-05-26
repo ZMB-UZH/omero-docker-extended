@@ -11,6 +11,7 @@
 Create deployment-local runtime files from the tracked templates, then review and update:
 
 - `installation_paths_example.env` -> `installation_paths.env`
+- `.env_example` -> generated `.env` defaults for Compose-only interpolation
 - `env/omeroserver_example.env` -> `env/omeroserver.env`
 - `env/omeroweb_example.env` -> `env/omeroweb.env`
 - `env/omero-celery_example.env` -> `env/omero-celery.env`
@@ -42,6 +43,7 @@ If `.env` is missing before first installation, export required values first:
 
 ```bash
 set -a
+source .env_example
 source installation_paths.env
 source env/omeroserver.env
 source env/omeroweb.env
@@ -106,10 +108,11 @@ PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.s
 
 Carrier releases are created from the GitHub Actions panel with the manual
 `release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
-`DOCKERHUB_TOKEN` as secrets in the `dockerhub-release` GitHub environment
-before dispatching that workflow. The `DOCKERHUB_TOKEN` value must be a Docker
-Hub access token with write access to the carrier repository; do not use a
-Docker Hub account password.
+`DOCKERHUB_TOKEN` as repository secrets before dispatching that workflow. The
+release job runs in the `dockerhub-release` GitHub Actions environment, so
+environment protection rules can be added later without changing secret names.
+The `DOCKERHUB_TOKEN` value must be a Docker Hub access token with write access
+to the carrier repository; do not use a Docker Hub account password.
 
 ## 3) Build Images
 
