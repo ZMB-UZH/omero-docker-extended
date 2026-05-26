@@ -29,6 +29,9 @@
   to OME Artifactory's versioned `ome/bioformats_package` Maven artifact with
   `.sha256` verification, preserving the same build path for standard and
   prebuilt-carrier images.
+- Reduced prebuilt-carrier release runner storage pressure by disabling
+  ephemeral Buildx local-cache export in the manual release workflow and by
+  flattening each serially built target before the next target is built.
 - Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.

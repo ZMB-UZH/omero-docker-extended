@@ -81,6 +81,23 @@ if [ "${1:-}" = "image" ] && [ "${2:-}" = "tag" ]; then
   exit 0
 fi
 if [ "${1:-}" = "build" ]; then
+  dockerfile_path=""
+  next_is_file=0
+  for arg in "$@"; do
+    if [ "${next_is_file}" = "1" ]; then
+      dockerfile_path="${arg}"
+      next_is_file=0
+      continue
+    fi
+    if [ "${arg}" = "--file" ]; then
+      next_is_file=1
+    fi
+  done
+  if [ -n "${dockerfile_path}" ] && [ -r "${dockerfile_path}" ]; then
+    while IFS= read -r dockerfile_line; do
+      printf 'DOCKERFILE %s\n' "${dockerfile_line}" >> "${log_path}"
+    done < "${dockerfile_path}"
+  fi
   exit "${build_exit_code}"
 fi
 if [ "${1:-}" = "container" ] && [ "${2:-}" = "create" ]; then
@@ -349,36 +366,109 @@ exit 0
                 joined_log,
             )
             self.assertIn(
-                "container create --name flatten-omeroserver-",
+                "DOCKERFILE FROM omeroserver:flattencheck__flatten_source_",
                 joined_log,
             )
             self.assertIn(
-                '--change ENV FOO="bar baz"',
+                'DOCKERFILE ENV FOO="bar baz"',
                 joined_log,
             )
             self.assertIn(
-                '--change ENTRYPOINT ["/hello.txt"]',
+                'DOCKERFILE ENTRYPOINT ["/hello.txt"]',
                 joined_log,
             )
             self.assertIn(
-                '--change HEALTHCHECK --interval=5000000000ns --timeout=3000000000ns --retries=2 CMD ["/hello.txt"]',
+                'DOCKERFILE HEALTHCHECK --interval=5000000000ns --timeout=3000000000ns --retries=2 CMD ["/hello.txt"]',
+                joined_log,
+            )
+            self.assertIn(
+                "--tag omeroserver:flattencheck",
                 joined_log,
             )
             self.assertIn(
                 "image rm -f omeroserver:flattencheck__flatten_source_",
                 joined_log,
             )
-            self.assertIn(
-                "image rm -f omeroserver:flattencheck__flatten_fs_",
-                joined_log,
-            )
-            self.assertIn(
-                "container rm -f flatten-omeroserver-",
-                joined_log,
-            )
+            self.assertNotIn("__flatten_fs_", joined_log)
+            self.assertNotIn("container create --name flatten-omeroserver-", joined_log)
+            self.assertNotIn("image import", joined_log)
             self.assertIn(
                 "buildx rm -f omero-builder",
                 joined_log,
+            )
+
+    def test_serial_flatten_releases_each_source_before_next_target(self) -> None:
+        """Verify serial flattened builds keep only one target source image live.
+
+        Inputs: fake docker fixture. Output: proves each target is flattened
+        before the next build starts.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            inspect_json = '{"Config":{"Env":[],"Labels":{},"OnBuild":[]}}'
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": inspect_json,
+                    "DOCKER_IMAGE_TAG": "flattencheck",
+                    "DOCKER_BUILD_TARGETS": "omeroserver omeroweb",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_BAKE_SERIAL_MODE": "always",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_PROVENANCE": "0",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
+                }
+            )
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Running serial per-target Buildx bake.", result.stderr)
+
+            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
+            first_bake = next(
+                index
+                for index, line in enumerate(log_lines)
+                if line.startswith("buildx bake") and "omeroserver" in line
+            )
+            first_source_removed = next(
+                index
+                for index, line in enumerate(log_lines)
+                if line.startswith("image rm -f ")
+                and "omeroserver:flattencheck__flatten_source_" in line
+            )
+            second_bake = next(
+                index
+                for index, line in enumerate(log_lines)
+                if line.startswith("buildx bake") and "omeroweb" in line
+            )
+
+            self.assertLess(first_bake, first_source_removed)
+            self.assertLess(first_source_removed, second_bake)
+            self.assertTrue(
+                any(
+                    line.startswith("buildx rm -f omero-builder")
+                    for line in log_lines[first_bake:first_source_removed]
+                ),
+                "serial flattened mode must release BuildKit state before flattening",
             )
 
     def test_script_runs_flatten_only_flow_for_compose_built_images(self) -> None:
@@ -464,7 +554,9 @@ exit 0
             self.assertIn(
                 "build --progress plain --provenance false --file", joined_log
             )
-            self.assertIn("image import", joined_log)
+            self.assertIn("--tag omeroserver:custom", joined_log)
+            self.assertNotIn("__flatten_fs_", joined_log)
+            self.assertNotIn("image import", joined_log)
 
     def test_script_fails_when_flatten_metadata_inspect_fails(self) -> None:
         """Confirm script fails when flatten metadata inspect fails exposes the expected failure.
@@ -514,7 +606,7 @@ exit 0
                 result.stderr,
             )
             joined_log = fake_log_path.read_text(encoding="utf-8")
-            self.assertIn(
+            self.assertNotIn(
                 "build --progress plain --provenance false --file", joined_log
             )
             self.assertNotIn("container create --name flatten-omeroserver-", joined_log)
