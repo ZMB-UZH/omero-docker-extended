@@ -6,6 +6,9 @@ from iter_test_helpers import next_or_fail
 
 import gzip
 import io
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,6 +29,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         Inputs: unittest supplies the class. Output: class-level repo root.
         """
         cls.repo_root = Path(__file__).resolve().parents[1]
+        bash_path = shutil.which("bash")
+        if bash_path is None:
+            raise RuntimeError("bash is required for easy-installer contract tests")
+        cls.bash_path = bash_path
 
     def read_text(self, relative_path: str) -> str:
         """Read a repository text fixture.
@@ -33,6 +40,70 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         Inputs: `relative_path`. Output: decoded fixture text.
         """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
+
+    def write_synthetic_easy_root(
+        self,
+        root: Path,
+        *,
+        installer_text: str | None = None,
+        loader: bool = True,
+        metadata_text: str | None = None,
+        env_guard: bool = True,
+        compose: bool = True,
+    ) -> Path:
+        """Create a minimal synthetic easy-installer root.
+
+        Inputs: root path and toggles. Output: easy-installer path.
+        """
+        installation = root / "installation"
+        tools = root / "tools"
+        installation.mkdir()
+        tools.mkdir()
+        easy_script = installation / "easy_installation_script.sh"
+        easy_script.write_text(
+            self.read_text("installation/easy_installation_script.sh"),
+            encoding="utf-8",
+        )
+        (installation / "installation_script.sh").write_text(
+            installer_text
+            if installer_text is not None
+            else (
+                "#!/usr/bin/env bash\n"
+                "# PREBUILT_IMAGE_MODE\n"
+                "run_prebuilt_image_load() { :; }\n"
+                "printf 'mode=%s\\n' \"${PREBUILT_IMAGE_MODE}\"\n"
+                "printf 'release=%s\\n' \"${PREBUILT_IMAGE_RELEASE}\"\n"
+            ),
+            encoding="utf-8",
+        )
+        if loader:
+            (installation / "load_prebuilt_carrier.sh").write_text(
+                "#!/usr/bin/env bash\nexit 0\n",
+                encoding="utf-8",
+            )
+        (tools / "prebuilt_release_metadata.py").write_text(
+            metadata_text
+            if metadata_text is not None
+            else (
+                "#!/usr/bin/env python3\n"
+                "import re\n"
+                "import sys\n"
+                "ok = len(sys.argv) == 3 and sys.argv[1] == '--validate-release-version' and re.fullmatch(r'0\\.9\\.0-beta\\.2', sys.argv[2])\n"
+                "raise SystemExit(0 if ok else 1)\n"
+            ),
+            encoding="utf-8",
+        )
+        if env_guard:
+            (tools / "env_safety_guard.py").write_text(
+                "# synthetic\n", encoding="utf-8"
+            )
+        if compose:
+            (root / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+        for path in installation.iterdir():
+            path.chmod(0o755)
+        for path in tools.iterdir():
+            path.chmod(0o755)
+        return easy_script
 
     def test_compose_custom_images_are_environment_driven_with_existing_defaults(
         self,
@@ -64,14 +135,152 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         script = self.read_text("installation/easy_installation_script.sh")
 
         self.assertIn("prompt_release_version()", script)
-        self.assertIn("Which prebuilt release version should be installed?", script)
+        self.assertIn("Which prebuilt Docker image tag should be installed?", script)
         self.assertIn("PREBUILT_IMAGE_RELEASE is required", script)
-        self.assertIn("tools/prebuilt_release_metadata.py", script)
+        self.assertIn("RELEASE_METADATA_TOOL", script)
+        self.assertIn("require_easy_installation_support()", script)
+        self.assertIn("load_prebuilt_carrier.sh", script)
+        self.assertIn("prebuilt_release_metadata.py", script)
         self.assertIn("--validate-release-version", script)
+        self.assertIn("Run ./github_pull_project_bash", script)
         self.assertIn('export PREBUILT_IMAGE_MODE="require"', script)
         self.assertIn('exec "${SCRIPT_DIR}/installation_script.sh" "$@"', script)
         self.assertNotIn("docker compose build", script)
         self.assertNotIn("docker build", script)
+
+    def test_easy_install_script_rejects_stale_installation_root_before_prompt(
+        self,
+    ) -> None:
+        """Verify a stale live root fails before mislabeling valid releases.
+
+        Inputs: synthetic installation root. Output: asserts precise stale-root error.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            easy_script = self.write_synthetic_easy_root(
+                root,
+                installer_text="#!/usr/bin/env bash\necho old installer\n",
+            )
+
+            result = subprocess.run(
+                [self.bash_path, str(easy_script)],
+                cwd=root,
+                env={
+                    **os.environ,
+                    "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                    "INSTALLATION_AUTOMATION_MODE": "1",
+                },
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("too old for easy installation", result.stderr)
+        self.assertIn("github_pull_project_bash", result.stderr)
+        self.assertNotIn("Invalid release version", result.stderr)
+
+    def test_easy_install_release_validation_uses_canonical_metadata_tool(self) -> None:
+        """Verify valid releases use the canonical metadata validator.
+
+        Inputs: synthetic installation root. Output: asserts exec receives strict mode.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            easy_script = self.write_synthetic_easy_root(root)
+
+            valid_result = subprocess.run(
+                [self.bash_path, str(easy_script)],
+                cwd=root,
+                env={
+                    **os.environ,
+                    "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                    "INSTALLATION_AUTOMATION_MODE": "1",
+                },
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            invalid_result = subprocess.run(
+                [self.bash_path, str(easy_script)],
+                cwd=root,
+                env={
+                    **os.environ,
+                    "PREBUILT_IMAGE_RELEASE": "v0.9.0-beta.2",
+                    "INSTALLATION_AUTOMATION_MODE": "1",
+                },
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+        self.assertEqual(valid_result.returncode, 0, valid_result.stderr)
+        self.assertIn("mode=require", valid_result.stdout)
+        self.assertIn("release=0.9.0-beta.2", valid_result.stdout)
+        self.assertEqual(invalid_result.returncode, 1)
+        self.assertIn("PREBUILT_IMAGE_RELEASE must be", invalid_result.stderr)
+
+    def test_easy_install_support_checks_fail_before_prompt(self) -> None:
+        """Verify missing support files fail before release prompting.
+
+        Inputs: synthetic roots with one missing support file. Output: precise errors.
+        """
+        cases = [
+            ("loader", {"loader": False}, "prebuilt carrier loader"),
+            ("env_guard", {"env_guard": False}, "deployment env validator"),
+            ("compose", {"compose": False}, "docker-compose.yml"),
+            (
+                "metadata",
+                {"metadata_text": "if\n"},
+                "Release metadata validator is not executable Python",
+            ),
+        ]
+        for case_name, kwargs, expected_error in cases:
+            with self.subTest(case_name=case_name):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    root = Path(tmp_dir)
+                    easy_script = self.write_synthetic_easy_root(root, **kwargs)
+                    result = subprocess.run(
+                        [self.bash_path, str(easy_script)],
+                        cwd=root,
+                        env={
+                            **os.environ,
+                            "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                            "INSTALLATION_AUTOMATION_MODE": "1",
+                        },
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(expected_error, result.stderr)
+                self.assertNotIn("Which prebuilt", result.stderr)
+
+    def test_easy_install_automation_requires_release(self) -> None:
+        """Verify unattended easy installs fail closed without a release tag.
+
+        Inputs: synthetic root with automation mode. Output: release-required error.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            easy_script = self.write_synthetic_easy_root(root)
+            result = subprocess.run(
+                [self.bash_path, str(easy_script)],
+                cwd=root,
+                env={**os.environ, "INSTALLATION_AUTOMATION_MODE": "1"},
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("PREBUILT_IMAGE_RELEASE is required", result.stderr)
+        self.assertNotIn("mode=require", result.stdout)
 
     def test_installer_strict_prebuilt_mode_skips_only_build_prompts(self) -> None:
         """Verify strict prebuilt mode skips only build-image prompts.
@@ -144,7 +353,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "Flatten final images into single-layer outputs?",
             "Enable Docker image security hardening?",
         }
-        easy_prompts = ["Which prebuilt release version should be installed?"] + [
+        easy_prompts = ["Which prebuilt Docker image tag should be installed?"] + [
             prompt for prompt in standard_prompts if prompt not in skipped_for_prebuilt
         ]
 
@@ -220,13 +429,18 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn(
             'docker cp "${container_name}:${MANIFEST_CONTAINER_PATH}"', loader
         )
-        self.assertIn('docker cp "${container_name}:${BUNDLE_CONTAINER_PATH}"', loader)
+        self.assertIn("stream_carrier_bundle()", loader)
+        self.assertIn(
+            'docker cp "${container_name}:${BUNDLE_CONTAINER_PATH}" -', loader
+        )
+        self.assertIn("tar -xO", loader)
         self.assertIn("runtime_images_archive", loader)
         self.assertIn("image_archive_sha256", loader)
         self.assertIn("runtime_images_uncompressed_bytes", loader)
         self.assertIn("docker info -f '{{.DockerRootDir}}'", loader)
         self.assertIn("hashlib.sha256()", loader)
-        self.assertIn('docker load -i "${bundle_path}"', loader)
+        self.assertIn("stream_carrier_bundle | docker load", loader)
+        self.assertNotIn('docker load -i "${bundle_path}"', loader)
         self.assertIn('docker image inspect "${image_ref}"', loader)
         self.assertRegex(loader, r"latest\|\*:latest\|\*:latest@\*")
         self.assertNotIn("docker compose build", loader)
@@ -247,7 +461,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "github.ref_name == github.event.repository.default_branch",
             release_job["if"],
         )
-        self.assertEqual("dockerhub-release", release_job["environment"])
+        self.assertEqual("dockerhub-release", release_job["environment"]["name"])
+        self.assertFalse(release_job["environment"]["deployment"])
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("write", release_job["permissions"]["contents"])
         self.assertEqual("${{ inputs.runner_label }}", release_job["runs-on"])
@@ -295,6 +510,32 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn('env_values["REDIS_MAXMEMORY"] =', workflow_text)
         self.assertNotIn('env_values["REDIS_MAXMEMORY_POLICY"] =', workflow_text)
         self.assertNotIn('env_values["REDIS_DATA_TMPFS_SIZE"] =', workflow_text)
+
+    def test_workflow_environments_do_not_create_github_deployments(self) -> None:
+        """Verify workflow environments opt out of deployment records.
+
+        Inputs: workflow fixtures. Output: empty offender list.
+        """
+        offenders: list[str] = []
+        workflows_dir = self.repo_root / ".github" / "workflows"
+        for workflow_path in sorted(workflows_dir.glob("*.yml")):
+            workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+            for job_name, job in workflow.get("jobs", {}).items():
+                environment = job.get("environment")
+                if environment is None:
+                    continue
+                if isinstance(environment, str):
+                    offenders.append(
+                        f"{workflow_path.relative_to(self.repo_root)}:{job_name}: "
+                        "environment must use deployment: false"
+                    )
+                    continue
+                if environment.get("deployment") is not False:
+                    offenders.append(
+                        f"{workflow_path.relative_to(self.repo_root)}:{job_name}: "
+                        "environment.deployment must be false"
+                    )
+        self.assertEqual([], offenders)
 
     def test_release_workflow_builds_hardened_flattened_bundle_from_compose(
         self,

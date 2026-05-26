@@ -57,7 +57,6 @@ required_images_file="${work_dir}/required-images.txt"
 bundle_bytes_file="${work_dir}/runtime-images.bytes"
 bundle_uncompressed_bytes_file="${work_dir}/runtime-images-uncompressed.bytes"
 manifest_path="${work_dir}/prebuilt-manifest.json"
-bundle_path="${work_dir}/runtime-images.tar.gz"
 
 # Remove temporary carrier resources. Inputs: shell arguments and environment. Output: best-effort cleanup side effects.
 cleanup() {
@@ -65,6 +64,12 @@ cleanup() {
     rm -rf "${work_dir}"
 }
 trap cleanup EXIT
+
+# Stream the compressed runtime image archive out of the carrier container.
+# Inputs: environment. Output: archive bytes on stdout.
+stream_carrier_bundle() {
+    docker cp "${container_name}:${BUNDLE_CONTAINER_PATH}" - | tar -xO
+}
 
 echo "Pulling prebuilt carrier image: ${carrier_ref}"
 docker pull "${carrier_ref}"
@@ -148,60 +153,54 @@ PY
 
 expected_bundle_bytes="$(cat "${bundle_bytes_file}")"
 expected_uncompressed_bytes="$(cat "${bundle_uncompressed_bytes_file}")"
-available_kb="$(df -Pk "${OMERO_TMP_PATH}" | awk 'NR == 2 { print $4 }')"
-tmp_required_kb="$(((expected_bundle_bytes * 2 + 1023) / 1024))"
 docker_root_dir="$(docker info -f '{{.DockerRootDir}}')"
 [ -n "${docker_root_dir}" ] || fail "Docker root directory could not be discovered."
 [ -d "${docker_root_dir}" ] || fail "Docker root directory does not exist: ${docker_root_dir}"
 docker_available_kb="$(df -Pk "${docker_root_dir}" | awk 'NR == 2 { print $4 }')"
-docker_required_kb="$(((expected_uncompressed_bytes * 2 + 1023) / 1024))"
-tmp_filesystem="$(df -Pk "${OMERO_TMP_PATH}" | awk 'NR == 2 { print $1 }')"
-docker_filesystem="$(df -Pk "${docker_root_dir}" | awk 'NR == 2 { print $1 }')"
-if [ "${tmp_filesystem}" = "${docker_filesystem}" ]; then
-    total_required_kb="$((tmp_required_kb + docker_required_kb))"
-    if [ "${available_kb}" -lt "${total_required_kb}" ]; then
-        fail "Not enough free space on ${tmp_filesystem}. Need at least ${total_required_kb} KiB for carrier extraction and docker load; available ${available_kb} KiB."
-    fi
-else
-    if [ "${available_kb}" -lt "${tmp_required_kb}" ]; then
-        fail "Not enough free space under OMERO_TMP_PATH=${OMERO_TMP_PATH}. Need at least ${tmp_required_kb} KiB for carrier extraction; available ${available_kb} KiB."
-    fi
-    if [ "${docker_available_kb}" -lt "${docker_required_kb}" ]; then
-        fail "Not enough free space under Docker root ${docker_root_dir}. Need at least ${docker_required_kb} KiB for docker load; available ${docker_available_kb} KiB."
-    fi
+docker_required_kb="$(((expected_uncompressed_bytes + 1023) / 1024))"
+if [ "${docker_available_kb}" -lt "${docker_required_kb}" ]; then
+    fail "Not enough free space under Docker root ${docker_root_dir}. Need at least ${docker_required_kb} KiB for docker load; available ${docker_available_kb} KiB."
 fi
 
-docker cp "${container_name}:${BUNDLE_CONTAINER_PATH}" "${bundle_path}"
-[ -s "${bundle_path}" ] || fail "Carrier runtime image bundle is empty."
-
-python3 - "${manifest_path}" "${bundle_path}" <<'PY'
+bundle_verification="$(
+    stream_carrier_bundle | python3 -c '
 from __future__ import annotations
 
 import hashlib
-import json
 import sys
-from pathlib import Path
 
-manifest_path = Path(sys.argv[1])
-bundle_path = Path(sys.argv[2])
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-expected_sha256 = manifest["image_archive_sha256"]
+expected_bytes = int(sys.argv[1])
 digest = hashlib.sha256()
-with bundle_path.open("rb") as handle:
-    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-        digest.update(chunk)
-
-actual_sha256 = digest.hexdigest()
-if actual_sha256 != expected_sha256:
+actual_bytes = 0
+for chunk in iter(lambda: sys.stdin.buffer.read(1024 * 1024), b""):
+    actual_bytes += len(chunk)
+    digest.update(chunk)
+if actual_bytes <= 0:
+    raise SystemExit("Carrier runtime image bundle is empty.")
+if actual_bytes != expected_bytes:
     raise SystemExit(
-        "Carrier runtime image bundle checksum mismatch: "
-        f"expected {expected_sha256}, got {actual_sha256}"
+        "Carrier runtime image bundle size mismatch: "
+        f"expected {expected_bytes}, got {actual_bytes}"
     )
-PY
+print(f"{actual_bytes} {digest.hexdigest()}")
+' "${expected_bundle_bytes}"
+)"
+
+actual_bundle_bytes="${bundle_verification%% *}"
+actual_sha256="${bundle_verification#* }"
+expected_sha256="$(
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["image_archive_sha256"])' \
+        "${manifest_path}"
+)"
+if [ "${actual_sha256}" != "${expected_sha256}" ]; then
+    fail "Carrier runtime image bundle checksum mismatch: expected ${expected_sha256}, got ${actual_sha256}"
+fi
+echo "Verified carrier runtime image bundle: ${actual_bundle_bytes} bytes, sha256=${actual_sha256}"
 
 echo "Loading runtime images from verified carrier bundle..."
-docker load -i "${bundle_path}"
+if ! stream_carrier_bundle | docker load; then
+    fail "docker load failed while importing the verified carrier runtime image bundle."
+fi
 
 while IFS= read -r image_ref; do
     [ -n "${image_ref}" ] || continue
