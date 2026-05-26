@@ -2341,7 +2341,8 @@ render_compose_dot_env_template_assignments() {
     local env_line=""
     local env_key=""
     local env_value=""
-    local resolved_value=""
+    local rendered_value=""
+    local template_resolved_value=""
     local read_status=0
 
     if [ ! -r "${template_path}" ]; then
@@ -2368,23 +2369,32 @@ render_compose_dot_env_template_assignments() {
         esac
 
         read_status=0
-        read_env_assignment_from_file "${dot_env_path}" "${env_key}" resolved_value || read_status=$?
+        read_env_assignment_from_file "${dot_env_path}" "${env_key}" rendered_value || read_status=$?
         if [ "${read_status}" -eq 0 ]; then
-            printf -v "${env_key}" '%s' "${resolved_value}"
+            template_resolved_value=""
+            if [ -z "${rendered_value}" ] && \
+                ! template_resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
+                echo "ERROR: Refusing unsafe value for ${env_key} from ${template_path}" >&2
+                return 1
+            fi
+            if [ -z "${rendered_value}" ] && [ -n "${template_resolved_value}" ]; then
+                rendered_value="${template_resolved_value}"
+            fi
+            printf -v "${env_key}" '%s' "${rendered_value}"
             export "${env_key?}"
-            printf '%s=%s\n' "${env_key}" "${resolved_value}"
+            printf '%s=%s\n' "${env_key}" "${rendered_value}"
             continue
         elif [ "${read_status}" -ne 1 ]; then
             return "${read_status}"
         fi
 
-        if ! resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
+        if ! rendered_value="$(resolve_env_assignment_value "${env_value}")"; then
             echo "ERROR: Refusing unsafe value for ${env_key} from ${template_path}" >&2
             return 1
         fi
-        printf -v "${env_key}" '%s' "${resolved_value}"
+        printf -v "${env_key}" '%s' "${rendered_value}"
         export "${env_key?}"
-        printf '%s=%s\n' "${env_key}" "${resolved_value}"
+        printf '%s=%s\n' "${env_key}" "${rendered_value}"
     done < "${template_path}"
 }
 

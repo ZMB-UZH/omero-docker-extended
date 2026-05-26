@@ -38,6 +38,16 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             "bootstrap_env_files_from_examples() {",
             cls.script_text,
         )
+        cls.env_assignment_reader_block = cls._extract_script_block(
+            "read_env_assignment_from_file() {",
+            "# Load secrets environment.",
+            cls.script_text,
+        )
+        cls.dot_env_renderer_block = cls._extract_script_block(
+            "render_compose_dot_env_template_assignments() {",
+            "# Derive compose project name.",
+            cls.script_text,
+        )
         cls.resolver_block = cls._extract_script_block(
             "_env_assignment_is_name_start_char() {",
             None,
@@ -256,6 +266,61 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Unsupported parameter expansion", result.stderr)
+
+    def test_dot_env_renderer_refreshes_empty_template_backed_values(self) -> None:
+        """Verify dot env renderer refreshes empty template backed values.
+
+        Inputs: synthetic generated .env and tracked template. Output: fails on regressions in generated .env refresh.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            dot_env_path = temp_path / ".env"
+            template_path = temp_path / ".env_example"
+            dot_env_path.write_text(
+                textwrap.dedent(
+                    """\
+                    REDIS_SAVE_POLICY=
+                    REDIS_APPENDONLY=
+                    REDIS_MAXMEMORY=1gb
+                    REDIS_MAXMEMORY_POLICY=
+                    REDIS_DATA_TMPFS_SIZE=
+                    """
+                ),
+                encoding="utf-8",
+            )
+            template_path.write_text(
+                textwrap.dedent(
+                    """\
+                    REDIS_SAVE_POLICY=
+                    REDIS_APPENDONLY=no
+                    REDIS_MAXMEMORY=512mb
+                    REDIS_MAXMEMORY_POLICY=allkeys-lru
+                    REDIS_DATA_TMPFS_SIZE=512m
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            result = self._run_harness(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/bash
+                    set -euo pipefail
+                    {self.validation_helpers}
+                    {self.resolver_block}
+                    {self.env_assignment_reader_block}
+                    {self.dot_env_renderer_block}
+                    render_compose_dot_env_template_assignments "{dot_env_path}" "{template_path}"
+                    """
+                )
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("REDIS_SAVE_POLICY=\n", result.stdout)
+            self.assertIn("REDIS_APPENDONLY=no\n", result.stdout)
+            self.assertIn("REDIS_MAXMEMORY=1gb\n", result.stdout)
+            self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", result.stdout)
+            self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", result.stdout)
 
     def test_installation_script_no_longer_re_evaluates_env_lines(self) -> None:
         """Verify the installation script no longer re evaluates env lines execution contract.
