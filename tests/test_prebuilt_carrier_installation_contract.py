@@ -145,6 +145,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "github.ref_name == github.event.repository.default_branch",
             release_job["if"],
         )
+        self.assertEqual("dockerhub-release", release_job["environment"])
         self.assertEqual("write", workflow["permissions"]["contents"])
         self.assertEqual("${{ inputs.runner_label }}", release_job["runs-on"])
         self.assertEqual(

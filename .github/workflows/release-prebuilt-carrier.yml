@@ -30,6 +30,7 @@ jobs:
     name: Release prebuilt carrier
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ${{ inputs.runner_label }}
+    environment: dockerhub-release
     env:
       DEFAULT_DOCKER_REPOSITORY: strmt7/omero-docker-extended
     steps:
