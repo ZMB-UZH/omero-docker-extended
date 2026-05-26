@@ -25,6 +25,10 @@
 - Moved generated `.env` Redis defaults into tracked `.env_example`; the
   installer now preserves deployment-local `.env` Redis values while rendering
   Compose-only keys from the tracked template contract.
+- Switched the shared ImarisConvertBioformats build-time Bio-Formats download
+  to OME Artifactory's versioned `ome/bioformats_package` Maven artifact with
+  `.sha256` verification, preserving the same build path for standard and
+  prebuilt-carrier images.
 - Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.
