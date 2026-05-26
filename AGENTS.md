@@ -79,10 +79,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Do not assume any non-root user, group, Dataset, Project, Screen, Image, file, annotation, script ID, plugin row, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
 - When tests or live verification need OMERO images, files, annotations, acquisition metadata, users, groups, or plugin index rows, create deterministic disposable fixtures inside the test or verification flow and clean or isolate them by unique names. A user-named live object may be inspected only as a diagnostic target, never as a product assumption or required test precondition.
 - Keep changes deterministic, explicit, minimal, and reproducible; less is more when fewer lines prove full functional parity and satisfy every repo rule.
-- If the user explicitly asks for lower-token replies, use opt-in `caveman` only
-  for internal AI communication. It never rewrites repo docs, comments, or
-  user-facing copy, and never changes routing, tools, verification, or
-  uncertainty handling; drop it for destructive/security/ambiguous work.
+- If the user explicitly asks for lower-token replies, use opt-in `caveman` only for internal AI communication. It never rewrites repo docs, comments, or user-facing copy, and never changes routing, tools, verification, or uncertainty handling; drop it for destructive/security/ambiguous work.
 - Update `docs/` whenever behavior or operating assumptions change; preserve every required meaning when compacting docs, add objective regression checks before line-budget changes, and fix a proven avoidable retry/error loop in repo instructions/tools only after the correct workflow is verified.
 - When creating or editing plugin help pages, follow
   `docs/reference/plugin-help-page-style-guide.md` for user-facing copy,
@@ -95,6 +92,9 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource counts need explicit credentials and can be unavailable for auth, subscription, or repo access. GitHub HTTPS Git operations require a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If a GitHub PAT is unavailable, ask immediately and pause; do not retry auth failures except local tasks.
   If DeepSource scanning is skipped or unavailable, report it as unavailable, not zero, and continue the rest of the local and GitHub workflow verification instead of treating it as a blocking failure.
 - After every push, verify GitHub workflows are green and compare DeepSource grouped issues and issue occurrences for the pushed commit against the pre-push baseline when DeepSource auth and repository access are available; if either count increased, fetch grouped issue details, fix the regression root cause, rerun targeted tests, and repeat post-push verification.
+  When many unrelated workflows fail at once, check official GitHub Status and
+  exact job logs before deciding whether the root cause is an outage or a repo
+  regression.
 - Prefer focused unit/contract tests first; when live testing makes sense or the user explicitly requests it for functional OMERO/install/Compose/startup/plugin/env-contract changes, reconcile the live root, preserve unrelated dirty work non-destructively, match the exact checkout, run env guards, rebuild/inject/restart affected containers, and test mechanisms end to end before commit/push.
 - Pin image tags and dependency versions. Never use `:latest`.
 - Treat plugin input as untrusted and validate at system boundaries.

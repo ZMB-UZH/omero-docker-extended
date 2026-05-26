@@ -78,6 +78,10 @@ upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks,
 OSV reusable workflow publishing, and Codecov upload still require the actual
 GitHub workflow result. Do not present the local gate as a replacement for the
 GitHub security workflow; use it to catch reproducible failures before push.
+When many unrelated GitHub workflows fail at once, check the official GitHub
+Status page and the exact failed job logs before deciding whether the root
+cause is an external Actions incident or a repository regression. Treat an
+outage as evidence only when the logs match the official incident.
 The tests workflow pins the Codecov CLI version instead of using Codecov's
 `latest` default; update that pin only after verifying the replacement
 version's published signature.
