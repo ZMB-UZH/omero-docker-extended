@@ -7,21 +7,23 @@
   Compose image set into one Docker Hub carrier image, verifies the carrier
   contents, and creates a GitHub release with the same SemVer pre-release tag
   as the Docker image tag. Docker Hub credentials use repository secrets named
-  `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job runs in the
-  `dockerhub-release` GitHub Actions environment for optional protection rules,
-  `DOCKERHUB_TOKEN` is documented as a Docker Hub access token for
+  `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job uses the
+  `dockerhub-release` GitHub Actions environment with deployment-record
+  creation disabled for optional protection rules without deployment history
+  entries, `DOCKERHUB_TOKEN` is documented as a Docker Hub access token for
   two-factor-authenticated accounts, release write permissions are scoped to
   the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
   a branch-targeted draft prerelease before publishing it after carrier-image
   verification.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
-  `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to
+  `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt Docker image tag to
   install, skips the Buildx, build-cache, final-image flattening, and
   image-hardening prompts so the easy path has ten interactive questions,
-  verifies the carrier manifest and compressed archive checksum, loads the
-  bundled images with `docker load`, checks temporary and Docker-root free
-  space before loading, and starts Compose with `--no-build`.
+  verifies the carrier manifest and compressed archive checksum, streams the
+  verified archive into `docker load` without writing a second full archive
+  under `OMERO_TMP_PATH`, checks Docker-root free space before loading, and
+  starts Compose with `--no-build`.
 - Kept standard installation behavior intact by preserving the existing image
   defaults in `docker-compose.yml` while allowing the custom image references to
   be supplied through environment variables.

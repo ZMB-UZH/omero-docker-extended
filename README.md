@@ -337,18 +337,18 @@ carrier is a single Docker image tagged with the same SemVer pre-release
 version as the GitHub release. During installation,
 `installation/easy_installation_script.sh` pulls that one carrier, verifies its
 manifest and compressed archive checksum, loads the bundled runtime image tags
-into Docker with `docker load`, then starts the normal multi-container Compose
-deployment with `--no-build`.
+into Docker by streaming the verified archive to `docker load`, then starts the
+normal multi-container Compose deployment with `--no-build`.
 
 The release workflow flattens the bundled runtime service images before they
 are written into `runtime-images.tar.gz`. The carrier image itself remains a
 normal Docker image with small metadata/setup layers plus one large archive
 layer; it must not duplicate the archive in a later permission-fix layer.
 
-This path does not switch to the build workflow if the carrier cannot be pulled, verified, extracted, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
+This path does not switch to the build workflow if the carrier cannot be pulled, verified, streamed, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
 
 Run the easy installer from an updated installation root. The first prompt asks
-which prebuilt release version to install:
+which prebuilt Docker image tag to install:
 
 ```bash
 cd /opt/omero
@@ -368,11 +368,12 @@ Actions settings allow workflow write permissions. The release targets the
 default branch ref, creates a draft GitHub prerelease with source artifacts,
 pushes and verifies the carrier image, then publishes the prerelease. If the
 carrier publish fails after the draft was created, the workflow deletes that
-draft release and its tag. The job runs in the `dockerhub-release` GitHub
-Actions environment, so repository owners can add environment protection rules
-without changing the secret names. The `DOCKERHUB_TOKEN` value must be a Docker
-Hub access token with write access to the carrier repository; do not store a
-Docker Hub account password there.
+draft release and its tag. The job uses the `dockerhub-release` GitHub Actions
+environment with deployment-record creation disabled, so repository owners can
+add environment protection rules without adding GitHub deployment history
+entries or changing the secret names. The `DOCKERHUB_TOKEN` value must be a
+Docker Hub access token with write access to the carrier repository; do not
+store a Docker Hub account password there.
 
 **5.** After a successful installation, run:
 

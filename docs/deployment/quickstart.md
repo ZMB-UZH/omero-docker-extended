@@ -75,7 +75,7 @@ From an installation root that already has reviewed runtime env files:
 bash installation/easy_installation_script.sh
 ```
 
-The first easy-installer prompt asks which prebuilt release version to install.
+The first easy-installer prompt asks which prebuilt Docker image tag to install.
 Use the exact GitHub release tag, which also matches the Docker Hub carrier
 image tag. `installation/easy_installation_script.sh` then delegates to the
 canonical installer with `PREBUILT_IMAGE_MODE=require`. It removes the local
@@ -98,9 +98,10 @@ installation exits with an error and does not run `docker compose build`.
 The carrier stores a manifest and a compressed Docker image archive. The loader
 verifies the manifest schema, release value, runtime-image references, archive
 size, uncompressed Docker-save size, and archive SHA-256 before `docker load`.
-It checks free space under both `OMERO_TMP_PATH` and Docker's root directory,
-then verifies each required image tag exists in the local Docker daemon. The
-final Compose startup uses `--no-build`.
+It streams the verified archive from the carrier image into Docker instead of
+writing an extra full archive copy under `OMERO_TMP_PATH`, checks free space
+under Docker's root directory, then verifies each required image tag exists in
+the local Docker daemon. The final Compose startup uses `--no-build`.
 
 Flattening in the release workflow applies to the bundled runtime service
 images inside `runtime-images.tar.gz`. The Docker Hub carrier remains a normal
@@ -123,11 +124,12 @@ required when repository Actions settings allow workflow write permissions. The
 release targets the default branch ref, creates a draft GitHub prerelease with
 source artifacts, pushes and verifies the carrier image, then publishes the
 prerelease. If the carrier publish fails after the draft was created, the
-workflow deletes that draft release and its tag. The release job runs in the
-`dockerhub-release` GitHub Actions environment, so environment protection rules
-can be added later without changing secret names. The `DOCKERHUB_TOKEN` value
-must be a Docker Hub access token with write access to the carrier repository;
-do not use a Docker Hub account password.
+workflow deletes that draft release and its tag. The release job uses the
+`dockerhub-release` GitHub Actions environment with deployment-record creation
+disabled, so environment secrets and protection rules remain available without
+adding GitHub deployment history entries. The `DOCKERHUB_TOKEN` value must be a
+Docker Hub access token with write access to the carrier repository; do not use
+a Docker Hub account password.
 
 ## 3) Build Images
 
