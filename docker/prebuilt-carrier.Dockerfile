@@ -14,4 +14,10 @@ RUN chown -R carrier:carrier /omero-prebuilt \
 
 USER carrier
 
+HEALTHCHECK --interval=1h --timeout=5s --start-period=5s --retries=1 \
+    CMD test -r /omero-prebuilt/prebuilt-manifest.json \
+    && test -r /omero-prebuilt/prebuilt-required-images.txt \
+    && test -r /omero-prebuilt/runtime-images.tar.gz \
+    || exit 1
+
 CMD ["sh", "-c", "printf '%s\\n' 'OMERO Docker Extended prebuilt carrier image. Use installation/easy_installation_script.sh.'"]

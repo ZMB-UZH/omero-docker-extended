@@ -19,7 +19,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,6 +31,8 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ${{ inputs.runner_label }}
     environment: dockerhub-release
+    permissions:
+      contents: write
     env:
       DEFAULT_DOCKER_REPOSITORY: strmt7/omero-docker-extended
     steps:
@@ -246,7 +248,7 @@ jobs:
               "carrier_image_repository": os.environ["DOCKER_REPOSITORY"],
               "required_images": required_images,
               "runtime_images_archive": "runtime-images.tar.gz",
-              "runtime_images_archive_sha256": digest.hexdigest(),
+              "image_archive_sha256": digest.hexdigest(),
               "runtime_images_archive_bytes": bundle.stat().st_size,
               "runtime_images_uncompressed_bytes": raw_bytes,
           }
