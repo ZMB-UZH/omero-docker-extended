@@ -9,7 +9,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 ## 2. Deployment
 
-- `deployment/quickstart.md` -- step-by-step first deployment guide
+- `deployment/quickstart.md` -- step-by-step first deployment guide, including the standard build path and prebuilt carrier easy installation path
 - `deployment/configuration.md` -- environment files, plugin registration, Celery config, reverse proxy
 
 ## 3. Plugin Guides

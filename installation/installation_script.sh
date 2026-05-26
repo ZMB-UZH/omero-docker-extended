@@ -17,6 +17,11 @@ ENABLE_STORAGE_QUOTAS="${ENABLE_STORAGE_QUOTAS:-0}" # set to 1 to prompt default
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
+PREBUILT_IMAGE_MODE="${PREBUILT_IMAGE_MODE:-disabled}" # set to require to load the release carrier image instead of building
+PREBUILT_CARRIER_LOADER_RELATIVE_PATH="${PREBUILT_CARRIER_LOADER_RELATIVE_PATH:-installation/load_prebuilt_carrier.sh}"
+PREBUILT_IMAGE_REPOSITORY="${PREBUILT_IMAGE_REPOSITORY:-strmt7/omero-docker-extended}"
+PREBUILT_IMAGE_RELEASE="${PREBUILT_IMAGE_RELEASE:-}"
+PREBUILT_IMAGE_REF="${PREBUILT_IMAGE_REF:-}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-2}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-30}"
@@ -60,6 +65,8 @@ GRAFANA_ENV_FILE="${REPO_ROOT_DIR}/env/grafana.env"
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
 OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
+REDIS_SYSCTL_INIT_IMAGE="${REDIS_SYSCTL_INIT_IMAGE:-redis-sysctl-init:custom}"
+PG_MAINTENANCE_IMAGE="${PG_MAINTENANCE_IMAGE:-pg-maintenance:custom}"
 PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
 GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
@@ -571,6 +578,50 @@ resolve_build_provenance_setting() {
     return 0
 }
 
+# Validate prebuilt image mode. Inputs: shell arguments and environment. Output: command status.
+validate_prebuilt_image_mode() {
+    case "${PREBUILT_IMAGE_MODE}" in
+        disabled|require)
+            return 0
+            ;;
+        *)
+            echo "ERROR: PREBUILT_IMAGE_MODE must be one of: disabled, require. Got: ${PREBUILT_IMAGE_MODE}" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Load release-built runtime images from the single prebuilt carrier image.
+# Inputs: shell arguments and environment. Output: command status and side effects.
+run_prebuilt_image_load() {
+    local loader_path="${OMERO_INSTALLATION_PATH%/}/${PREBUILT_CARRIER_LOADER_RELATIVE_PATH}"
+
+    if [ ! -x "${loader_path}" ]; then
+        echo "ERROR: Prebuilt carrier loader is missing or not executable: ${loader_path}" >&2
+        echo "ERROR: Re-run the pull/update script and ensure installation/load_prebuilt_carrier.sh exists." >&2
+        return 1
+    fi
+
+    echo "Loading OMERO runtime images from the single prebuilt carrier image..."
+    echo "  Repository : ${PREBUILT_IMAGE_REPOSITORY}"
+    if [ -n "${PREBUILT_IMAGE_REF}" ]; then
+        echo "  Image ref  : ${PREBUILT_IMAGE_REF}"
+    else
+        echo "  Release    : ${PREBUILT_IMAGE_RELEASE}"
+    fi
+
+    if ! OMERO_TMP_PATH="${OMERO_TMP_PATH}" \
+        PREBUILT_IMAGE_REPOSITORY="${PREBUILT_IMAGE_REPOSITORY}" \
+        PREBUILT_IMAGE_RELEASE="${PREBUILT_IMAGE_RELEASE}" \
+        PREBUILT_IMAGE_REF="${PREBUILT_IMAGE_REF}" \
+        "${loader_path}"; then
+        echo "ERROR: Loading the prebuilt OMERO carrier image failed." >&2
+        return 1
+    fi
+
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # run_image_build
 #
@@ -584,6 +635,11 @@ run_image_build() {
     local local_cache_enabled_setting="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
     local provenance_setting=""
     local server_env_source="${OMERO_SERVER_ENV_FILE:-env/omeroserver.env}"
+
+    if [ "${PREBUILT_IMAGE_MODE:-disabled}" = "require" ]; then
+        run_prebuilt_image_load
+        return $?
+    fi
 
     if [ -z "${OMERO_CLI_ZARR_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable OMERO_CLI_ZARR_VERSION in ${server_env_source}" >&2
@@ -810,6 +866,12 @@ export_compose_interpolation_env() {
         OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS
         OMERO_SERVER_HEALTHCHECK_RETRIES
         OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS
+        OMERO_SERVER_IMAGE
+        OMERO_WEB_IMAGE
+        REDIS_SYSCTL_INIT_IMAGE
+        PG_MAINTENANCE_IMAGE
+        PATH_USAGE_EXPORTER_IMAGE
+        CROWDSEC_IMAGE
         OMERO_DROPBOX_VERSION
         OMERO_CLI_ZARR_VERSION
         OME_ZARR_PY_VERSION
@@ -1048,11 +1110,16 @@ compose_up_with_retries() {
     local compose_file="$1"
     local attempt=1
     local crowdsec_bootstrap_enroll="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"
+    local -a compose_up_args=(up -d --wait --wait-timeout "${COMPOSE_UP_WAIT_TIMEOUT_SECONDS}")
+
+    if [ "${PREBUILT_IMAGE_MODE:-disabled}" = "require" ]; then
+        compose_up_args+=(--no-build)
+    fi
 
     while [ "${attempt}" -le "${COMPOSE_UP_RETRIES}" ]; do
         echo "Starting containers (attempt ${attempt}/${COMPOSE_UP_RETRIES})..."
 
-        if CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env "${compose_file}" up -d --wait --wait-timeout "${COMPOSE_UP_WAIT_TIMEOUT_SECONDS}"; then
+        if CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env "${compose_file}" "${compose_up_args[@]}"; then
             echo "Containers started successfully."
             return 0
         fi
@@ -2982,20 +3049,33 @@ if ! resolve_delete_images_choice; then
     exit 1
 fi
 
-if ! resolve_buildx_compressed_build_choice; then
+if ! validate_prebuilt_image_mode; then
     exit 1
+fi
+
+if [ "${PREBUILT_IMAGE_MODE}" = "require" ]; then
+    USE_BUILDX_COMPRESSED_BUILD=0
+    DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1
+    APPLY_SECURITY_HARDENING=1
+    echo "PREBUILT_IMAGE_MODE=require: using release-built images; skipping Buildx, flattening, and security-hardening prompts."
+else
+    if ! resolve_buildx_compressed_build_choice; then
+        exit 1
+    fi
 fi
 
 if ! resolve_cache_build_choice; then
     exit 1
 fi
 
-if ! resolve_flatten_final_image_choice; then
-    exit 1
-fi
+if [ "${PREBUILT_IMAGE_MODE}" != "require" ]; then
+    if ! resolve_flatten_final_image_choice; then
+        exit 1
+    fi
 
-if ! resolve_security_hardening_choice; then
-    exit 1
+    if ! resolve_security_hardening_choice; then
+        exit 1
+    fi
 fi
 
 if ! resolve_vulnerability_scan_choice; then
@@ -3451,6 +3531,7 @@ _scout_scan_image() {
 # ---------------------------------------------------------------------------
 # Execute docker scout baseline scan. Inputs: shell arguments and environment. Output: command status and side effects.
 run_docker_scout_baseline_scan() {
+    if [ "${PREBUILT_IMAGE_MODE:-disabled}" = "require" ]; then return 0; fi
     # Only scan baselines when cache is disabled (fresh pulls).
     if [ "${USE_CACHE_BUILD}" != "0" ]; then return 0; fi
     if ! _scout_is_available; then return 0; fi

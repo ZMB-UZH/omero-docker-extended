@@ -1,5 +1,26 @@
 # Release Notes
 
+## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
+
+- Added a manual `release-prebuilt-carrier` GitHub Actions workflow that creates
+  a source archive, builds hardened flattened runtime images, bundles the
+  Compose image set into one Docker Hub carrier image, verifies the carrier
+  contents, and creates a GitHub release with the same SemVer pre-release tag
+  as the Docker image tag.
+- Added `installation/easy_installation_script.sh` and
+  `installation/load_prebuilt_carrier.sh`. Easy installation uses
+  `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to
+  install, skips only the Buildx, final-image flattening, and image-hardening
+  prompts, verifies the carrier manifest and compressed archive checksum, loads
+  the bundled images with `docker load`, checks temporary and Docker-root free
+  space before loading, and starts Compose with `--no-build`.
+- Kept standard installation behavior intact by preserving the existing image
+  defaults in `docker-compose.yml` while allowing the custom image references to
+  be supplied through environment variables.
+- Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
+  pre-commit configuration, hash-locked Mypy requirements, documentation, and
+  regression contracts.
+
 ## 2026-05-12 Import and Imaris Connector Hardening
 
 - Refreshed pinned infrastructure images after upstream release-note review:

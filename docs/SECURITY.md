@@ -62,6 +62,12 @@ Interactive installation defaults Docker image security hardening to **yes**. Se
 
 Locale data is intentionally preserved across the hardened images for compatibility and multilingual support; the hardening pass focuses on package and dependency updates rather than locale stripping. Blanket post-install venv upgrades are intentionally avoided because they can override pinned/plugin-dependent stacks such as `omero-web-zarr` and its Zarr compatibility constraint.
 
+The prebuilt carrier release workflow always builds the bundled custom runtime
+images with `APPLY_SECURITY_HARDENING=1` and
+`DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` before publishing the carrier. The easy
+installation path therefore skips the local hardening prompt and loads only the
+release-built images from the verified carrier bundle.
+
 ## Image pinning
 
 - All Docker images in `docker-compose.yml` use explicit version tags (e.g.,

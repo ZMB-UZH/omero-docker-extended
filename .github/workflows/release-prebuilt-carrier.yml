@@ -1,0 +1,301 @@
+name: release-prebuilt-carrier
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "SemVer release and Docker tag. Leave empty to bump beta from existing tags or start 0.1.0-beta.1."
+        required: false
+        type: string
+      docker_repository:
+        description: "Docker Hub repository for the single carrier image."
+        required: false
+        default: "strmt7/omero-docker-extended"
+        type: string
+      runner_label:
+        description: "Runner label. Use a self-hosted runner with sufficient Docker storage for large carrier builds when needed."
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release prebuilt carrier
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ${{ inputs.runner_label }}
+    env:
+      DEFAULT_DOCKER_REPOSITORY: strmt7/omero-docker-extended
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        env:
+          REQUESTED_RELEASE_VERSION: ${{ inputs.release_version }}
+          REQUESTED_DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
+        run: |
+          python3 tools/prebuilt_release_metadata.py \
+            --requested-version "${REQUESTED_RELEASE_VERSION}" \
+            --requested-docker-repository "${REQUESTED_DOCKER_REPOSITORY}" \
+            --default-docker-repository "${DEFAULT_DOCKER_REPOSITORY}" \
+            --repo-root "${GITHUB_WORKSPACE}"
+
+      - name: Report runner storage before build
+        run: |
+          set -euo pipefail
+          df -h /
+          docker system df || true
+
+      - name: Refuse existing release or image tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Release tag already exists: ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          if gh release view "${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "GitHub release already exists: ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          status="$(
+            python3 - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ["DOCKER_REPOSITORY"]
+          tag = urllib.parse.quote(os.environ["RELEASE_VERSION"], safe="")
+          url = f"https://hub.docker.com/v2/repositories/{repository}/tags/{tag}/"
+          request = urllib.request.Request(url, headers={"Accept": "application/json"})
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  print(response.status)
+          except urllib.error.HTTPError as exc:
+              print(exc.code)
+          except urllib.error.URLError as exc:
+              print(f"ERROR:{exc.reason}")
+          PY
+          )"
+          case "${status}" in
+            404) ;;
+            200)
+              echo "Docker Hub image tag already exists: ${CARRIER_IMAGE}" >&2
+              exit 1
+              ;;
+            *)
+              echo "Could not verify Docker Hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Create source archive
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          git archive \
+            --format=tar.gz \
+            --prefix="omero-docker-extended-${RELEASE_VERSION}/" \
+            HEAD \
+            -o "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz"
+          sha256sum "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
+            > "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256"
+
+      - name: Prepare synthetic CI environment files
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import re
+          import shutil
+          from pathlib import Path
+
+          root = Path.cwd()
+          copied = [(root / "installation_paths_example.env", root / "installation_paths.env")]
+          copied.extend(
+              (path, path.with_name(path.name.replace("_example.env", ".env")))
+              for path in sorted((root / "env").glob("*_example.env"))
+          )
+
+          env_values: dict[str, str] = {}
+          key_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+          for source, target in copied:
+              if not source.is_file():
+                  raise SystemExit(f"Missing environment contract: {source}")
+              shutil.copyfile(source, target)
+              for line in target.read_text(encoding="utf-8").splitlines():
+                  stripped = line.strip()
+                  if not stripped or stripped.startswith("#") or "=" not in line:
+                      continue
+                  key, value = line.split("=", 1)
+                  key = key.strip()
+                  if not key_pattern.fullmatch(key):
+                      raise SystemExit(f"Invalid environment key in {target}: {key}")
+                  env_values[key] = value
+
+          env_values["OMERO_INSTALLATION_PATH"] = str(root)
+          env_values.setdefault("COMPOSE_PROFILES", "sysctl-init,crowdsec")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              for key, value in sorted(env_values.items()):
+                  marker = f"OMERO_ENV_{key}"
+                  env_file.write(f"{key}<<{marker}\n{value}\n{marker}\n")
+
+          print(f"Prepared {len(copied)} synthetic CI environment file(s).")
+          PY
+
+      - name: Authenticate to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "${DOCKERHUB_USERNAME}" ] || { echo "DOCKERHUB_USERNAME secret is required." >&2; exit 1; }
+          [ -n "${DOCKERHUB_TOKEN}" ] || { echo "DOCKERHUB_TOKEN secret is required." >&2; exit 1; }
+          printf '%s' "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Build hardened flattened runtime images
+        run: |
+          set -euo pipefail
+          COMPOSE_FILE="${GITHUB_WORKSPACE}/docker-compose.yml" \
+          COMPOSE_PROFILES="sysctl-init,crowdsec" \
+          DOCKER_BUILD_PUSH_IMAGES="0" \
+          DOCKER_BUILD_INLINE_CACHE="1" \
+          DOCKER_BUILD_NO_CACHE="0" \
+          DOCKER_BUILD_PROVENANCE="0" \
+          DOCKER_BUILD_FLATTEN_FINAL_IMAGE="1" \
+          APPLY_SECURITY_HARDENING="1" \
+          DOCKER_BUILD_PROGRESS="plain" \
+          installation/docker_buildx_compressed_push.sh
+
+      - name: Save runtime image bundle
+        run: |
+          set -euo pipefail
+          mapfile -t compose_images < <(
+            COMPOSE_PROFILES="sysctl-init,crowdsec" docker compose -f docker-compose.yml config --images | sort -u
+          )
+          [ "${#compose_images[@]}" -gt 0 ] || { echo "No Compose images were discovered." >&2; exit 1; }
+          for image_ref in "${compose_images[@]}"; do
+            case "${image_ref}" in
+              ""|latest|*:latest|*:latest@*)
+                echo "Invalid floating image reference: ${image_ref}" >&2
+                exit 1
+                ;;
+            esac
+            if ! docker image inspect "${image_ref}" >/dev/null 2>&1; then
+              docker pull "${image_ref}"
+            fi
+          done
+          printf '%s\n' "${compose_images[@]}" > dist/prebuilt-required-images.txt
+          docker save "${compose_images[@]}" \
+            | python3 tools/write_prebuilt_runtime_archive.py \
+                --archive dist/runtime-images.tar.gz \
+                --raw-bytes-file dist/runtime-images-uncompressed.bytes
+          test -s dist/runtime-images-uncompressed.bytes
+          df -h /
+          docker system df || true
+
+      - name: Write prebuilt manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          dist = Path("dist")
+          bundle = dist / "runtime-images.tar.gz"
+          raw_bytes_path = dist / "runtime-images-uncompressed.bytes"
+          raw_bytes = int(raw_bytes_path.read_text(encoding="utf-8").strip())
+          digest = hashlib.sha256()
+          with bundle.open("rb") as handle:
+              for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                  digest.update(chunk)
+
+          required_images = [
+              line.strip()
+              for line in (dist / "prebuilt-required-images.txt").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          manifest = {
+              "schema_version": 1,
+              "release": os.environ["RELEASE_VERSION"],
+              "git_sha": os.environ["GITHUB_SHA"],
+              "carrier_image": os.environ["CARRIER_IMAGE"],
+              "carrier_image_repository": os.environ["DOCKER_REPOSITORY"],
+              "required_images": required_images,
+              "runtime_images_archive": "runtime-images.tar.gz",
+              "runtime_images_archive_sha256": digest.hexdigest(),
+              "runtime_images_archive_bytes": bundle.stat().st_size,
+              "runtime_images_uncompressed_bytes": raw_bytes,
+          }
+          (dist / "prebuilt-manifest.json").write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Build and push single carrier image
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --push \
+            --provenance=false \
+            --progress plain \
+            -f docker/prebuilt-carrier.Dockerfile \
+            -t "${CARRIER_IMAGE}" \
+            dist
+          df -h /
+          docker system df || true
+
+      - name: Verify carrier image contents
+        run: |
+          set -euo pipefail
+          docker pull "${CARRIER_IMAGE}"
+          docker run --rm "${CARRIER_IMAGE}" sh -c \
+            'test -s /omero-prebuilt/prebuilt-manifest.json && test -s /omero-prebuilt/prebuilt-required-images.txt && test -s /omero-prebuilt/runtime-images.tar.gz'
+          cid="$(docker create "${CARRIER_IMAGE}")"
+          docker cp "${cid}:/omero-prebuilt/prebuilt-manifest.json" dist/verified-prebuilt-manifest.json
+          docker rm -f "${cid}" >/dev/null
+          cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > dist/release-notes.md <<EOF
+          Prebuilt carrier image:
+
+          ${CARRIER_IMAGE}
+
+          This release contains the source archive and the single Docker carrier image manifest.
+          EOF
+          gh release create "${RELEASE_VERSION}" \
+            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
+            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
+            "dist/prebuilt-manifest.json" \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_VERSION}" \
+            --notes-file dist/release-notes.md \
+            --latest=false

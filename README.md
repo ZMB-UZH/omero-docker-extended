@@ -79,6 +79,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 26.04 LTS)
 │   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
+│   ├── prebuilt-carrier.Dockerfile    #   Release carrier image for easy installation bundles
 │   ├── redis-sysctl-init.Dockerfile   #   Alpine sidecar for kernel parameter tuning
 │   └── redis-sysctl-init.sh
 ├── env/                               # Environment variable templates
@@ -112,6 +113,8 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── pg-maintenance-cron            #   Weekly/monthly schedule
 ├── installation/                      # Deployment automation
 │   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
+│   ├── easy_installation_script.sh    #   Strict prebuilt carrier installation entrypoint
+│   ├── load_prebuilt_carrier.sh       #   Verifies and loads carrier-bundled runtime images
 │   └── docker_buildx_compressed_push.sh # Buildx compressed image build/push helper
 ├── helper_scripts_debian/             # Host provisioning helpers
 │   ├── docker_debian_13_install_script
@@ -317,6 +320,31 @@ sudo bash ./github_pull_project_bash
 The script prompts for installation parameters (defaults are available), installs/updates all necessary files, and finally starts the full stack upon choice. Installation duration depends on host CPU and disk performance, and is optimized for multi-threaded systems.
 
 The pull/update script also saves a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data path.
+
+### Easy installation with a prebuilt carrier image
+
+The easy installer uses a manually published release carrier image from Docker
+Hub instead of building the repository Dockerfiles on the target host. The
+carrier is a single Docker image tagged with the same SemVer pre-release
+version as the GitHub release. During installation,
+`installation/easy_installation_script.sh` pulls that one carrier, verifies its
+manifest and compressed archive checksum, loads the bundled runtime image tags
+into Docker with `docker load`, then starts the normal multi-container Compose
+deployment with `--no-build`.
+
+This path does not switch to the build workflow if the carrier cannot be pulled, verified, extracted, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
+
+Run the easy installer from an updated installation root. The first prompt asks
+which prebuilt release version to install:
+
+```bash
+cd /opt/omero
+sudo bash ./installation/easy_installation_script.sh
+```
+
+Use the release version shown on the GitHub release and the matching Docker Hub
+tag. Do not use `latest`. For unattended runs, set `PREBUILT_IMAGE_RELEASE`
+explicitly instead of relying on a prompt.
 
 **5.** After a successful installation, run:
 

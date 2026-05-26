@@ -51,7 +51,15 @@ PROCESSOR_CONFIG_CACHE_TTL = get_int_env(
     env_file=ENV_FILE_OMERO_CELERY,
 )
 
-_PROCESS_JOBS = {}
+
+class _ProcessJob(TypedDict):
+    """Helper type for live process job registry entries."""
+
+    handle: Any
+    created: float
+
+
+_PROCESS_JOBS: dict[str, _ProcessJob] = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
 
 
