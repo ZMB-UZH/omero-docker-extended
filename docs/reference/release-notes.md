@@ -6,7 +6,8 @@
   a source archive, builds hardened flattened runtime images, bundles the
   Compose image set into one Docker Hub carrier image, verifies the carrier
   contents, and creates a GitHub release with the same SemVer pre-release tag
-  as the Docker image tag.
+  as the Docker image tag. Docker Hub credentials are scoped to the
+  `dockerhub-release` GitHub environment.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
   `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to

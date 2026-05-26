@@ -104,6 +104,11 @@ For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
 PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.sh
 ```
 
+Carrier releases are created from the GitHub Actions panel with the manual
+`release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN` as secrets in the `dockerhub-release` GitHub environment
+before dispatching that workflow.
+
 ## 3) Build Images
 
 ```bash

@@ -346,6 +346,10 @@ Use the release version shown on the GitHub release and the matching Docker Hub
 tag. Do not use `latest`. For unattended runs, set `PREBUILT_IMAGE_RELEASE`
 explicitly instead of relying on a prompt.
 
+Carrier images are published with the manual `release-prebuilt-carrier` GitHub
+Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as secrets
+in the `dockerhub-release` GitHub environment before running it.
+
 **5.** After a successful installation, run:
 
 - Portainer: <http://localhost:9000> (set admin password on first login)
