@@ -47,7 +47,6 @@ LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
 LOCAL_CACHE_ROTATION_TOKEN=""
 FLATTEN_TEMP_IMAGES=()
 FLATTEN_TEMP_DIRS=()
-FLATTEN_TEMP_CONTAINERS=()
 BUILDX_RUNTIME_CLEANUP_ARMED=0
 
 # Require binary. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -446,14 +445,6 @@ register_flatten_temp_source_images() {
 cleanup_flatten_artifacts() {
     local image_name=""
     local dir_path=""
-    local container_name=""
-
-    for container_name in "${FLATTEN_TEMP_CONTAINERS[@]:-}"; do
-        if [ -n "${container_name}" ]; then
-            docker container rm -f "${container_name}" >/dev/null 2>&1 || true
-        fi
-    done
-
     for image_name in "${FLATTEN_TEMP_IMAGES[@]:-}"; do
         if [ -n "${image_name}" ]; then
             docker image rm -f "${image_name}" >/dev/null 2>&1 || true
@@ -466,13 +457,6 @@ cleanup_flatten_artifacts() {
         fi
     done
 
-    return 0
-}
-
-# Register flatten temp container. Inputs: shell arguments and environment. Output: command status and side effects.
-register_flatten_temp_container() {
-    local container_name="${1:?BUG: register_flatten_temp_container requires a container name}"
-    FLATTEN_TEMP_CONTAINERS+=("${container_name}")
     return 0
 }
 
@@ -678,10 +662,10 @@ cleanup_local_cache_staging_dirs() {
     return 0
 }
 
-# Generate flatten filesystem dockerfile. Inputs: shell arguments and environment. Output: command status and side effects.
-generate_flatten_filesystem_dockerfile() {
-    local source_image_name="${1:?BUG: generate_flatten_filesystem_dockerfile requires a source image name}"
-    local dockerfile_path="${2:?BUG: generate_flatten_filesystem_dockerfile requires a dockerfile path}"
+# Generate flatten Dockerfile. Inputs: shell arguments and environment. Output: command status and side effects.
+generate_flatten_dockerfile() {
+    local source_image_name="${1:?BUG: generate_flatten_dockerfile requires a source image name}"
+    local dockerfile_path="${2:?BUG: generate_flatten_dockerfile requires a dockerfile path}"
 
     if ! python3 - "${source_image_name}" >"${dockerfile_path}" <<'PY'
 import sys
@@ -696,6 +680,10 @@ for line in (
 PY
     then
         echo "ERROR (${SCRIPT_NAME}): Failed to generate flatten Dockerfile for source image '${source_image_name}'." >&2
+        return 1
+    fi
+
+    if ! build_flatten_import_changes "${source_image_name}" >>"${dockerfile_path}"; then
         return 1
     fi
 
@@ -841,29 +829,19 @@ flatten_target_image() {
     local final_image_name=""
     local flatten_context_dir=""
     local flatten_dockerfile=""
-    local flatten_filesystem_image_name=""
-    local flatten_container_name=""
-    local flatten_import_changes_file=""
-    local -a import_change_args=()
-    local change_line=""
 
     source_image_name="$(compose_flatten_source_image_name "${target}")"
     final_image_name="$(resolve_target_final_image_name "${target}")"
     flatten_context_dir="$(mktemp -d)"
     register_flatten_temp_dir "${flatten_context_dir}"
     flatten_dockerfile="${flatten_context_dir}/Dockerfile"
-    flatten_filesystem_image_name="${final_image_name}__flatten_fs_${LOCAL_CACHE_ROTATION_TOKEN}"
-    flatten_container_name="flatten-${target//[^a-zA-Z0-9_.-]/-}-${LOCAL_CACHE_ROTATION_TOKEN}"
-    flatten_import_changes_file="${flatten_context_dir}/import-changes.txt"
-    register_flatten_temp_image "${flatten_filesystem_image_name}"
-    register_flatten_temp_container "${flatten_container_name}"
 
     if ! docker image inspect "${source_image_name}" >/dev/null 2>&1; then
         echo "ERROR (${SCRIPT_NAME}): Flatten source image is missing for target '${target}': ${source_image_name}" >&2
         return 1
     fi
 
-    if ! generate_flatten_filesystem_dockerfile "${source_image_name}" "${flatten_dockerfile}"; then
+    if ! generate_flatten_dockerfile "${source_image_name}" "${flatten_dockerfile}"; then
         return 1
     fi
 
@@ -872,29 +850,9 @@ flatten_target_image() {
         --progress "${DOCKER_BUILD_PROGRESS}" \
         --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
         --file "${flatten_dockerfile}" \
-        --tag "${flatten_filesystem_image_name}" \
+        --tag "${final_image_name}" \
         "${flatten_context_dir}" >/dev/null; then
-        echo "ERROR (${SCRIPT_NAME}): Failed to build temporary flatten filesystem image for target '${target}'." >&2
-        return 1
-    fi
-
-    if ! build_flatten_import_changes "${source_image_name}" >"${flatten_import_changes_file}"; then
-        return 1
-    fi
-
-    while IFS= read -r change_line; do
-        if [ -n "${change_line}" ]; then
-            import_change_args+=(--change "${change_line}")
-        fi
-    done < "${flatten_import_changes_file}"
-
-    if ! docker container create --name "${flatten_container_name}" "${flatten_filesystem_image_name}" /bin/sh >/dev/null; then
-        echo "ERROR (${SCRIPT_NAME}): Failed to create temporary flatten container for target '${target}'." >&2
-        return 1
-    fi
-
-    if ! docker export "${flatten_container_name}" | docker image import "${import_change_args[@]}" - "${final_image_name}" >/dev/null; then
-        echo "ERROR (${SCRIPT_NAME}): Failed to import flattened single-layer image for target '${target}'." >&2
+        echo "ERROR (${SCRIPT_NAME}): Failed to build flattened single-layer image for target '${target}'." >&2
         return 1
     fi
 
@@ -907,8 +865,6 @@ flatten_target_image() {
     fi
 
     echo "INFO (${SCRIPT_NAME}): Flattened '${target}' successfully." >&2
-    docker container rm -f "${flatten_container_name}" >/dev/null 2>&1 || true
-    docker image rm -f "${flatten_filesystem_image_name}" >/dev/null 2>&1 || true
     docker image rm -f "${source_image_name}" >/dev/null 2>&1 || true
     return 0
 }
@@ -1174,15 +1130,17 @@ run_buildx_bake_serial_fallback() {
     local original_targets="${DOCKER_BUILD_TARGETS}"
     local target=""
     local target_count
+    local target_index=0
 
     target_count="$(count_build_targets)"
     if [ "${target_count}" -le 1 ]; then
         return 1
     fi
 
-    echo "WARNING (${SCRIPT_NAME}): Falling back to serial per-target Buildx bake to avoid cache export lock contention." >&2
+    echo "INFO (${SCRIPT_NAME}): Running serial per-target Buildx bake." >&2
 
     for target in ${original_targets}; do
+        target_index=$((target_index + 1))
         echo "INFO (${SCRIPT_NAME}): Serial Buildx bake target: ${target}" >&2
         DOCKER_BUILD_TARGETS="${target}"
 
@@ -1204,10 +1162,25 @@ run_buildx_bake_serial_fallback() {
         fi
 
         commit_local_cache_staging_dirs
+
+        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+            if [ "${DOCKER_BUILDX_KEEP_BUILDER}" != "1" ]; then
+                cleanup_buildx_runtime_artifacts || true
+            fi
+            if ! flatten_target_image "${target}"; then
+                DOCKER_BUILD_TARGETS="${original_targets}"
+                return 1
+            fi
+            if [ "${target_index}" -lt "${target_count}" ]; then
+                ensure_builder
+                if [ "${DOCKER_BUILDX_KEEP_BUILDER}" != "1" ]; then
+                    BUILDX_RUNTIME_CLEANUP_ARMED=1
+                fi
+            fi
+        fi
     done
 
     DOCKER_BUILD_TARGETS="${original_targets}"
-    flatten_final_images_if_requested
     return 0
 }
 

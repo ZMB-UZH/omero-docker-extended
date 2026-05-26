@@ -210,6 +210,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("git archive", workflow_text)
         self.assertIn("installation/docker_buildx_compressed_push.sh", workflow_text)
         self.assertIn('DOCKER_BUILD_INLINE_CACHE="1"', workflow_text)
+        self.assertIn('DOCKER_BUILD_LOCAL_CACHE_ENABLED="0"', workflow_text)
+        self.assertIn('DOCKER_BUILD_BAKE_SERIAL_MODE="always"', workflow_text)
         self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="1"', workflow_text)
         self.assertIn('APPLY_SECURITY_HARDENING="1"', workflow_text)
         self.assertNotIn("DOCKER_BUILD_TARGETS=", workflow_text)
