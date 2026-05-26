@@ -355,9 +355,8 @@ cd /opt/omero
 sudo bash ./installation/easy_installation_script.sh
 ```
 
-Use the release version shown on the GitHub release and the matching Docker Hub
-tag. Do not use `latest`. For unattended runs, set `PREBUILT_IMAGE_RELEASE`
-explicitly instead of relying on a prompt.
+Enter the Docker Hub carrier image tag. Do not use `latest`. For unattended
+runs, set `PREBUILT_IMAGE_RELEASE` explicitly instead of relying on a prompt.
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
 Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
