@@ -17,9 +17,10 @@
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
   `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt release version to
-  install, skips only the Buildx, final-image flattening, and image-hardening
-  prompts, verifies the carrier manifest and compressed archive checksum, loads
-  the bundled images with `docker load`, checks temporary and Docker-root free
+  install, skips the Buildx, build-cache, final-image flattening, and
+  image-hardening prompts so the easy path has ten interactive questions,
+  verifies the carrier manifest and compressed archive checksum, loads the
+  bundled images with `docker load`, checks temporary and Docker-root free
   space before loading, and starts Compose with `--no-build`.
 - Kept standard installation behavior intact by preserving the existing image
   defaults in `docker-compose.yml` while allowing the custom image references to
