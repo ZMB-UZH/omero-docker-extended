@@ -41,6 +41,9 @@
   images inside `runtime-images.tar.gz` are the flattened images; the carrier
   itself intentionally remains a small normal image wrapper around one large
   archive layer.
+- Made the release workflow create and verify the release tag explicitly before
+  creating the draft GitHub release, because GitHub draft releases can otherwise
+  be represented by an untagged draft URL until publication.
 - Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.

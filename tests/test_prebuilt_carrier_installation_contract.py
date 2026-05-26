@@ -343,6 +343,17 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             workflow_text,
         )
         self.assertIn(
+            '--method POST "repos/${GITHUB_REPOSITORY}/git/refs"',
+            workflow_text,
+        )
+        self.assertLess(
+            workflow_text.index('--method POST "repos/${GITHUB_REPOSITORY}/git/refs"'),
+            workflow_text.index('gh release create "${RELEASE_VERSION}"'),
+        )
+        self.assertIn('-f "ref=refs/tags/${RELEASE_VERSION}"', workflow_text)
+        self.assertIn('-f "sha=${GITHUB_SHA}"', workflow_text)
+        self.assertIn("--verify-tag", workflow_text)
+        self.assertIn(
             '"repos/${GITHUB_REPOSITORY}/git/tags/${created_tag_sha}"',
             workflow_text,
         )
@@ -353,8 +364,14 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("if: failure()", workflow_text)
         self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN=1", workflow_text)
         self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN:-0", workflow_text)
+        self.assertIn("RELEASE_TAG_CREATED_BY_RUN=1", workflow_text)
+        self.assertIn("RELEASE_TAG_CREATED_BY_RUN:-0", workflow_text)
         self.assertIn("--json isDraft", workflow_text)
         self.assertIn("--cleanup-tag", workflow_text)
+        self.assertIn(
+            '--method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}"',
+            workflow_text,
+        )
         self.assertIn(
             "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url",
             workflow_text,
