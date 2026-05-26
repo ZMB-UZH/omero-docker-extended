@@ -169,6 +169,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("--requested-version", workflow_text)
         self.assertIn("--requested-docker-repository", workflow_text)
         self.assertIn("--latest=false", workflow_text)
+        self.assertIn("DOCKERHUB_TOKEN", workflow_text)
+        self.assertIn("--password-stdin", workflow_text)
+        self.assertNotIn("DOCKERHUB_ACCESS_TOKEN", workflow_text)
 
     def test_release_workflow_builds_hardened_flattened_bundle_from_compose(
         self,

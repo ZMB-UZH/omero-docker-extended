@@ -107,7 +107,9 @@ PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.s
 Carrier releases are created from the GitHub Actions panel with the manual
 `release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` as secrets in the `dockerhub-release` GitHub environment
-before dispatching that workflow.
+before dispatching that workflow. The `DOCKERHUB_TOKEN` value must be a Docker
+Hub access token with write access to the carrier repository; do not use a
+Docker Hub account password.
 
 ## 3) Build Images
 
