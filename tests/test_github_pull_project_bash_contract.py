@@ -18,6 +18,27 @@ FAKE_RELEASE_TAG = "1.2.3-main.4"
 # Build the synthetic 40-character hex commit at runtime so DevSkim does not
 # treat it as a token-shaped literal in source.
 FAKE_COMMIT = "abcdef" * 6 + "abcd"
+RUNTIME_DIRS = (
+    "postgresdb/omero_database",
+    "postgresdb/plugin_database",
+    "omero_data",
+    "omero_temp",
+    "omero_data/user",
+    "omero_data/import",
+    "omero_data/omeroserver-var",
+    "omero_data/omeroweb-var",
+    "omero_data/omeroserver-logs",
+    "omero_data/omeroweb-logs",
+    "omero_data/omeroweb-supervisor-logs",
+    "portainer_data",
+    "prometheus_data",
+    "grafana_data",
+    "loki_data",
+    "pg_maintenance_data",
+    "node_exporter_textfile",
+    "crowdsec_db",
+    "crowdsec_config",
+)
 
 
 class GitHubPullProjectBashContractTests(unittest.TestCase):
@@ -164,6 +185,89 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             self.assertTrue(backup_file.is_file())
             self.assertIn(".env_backups/ (operator env backups)", result.stdout)
 
+    def test_replacement_preserves_runtime_paths_and_local_env_content(self) -> None:
+        """Verify replacement preserves every configured runtime path and env file.
+
+        Inputs: synthetic installation root with markers in all runtime paths.
+        Output: confirms protected data, env, and backup content survive replacement.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_path = Path(tmp_dir)
+            install_root = self._write_install_root(temp_path)
+            fake_bin, _git_log = self._write_fake_git(temp_path)
+            stale_managed_file = install_root / "stale-managed-file.txt"
+            stale_managed_file.write_text("replace me\n", encoding="utf-8")
+            protected_files = [
+                install_root / ".env",
+                install_root / "installation_paths.env",
+                install_root / "env" / "omeroserver.env",
+                install_root
+                / ".env_backups"
+                / "20260527T000000_000000Z"
+                / "installation_paths.env",
+            ]
+            before_content = {
+                protected_file: protected_file.read_text(encoding="utf-8")
+                for protected_file in protected_files
+            }
+            marker_files = []
+            for index, relative_dir in enumerate(RUNTIME_DIRS):
+                marker_file = install_root / relative_dir / f".preserve-{index}"
+                marker_file.write_text(relative_dir, encoding="utf-8")
+                marker_files.append((marker_file, relative_dir))
+
+            result = self._run_launcher(
+                install_root,
+                fake_bin,
+                extra_env={"INSTALLATION_AUTOMATION_MODE": "1"},
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(stale_managed_file.exists())
+            for marker_file, expected_content in marker_files:
+                self.assertEqual(
+                    marker_file.read_text(encoding="utf-8"), expected_content
+                )
+            for protected_file, expected_content in before_content.items():
+                self.assertEqual(
+                    protected_file.read_text(encoding="utf-8"), expected_content
+                )
+            self.assertEqual(
+                (install_root / "env" / "omeroserver_example.env").read_text(
+                    encoding="utf-8"
+                ),
+                "EXAMPLE=1\n",
+            )
+
+    def test_unsafe_installation_paths_fail_before_replacement(self) -> None:
+        """Verify unsafe path assignments fail closed without executing.
+
+        Inputs: command-substitution path assignment. Output: marker command is
+        not executed and existing managed files are not removed.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_path = Path(tmp_dir)
+            install_root = self._write_install_root(temp_path)
+            fake_bin, _git_log = self._write_fake_git(temp_path)
+            marker_file = temp_path / "should-not-exist"
+            stale_managed_file = install_root / "stale-managed-file.txt"
+            stale_managed_file.write_text("must remain\n", encoding="utf-8")
+            (install_root / "installation_paths.env").write_text(
+                f'OMERO_INSTALLATION_PATH=$(touch "{marker_file}")\n',
+                encoding="utf-8",
+            )
+
+            result = self._run_launcher(
+                install_root,
+                fake_bin,
+                extra_env={"INSTALLATION_AUTOMATION_MODE": "1"},
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(marker_file.exists())
+            self.assertTrue(stale_managed_file.exists())
+            self.assertIn("Refusing unsafe value", result.stderr)
+
     def test_easy_install_path_rejects_source_ref_selector(self) -> None:
         """Verify the Git source selector cannot collide with easy installation.
 
@@ -231,6 +335,23 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             offenders, msg=f"Stale launcher references remain: {offenders}"
         )
 
+    def test_launcher_uses_safe_env_assignment_parser(self) -> None:
+        """Verify the launcher does not re-evaluate installation path lines.
+
+        Inputs: launcher source text. Output: confirms safe parser wiring is
+        present and the older eval/source path loading patterns are absent.
+        """
+        script_text = self.launcher_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'ENV_ASSIGNMENT_HELPER_PATH="${SCRIPT_DIR}/env_assignment_utils.sh"',
+            script_text,
+        )
+        self.assertIn("load_resolved_env_assignments", script_text)
+        self.assertIn("resolve_env_assignment_value", script_text)
+        self.assertNotIn('eval "${env_line}"', script_text)
+        self.assertNotIn('. "${env_file}"', script_text)
+
     def _run_launcher(
         self,
         install_root: Path,
@@ -289,29 +410,12 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             self.launcher_path,
             install_root / "installation" / "github_pull_project_bash",
         )
+        shutil.copy2(
+            self.repo_root / "installation" / "env_assignment_utils.sh",
+            install_root / "installation" / "env_assignment_utils.sh",
+        )
 
-        runtime_dirs = [
-            "postgresdb/omero_database",
-            "postgresdb/plugin_database",
-            "omero_data",
-            "omero_temp",
-            "omero_data/user",
-            "omero_data/import",
-            "omero_data/omeroserver-var",
-            "omero_data/omeroweb-var",
-            "omero_data/omeroserver-logs",
-            "omero_data/omeroweb-logs",
-            "omero_data/omeroweb-supervisor-logs",
-            "portainer_data",
-            "prometheus_data",
-            "grafana_data",
-            "loki_data",
-            "pg_maintenance_data",
-            "node_exporter_textfile",
-            "crowdsec_db",
-            "crowdsec_config",
-        ]
-        for relative_dir in runtime_dirs:
+        for relative_dir in RUNTIME_DIRS:
             (install_root / relative_dir).mkdir(parents=True, exist_ok=True)
         backup_dir = install_root / ".env_backups" / "20260527T000000_000000Z"
         backup_dir.mkdir(parents=True)
@@ -322,6 +426,7 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
         (install_root / "env" / "omeroserver.env").write_text(
             "LOCAL=1\n", encoding="utf-8"
         )
+        (install_root / ".env").write_text("LOCAL_DOT_ENV=1\n", encoding="utf-8")
 
         install_paths = textwrap.dedent(
             f"""\
@@ -378,6 +483,11 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
                     printf '%s\\n' "${head}" > "${destination}/.fake-head"
                     printf '%s\\n' 'EXAMPLE=1' > "${destination}/env/omeroserver_example.env"
                     printf '%s\\n' 'logo template' > "${destination}/logo/logo_example.png"
+                    cat > "${destination}/installation/env_assignment_utils.sh" <<'SCRIPT'
+                resolve_env_assignment_value() {
+                    printf '%s' "$1"
+                }
+                SCRIPT
                     cat > "${destination}/installation/installation_script.sh" <<'SCRIPT'
                 #!/usr/bin/env bash
                 set -euo pipefail
