@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is a technical project for a Dockerized OMERO deployment and
+This repository is a technical project for a dockerized OMERO deployment and
 related OMERO.web plugins. Project discussion should stay respectful,
 evidence-based, and focused on improving the software, documentation, security,
 or operational reliability.
@@ -28,9 +28,9 @@ or operational reliability.
 ## Reporting
 
 Conduct concerns may be reported through GitHub's content-reporting tools when
-available. Security issues must use the private vulnerability path documented in
+available. Security issues must follow the private-reporting guidance in
 [SECURITY.md](SECURITY.md):
-<https://github.com/ZMB-UZH/omero-docker-extended/security/advisories/new>.
+<https://github.com/ZMB-UZH/omero-docker-extended/security/policy>.
 If GitHub's reporting tools are unavailable, contact the repository maintainer
 through a non-public channel.
 

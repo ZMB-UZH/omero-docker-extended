@@ -74,6 +74,35 @@ Examples:
   `docker/<service>.Dockerfile` fail closed when those values are absent
   instead of silently falling back to in-code defaults.
 
+## Prebuilt carrier and easy installation
+
+- The standard installer and `installation/easy_installation_script.sh` must
+  stay interchangeable. Both paths use the same deployment-local env files,
+  installation paths, UID/GID discovery, permission checks, data-path snapshots,
+  Compose startup, and post-start validation; only the image acquisition path
+  differs.
+- The easy installer must require `PREBUILT_IMAGE_MODE=require` and fail if the
+  release carrier cannot be pulled, verified, streamed, or loaded. Do not add a
+  branch that switches from easy installation back to a local image build.
+- `docker/prebuilt-carrier.Dockerfile` is intentionally `FROM scratch`: it is a
+  data carrier for the manifest, required-image list, and
+  `runtime-images.tar.gz`. Do not add Alpine, BusyBox, a shell, a package
+  manager, a healthcheck command, or a later ownership/mode mutation layer.
+- The manual `release-prebuilt-carrier` workflow is the only manual release
+  workflow. It builds hardened flattened runtime service images, writes the
+  source archive and manifest, pushes one carrier image, verifies the copied
+  metadata from that image with `docker create`/`docker cp`, and publishes a
+  GitHub prerelease with the same SemVer tag as the carrier image.
+- The workflow uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token must
+  be a docker hub access token, never an account password. No workflow in this
+  repository may create GitHub deployment records. Keep the `dockerhub-release`
+  environment on that release job only, and keep `deployment: false` so
+  protected secrets do not create deployment history.
+- Before claiming installation parity, prove the targeted code path with local
+  contract tests and, for release/easy-install changes, a live install or update
+  run from the exact checkout/tag under test while preserving non-example env
+  files.
+
 ## bioformats2raw version compatibility
 
 - `bioformats2raw` is installed in the `omeroweb` container. The version is controlled by `BIOFORMATS2RAW_VERSION` from `env/omeroserver.env`.
@@ -273,4 +302,6 @@ SH
 - Before security-sensitive edits, read `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, and `docs/operations/code-scanning.md`.
 - Fix root causes before considering suppressions.
 - Refresh action versions from official GitHub releases or tags before touching workflow pins.
-- Do not bind pure CI jobs to GitHub environments unless deployment records are intended.
+- No workflow in this repository may create GitHub deployment records. If a job
+  needs a GitHub environment for protected secrets, it must set
+  `deployment: false`.

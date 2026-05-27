@@ -662,7 +662,7 @@ cleanup_local_cache_staging_dirs() {
     return 0
 }
 
-# Generate flatten Dockerfile. Inputs: shell arguments and environment. Output: command status and side effects.
+# Generate flatten dockerfile. Inputs: shell arguments and environment. Output: command status and side effects.
 generate_flatten_dockerfile() {
     local source_image_name="${1:?BUG: generate_flatten_dockerfile requires a source image name}"
     local dockerfile_path="${2:?BUG: generate_flatten_dockerfile requires a dockerfile path}"
@@ -679,7 +679,7 @@ for line in (
     print(line)
 PY
     then
-        echo "ERROR (${SCRIPT_NAME}): Failed to generate flatten Dockerfile for source image '${source_image_name}'." >&2
+        echo "ERROR (${SCRIPT_NAME}): Failed to generate flatten dockerfile for source image '${source_image_name}'." >&2
         return 1
     fi
 
@@ -1061,7 +1061,7 @@ build_target_overrides() {
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
 
-        # Optional Docker image security hardening build args
+        # Optional docker image security hardening build args
         # Controlled by APPLY_SECURITY_HARDENING from the installation script
         if [ "${APPLY_SECURITY_HARDENING:-0}" = "1" ]; then
             printf -- '--set\n%s.args.APPLY_SECURITY_HARDENING=1\n' "${target}"
@@ -1117,8 +1117,8 @@ build_target_overrides() {
             # and causes a massive memory spike — completely pointless for a
             # local build where compression format is irrelevant.
             # With docker-container driver, type=image,push=false keeps the image
-            # INSIDE the BuildKit daemon — NOT visible to the host Docker daemon.
-            # type=docker exports it back to the host daemon via the Docker socket.
+            # INSIDE the BuildKit daemon — NOT visible to the host docker daemon.
+            # type=docker exports it back to the host daemon via the docker socket.
             printf -- '--set\n%s.output=type=docker\n' \
                 "${target}"
         fi
@@ -1316,7 +1316,7 @@ main() {
 
     if ! docker buildx version >/dev/null 2>&1; then
         echo "ERROR (${SCRIPT_NAME}): docker buildx is required but not available." >&2
-        echo "Install Docker Buildx and retry." >&2
+        echo "Install docker Buildx and retry." >&2
         return 1
     fi
 

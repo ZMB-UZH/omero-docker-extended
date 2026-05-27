@@ -4,25 +4,25 @@
 
 - Added a manual `release-prebuilt-carrier` GitHub Actions workflow that creates
   a source archive, builds hardened flattened runtime images, bundles the
-  Compose image set into one Docker Hub carrier image, verifies the carrier
+  Compose image set into one docker hub carrier image, verifies the carrier
   contents, and creates a GitHub release with the same SemVer pre-release tag
-  as the Docker image tag. Docker Hub credentials use repository secrets named
+  as the docker image tag. docker hub credentials use repository secrets named
   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job uses the
   `dockerhub-release` GitHub Actions environment with deployment-record
   creation disabled for optional protection rules without deployment history
-  entries, `DOCKERHUB_TOKEN` is documented as a Docker Hub access token for
+  entries, `DOCKERHUB_TOKEN` is documented as a docker hub access token for
   two-factor-authenticated accounts, release write permissions are scoped to
   the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
   a branch-targeted draft prerelease before publishing it after carrier-image
   verification.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
-  `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt Docker image tag to
+  `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt docker image tag to
   install, skips the Buildx, build-cache, final-image flattening, and
   image-hardening prompts so the easy path has ten interactive questions,
   verifies the carrier manifest and compressed archive checksum, streams the
   verified archive into `docker load` without writing a second full archive
-  under `OMERO_TMP_PATH`, checks Docker-root free space before loading, and
+  under `OMERO_TMP_PATH`, checks docker-root free space before loading, and
   starts Compose with `--no-build`.
 - Kept standard installation behavior intact by preserving the existing image
   defaults in `docker-compose.yml` while allowing the custom image references to
@@ -37,12 +37,12 @@
 - Reduced prebuilt-carrier release runner storage pressure by disabling
   ephemeral Buildx local-cache export in the manual release workflow and by
   flattening each serially built target before the next target is built.
-- Eliminated the prebuilt carrier's duplicate runtime-archive layer by applying
-  carrier ownership and read-only permissions at `COPY` time instead of
-  mutating the large archive in a later Dockerfile layer. The runtime service
-  images inside `runtime-images.tar.gz` are the flattened images; the carrier
-  itself intentionally remains a small normal image wrapper around one large
-  archive layer.
+- Eliminated the prebuilt carrier's duplicate runtime-archive layer and removed
+  the carrier wrapper's Alpine base image and BusyBox package surface by making
+  `docker/prebuilt-carrier.Dockerfile` a scratch-based data image with a single
+  payload layer. The runtime service images inside `runtime-images.tar.gz` are
+  the flattened images; the carrier wrapper has no OS package layer, package
+  manager, shell, or runnable healthcheck command.
 - Made the release workflow create and verify the release tag explicitly before
   creating the draft GitHub release, because GitHub draft releases can otherwise
   be represented by an untagged draft URL until publication.
@@ -61,7 +61,7 @@
   CrowdSec `v1.7.8`, Alloy `v1.16.1`, Redis `8.6.3-alpine`,
   Redis exporter `v1.83.0-alpine`, Prometheus `v3.11.3`, and Ollama
   `0.23.2`.
-- Strengthened image-pin regression coverage so Compose, Dockerfile, and
+- Strengthened image-pin regression coverage so Compose, dockerfile, and
   workflow container images cannot use untagged or floating aliases such as
   `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
   `current`.

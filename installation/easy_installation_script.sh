@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 RELEASE_METADATA_TOOL="${REPO_ROOT_DIR}/tools/prebuilt_release_metadata.py"
 
-# Validate a Docker-compatible SemVer release tag. Inputs: shell arguments and environment. Output: command status.
+# Validate a docker-compatible SemVer release tag. Inputs: shell arguments and environment. Output: command status.
 is_valid_release_version() {
     python3 "${RELEASE_METADATA_TOOL}" \
         --validate-release-version "${1:-}" \
@@ -70,28 +70,33 @@ require_easy_installation_support() {
     fi
 }
 
-# Prompt for the prebuilt Docker image tag. Inputs: shell arguments and environment. Output: exported release value or failure.
+# Prompt for the prebuilt docker image tag. Inputs: shell arguments and environment. Output: exported release value or failure.
+has_controlling_tty() {
+    [ -r /dev/tty ] && [ -w /dev/tty ] && { : </dev/tty >/dev/tty; } 2>/dev/null
+}
+
+# Prompt for the prebuilt docker image tag. Inputs: shell arguments and environment. Output: exported release value or failure.
 prompt_release_version() {
     local reply=""
 
     if [ -n "${PREBUILT_IMAGE_RELEASE:-}" ]; then
         if ! is_valid_release_version "${PREBUILT_IMAGE_RELEASE}"; then
-            echo "ERROR: PREBUILT_IMAGE_RELEASE must be a Docker-compatible SemVer release without a v prefix, + metadata, slash, colon, or spaces." >&2
+            echo "ERROR: PREBUILT_IMAGE_RELEASE must be a docker-compatible SemVer release without a v prefix, + metadata, slash, colon, or spaces." >&2
             return 1
         fi
         return 0
     fi
 
-    if [ "${INSTALLATION_AUTOMATION_MODE:-0}" = "1" ] || [ ! -r /dev/tty ]; then
+    if [ "${INSTALLATION_AUTOMATION_MODE:-0}" = "1" ] || ! has_controlling_tty; then
         echo "ERROR: PREBUILT_IMAGE_RELEASE is required when /dev/tty is unavailable or INSTALLATION_AUTOMATION_MODE=1." >&2
         return 1
     fi
 
     while true; do
-        printf '%s\n' "Which prebuilt Docker image tag should be installed?" >/dev/tty
+        printf '%s\n' "Which prebuilt docker image tag should be installed?" >/dev/tty
         printf '%s' '> ' >/dev/tty
         if ! IFS= read -r reply </dev/tty; then
-            echo "ERROR: Could not read prebuilt Docker image tag." >&2
+            echo "ERROR: Could not read prebuilt docker image tag." >&2
             return 1
         fi
         if is_valid_release_version "${reply}"; then
@@ -99,7 +104,7 @@ prompt_release_version() {
             export PREBUILT_IMAGE_RELEASE
             return 0
         fi
-        printf '%s\n' "Invalid release version. Use Docker-compatible SemVer without v prefix, + metadata, slash, colon, or spaces." >/dev/tty
+        printf '%s\n' "Invalid release version. Use docker-compatible SemVer without v prefix, + metadata, slash, colon, or spaces." >/dev/tty
     done
 }
 

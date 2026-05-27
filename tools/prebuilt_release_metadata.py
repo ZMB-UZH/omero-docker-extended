@@ -29,7 +29,7 @@ BETA_PATTERN = re.compile(r"^beta\.([1-9][0-9]*)$")
 
 @dataclass(frozen=True)
 class SemVer:
-    """Parsed Docker-compatible SemVer release value."""
+    """Parsed docker-compatible SemVer release value."""
 
     major: int
     minor: int
@@ -38,14 +38,14 @@ class SemVer:
 
 
 def parse_release_version(value: str) -> SemVer:
-    """Parse a Docker-compatible release version.
+    """Parse a docker-compatible release version.
 
     Inputs: `value`. Output: `SemVer`; raises `ValueError` for invalid tags.
     """
     match = SEMVER_PATTERN.fullmatch(value)
     if match is None:
         raise ValueError(
-            "Release version must be Docker-compatible SemVer without a v "
+            "Release version must be docker-compatible SemVer without a v "
             "prefix or +build metadata, for example 0.1.0-beta.1."
         )
     return SemVer(
@@ -80,13 +80,13 @@ def validate_release_version(value: str) -> str:
 
 
 def validate_docker_repository(value: str) -> str:
-    """Validate a Docker Hub namespace and repository.
+    """Validate a docker hub namespace and repository.
 
     Inputs: `value`. Output: repository `str`; raises `ValueError` on failure.
     """
     if DOCKER_HUB_REPOSITORY_PATTERN.fullmatch(value) is None:
         raise ValueError(
-            "Docker repository must be a lower-case Docker Hub namespace/repository."
+            "docker repository must be a lower-case docker hub namespace/repository."
         )
     return value
 
@@ -116,7 +116,7 @@ def semver_sort_key(version: SemVer) -> tuple[int, int, int, int, int, str]:
 def next_beta_release_version(existing_tags: Sequence[str]) -> str:
     """Choose the next beta release tag from remote tags.
 
-    Inputs: `existing_tags`. Output: Docker-compatible SemVer prerelease tag.
+    Inputs: `existing_tags`. Output: docker-compatible SemVer prerelease tag.
     """
     versions: list[SemVer] = []
     for tag in existing_tags:
@@ -184,7 +184,7 @@ def resolve_release_metadata(
     default_docker_repository: str,
     existing_tags: Sequence[str],
 ) -> tuple[str, str, str]:
-    """Resolve release metadata for GitHub and Docker.
+    """Resolve release metadata for GitHub and docker.
 
     Inputs: requested values, defaults, and existing tags. Output: release, repo,
     and carrier image reference.

@@ -27,23 +27,30 @@ context before exact `rg`, file reads, and tests.
    not proof until stdio `initialize`, raw JSON-RPC protocol probes,
    and `list_tools` succeed. `mcp-smoke --include-search` may only use an
    already-recorded active index and must refuse to build or refresh one.
-5. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
+5. Before relying on MCP search for current local edits or just-changed docs,
+   refresh explicitly with
+   `python3 tools/cocoindex_agent_search.py index --allow-dirty-index` for an
+   intentional dirty-worktree index, or
+   `python3 tools/cocoindex_agent_search.py search --refresh "<query>"` on a
+   clean tree. MCP search itself never refreshes, and stale active indexes can
+   return old text.
+6. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
    is unavailable or a CLI-only workflow is intentionally being prepared.
-6. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` only
+7. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` only
    after an explicit `index` has recorded an active index for this repo. Use
    `--index-if-missing` only when cold indexing is intentional and safe, then
    confirm the returned files with `rg` in the real repo.
    `prepare`, `index`, `search --index-if-missing`, `search --refresh`, and
    `benchmark` reject dirty or untracked worktrees unless the caller uses the
    explicit dirty flag for that disk-heavy operation.
-7. If the wrapper reports a cold semantic index, tell the user once in one
+8. If the wrapper reports a cold semantic index, tell the user once in one
    short sentence that the first search can take several minutes and later
    searches reuse the external cache.
-8. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
-9. Run
+9. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
+10. Run
    `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`
    when changing this workflow or after a major CocoIndex Code release.
-10. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
+11. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
    likely; the hybrid path is for broad routing where candidate output would be
    large.
 
@@ -112,6 +119,8 @@ context before exact `rg`, file reads, and tests.
   server must answer
   initialize and tool-list requests without installing, mirroring, launching the
   daemon, or indexing; MCP search may only query an existing active index.
+  Refresh current local edits with the CLI first; MCP search itself must stay
+  read-only and must not refresh the active index.
   Then run `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target
   repo root to prove the configured server completes the MCP handshake. Use
   `mcp-smoke --include-search` only for an explicit end-to-end search smoke

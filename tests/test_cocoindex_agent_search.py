@@ -2474,6 +2474,10 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
         assert "AGENT_COCOINDEX_HOME" in text, relative_path
         assert "cold" in text and "external cache" in text, relative_path
         assert "text-decodable" in text, relative_path
+        assert "--refresh" in text, relative_path
+        assert "--allow-dirty-index" in text, relative_path
+        assert "MCP search itself never refreshes" in text, relative_path
+        assert "stale active-index text" in text, relative_path
         assert ".cocoindex_code/" in text or "outside the live checkout" in text, (
             relative_path
         )

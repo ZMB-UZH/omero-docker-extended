@@ -16,7 +16,7 @@ fail() {
     exit 1
 }
 
-# Validate a Docker image reference component. Inputs: shell arguments and environment. Output: command status or process termination.
+# Validate a docker image reference component. Inputs: shell arguments and environment. Output: command status or process termination.
 validate_image_component() {
     local label="$1"
     local value="$2"
@@ -154,12 +154,12 @@ PY
 expected_bundle_bytes="$(cat "${bundle_bytes_file}")"
 expected_uncompressed_bytes="$(cat "${bundle_uncompressed_bytes_file}")"
 docker_root_dir="$(docker info -f '{{.DockerRootDir}}')"
-[ -n "${docker_root_dir}" ] || fail "Docker root directory could not be discovered."
-[ -d "${docker_root_dir}" ] || fail "Docker root directory does not exist: ${docker_root_dir}"
+[ -n "${docker_root_dir}" ] || fail "docker root directory could not be discovered."
+[ -d "${docker_root_dir}" ] || fail "docker root directory does not exist: ${docker_root_dir}"
 docker_available_kb="$(df -Pk "${docker_root_dir}" | awk 'NR == 2 { print $4 }')"
 docker_required_kb="$(((expected_uncompressed_bytes + 1023) / 1024))"
 if [ "${docker_available_kb}" -lt "${docker_required_kb}" ]; then
-    fail "Not enough free space under Docker root ${docker_root_dir}. Need at least ${docker_required_kb} KiB for docker load; available ${docker_available_kb} KiB."
+    fail "Not enough free space under docker root ${docker_root_dir}. Need at least ${docker_required_kb} KiB for docker load; available ${docker_available_kb} KiB."
 fi
 
 bundle_verification="$(

@@ -12,7 +12,7 @@ USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to us
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
 DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}" # plain progress is stable across terminal resize/reflow
 APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}" # set to 0/1 to override the prompt; empty defaults the prompt to yes
-ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
+ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run docker scout vulnerability scanning
 ENABLE_STORAGE_QUOTAS="${ENABLE_STORAGE_QUOTAS:-0}" # set to 1 to prompt default yes for ext4 project-quota enablement
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
@@ -734,7 +734,7 @@ run_image_build() {
         fi
         compose_build_args+=(--provenance "${provenance_setting}")
 
-        # Optional Docker image security hardening build args
+        # Optional docker image security hardening build args
         if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
             compose_build_args+=(--build-arg "APPLY_SECURITY_HARDENING=1")
             compose_build_args+=(--build-arg "APPLY_DNF_UPDATES=1")
@@ -2925,12 +2925,12 @@ resolve_security_hardening_choice() {
         case "${reply}" in
             y|yes)
                 APPLY_SECURITY_HARDENING=1
-                echo "SECURITY_HARDENING_CHOICE=${override_choice}: Docker image security hardening enabled."
+                echo "SECURITY_HARDENING_CHOICE=${override_choice}: docker image security hardening enabled."
                 return 0
                 ;;
             n|no)
                 APPLY_SECURITY_HARDENING=0
-                echo "SECURITY_HARDENING_CHOICE=${override_choice}: Docker image security hardening disabled."
+                echo "SECURITY_HARDENING_CHOICE=${override_choice}: docker image security hardening disabled."
                 return 0
                 ;;
             *)
@@ -2954,7 +2954,7 @@ resolve_security_hardening_choice() {
         fi
     fi
 
-    reply="$(prompt_yes_no "Enable Docker image security hardening? (applies OS and Python security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    reply="$(prompt_yes_no "Enable docker image security hardening? (applies OS and Python security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
     if [ "${reply}" = "yes" ]; then
         APPLY_SECURITY_HARDENING=1
     else
@@ -2974,12 +2974,12 @@ resolve_vulnerability_scan_choice() {
         case "${reply}" in
             y|yes)
                 ENABLE_VULNERABILITY_SCAN=1
-                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: Docker Scout vulnerability scanning enabled."
+                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: docker scout vulnerability scanning enabled."
                 return 0
                 ;;
             n|no)
                 ENABLE_VULNERABILITY_SCAN=0
-                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: Docker Scout vulnerability scanning disabled."
+                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: docker scout vulnerability scanning disabled."
                 return 0
                 ;;
             *)
@@ -3003,7 +3003,7 @@ resolve_vulnerability_scan_choice() {
         default_choice="yes"
     fi
 
-    reply="$(prompt_yes_no "Enable Docker Scout vulnerability scanning? (scans all images for known CVEs — adds several minutes) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    reply="$(prompt_yes_no "Enable docker scout vulnerability scanning? (scans all images for known CVEs — adds several minutes) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
     if [ "${reply}" = "yes" ]; then
         ENABLE_VULNERABILITY_SCAN=1
     else
@@ -3531,7 +3531,7 @@ if ! cleanup_local_build_cache_if_disabled; then
 fi
 
 # ---------------------------------------------------------------------------
-# Docker Scout vulnerability scanning
+# Docker scout vulnerability scanning
 #
 # Two-phase approach:
 #   Phase 1 (pre-build):  When cache is disabled, pull and scan upstream base
@@ -3544,7 +3544,7 @@ fi
 #                         is available, or a single Vulnerabilities column
 #                         when it is not (cache was enabled).
 #
-# Docker Scout availability is checked once; if absent both phases are skipped
+# Docker scout availability is checked once; if absent both phases are skipped
 # with an informational message — scanning never blocks the installation.
 # ---------------------------------------------------------------------------
 
@@ -3567,7 +3567,7 @@ _scout_is_available() {
         return 0
     fi
 
-    # When the script runs as root (e.g. via sudo), HOME is /root and Docker
+    # When the script runs as root (e.g. via sudo), HOME is /root and docker
     # cannot find a per-user Scout installation under the invoking user's
     # ~/.docker/cli-plugins/.  Discover the real user's DOCKER_CONFIG and
     # export it so all subsequent docker scout calls find the plugin.
@@ -3596,7 +3596,7 @@ _scout_is_available() {
 }
 
 # _scout_extract_summary <raw_output>
-# Parses Docker Scout CVE output into a compact one-line format:
+# Parses docker scout CVE output into a compact one-line format:
 #   "73 (9C 58H 63M 51L)"
 # Perform scout extract summary. Inputs: shell arguments and environment. Output: command status and side effects.
 _scout_extract_summary() {
@@ -3667,7 +3667,7 @@ run_docker_scout_baseline_scan() {
         base_image="$(_scout_extract_base_image "${dockerfile}")" || continue
         [ -n "${base_image}" ] || continue
 
-        # Deduplicate (multiple Dockerfiles may share the same base).
+        # Deduplicate (multiple dockerfiles may share the same base).
         local already_seen="false" seen=""
         for seen in "${base_images_seen[@]+"${base_images_seen[@]}"}"; do
             if [ "${seen}" = "${base_image}" ]; then already_seen="true"; break; fi
@@ -3721,7 +3721,7 @@ fi
 #
 # Discovers ALL images from docker-compose.yml:
 #   - Custom-built images (those with a build: + dockerfile: block) are
-#     matched to their Dockerfile's FROM base image for baseline lookup.
+#     matched to their dockerfile's FROM base image for baseline lookup.
 #   - Third-party images (no build: block) are scanned as-is; their
 #     Before column shows "(not modified)" when baseline is available.
 #
@@ -3731,12 +3731,12 @@ fi
 run_docker_scout_summary() {
     echo ""
     echo "============================================================"
-    echo "  Docker Scout — Vulnerability Report"
+    echo "  docker scout — Vulnerability Report"
     echo "============================================================"
 
     if ! _scout_is_available; then
-        echo "  Docker Scout is not installed or not accessible."
-        echo "  Install the Docker Scout CLI plugin to enable"
+        echo "  docker scout is not installed or not accessible."
+        echo "  Install the docker scout CLI plugin to enable"
         echo "  post-build vulnerability reports."
         echo "============================================================"
         echo ""
@@ -3750,7 +3750,7 @@ run_docker_scout_summary() {
     local -a thirdparty_images=()
     local dockerfile="" base_image="" built_tag=""
 
-    # Map each Dockerfile referenced in docker-compose.yml to its image tag.
+    # Map each dockerfile referenced in docker-compose.yml to its image tag.
     local compose_config=""
     compose_config="$(compose_with_installation_env "${COMPOSE_FILE}" config 2>/dev/null || true)"
 
