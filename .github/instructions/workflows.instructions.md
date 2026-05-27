@@ -12,3 +12,7 @@ applyTo: ".github/workflows/*.yml"
 - Do not add job-level `environment` blocks; GitHub Actions environments create
   deployment records. Keep release credentials in repository secrets with the
   documented names instead.
+- If Zizmor flags `secrets-outside-env` for the manual release workflow, keep
+  the ignore comment on the exact Docker Hub secret reference and keep the
+  explanation tied to the no-deployment-record policy. Do not disable the audit
+  globally and do not add a workflow environment to satisfy the scanner.
