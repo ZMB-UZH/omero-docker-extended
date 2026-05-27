@@ -30,9 +30,6 @@ jobs:
     name: Release prebuilt carrier
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ${{ inputs.runner_label }}
-    environment:
-      name: dockerhub-release
-      deployment: false
     permissions:
       contents: write
     env:

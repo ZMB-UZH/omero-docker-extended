@@ -7,9 +7,8 @@
   Compose image set into one docker hub carrier image, verifies the carrier
   contents, and creates a GitHub release with the same docker-compatible SemVer tag
   as the docker image tag. docker hub credentials use repository secrets named
-  `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job uses the
-  `dockerhub-release` GitHub Actions environment with deployment-record
-  creation disabled for optional protection rules without deployment history
+  `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job deliberately
+  avoids GitHub Actions environments so it cannot create deployment history
   entries, `DOCKERHUB_TOKEN` is documented as a docker hub access token for
   two-factor-authenticated accounts, release write permissions are scoped to
   the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
