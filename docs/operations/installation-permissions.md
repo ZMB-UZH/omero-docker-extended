@@ -425,7 +425,8 @@ This is one of the few intentionally broad write-permission exceptions in the st
 
 Behavior:
 
-- preserve runtime files and data paths derived from `installation_paths.env`,
+- preserve runtime files, `.env_backups/`, and data paths derived from
+  `installation_paths.env`,
 - protect `installation_paths.env` and runtime env files from overwrite,
 - ask the standard installer source-version question before replacement,
 - create/update a temporary clone from the selected branch, release tag, or commit,

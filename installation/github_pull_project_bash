@@ -466,6 +466,7 @@ replace_working_tree_with_clone() {
     # Built-in exclusions (always applied)
     find_args+=( ! -name '.git' )
     find_args+=( ! -name '.project-pull.*' )
+    find_args+=( ! -name '.env_backups' )
     find_args+=( ! -name 'installation_paths.env' )
     find_args+=( ! -name '.env' )
     find_args+=( ! -name 'env' )
@@ -530,6 +531,7 @@ replace_working_tree_with_clone() {
     echo "  - installation_paths.env (local installation paths source of truth)"
     echo "  - .env (docker compose runtime paths)"
     echo "  - env/ (credential and service env files)"
+    echo "  - .env_backups/ (operator env backups)"
     if [ ${#active_protected_files[@]} -gt 0 ]; then
         echo "  Preserved files (local file kept, sibling templates refreshed):"
         printf '    - %s\n' "${active_protected_files[@]}"
@@ -571,6 +573,7 @@ replace_working_tree_with_clone() {
     local -a clone_move_find_args=()
     clone_move_find_args+=( "${clone_dir}" -mindepth 1 -maxdepth 1 )
     clone_move_find_args+=( ! -name '.git' )
+    clone_move_find_args+=( ! -name '.env_backups' )
     clone_move_find_args+=( ! -name 'installation_paths.env' )
     clone_move_find_args+=( ! -name 'env' )
     if [ "${preserve_logo_png}" = true ]; then
