@@ -2114,7 +2114,7 @@ bootstrap_installation_checkout_if_missing() {
 
     if [ "${install_realpath}" = "${repo_realpath}" ]; then
         echo "ERROR: docker-compose.yml is missing from OMERO installation path: ${compose_file_path}" >&2
-        echo "ERROR: Repository checkout appears incomplete. Re-run github_pull_project_bash to restore project files." >&2
+        echo "ERROR: Repository checkout appears incomplete. Re-run installation/github_pull_project_bash to restore project files." >&2
         return 1
     fi
 
@@ -2440,7 +2440,7 @@ write_installation_paths_env() {
 # Re-run the installation script to regenerate after changing paths.
 #
 # This file is the single source of truth for all installation paths.
-# It is read by github_pull_project_bash to determine which directories
+# It is read by installation/github_pull_project_bash to determine which directories
 # to protect during updates, and by the installation script itself.
 #
 # Required variables:

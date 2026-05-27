@@ -66,7 +66,6 @@ KNOWN_EXACT_REPO_REFERENCES: frozenset[str] = frozenset(
         "docker-compose.yml",
         "installation_paths.env",
         "installation_paths_example.env",
-        "github_pull_project_bash_example",
         "supervisord.conf",
         "omero-web.config",
         "omero_imaris_connector/XTOmeroConnector.py",

@@ -971,9 +971,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in github pull script exports compressed build env integration.
         """
-        script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "github_pull_project_bash"
+        ).read_text(encoding="utf-8")
         self.assertIn("exec env", script_text)
         self.assertIn(
             'USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"',
@@ -993,16 +993,16 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in pull scripts enable transcript capture.
         """
-        scripts = [self.repo_root / "github_pull_project_bash_example"]
+        scripts = [self.repo_root / "installation" / "github_pull_project_bash"]
 
         for script in scripts:
             text = script.read_text(encoding="utf-8")
             self.assertIn(
-                'TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"',
+                'TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"',
                 text,
             )
             self.assertIn(
-                'install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"',
+                'install_transcript_enable "${REPO_ROOT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"',
                 text,
             )
 
@@ -1029,40 +1029,50 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("tty_echo()", script_text)
         self.assertIn("tty_read_line()", script_text)
 
-    def test_public_pull_script_defaults_to_public_repo(self) -> None:
-        """Verify the public pull script defaults to public repo execution contract.
+    def test_public_pull_script_defaults_to_public_repo_and_remote_default_branch(
+        self,
+    ) -> None:
+        """Verify the public pull script defaults to public repo and remote HEAD.
 
-        Inputs: repository fixtures. Output: fails on regressions in public pull script defaults to public repo integration.
+        Inputs: repository fixtures. Output: fails on hard-coded branch defaults.
         """
-        script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "github_pull_project_bash"
+        ).read_text(encoding="utf-8")
         self.assertIn(
             'REPO_URL="${REPO_URL:-https://github.com/ZMB-UZH/omero-docker-extended.git}"',
             script_text,
         )
-        self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
+        self.assertIn('REPO_BRANCH="${REPO_BRANCH:-}"', script_text)
+        self.assertIn("resolve_latest_repo_branch()", script_text)
+        self.assertIn('git ls-remote --symref "${REPO_URL}" HEAD', script_text)
+        self.assertNotIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
 
     def test_public_pull_script_is_https_only(self) -> None:
         """Verify the public pull script is https only execution contract.
 
         Inputs: repository fixtures. Output: fails on regressions in public pull script is https only integration.
         """
-        script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "github_pull_project_bash"
+        ).read_text(encoding="utf-8")
         self.assertNotIn("GIT_SSH_COMMAND", script_text)
         self.assertIn("supports only HTTP(S) repository URLs", script_text)
 
-    def test_public_pull_script_protects_runtime_pull_helper(self) -> None:
-        """Verify the public pull script protects runtime pull helper execution contract.
+    def test_public_pull_script_refreshes_tracked_installation_launcher(self) -> None:
+        """Verify the public pull script refreshes the tracked installation launcher.
 
-        Inputs: repository fixtures. Output: fails on regressions in public pull script protects runtime pull helper integration.
+        Inputs: repository fixtures. Output: fails on stale root-launcher protection.
         """
-        script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
+        script_text = (
+            self.repo_root / "installation" / "github_pull_project_bash"
+        ).read_text(encoding="utf-8")
+        self.assertIn('REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"', script_text)
+        self.assertIn(
+            'replace_working_tree_with_clone "${BOOTSTRAP_CLONE_DIR}" "${REPO_ROOT_DIR}"',
+            script_text,
         )
-        self.assertIn("! -name 'github_pull_project_bash'", script_text)
+        self.assertNotIn("! -name 'github_pull_project_bash'", script_text)
 
     # ------------------------------------------------------------------
     # CrowdSec conditional probe injection
@@ -2225,7 +2235,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / "helper_scripts_debian" / "docker_image_analysis.sh"
         ).read_text(encoding="utf-8")
         public_pull_script = (
-            self.repo_root / "github_pull_project_bash_example"
+            self.repo_root / "installation" / "github_pull_project_bash"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("IFS=$'\\n\\t'", extra_packages_script)

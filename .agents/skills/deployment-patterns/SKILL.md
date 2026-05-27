@@ -16,7 +16,7 @@ Start from `third_party/ecc-v1.10.0/skills/deployment-patterns/SKILL.md` for gen
 ## Repo overlay
 
 - This repo is a single integrated docker compose platform, not a generic cloud microservice stack.
-- Favor explicit update safety over clever rollout logic; check `installation/`, `github_pull_project_bash_example`, and the deployment docs first.
+- Favor explicit update safety over clever rollout logic; check `installation/`, `installation/github_pull_project_bash`, and the deployment docs first.
 - Keep configuration in `env/*_example.env` and `installation_paths_example.env`, not in workflow or compose defaults.
 - Preserve health checks, image pinning, and no-new-privileges hardening.
 - Keep the standard installer and `easy_installation_script.sh`

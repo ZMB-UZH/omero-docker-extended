@@ -5,7 +5,7 @@
 - Added a manual `release-prebuilt-carrier` GitHub Actions workflow that creates
   a source archive, builds hardened flattened runtime images, bundles the
   Compose image set into one docker hub carrier image, verifies the carrier
-  contents, and creates a GitHub release with the same SemVer pre-release tag
+  contents, and creates a GitHub release with the same docker-compatible SemVer tag
   as the docker image tag. docker hub credentials use repository secrets named
   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, the release job uses the
   `dockerhub-release` GitHub Actions environment with deployment-record
@@ -13,7 +13,7 @@
   entries, `DOCKERHUB_TOKEN` is documented as a docker hub access token for
   two-factor-authenticated accounts, release write permissions are scoped to
   the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
-  a branch-targeted draft prerelease before publishing it after carrier-image
+  a branch-targeted draft release before publishing it after carrier-image
   verification.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
