@@ -37,6 +37,9 @@
 - Reduced prebuilt-carrier release runner storage pressure by disabling
   ephemeral Buildx local-cache export in the manual release workflow and by
   flattening each serially built target before the next target is built.
+- Added a Compose-derived release storage guard that prunes only
+  non-required runner-local docker image references before the workflow pulls
+  missing required images and saves `runtime-images.tar.gz`.
 - Eliminated the prebuilt carrier's duplicate runtime-archive layer and removed
   the carrier wrapper's Alpine base image and BusyBox package surface by making
   `docker/prebuilt-carrier.Dockerfile` a scratch-based data image with a single

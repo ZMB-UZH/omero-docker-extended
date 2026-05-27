@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           df -h /
-          docker system df || true
+          docker system df
 
       - name: Refuse existing release or image tag
         env:
@@ -234,6 +234,12 @@ jobs:
             COMPOSE_PROFILES="${COMPOSE_PROFILES:?}" docker compose -f docker-compose.yml config --images | sort -u
           )
           [ "${#compose_images[@]}" -gt 0 ] || { echo "No Compose images were discovered." >&2; exit 1; }
+          printf '%s\n' "${compose_images[@]}" > dist/prebuilt-required-images.txt
+          python3 tools/prune_non_required_docker_images.py \
+            --required-images-file dist/prebuilt-required-images.txt \
+            --execute
+          df -h /
+          docker system df
           for image_ref in "${compose_images[@]}"; do
             case "${image_ref}" in
               ""|latest|*:latest|*:latest@*)
@@ -245,14 +251,13 @@ jobs:
               docker pull "${image_ref}"
             fi
           done
-          printf '%s\n' "${compose_images[@]}" > dist/prebuilt-required-images.txt
           docker save "${compose_images[@]}" \
             | python3 tools/write_prebuilt_runtime_archive.py \
                 --archive dist/runtime-images.tar.gz \
                 --raw-bytes-file dist/runtime-images-uncompressed.bytes
           test -s dist/runtime-images-uncompressed.bytes
           df -h /
-          docker system df || true
+          docker system df
 
       - name: Write prebuilt manifest
         run: |
@@ -372,7 +377,7 @@ jobs:
             -t "${CARRIER_IMAGE}" \
             dist
           df -h /
-          docker system df || true
+          docker system df
 
       - name: Verify carrier image contents
         run: |

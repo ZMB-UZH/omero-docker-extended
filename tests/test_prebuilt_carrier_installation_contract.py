@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 
 from tools import prebuilt_release_metadata
+from tools import prune_non_required_docker_images
 from tools import write_prebuilt_runtime_archive
 
 
@@ -622,6 +623,11 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "docker compose -f docker-compose.yml config --images", workflow_text
         )
         self.assertIn('COMPOSE_PROFILES="${COMPOSE_PROFILES:?}"', workflow_text)
+        self.assertIn("tools/prune_non_required_docker_images.py", workflow_text)
+        self.assertIn(
+            "--required-images-file dist/prebuilt-required-images.txt", workflow_text
+        )
+        self.assertNotIn("docker system df || true", workflow_text)
         self.assertIn('docker save "${compose_images[@]}"', workflow_text)
         self.assertIn("tools/write_prebuilt_runtime_archive.py", workflow_text)
         self.assertIn("image_archive_sha256", workflow_text)
@@ -799,6 +805,52 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             self.assertEqual(len(payload), raw_bytes)
             self.assertEqual(f"{len(payload)}\n", bytes_path.read_text())
             self.assertEqual(payload, gzip.decompress(archive_path.read_bytes()))
+
+    def test_release_prune_helper_keeps_only_compose_required_images(self) -> None:
+        """Verify release pruning is derived from required image references.
+
+        Inputs: synthetic docker image listing. Output: asserts removable refs.
+        """
+        required_images = [
+            "example.local/required-one:1.0.0",
+            "example.local/required-two:2.0.0",
+        ]
+        local_images = [
+            prune_non_required_docker_images.LocalImage(
+                reference="example.local/required-one:1.0.0",
+                image_id="sha256:required-one",
+            ),
+            prune_non_required_docker_images.LocalImage(
+                reference="example.local/required-two:2.0.0",
+                image_id="sha256:required-two",
+            ),
+            prune_non_required_docker_images.LocalImage(
+                reference="example.local/base-only:3.0.0",
+                image_id="sha256:base",
+            ),
+            prune_non_required_docker_images.LocalImage(
+                reference="example.local/required-one-alias:4.0.0",
+                image_id="sha256:required-one",
+            ),
+        ]
+
+        removable = prune_non_required_docker_images.removable_image_references(
+            required_images=required_images,
+            local_images=local_images,
+            required_image_ids={"sha256:required-one", "sha256:required-two"},
+        )
+
+        self.assertEqual(["example.local/base-only:3.0.0"], removable)
+
+    def test_release_prune_helper_rejects_unsafe_image_references(self) -> None:
+        """Verify pruning helper rejects floating or malformed refs.
+
+        Inputs: malformed synthetic image refs. Output: asserts validation fails.
+        """
+        for image_ref in ("latest", "repo/image:latest", "-bad:tag", "bad tag"):
+            with self.subTest(image_ref=image_ref):
+                with self.assertRaises(ValueError):
+                    prune_non_required_docker_images.validate_image_reference(image_ref)
 
     def test_prebuilt_carrier_image_is_scratch_data_only(self) -> None:
         """Verify carrier image is data-only and has no OS package surface.
