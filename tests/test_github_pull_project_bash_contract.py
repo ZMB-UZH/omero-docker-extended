@@ -23,6 +23,7 @@ RUNTIME_DIRS = (
     "postgresdb/plugin_database",
     "omero_data",
     "omero_temp",
+    "omero_data/buildx_cache",
     "omero_data/user",
     "omero_data/import",
     "omero_data/omeroserver-var",
@@ -76,6 +77,7 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
                 f"clone --depth 1 --branch {FAKE_DEFAULT_BRANCH}",
                 self._read_git_log(git_log),
             )
+            self.assertFalse(list(install_root.glob(".project-pull.*")))
 
     def test_release_tag_source_selection_clones_exact_tag(self) -> None:
         """Verify a GitHub release tag is fetched and cloned as an exact tag.
@@ -435,6 +437,7 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             OMERO_PLUGIN_DATABASE_PATH={install_root}/postgresdb/plugin_database
             OMERO_DATA_PATH={install_root}/omero_data
             OMERO_TMP_PATH={install_root}/omero_temp
+            BUILDX_DATA_PATH={install_root}/omero_data/buildx_cache
             OMERO_USER_DATA_PATH={install_root}/omero_data/user
             OMERO_IMPORT_PATH={install_root}/omero_data/import
             OMERO_SERVER_VAR_PATH={install_root}/omero_data/omeroserver-var

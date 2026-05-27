@@ -11,12 +11,14 @@ Security practices and controls for this deployment.
 - `installation_paths.env` is also gitignored (contains site-specific paths).
 - Provide deployment-local credentials before deployment. The tracked secret example keeps values empty; database passwords, OMERO root password, job-service account password, Grafana admin password, hash secrets (`OMP_HASH_SECRET`, `FMP_HASH_SECRET`), and LDAP bind credentials/filter settings must be set only in deployment-local env files.
 - The `installation/github_pull_project_bash` update script preserves `env/`,
-  `installation_paths.env`, and `.env_backups/`, keeps existing site-local
-  `logo/logo.png` in place while refreshing `logo/logo_example.png`, and does
-  not overwrite non-example runtime files during repository updates. It resolves
+  `installation_paths.env`, `.env_backups/`, and every configured runtime path
+  including `BUILDX_DATA_PATH`, keeps existing site-local `logo/logo.png` in
+  place while refreshing `logo/logo_example.png`, and does not overwrite
+  non-example runtime files during repository updates. It resolves
   installation-path assignments with the same safe parser family as the
   installer and rejects command substitution instead of evaluating env-file
-  lines. The real `logo/logo.png` asset is deployment-local and gitignored.
+  lines. Temporary bootstrap clones are removed before the installer starts.
+  The real `logo/logo.png` asset is deployment-local and gitignored.
 
 ## Container security
 
