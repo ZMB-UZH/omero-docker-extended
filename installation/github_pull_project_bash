@@ -15,11 +15,20 @@ REPO_SOURCE_REF="${REPO_SOURCE_REF:-}"
 SELECTED_REPO_SOURCE_MODE="latest"
 SELECTED_REPO_SOURCE_REF="latest"
 TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"
+ENV_ASSIGNMENT_HELPER_PATH="${SCRIPT_DIR}/env_assignment_utils.sh"
 
 if [ -r "${TRANSCRIPT_HELPER_PATH}" ]; then
     # shellcheck disable=SC1090
     . "${TRANSCRIPT_HELPER_PATH}"
 fi
+
+if [ ! -r "${ENV_ASSIGNMENT_HELPER_PATH}" ]; then
+    echo "ERROR: Required env assignment helper is missing or unreadable: ${ENV_ASSIGNMENT_HELPER_PATH}" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "${ENV_ASSIGNMENT_HELPER_PATH}"
 
 if declare -F install_transcript_enable >/dev/null 2>&1; then
     install_transcript_enable "${REPO_ROOT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"
@@ -67,6 +76,18 @@ is_valid_git_tag_selector() {
 
     [ -n "${value}" ] || return 1
     git check-ref-format "refs/tags/${value}" >/dev/null 2>&1
+}
+
+
+is_shell_variable_name() {
+    case "${1:-}" in
+        ''|[0-9]*|*[!A-Za-z0-9_]*)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
 }
 
 
@@ -267,19 +288,7 @@ resolve_all_data_paths() {
     fi
 
     (
-        local env_line
-        while IFS= read -r env_line || [ -n "${env_line}" ]; do
-            case "${env_line}" in
-                ''|'#'*)
-                    continue
-                    ;;
-                [A-Za-z_]*=*)
-                    eval "${env_line}"
-                    ;;
-                *)
-                    ;;
-            esac
-        done < "${env_file}"
+        load_resolved_env_assignments "${env_file}" || exit 1
 
         printf '%s\n' \
             "${OMERO_INSTALLATION_PATH:-}" \
@@ -305,6 +314,44 @@ resolve_all_data_paths() {
     )
 }
 
+
+load_resolved_env_assignments() {
+    local env_file="$1"
+    local env_line=""
+    local env_key=""
+    local env_value=""
+    local resolved_value=""
+
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: Required installation paths file is missing or unreadable: ${env_file}" >&2
+        return 1
+    fi
+
+    while IFS= read -r env_line || [ -n "${env_line}" ]; do
+        case "${env_line}" in
+            ''|'#'*)
+                continue
+                ;;
+            [A-Za-z_]*=*)
+                env_key="${env_line%%=*}"
+                env_value="${env_line#*=}"
+                if ! is_shell_variable_name "${env_key}"; then
+                    echo "ERROR: Invalid environment variable name in ${env_file}: ${env_key}" >&2
+                    return 1
+                fi
+                if ! resolved_value="$(resolve_env_assignment_value "${env_value}")"; then
+                    echo "ERROR: Refusing unsafe value for ${env_key} from ${env_file}" >&2
+                    return 1
+                fi
+                printf -v "${env_key}" '%s' "${resolved_value}"
+                export "${env_key?}"
+                ;;
+            *)
+                ;;
+        esac
+    done < "${env_file}"
+}
+
 # ---------------------------------------------------------------------------
 # collect_protected_top_level_names
 #
@@ -323,7 +370,9 @@ collect_protected_top_level_names() {
     fi
 
     local resolved_paths
-    resolved_paths="$(resolve_all_data_paths "${env_file}")"
+    if ! resolved_paths="$(resolve_all_data_paths "${env_file}")"; then
+        return 1
+    fi
 
     local _path _rel _top
     while IFS= read -r _path; do
@@ -365,8 +414,7 @@ collect_sentinel_dir_names() {
     fi
 
     (
-        # shellcheck disable=SC1090
-        . "${env_file}" 2>/dev/null || exit 0
+        load_resolved_env_assignments "${env_file}" || exit 1
 
         local _install_root="${OMERO_INSTALLATION_PATH:-}"
         _install_root="${_install_root%/}"
@@ -437,10 +485,14 @@ replace_working_tree_with_clone() {
 
     # ── 1. Collect top-level data directories (direct exclusions) ─────
     local -a protected_data_dirs=()
+    local protected_data_dir_output=""
     local _name
+    if ! protected_data_dir_output="$(collect_protected_top_level_names "${current_repo_dir}")"; then
+        return 1
+    fi
     while IFS= read -r _name; do
         [ -n "${_name}" ] && protected_data_dirs+=("${_name}")
-    done < <(collect_protected_top_level_names "${current_repo_dir}")
+    done <<< "${protected_data_dir_output}"
 
     if [ ${#protected_data_dirs[@]} -eq 0 ]; then
         echo "WARNING: No top-level protected data directories were discovered under ${current_repo_dir}." >&2
@@ -449,9 +501,13 @@ replace_working_tree_with_clone() {
 
     # ── 2. Collect sentinel directory names for the deep scan ─────────
     local -a sentinel_names=()
+    local sentinel_name_output=""
+    if ! sentinel_name_output="$(collect_sentinel_dir_names "${current_repo_dir}")"; then
+        return 1
+    fi
     while IFS= read -r _name; do
         [ -n "${_name}" ] && sentinel_names+=("${_name}")
-    done < <(collect_sentinel_dir_names "${current_repo_dir}")
+    done <<< "${sentinel_name_output}"
 
     if [ ${#sentinel_names[@]} -eq 0 ]; then
         echo "ERROR: No sentinel directory names were discovered from installation_paths.env." >&2
