@@ -200,8 +200,8 @@ jobs:
 
       - name: Authenticate to docker hub
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
         run: |
           set -euo pipefail
           [ -n "${DOCKERHUB_USERNAME}" ] || { echo "DOCKERHUB_USERNAME secret is required." >&2; exit 1; }

@@ -526,6 +526,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("DOCKERHUB_TOKEN", workflow_text)
         self.assertIn("--password-stdin", workflow_text)
         self.assertNotIn("DOCKERHUB_ACCESS_TOKEN", workflow_text)
+        self.assertIn("# zizmor: ignore[secrets-outside-env]", workflow_text)
+        self.assertIn(
+            "GitHub Actions environments create deployment records", workflow_text
+        )
         self.assertIn(
             "from tools.env_safety_guard import resolve_env_references",
             workflow_text,
