@@ -99,9 +99,8 @@ Examples:
   with service-name hardcoding or image-specific cleanup.
 - The workflow uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token must
   be a docker hub access token, never an account password. No workflow in this
-  repository may create GitHub deployment records. Keep the `dockerhub-release`
-  environment on that release job only, and keep `deployment: false` so
-  protected secrets do not create deployment history.
+  repository may create GitHub deployment records. Do not add job-level
+  `environment` blocks; GitHub Actions environments create deployment records.
 - Before claiming installation parity, prove the targeted code path with local
   contract tests and, for release/easy-install changes, a live install or update
   run from the exact checkout/tag under test while preserving non-example env
@@ -306,6 +305,6 @@ SH
 - Before security-sensitive edits, read `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, and `docs/operations/code-scanning.md`.
 - Fix root causes before considering suppressions.
 - Refresh action versions from official GitHub releases or tags before touching workflow pins.
-- No workflow in this repository may create GitHub deployment records. If a job
-  needs a GitHub environment for protected secrets, it must set
-  `deployment: false`.
+- No workflow in this repository may create GitHub deployment records. Do not
+  add job-level `environment` blocks; GitHub Actions environments create
+  deployment records.

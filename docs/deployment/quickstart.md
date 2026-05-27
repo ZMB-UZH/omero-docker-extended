@@ -124,10 +124,10 @@ required when repository Actions settings allow workflow write permissions. The
 release targets the default branch ref, creates a draft GitHub release with
 source artifacts, pushes and verifies the carrier image, then publishes the
 release. If the carrier publish fails after the draft was created, the
-workflow deletes that draft release and its tag. The release job uses the
-`dockerhub-release` GitHub Actions environment with deployment-record creation
-disabled, so environment secrets and protection rules remain available without
-adding GitHub deployment history entries. Before saving the runtime archive,
+workflow deletes that draft release and its tag. The release job deliberately
+does not use a GitHub Actions environment, because job environments create
+deployment records. Keep the Docker Hub credentials as repository secrets with
+the documented names. Before saving the runtime archive,
 the workflow derives the required image references from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner
 storage pressure without changing the carrier contents. The `DOCKERHUB_TOKEN`

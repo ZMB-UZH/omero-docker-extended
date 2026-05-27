@@ -483,8 +483,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "github.ref_name == github.event.repository.default_branch",
             release_job["if"],
         )
-        self.assertEqual("dockerhub-release", release_job["environment"]["name"])
-        self.assertFalse(release_job["environment"]["deployment"])
+        self.assertNotIn("environment", release_job)
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("write", release_job["permissions"]["contents"])
         self.assertEqual("${{ inputs.runner_label }}", release_job["runs-on"])
@@ -540,8 +539,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn('env_values["REDIS_DATA_TMPFS_SIZE"] =', workflow_text)
         self.assertNotIn('COMPOSE_PROFILES="sysctl-init,crowdsec"', workflow_text)
 
-    def test_workflow_environments_do_not_create_github_deployments(self) -> None:
-        """Verify all workflow environments opt out of deployment records.
+    def test_workflows_do_not_use_github_actions_environments(self) -> None:
+        """Verify workflows do not use GitHub Actions environments.
 
         Inputs: workflow fixtures. Output: empty offender list.
         """
@@ -550,19 +549,11 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         for workflow_path in sorted(workflows_dir.glob("*.yml")):
             workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
             for job_name, job in workflow.get("jobs", {}).items():
-                environment = job.get("environment")
-                if environment is None:
-                    continue
-                if isinstance(environment, str):
+                if "environment" in job:
                     offenders.append(
                         f"{workflow_path.relative_to(self.repo_root)}:{job_name}: "
-                        "environment must use deployment: false"
-                    )
-                    continue
-                if environment.get("deployment") is not False:
-                    offenders.append(
-                        f"{workflow_path.relative_to(self.repo_root)}:{job_name}: "
-                        "environment.deployment must be false"
+                        "remove the job environment because GitHub Actions "
+                        "environments create deployment records"
                     )
         self.assertEqual([], offenders)
         workflow_instructions = self.read_text(
@@ -574,7 +565,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 "No workflow in this repository may create GitHub deployment records",
                 instruction_text,
             )
-            self.assertIn("deployment: false", instruction_text)
+            self.assertIn("Do not", instruction_text)
+            self.assertIn("job-level", instruction_text)
+            self.assertIn("`environment` blocks", instruction_text)
 
     def test_release_workflow_embedded_python_blocks_parse(self) -> None:
         """Verify workflow heredoc Python is syntactically valid.
