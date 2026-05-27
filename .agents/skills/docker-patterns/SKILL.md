@@ -22,4 +22,6 @@ Start from `third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md` for generic
 - The prebuilt carrier is a scratch data image. Do not add an OS base, shell,
   package manager, healthcheck command, or post-copy permission mutation that
   duplicates the large runtime archive layer.
+- Release-runner storage cleanup must be derived from the rendered Compose
+  image list. Do not hard-code service images or prune required image IDs.
 - For live runtime probing, follow the Loki-first and service-user rules in `AGENTS.md`.

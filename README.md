@@ -426,9 +426,12 @@ carrier publish fails after the draft was created, the workflow deletes that
 draft release and its tag. The job uses the `dockerhub-release` GitHub Actions
 environment with deployment-record creation disabled, so repository owners can
 add environment protection rules without adding GitHub deployment history
-entries or changing the secret names. The `DOCKERHUB_TOKEN` value must be a
-docker hub access token with write access to the carrier repository; do not
-store a docker hub account password there.
+entries or changing the secret names. Before the runtime archive is saved, the
+workflow derives the required image references from Compose and prunes only
+runner-local docker images outside that required set to keep hosted-runner
+storage available without changing the released image list. The
+`DOCKERHUB_TOKEN` value must be a docker hub access token with write access to
+the carrier repository; do not store a docker hub account password there.
 
 **5.** After a successful installation, run:
 

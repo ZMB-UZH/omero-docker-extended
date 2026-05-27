@@ -93,6 +93,10 @@ Examples:
   source archive and manifest, pushes one carrier image, verifies the copied
   metadata from that image with `docker create`/`docker cp`, and publishes a
   GitHub prerelease with the same SemVer tag as the carrier image.
+- Before the workflow saves `runtime-images.tar.gz`, it must derive the
+  required image set from the rendered Compose config and may prune only
+  runner-local docker images outside that required set. Do not replace this
+  with service-name hardcoding or image-specific cleanup.
 - The workflow uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token must
   be a docker hub access token, never an account password. No workflow in this
   repository may create GitHub deployment records. Keep the `dockerhub-release`
