@@ -137,6 +137,33 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             self.assertNotIn("INSTALLER_OK", result.stdout)
             self.assertNotIn("clone ", self._read_git_log(git_log))
 
+    def test_env_backups_are_preserved_during_replacement(self) -> None:
+        """Verify update replacement keeps operator env backups.
+
+        Inputs: synthetic installation root with `.env_backups`. Output: confirms
+        backup files survive source replacement.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_path = Path(tmp_dir)
+            install_root = self._write_install_root(temp_path)
+            fake_bin, _git_log = self._write_fake_git(temp_path)
+            backup_file = (
+                install_root
+                / ".env_backups"
+                / "20260527T000000_000000Z"
+                / "installation_paths.env"
+            )
+
+            result = self._run_launcher(
+                install_root,
+                fake_bin,
+                extra_env={"INSTALLATION_AUTOMATION_MODE": "1"},
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertTrue(backup_file.is_file())
+            self.assertIn(".env_backups/ (operator env backups)", result.stdout)
+
     def test_easy_install_path_rejects_source_ref_selector(self) -> None:
         """Verify the Git source selector cannot collide with easy installation.
 
@@ -286,6 +313,11 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
         ]
         for relative_dir in runtime_dirs:
             (install_root / relative_dir).mkdir(parents=True, exist_ok=True)
+        backup_dir = install_root / ".env_backups" / "20260527T000000_000000Z"
+        backup_dir.mkdir(parents=True)
+        (backup_dir / "installation_paths.env").write_text(
+            "backup=1\n", encoding="utf-8"
+        )
         (install_root / "env").mkdir()
         (install_root / "env" / "omeroserver.env").write_text(
             "LOCAL=1\n", encoding="utf-8"
