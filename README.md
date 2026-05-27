@@ -157,6 +157,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── docker_buildx_compressed_push.sh # Buildx compressed image build/push helper
 │   ├── easy_installation_script.sh    #   Strict prebuilt carrier installation entrypoint
 │   ├── env_assignment_utils.sh        #   Shell env-file assignment helpers
+│   ├── github_pull_project_bash       #   Safe pull/update launcher with source-ref selection
 │   ├── install_transcript_utils.sh    #   Installation transcript utilities
 │   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
 │   └── load_prebuilt_carrier.sh       #   Verifies and loads carrier-bundled runtime images
@@ -175,7 +176,6 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── .env_example                       # Template for Compose interpolation defaults
 ├── installation_paths_example.env     # Template for filesystem paths
-├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
 ├── iter_test_helpers.py               # Shared test helper functions
 ├── mypy.ini                           # Mypy configuration
 ├── docs/                              # Full documentation set (see docs/index.md)
@@ -308,11 +308,6 @@ Common utilities shared across all plugins:
 <details open>
 <summary><h2>Deployment</h2></summary>
 
-> WARNING!
-> **Beta version**
->
-> OMERO Docker Extended is currently in beta stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
-
 ### Prerequisites
 
 - Root access on the Linux host.
@@ -322,7 +317,7 @@ Common utilities shared across all plugins:
   - RAM: minimum 16 GB (32 GB recommended)
 - docker engine and docker compose plugin installed on the host.
 - Host storage paths with adequate filesystem permissions.
-- Network access to GitHub configured if using the pull-based update workflow (see `github_pull_project_bash_example`).
+- Network access to GitHub configured if using the pull-based update workflow (see `installation/github_pull_project_bash`).
 
 ### Recommended installation workflow
 
@@ -341,16 +336,15 @@ cd /opt/omero
 - `.env_example`
 - `docker-compose.yml`
 - `env/` directory
+- `installation/` directory
 - `helper_scripts_debian/` directory
-- `github_pull_project_bash_example`
 
 Then, create runtime copies by removing the `_example` suffix where applicable
-(`installation_paths.env`, `github_pull_project_bash`, etc.). The installer
-generates `.env` from deployment-local values and renders Compose-only keys
-from `.env_example` while preserving existing generated `.env` assignments.
-Keep installation-specific settings in non-example runtime files; non-example
-runtime files are authoritative and are not overwritten by the pull/update
-workflow.
+(`installation_paths.env`, environment files, etc.). The installer generates
+`.env` from deployment-local values and renders Compose-only keys from
+`.env_example` while preserving existing generated `.env` assignments. Keep
+installation-specific settings in non-example runtime files; non-example runtime
+files are authoritative and are not overwritten by the pull/update workflow.
 
 > IMPORTANT!
 > **Mandatory credential setup before first installation**
@@ -375,12 +369,24 @@ docker compose ps
 
 ```bash
 cd /opt/omero
-sudo chown root:root github_pull_project_bash
-sudo chmod +x github_pull_project_bash
-sudo bash ./github_pull_project_bash
+sudo chown root:root installation/github_pull_project_bash
+sudo chmod +x installation/github_pull_project_bash
+sudo bash ./installation/github_pull_project_bash
 ```
 
-The script prompts for installation parameters (defaults are available), installs/updates all necessary files, and finally starts the full stack upon choice. Installation duration depends on host CPU and disk performance, and is optimized for multi-threaded systems.
+For the standard build-based workflow, the first prompt asks which source
+version to install. Empty input or `latest` keeps the default behavior and uses
+the latest commit from `REPO_BRANCH`; when `REPO_BRANCH` is unset, the launcher
+resolves the repository's remote default branch instead of assuming a branch
+name. An exact GitHub release tag uses that release's source tree; a commit hash
+checks out that commit. Invalid or unavailable selections fail before repository
+files are replaced. After the source tree is selected, the script prompts for
+installation parameters (defaults are available), installs/updates all necessary
+files, and finally starts the full stack upon choice. Installation duration
+depends on host CPU and disk performance, and is optimized for multi-threaded
+systems. For unattended standard installs, set `REPO_SOURCE_REF` to `latest`,
+the release tag, or the commit hash; when it is unset in automation mode, the
+launcher uses `latest`.
 
 The pull/update script also saves a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data path.
 
@@ -388,7 +394,7 @@ The pull/update script also saves a full terminal transcript of the visible sess
 
 The easy installer uses a manually published release carrier image from docker
 hub instead of building the repository dockerfiles on the target host. The
-carrier is a single docker image tagged with the same SemVer pre-release
+carrier is a single docker image tagged with the same docker-compatible SemVer
 version as the GitHub release. During installation,
 `installation/easy_installation_script.sh` pulls that one carrier, verifies its
 manifest and compressed archive checksum, loads the bundled runtime image tags
@@ -420,8 +426,8 @@ repository secrets before running it. The workflow uses GitHub Actions'
 built-in `GITHUB_TOKEN` with job-scoped `contents: write` permission to create
 the GitHub release; no separate GitHub PAT secret is required when repository
 Actions settings allow workflow write permissions. The release targets the
-default branch ref, creates a draft GitHub prerelease with source artifacts,
-pushes and verifies the carrier image, then publishes the prerelease. If the
+default branch ref, creates a draft GitHub release with source artifacts,
+pushes and verifies the carrier image, then publishes the release. If the
 carrier publish fails after the draft was created, the workflow deletes that
 draft release and its tag. The job uses the `dockerhub-release` GitHub Actions
 environment with deployment-record creation disabled, so repository owners can
@@ -458,7 +464,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI Agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
-- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files that operators manage locally.
+- This split exists so update flows (including `installation/github_pull_project_bash`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
 - The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
 ### Basic docker commands

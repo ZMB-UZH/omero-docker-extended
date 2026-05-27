@@ -21,6 +21,9 @@ from tools import prune_non_required_docker_images
 from tools import write_prebuilt_runtime_archive
 
 
+VALID_RELEASE_VERSION = "1.0.0-main.1"
+
+
 class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
     """Verify easy installation and release carrier wiring."""
 
@@ -90,7 +93,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 "#!/usr/bin/env python3\n"
                 "import re\n"
                 "import sys\n"
-                "ok = len(sys.argv) == 3 and sys.argv[1] == '--validate-release-version' and re.fullmatch(r'0\\.9\\.0-beta\\.2', sys.argv[2])\n"
+                "ok = len(sys.argv) == 3 and sys.argv[1] == '--validate-release-version' and re.fullmatch(r'1\\.0\\.0-main\\.1', sys.argv[2])\n"
                 "raise SystemExit(0 if ok else 1)\n"
             ),
             encoding="utf-8",
@@ -144,7 +147,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("load_prebuilt_carrier.sh", script)
         self.assertIn("prebuilt_release_metadata.py", script)
         self.assertIn("--validate-release-version", script)
-        self.assertIn("Run ./github_pull_project_bash", script)
+        self.assertIn("Run ./installation/github_pull_project_bash", script)
         self.assertIn('export PREBUILT_IMAGE_MODE="require"', script)
         self.assertIn('exec "${SCRIPT_DIR}/installation_script.sh" "$@"', script)
         self.assertNotIn("docker compose build", script)
@@ -169,7 +172,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 cwd=root,
                 env={
                     **os.environ,
-                    "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                    "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
                 text=True,
@@ -197,7 +200,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 cwd=root,
                 env={
                     **os.environ,
-                    "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                    "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
                 text=True,
@@ -210,7 +213,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 cwd=root,
                 env={
                     **os.environ,
-                    "PREBUILT_IMAGE_RELEASE": "v0.9.0-beta.2",
+                    "PREBUILT_IMAGE_RELEASE": f"v{VALID_RELEASE_VERSION}",
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
                 text=True,
@@ -221,7 +224,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
 
         self.assertEqual(valid_result.returncode, 0, valid_result.stderr)
         self.assertIn("mode=require", valid_result.stdout)
-        self.assertIn("release=0.9.0-beta.2", valid_result.stdout)
+        self.assertIn(f"release={VALID_RELEASE_VERSION}", valid_result.stdout)
         self.assertEqual(invalid_result.returncode, 1)
         self.assertIn("PREBUILT_IMAGE_RELEASE must be", invalid_result.stderr)
 
@@ -250,7 +253,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                         cwd=root,
                         env={
                             **os.environ,
-                            "PREBUILT_IMAGE_RELEASE": "0.9.0-beta.2",
+                            "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
                             "INSTALLATION_AUTOMATION_MODE": "1",
                         },
                         text=True,
@@ -686,7 +689,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn('--target "${RELEASE_TARGET_REF}"', workflow_text)
         self.assertIn("--draft", workflow_text)
         self.assertIn("--draft=false", workflow_text)
-        self.assertIn("--prerelease", workflow_text)
+        self.assertNotIn("--prerelease", workflow_text)
         self.assertIn("if: failure()", workflow_text)
         self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN=1", workflow_text)
         self.assertIn("RELEASE_DRAFT_CREATED_BY_RUN:-0", workflow_text)
@@ -709,39 +712,50 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn('--target "${GITHUB_SHA}"', workflow_text)
         self.assertNotIn("git ls-remote", workflow_text)
 
-    def test_release_metadata_helper_generates_professional_beta_versions(self) -> None:
+    def test_release_metadata_helper_generates_professional_main_versions(self) -> None:
         """Verify release helper keeps GitHub and docker tags aligned.
 
-        Inputs: synthetic tag sets. Output: asserts SemVer beta and rejection logic.
+        Inputs: synthetic tag sets. Output: asserts SemVer main-channel and rejection logic.
         """
         self.assertEqual(
-            "0.1.0-beta.1",
-            prebuilt_release_metadata.next_beta_release_version(()),
+            VALID_RELEASE_VERSION,
+            prebuilt_release_metadata.next_main_release_version(()),
         )
         self.assertEqual(
-            "0.9.0-beta.2",
-            prebuilt_release_metadata.next_beta_release_version(
-                ("not-a-release", "0.8.0", "0.9.0-beta.1")
+            VALID_RELEASE_VERSION,
+            prebuilt_release_metadata.next_main_release_version(
+                ("not-a-release", "0.8.0", "0.9.0-main.7", "0.9.0-legacy.1")
             ),
         )
         self.assertEqual(
-            "1.2.4-beta.1",
-            prebuilt_release_metadata.next_beta_release_version(("1.2.3",)),
+            "1.0.0-main.2",
+            prebuilt_release_metadata.next_main_release_version(
+                (VALID_RELEASE_VERSION,)
+            ),
+        )
+        self.assertEqual(
+            "1.2.4-main.1",
+            prebuilt_release_metadata.next_main_release_version(("1.2.3",)),
         )
         self.assertEqual(
             (
-                "0.9.0-beta.1",
+                VALID_RELEASE_VERSION,
                 "strmt7/omero-docker-extended",
-                "strmt7/omero-docker-extended:0.9.0-beta.1",
+                f"strmt7/omero-docker-extended:{VALID_RELEASE_VERSION}",
             ),
             prebuilt_release_metadata.resolve_release_metadata(
-                requested_version="0.9.0-beta.1",
+                requested_version=VALID_RELEASE_VERSION,
                 requested_docker_repository="",
                 default_docker_repository="strmt7/omero-docker-extended",
                 existing_tags=("0.8.0",),
             ),
         )
-        for bad_value in ("latest", "v0.9.0-beta.1", "0.9.0+build.1", "0.9"):
+        for bad_value in (
+            "latest",
+            f"v{VALID_RELEASE_VERSION}",
+            "1.0.0+build.1",
+            "1.0",
+        ):
             with self.subTest(bad_value=bad_value):
                 self.assertFalse(
                     prebuilt_release_metadata.is_valid_release_version(bad_value)
@@ -755,16 +769,17 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertEqual(
             0,
             prebuilt_release_metadata.main(
-                ["--validate-release-version", "0.9.0-beta.1"]
+                ["--validate-release-version", VALID_RELEASE_VERSION]
             ),
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             tags_path = Path(temp_dir) / "tags.txt"
             tags_path.write_text(
-                "0.9.0-beta.1\nnot-a-release\n0.8.0\n", encoding="utf-8"
+                f"{VALID_RELEASE_VERSION}\nnot-a-release\n0.8.0\n",
+                encoding="utf-8",
             )
             self.assertEqual(
-                ["0.8.0", "0.9.0-beta.1", "not-a-release"],
+                ["0.8.0", VALID_RELEASE_VERSION, "not-a-release"],
                 prebuilt_release_metadata.read_existing_tags_file(tags_path),
             )
             self.assertEqual(

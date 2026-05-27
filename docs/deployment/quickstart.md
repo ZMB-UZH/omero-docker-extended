@@ -67,7 +67,7 @@ If `.env` is missing, omit only `--env-file .env` from that command.
 The easy installation path consumes a single manually released docker hub
 carrier image instead of building dockerfiles on the installation host. The
 carrier image tag and GitHub release tag are the same docker-compatible SemVer
-pre-release string, for example `0.1.0-beta.1`.
+string, for example `1.0.0-main.1`.
 
 From an installation root that already has reviewed runtime env files:
 
@@ -76,7 +76,7 @@ bash installation/easy_installation_script.sh
 ```
 
 The first easy-installer prompt asks which prebuilt docker image tag to install.
-Enter the docker hub carrier image tag, for example `0.1.0-beta.1`.
+Enter the docker hub carrier image tag, for example `1.0.0-main.1`.
 `installation/easy_installation_script.sh` then delegates to the canonical
 installer with `PREBUILT_IMAGE_MODE=require`. It removes the local build-only
 questions from the interactive flow:
@@ -112,7 +112,7 @@ archive; it has no Alpine, BusyBox, package manager, or shell layer and uses
 For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
 
 ```bash
-PREBUILT_IMAGE_RELEASE=0.1.0-beta.1 bash installation/easy_installation_script.sh
+PREBUILT_IMAGE_RELEASE=1.0.0-main.1 bash installation/easy_installation_script.sh
 ```
 
 Carrier releases are created from the GitHub Actions panel with the manual
@@ -121,9 +121,9 @@ Carrier releases are created from the GitHub Actions panel with the manual
 workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
 permission to create the GitHub release; no separate GitHub PAT secret is
 required when repository Actions settings allow workflow write permissions. The
-release targets the default branch ref, creates a draft GitHub prerelease with
+release targets the default branch ref, creates a draft GitHub release with
 source artifacts, pushes and verifies the carrier image, then publishes the
-prerelease. If the carrier publish fails after the draft was created, the
+release. If the carrier publish fails after the draft was created, the
 workflow deletes that draft release and its tag. The release job uses the
 `dockerhub-release` GitHub Actions environment with deployment-record creation
 disabled, so environment secrets and protection rules remain available without
@@ -228,16 +228,24 @@ DOCKER_IMAGE_TAG=2026.02.0 \
 bash installation/installation_script.sh
 ```
 
-- `github_pull_project_bash` preserves the installation script prompts by default.
-- `github_pull_project_bash` defaults to `REPO_BRANCH=main` only for that script; branch defaults for other pull scripts are script-specific.
+- `installation/github_pull_project_bash` preserves the installation script prompts by default.
+- `installation/github_pull_project_bash` uses `REPO_BRANCH` when set and otherwise resolves the repository's remote default branch.
+- The first standard pull/update prompt selects the source version. Empty input
+  or `latest` installs the latest commit from that resolved branch; an exact
+  GitHub release tag installs that release's source tree; a commit hash installs
+  that commit. Invalid or unavailable selections fail before repository files
+  are replaced.
+- For unattended source selection, set `REPO_SOURCE_REF` to `latest`, the
+  release tag, or the commit hash. If `REPO_SOURCE_REF` is unset while
+  `INSTALLATION_AUTOMATION_MODE=1`, the launcher uses `latest`.
 - For unattended automation, you can explicitly set `INSTALLATION_AUTOMATION_MODE=1`.
 - `installation/installation_script.sh` rewrites `installation_paths.env` only after path prompts are resolved (installation path, database path, plugin database path, data path, and tmp path), so selected non-default paths are persisted immediately for future pull/update runs.
-- `github_pull_project_bash` and its variants now save the visible terminal session to `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` after the run finishes.
+- `installation/github_pull_project_bash` saves the visible terminal session to `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` after the run finishes.
 
 - To integrate with the pull/update workflow, run:
 
 ```bash
-bash github_pull_project_bash
+bash installation/github_pull_project_bash
 ```
 
 ### Post-build vulnerability report

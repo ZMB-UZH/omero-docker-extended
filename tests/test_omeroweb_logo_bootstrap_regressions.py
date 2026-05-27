@@ -33,7 +33,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in pull scripts preserve site local logo png.
         """
-        scripts = [self.repo_root / "github_pull_project_bash_example"]
+        scripts = [self.repo_root / "installation" / "github_pull_project_bash"]
 
         for script in scripts:
             script_text = script.read_text(encoding="utf-8")

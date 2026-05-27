@@ -35,37 +35,37 @@ require_easy_installation_support() {
     if ! grep -q "PREBUILT_IMAGE_MODE" "${installer_path}" || \
         ! grep -q "run_prebuilt_image_load" "${installer_path}"; then
         echo "ERROR: This installation root is too old for easy installation: ${REPO_ROOT_DIR}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files, then rerun installation/easy_installation_script.sh." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files, then rerun installation/easy_installation_script.sh." >&2
         return 1
     fi
 
     if [ ! -r "${RELEASE_METADATA_TOOL}" ]; then
         echo "ERROR: Missing release metadata validator: ${RELEASE_METADATA_TOOL}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
         return 1
     fi
 
     if ! python3 -m py_compile "${RELEASE_METADATA_TOOL}" >/dev/null 2>&1; then
         echo "ERROR: Release metadata validator is not executable Python: ${RELEASE_METADATA_TOOL}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
         return 1
     fi
 
     if [ ! -x "${loader_path}" ]; then
         echo "ERROR: Missing or non-executable prebuilt carrier loader: ${loader_path}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files, then rerun installation/easy_installation_script.sh." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files, then rerun installation/easy_installation_script.sh." >&2
         return 1
     fi
 
     if [ ! -r "${compose_path}" ]; then
         echo "ERROR: Missing docker-compose.yml from installation root: ${compose_path}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
         return 1
     fi
 
     if [ ! -r "${env_guard_path}" ]; then
         echo "ERROR: Missing deployment env validator: ${env_guard_path}" >&2
-        echo "ERROR: Run ./github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
+        echo "ERROR: Run ./installation/github_pull_project_bash from the installation root to refresh repository-managed files before easy installation." >&2
         return 1
     fi
 }

@@ -24,7 +24,9 @@ SEMVER_PATTERN = re.compile(
 DOCKER_HUB_REPOSITORY_PATTERN = re.compile(
     r"^[a-z0-9]+(?:[._-][a-z0-9]+)*/[a-z0-9]+(?:[._-][a-z0-9]+)*$"
 )
-BETA_PATTERN = re.compile(r"^beta\.([1-9][0-9]*)$")
+MAIN_CHANNEL_PATTERN = re.compile(r"^main\.([1-9][0-9]*)$")
+INITIAL_MAIN_RELEASE_VERSION = "1.0.0-main.1"
+INITIAL_MAIN_RELEASE_CORE = (1, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,7 @@ def parse_release_version(value: str) -> SemVer:
     if match is None:
         raise ValueError(
             "Release version must be docker-compatible SemVer without a v "
-            "prefix or +build metadata, for example 0.1.0-beta.1."
+            "prefix or +build metadata, for example 1.0.0-main.1."
         )
     return SemVer(
         major=int(match.group(1)),
@@ -99,45 +101,65 @@ def semver_sort_key(version: SemVer) -> tuple[int, int, int, int, int, str]:
     if version.prerelease is None:
         return (version.major, version.minor, version.patch, 2, 0, "")
 
-    beta_match = BETA_PATTERN.fullmatch(version.prerelease)
-    if beta_match is not None:
+    main_channel_match = MAIN_CHANNEL_PATTERN.fullmatch(version.prerelease)
+    if main_channel_match is not None:
         return (
             version.major,
             version.minor,
             version.patch,
             1,
-            int(beta_match.group(1)),
+            int(main_channel_match.group(1)),
             "",
         )
 
     return (version.major, version.minor, version.patch, 0, 0, version.prerelease)
 
 
-def next_beta_release_version(existing_tags: Sequence[str]) -> str:
-    """Choose the next beta release tag from remote tags.
+def next_main_release_version(existing_tags: Sequence[str]) -> str:
+    """Choose the next main-channel release tag from remote tags.
 
-    Inputs: `existing_tags`. Output: docker-compatible SemVer prerelease tag.
+    Inputs: `existing_tags`. Output: docker-compatible SemVer release tag.
     """
-    versions: list[SemVer] = []
+    channel_versions: list[tuple[SemVer, int]] = []
+    stable_versions: list[SemVer] = []
     for tag in existing_tags:
         try:
-            versions.append(parse_release_version(tag))
+            version = parse_release_version(tag)
         except ValueError:
             continue
+        if version.prerelease is None:
+            stable_versions.append(version)
+            continue
+        main_channel_match = MAIN_CHANNEL_PATTERN.fullmatch(version.prerelease)
+        version_core = (version.major, version.minor, version.patch)
+        if main_channel_match is not None and version_core >= INITIAL_MAIN_RELEASE_CORE:
+            channel_versions.append((version, int(main_channel_match.group(1))))
 
-    if not versions:
-        return "0.1.0-beta.1"
+    if channel_versions:
+        latest, sequence = max(
+            channel_versions,
+            key=lambda item: (
+                item[0].major,
+                item[0].minor,
+                item[0].patch,
+                item[1],
+            ),
+        )
+        return f"{latest.major}.{latest.minor}.{latest.patch}-main.{sequence + 1}"
 
-    latest = max(versions, key=semver_sort_key)
-    if latest.prerelease is not None:
-        beta_match = BETA_PATTERN.fullmatch(latest.prerelease)
-        if beta_match is not None:
-            return (
-                f"{latest.major}.{latest.minor}.{latest.patch}-"
-                f"beta.{int(beta_match.group(1)) + 1}"
-            )
+    stable_versions = [
+        version
+        for version in stable_versions
+        if (version.major, version.minor, version.patch) >= INITIAL_MAIN_RELEASE_CORE
+    ]
+    if stable_versions:
+        latest = max(
+            stable_versions,
+            key=lambda version: (version.major, version.minor, version.patch),
+        )
+        return f"{latest.major}.{latest.minor}.{latest.patch + 1}-main.1"
 
-    return f"{latest.major}.{latest.minor}.{latest.patch + 1}-beta.1"
+    return INITIAL_MAIN_RELEASE_VERSION
 
 
 def list_remote_tags(repo_root: Path) -> list[str]:
@@ -192,7 +214,7 @@ def resolve_release_metadata(
     release_version = (
         validate_release_version(requested_version.strip())
         if requested_version.strip()
-        else next_beta_release_version(existing_tags)
+        else next_main_release_version(existing_tags)
     )
     docker_repository = validate_docker_repository(
         requested_docker_repository.strip() or default_docker_repository

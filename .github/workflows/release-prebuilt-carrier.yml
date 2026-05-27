@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "SemVer release and docker image tag. Leave empty to bump beta from existing tags or start 0.1.0-beta.1."
+        description: "SemVer release and docker image tag. Leave empty to bump the main-channel tag from existing tags or start 1.0.0-main.1."
         required: false
         type: string
       docker_repository:
@@ -361,7 +361,6 @@ jobs:
             --title "${RELEASE_VERSION}" \
             --notes-file dist/release-notes.md \
             --draft \
-            --prerelease \
             --verify-tag \
             --latest=false
           echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
@@ -402,8 +401,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release edit "${RELEASE_VERSION}" \
-            --draft=false \
-            --prerelease
+            --draft=false
           created_tag_type="$(
             gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
               --jq '.object.type'
@@ -449,14 +447,14 @@ jobs:
               errors.append("target ref mismatch")
           if release.get("isDraft"):
               errors.append("release is still a draft")
-          if not release.get("isPrerelease"):
-              errors.append("release is not marked as a prerelease")
+          if release.get("isPrerelease"):
+              errors.append("release is marked as a prerelease")
           missing_assets = sorted(expected_assets - actual_assets)
           if missing_assets:
               errors.append(f"missing release asset(s): {', '.join(missing_assets)}")
           if errors:
               raise SystemExit("; ".join(errors))
-          print(f"Published GitHub prerelease {release['url']}")
+          print(f"Published GitHub release {release['url']}")
           PY
 
       - name: Delete draft GitHub release after failed carrier publish

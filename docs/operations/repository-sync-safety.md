@@ -103,7 +103,7 @@ ahead/behind main because they no longer shared a common ancestor with main.
 
 Root causes:
 
-1. The sync commit was created on the local `alpha` branch (which carried
+1. The sync commit was created on a local source-history branch (which carried
    the source repository's full commit history) and then pushed to the
    destination's `main` — injecting foreign ancestry.
 2. The operator attempted to repair the drift by force-pushing all 644

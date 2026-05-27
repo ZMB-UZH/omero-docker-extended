@@ -92,7 +92,7 @@ Examples:
   workflow. It builds hardened flattened runtime service images, writes the
   source archive and manifest, pushes one carrier image, verifies the copied
   metadata from that image with `docker create`/`docker cp`, and publishes a
-  GitHub prerelease with the same SemVer tag as the carrier image.
+  GitHub release with the same docker-compatible SemVer tag as the carrier image.
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the
   required image set from the rendered Compose config and may prune only
   runner-local docker images outside that required set. Do not replace this

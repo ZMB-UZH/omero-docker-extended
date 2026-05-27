@@ -40,7 +40,7 @@ These are repo-local or agent-facing capabilities that would improve the quality
 | `import-pipeline-refactor-guide` | The import code is mid-transition between giant legacy modules and service-layer extraction. Refactors need a stable playbook.               | `omeroweb_import` refactor or cleanup changes                  | Next     |
 | `workflow-supply-chain-reviewer` | GitHub Actions, Dependabot, and security policy changes affect the repo's integrity even when app code is unchanged.                         | Workflow or Dependabot edits                                   | Next     |
 | `incident-to-regression-test`    | The repo already values regression tests strongly. Every production fix should become a durable test rather than a one-off patch.            | Bugfixes after incidents or operator reports                   | Next     |
-| `release-readiness-reviewer`     | Startup, Dockerfile, env-template, and docs changes need coordinated validation and release-note discipline.                                 | Alpha/main release prep                                        | Later    |
+| `release-readiness-reviewer`     | Startup, Dockerfile, env-template, and docs changes need coordinated validation and release-note discipline.                                 | Main release prep                                              | Later    |
 
 ## Recommended Hooks
 

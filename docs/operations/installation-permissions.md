@@ -5,7 +5,7 @@ Authoritative map of ownership, mode bits, and writable-path assumptions during 
 Use this document when investigating:
 
 - permission-denied startup failures,
-- ownership drift after `github_pull_project_bash`,
+- ownership drift after `installation/github_pull_project_bash`,
 - missing writable directories,
 - Docker socket access problems,
 - quota metadata write failures,
@@ -24,8 +24,8 @@ The permission model is enforced in layers:
    application users.
 3. `docker/*.Dockerfile`
    Image builds establish ownership and executable bits for image-internal paths, but not host bind mounts.
-4. `github_pull*_example` and runtime pull helpers
-   These preserve runtime files and invoke the installation script. They do not own the final host permission model themselves.
+4. `installation/github_pull_project_bash`
+   This preserves runtime files and invokes the installation script. It does not own the final host permission model itself.
 
 The high-risk shared area is `OMERO_TMP_PATH` because both `omeroserver` and `omeroweb` use it. Its correctness depends on subtree-specific ownership, not a single recursive `chown` across the full root.
 
@@ -355,7 +355,7 @@ Path:
 Intent:
 
 - root-owned archive of the exact visible terminal session from
-  `github_pull_project_bash`
+  `installation/github_pull_project_bash`
   and `installation/installation_script.sh`.
 
 Host-side installer / pull helpers:
@@ -421,13 +421,14 @@ This is one of the few intentionally broad write-permission exceptions in the st
 
 ## 4. Pull / Update Scripts
 
-### `github_pull_project_bash_example`
+### `installation/github_pull_project_bash`
 
 Behavior:
 
 - preserve runtime files and data paths derived from `installation_paths.env`,
 - protect `installation_paths.env` and runtime env files from overwrite,
-- create/update a temporary clone,
+- ask the standard installer source-version question before replacement,
+- create/update a temporary clone from the selected branch, release tag, or commit,
 - execute the installation script afterward,
 - save the exact visible terminal session to
   `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log`
@@ -437,12 +438,6 @@ Important:
 
 - these scripts do not directly normalize host bind-mount ownership.
 - the real permission authority remains `installation/installation_script.sh`.
-
-The private variant also:
-
-- creates `~/.ssh` with `0700`,
-- creates `known_hosts` with `0600`,
-- configures `GIT_SSH_COMMAND`.
 
 ## 5. Image-Build Ownership Work
 
@@ -534,7 +529,7 @@ When debugging permission faults, check in this order:
    - `omero-web`,
    - plugin temp subtrees such as `omeroweb-import`,
    - any stale `omero_<user>` lock namespaces.
-7. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
+7. If the fault appeared after `installation/github_pull_project_bash`, review the installation script path normalization logic first.
 8. For managed-repository import failures, inspect
    `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status` before assuming the latest
    startup actually normalized the shared prefix.
