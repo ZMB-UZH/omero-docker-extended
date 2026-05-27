@@ -40,17 +40,19 @@ def default_docker_runner(args: Sequence[str]) -> subprocess.CompletedProcess[st
     )
 
 
-def validate_image_reference(value: str) -> str:
-    """Validate the image reference contract used by this release helper.
+def validate_image_reference(value: str, *, allow_latest: bool = False) -> str:
+    """Validate an image reference used by this release helper.
 
-    Inputs: image reference string. Output: validated image reference.
+    Inputs: image reference string and latest policy. Output: validated image reference.
     """
     if not value or value != value.strip() or any(char.isspace() for char in value):
         raise ValueError("Image references must be non-empty and whitespace-free.")
     if value.startswith("-"):
         raise ValueError("Image references must not start with '-'.")
-    if value == "latest" or value.endswith(":latest") or ":latest@" in value:
-        raise ValueError("Image references must not use latest.")
+    if not allow_latest and (
+        value == "latest" or value.endswith(":latest") or ":latest@" in value
+    ):
+        raise ValueError(f"Required image references must not use latest: {value}")
     return value
 
 
@@ -76,7 +78,7 @@ def image_reference_from_listing(image_listing: dict[str, str]) -> str | None:
     tag = image_listing.get("Tag", "")
     if not repository or not tag or repository == "<none>" or tag == "<none>":
         return None
-    return validate_image_reference(f"{repository}:{tag}")
+    return validate_image_reference(f"{repository}:{tag}", allow_latest=True)
 
 
 def inspect_present_required_image_ids(
