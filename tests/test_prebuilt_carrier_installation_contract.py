@@ -829,6 +829,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 image_id="sha256:base",
             ),
             prune_non_required_docker_images.LocalImage(
+                reference="example.local/non-required:latest",
+                image_id="sha256:local-latest",
+            ),
+            prune_non_required_docker_images.LocalImage(
                 reference="example.local/required-one-alias:4.0.0",
                 image_id="sha256:required-one",
             ),
@@ -840,7 +844,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             required_image_ids={"sha256:required-one", "sha256:required-two"},
         )
 
-        self.assertEqual(["example.local/base-only:3.0.0"], removable)
+        self.assertEqual(
+            ["example.local/base-only:3.0.0", "example.local/non-required:latest"],
+            removable,
+        )
 
     def test_release_prune_helper_rejects_unsafe_image_references(self) -> None:
         """Verify pruning helper rejects floating or malformed refs.
@@ -851,6 +858,17 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             with self.subTest(image_ref=image_ref):
                 with self.assertRaises(ValueError):
                     prune_non_required_docker_images.validate_image_reference(image_ref)
+
+    def test_release_prune_helper_allows_local_latest_as_prune_candidate(self) -> None:
+        """Verify local daemon latest tags do not invalidate required images.
+
+        Inputs: synthetic docker image listing. Output: asserts latest is removable.
+        """
+        reference = prune_non_required_docker_images.image_reference_from_listing(
+            {"Repository": "example.local/local-only", "Tag": "latest"}
+        )
+
+        self.assertEqual("example.local/local-only:latest", reference)
 
     def test_prebuilt_carrier_image_is_scratch_data_only(self) -> None:
         """Verify carrier image is data-only and has no OS package surface.
