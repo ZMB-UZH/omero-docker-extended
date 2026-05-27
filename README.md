@@ -464,7 +464,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI Agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
-- This split exists so update flows (including `installation/github_pull_project_bash`) can pull repository changes without replacing site-local runtime files or `.env_backups/` that admins manage outside git.
+- This split exists so update flows (including `installation/github_pull_project_bash`) can pull repository changes without replacing site-local runtime files, configured runtime paths, Buildx cache paths, or `.env_backups/` that admins manage outside git.
 - The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
 ### Basic docker commands
