@@ -37,7 +37,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 
 | Task class | Load first docs | Code roots | Default skills | First verification lane |
 | --- | --- | --- | --- | --- |
-| Docker, Compose, startup, install, env wiring | `docs/deployment/configuration.md`, `docs/reference/ai-agent-runtime-playbook.md`, `docs/operations/installation-permissions.md` | `docker-compose.yml`, `docker/`, `startup/`, `installation/`, `env/` | `docker-patterns`, `deployment-patterns`, `env-contract-reviewer` | `tests/`, then the matching shell or workflow contracts |
+| Docker/Compose startup, install, env wiring | `docs/deployment/configuration.md`, `docs/deployment/quickstart.md`, `docs/reference/ai-agent-runtime-playbook.md`, `docs/operations/installation-permissions.md` | `docker-compose.yml`, `docker/`, `startup/`, `installation/`, `env/` | `docker-patterns`, `deployment-patterns`, `env-contract-reviewer` | `tests/` plus shell/workflow contracts |
 | Shared Python helpers and env loaders | `ARCHITECTURE.md`, `docs/reference/python-style-and-linting.md` | `omero_plugin_common/` | `python-patterns`, `python-testing`, `env-contract-reviewer` | `omero_plugin_common/tests/` |
 | OMP Django views, annotation, AI parsing, user data | `docs/plugins/omp-plugin.md`, `docs/plugins/omp-plugin-workflow.md` | `omeroweb_omp_plugin/` | `django-patterns`, `django-security`, `django-verification` | `omeroweb_omp_plugin/tests/` |
 | Import plugin uploads, dataset routing, OMERO CLI import, SEM-EDX | `docs/plugins/import-plugin.md`, `docs/plugins/import-plugin-workflow.md`, `docs/reference/ai-agent-runtime-playbook.md` | `omeroweb_import/` | `django-patterns`, `omero-runtime-verifier`, `plugin-regression-triager`, `verification-loop` | `omeroweb_import/tests/` |
@@ -49,7 +49,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 | Docs and agent surfaces | `docs/index.md`, `docs/reference/ai-agent-integrations.md` | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/`, `.cursor/` | `context-budget`, `docs-knowledge-maintainer`, `search-first` | `tests/test_lint_docs_structure.py`, AI-surface tests |
 | Agent skills and reusable workflows | `docs/reference/ai-agent-skills.md`, `docs/reference/ai-agent-integrations.md` | `.agents/skills/`, `tools/lint_docs_structure.py` | `cocoindex-code-search`, `docs-knowledge-maintainer`, `verification-loop` | skill catalog and contract tests |
 | Security findings or scanner regressions | `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, `docs/operations/code-scanning.md` | touched code only | `security-finding-triager`, `security-review`, `documentation-lookup` | touched suite plus security contract tests |
-| Workflow and CI changes | `docs/operations/code-scanning.md`, `docs/reference/ai-agent-security-prevention-playbook.md` | `.github/workflows/` | `documentation-lookup`, `verification-loop`, `security-review` | workflow contract tests in `tests/` |
+| Workflow and CI changes | `docs/operations/code-scanning.md`, `docs/deployment/quickstart.md`, `docs/reference/ai-agent-security-prevention-playbook.md` | `.github/workflows/` | `documentation-lookup`, `verification-loop`, `security-review` | workflow contract tests in `tests/` |
 
 ## Split pytest map
 

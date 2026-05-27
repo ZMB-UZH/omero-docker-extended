@@ -898,7 +898,8 @@ CATALOG: tuple[Rule, ...] = (
         title="Floating or untagged image reference in Compose / Dockerfile / workflow",
         fix=(
             "Pin to an explicit version tag or digest; do not use latest, stable, "
-            "edge, main, master, nightly, rolling, or current aliases."
+            "edge, main, master, nightly, rolling, or current aliases. Dockerfile "
+            "`FROM scratch` is allowed only as Docker's reserved empty base."
         ),
         scanner="hadolint/DL3007+trivy",
         closed_history=4,
@@ -914,7 +915,9 @@ CATALOG: tuple[Rule, ...] = (
         skip_tests=False,
         kind="regex",
         pattern=(
-            r"^\s*(?:image:|FROM\s+)\s*[\"']?(?!\$\{)"
+            r"^\s*(?:"
+            r"image:\s*[\"']?(?!\$\{)"
+            r"|FROM\s+[\"']?(?!scratch(?:\s|$|#|[\"'])))"
             r"(?:[A-Za-z0-9._-]+(?::[0-9]+)?/)*[A-Za-z0-9._-]+"
             r"(?::(?:latest|stable|edge|main|master|nightly|rolling|current)\b"
             r"|(?=\s*(?:$|#|[\"'])))"

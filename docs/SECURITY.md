@@ -39,7 +39,7 @@ Security practices and controls for this deployment.
 Vulnerability scanning is **disabled by default** and can be enabled during
 installation by answering "yes" to the interactive prompt or by setting
 `ENABLE_VULNERABILITY_SCAN=1`. When enabled, the installation script runs
-[Docker Scout](https://docs.docker.com/scout/) to report known CVEs in all
+[docker scout](https://docs.docker.com/scout/) to report known CVEs in all
 images referenced by `docker-compose.yml` — both custom-built images
 (omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter,
 redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis,
@@ -47,14 +47,14 @@ PostgreSQL, etc.).
 
 The scan operates in two phases:
 
-1. **Pre-build baseline** (cache-disabled builds only): Pulls upstream base images from each Dockerfile's `FROM` line, scans them, and stores the results. Images pulled solely for baseline scanning that are not needed at runtime are automatically removed after the report.
+1. **Pre-build baseline** (cache-disabled builds only): Pulls upstream base images from each dockerfile's `FROM` line, scans them, and stores the results. Images pulled solely for baseline scanning that are not needed at runtime are automatically removed after the report.
 2. **Post-build report**: Scans every image from `docker-compose.yml` and displays a compact table. Third-party images not yet local are pulled for scanning and retained (they will be used when containers start). When baseline data is available, the table shows Before (upstream) and After (built) columns for side-by-side comparison.
 
-Docker Scout is optional — if the CLI plugin is not installed, both phases are silently skipped and installation proceeds normally. The scan never blocks the installation.
+Docker scout is optional — if the CLI plugin is not installed, both phases are silently skipped and installation proceeds normally. The scan never blocks the installation.
 
 ## Security hardening (optional)
 
-Interactive installation defaults Docker image security hardening to **yes**. Set `APPLY_SECURITY_HARDENING=0` or answer "no" to skip it. Setting `APPLY_SECURITY_HARDENING=1` also enables the same build pass explicitly:
+Interactive installation defaults docker image security hardening to **yes**. Set `APPLY_SECURITY_HARDENING=0` or answer "no" to skip it. Setting `APPLY_SECURITY_HARDENING=1` also enables the same build pass explicitly:
 
 1. **OS packages**: Runs `dnf update` (Rocky-based images) or `apt-get upgrade` (Ubuntu-based) or `apk upgrade` (Alpine-based) to patch known vulnerabilities in system libraries.
 2. **Python packages**: Applies curated compatibility-safe Python updates only. The hardening pass does **not** blanket-upgrade entire OMERO/plugin virtual environments after OMERO/plugin packages are installed.
@@ -66,16 +66,19 @@ The prebuilt carrier release workflow always builds the bundled custom runtime
 images with `APPLY_SECURITY_HARDENING=1` and
 `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` before publishing the carrier. The easy
 installation path therefore skips the local hardening prompt and loads only the
-release-built images from the verified carrier bundle.
+release-built images from the verified carrier bundle. The carrier wrapper is a
+scratch-based data image with no OS package layer, shell, or package manager;
+it uses `HEALTHCHECK NONE` metadata instead of a runnable healthcheck command,
+and only the bundled runtime service images carry OS package surfaces.
 
 ## Image pinning
 
-- All Docker images in `docker-compose.yml` use explicit version tags (e.g.,
+- All docker images in `docker-compose.yml` use explicit version tags (e.g.,
   `postgres:16.12`, `redis:8.6.3-alpine`). Untagged images and floating aliases
   such as `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
   `current` are prohibited.
 - Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.1`, `celery==5.6.3`).
-- Dependabot monitors pip and Docker dependencies weekly and opens PRs for updates.
+- Dependabot monitors pip and docker dependencies weekly and opens PRs for updates.
 
 ## Input validation
 
@@ -102,7 +105,7 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
 
 - By default, only `omeroserver` (`OMERO_SERVER_HOST_PORT`, default 4064), `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090), `portainer` (9000/9443), `prometheus` (9090), `grafana` (3000), and `loki` (3100) are exposed to the host.
 - When the `crowdsec` profile is enabled, CrowdSec uses host networking and exposes its LAPI on host port 8080.
-- All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` Docker network.
+- All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` docker network.
 - Restrict public access to monitoring interfaces (Grafana, Prometheus, Portainer) using firewall rules or a reverse proxy with authentication.
 - OMERO.web should be behind a TLS-terminating reverse proxy for production use.
 - Docker socket is mounted read-only in `omeroweb` for container stats (admin tools plugin).

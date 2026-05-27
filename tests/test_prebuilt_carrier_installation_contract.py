@@ -136,7 +136,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         script = self.read_text("installation/easy_installation_script.sh")
 
         self.assertIn("prompt_release_version()", script)
-        self.assertIn("Which prebuilt Docker image tag should be installed?", script)
+        self.assertIn("Which prebuilt docker image tag should be installed?", script)
         self.assertIn("PREBUILT_IMAGE_RELEASE is required", script)
         self.assertIn("RELEASE_METADATA_TOOL", script)
         self.assertIn("require_easy_installation_support()", script)
@@ -278,10 +278,27 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 check=False,
             )
+            no_tty_result = subprocess.run(
+                [self.bash_path, str(easy_script)],
+                cwd=root,
+                env={key: value for key, value in os.environ.items() if key != "TERM"},
+                stdin=subprocess.DEVNULL,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("PREBUILT_IMAGE_RELEASE is required", result.stderr)
         self.assertNotIn("mode=require", result.stdout)
+        self.assertEqual(no_tty_result.returncode, 1)
+        self.assertIn("PREBUILT_IMAGE_RELEASE is required", no_tty_result.stderr)
+        self.assertNotIn("No such device or address", no_tty_result.stderr)
+        self.assertNotIn(
+            "Could not read prebuilt docker image tag", no_tty_result.stderr
+        )
+        self.assertNotIn("mode=require", no_tty_result.stdout)
 
     def test_installer_strict_prebuilt_mode_skips_only_build_prompts(self) -> None:
         """Verify strict prebuilt mode skips only build-image prompts.
@@ -338,8 +355,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "Enable Buildx compressed build workflow?",
             "Use build cache?",
             "Flatten final images into single-layer outputs?",
-            "Enable Docker image security hardening?",
-            "Enable Docker Scout vulnerability scanning?",
+            "Enable docker image security hardening?",
+            "Enable docker scout vulnerability scanning?",
             "Start containers after build?",
             "OMERO installation path",
             "OMERO database path",
@@ -352,9 +369,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "Enable Buildx compressed build workflow?",
             "Use build cache?",
             "Flatten final images into single-layer outputs?",
-            "Enable Docker image security hardening?",
+            "Enable docker image security hardening?",
         }
-        easy_prompts = ["Which prebuilt Docker image tag should be installed?"] + [
+        easy_prompts = ["Which prebuilt docker image tag should be installed?"] + [
             prompt for prompt in standard_prompts if prompt not in skipped_for_prebuilt
         ]
 
@@ -497,6 +514,12 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("installation_paths_example.env", workflow_text)
         self.assertIn('glob("*_example.env")', workflow_text)
         self.assertIn("shutil.copyfile(source, target)", workflow_text)
+        self.assertIn(
+            '["docker", "compose", "-f", "docker-compose.yml", "config", "--profiles"]',
+            workflow_text,
+        )
+        self.assertIn('env_values["COMPOSE_PROFILES"] = ",".join', workflow_text)
+        self.assertIn("No Compose profiles discovered for release build", workflow_text)
         self.assertIn("DOCKERHUB_TOKEN", workflow_text)
         self.assertIn("--password-stdin", workflow_text)
         self.assertNotIn("DOCKERHUB_ACCESS_TOKEN", workflow_text)
@@ -511,9 +534,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn('env_values["REDIS_MAXMEMORY"] =', workflow_text)
         self.assertNotIn('env_values["REDIS_MAXMEMORY_POLICY"] =', workflow_text)
         self.assertNotIn('env_values["REDIS_DATA_TMPFS_SIZE"] =', workflow_text)
+        self.assertNotIn('COMPOSE_PROFILES="sysctl-init,crowdsec"', workflow_text)
 
     def test_workflow_environments_do_not_create_github_deployments(self) -> None:
-        """Verify workflow environments opt out of deployment records.
+        """Verify all workflow environments opt out of deployment records.
 
         Inputs: workflow fixtures. Output: empty offender list.
         """
@@ -537,6 +561,16 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                         "environment.deployment must be false"
                     )
         self.assertEqual([], offenders)
+        workflow_instructions = self.read_text(
+            ".github/instructions/workflows.instructions.md"
+        )
+        runtime_playbook = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        for instruction_text in (workflow_instructions, runtime_playbook):
+            self.assertIn(
+                "No workflow in this repository may create GitHub deployment records",
+                instruction_text,
+            )
+            self.assertIn("deployment: false", instruction_text)
 
     def test_release_workflow_embedded_python_blocks_parse(self) -> None:
         """Verify workflow heredoc Python is syntactically valid.
@@ -587,6 +621,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn(
             "docker compose -f docker-compose.yml config --images", workflow_text
         )
+        self.assertIn('COMPOSE_PROFILES="${COMPOSE_PROFILES:?}"', workflow_text)
         self.assertIn('docker save "${compose_images[@]}"', workflow_text)
         self.assertIn("tools/write_prebuilt_runtime_archive.py", workflow_text)
         self.assertIn("image_archive_sha256", workflow_text)
@@ -596,7 +631,21 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("docker buildx build", workflow_text)
         self.assertIn("-f docker/prebuilt-carrier.Dockerfile", workflow_text)
         self.assertIn('-t "${CARRIER_IMAGE}"', workflow_text)
-        self.assertIn("docker run --rm", workflow_text)
+        self.assertIn('docker create "${CARRIER_IMAGE}"', workflow_text)
+        self.assertIn(
+            'docker cp "${cid}:/omero-prebuilt/prebuilt-manifest.json"',
+            workflow_text,
+        )
+        self.assertIn(
+            'docker cp "${cid}:/omero-prebuilt/prebuilt-required-images.txt"',
+            workflow_text,
+        )
+        self.assertIn(
+            "cmp dist/prebuilt-required-images.txt "
+            "dist/verified-prebuilt-required-images.txt",
+            workflow_text,
+        )
+        self.assertNotIn("docker run --rm", workflow_text)
         self.assertIn("gh release create", workflow_text)
         self.assertIn("Create GitHub draft release", workflow_text)
         self.assertIn("Publish GitHub release", workflow_text)
@@ -655,7 +704,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn("git ls-remote", workflow_text)
 
     def test_release_metadata_helper_generates_professional_beta_versions(self) -> None:
-        """Verify release helper keeps GitHub and Docker tags aligned.
+        """Verify release helper keeps GitHub and docker tags aligned.
 
         Inputs: synthetic tag sets. Output: asserts SemVer beta and rejection logic.
         """
@@ -751,33 +800,52 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             self.assertEqual(f"{len(payload)}\n", bytes_path.read_text())
             self.assertEqual(payload, gzip.decompress(archive_path.read_bytes()))
 
-    def test_prebuilt_carrier_image_declares_non_root_healthcheck(self) -> None:
-        """Verify carrier image security metadata is explicit.
+    def test_prebuilt_carrier_image_is_scratch_data_only(self) -> None:
+        """Verify carrier image is data-only and has no OS package surface.
 
-        Inputs: carrier Dockerfile fixture. Output: asserts non-root healthcheck.
+        Inputs: carrier dockerfile fixture. Output: asserts scratch payload image.
         """
         dockerfile = self.read_text("docker/prebuilt-carrier.Dockerfile")
         readme = self.read_text("README.md")
+        normalized_readme = " ".join(readme.split())
         quickstart = self.read_text("docs/deployment/quickstart.md")
         normalized_quickstart = " ".join(quickstart.split())
 
-        self.assertIn("USER carrier", dockerfile)
-        self.assertIn("HEALTHCHECK", dockerfile)
-        self.assertIn("mkdir -p /omero-prebuilt", dockerfile)
-        self.assertIn("chmod 0555 /omero-prebuilt", dockerfile)
+        self.assertIn("FROM scratch", dockerfile)
+        self.assertIn("Scratch has no passwd database", dockerfile)
+        self.assertIn("USER 65532:65532", dockerfile)
+        self.assertIn("HEALTHCHECK NONE", dockerfile)
+        self.assertIn('CMD ["/omero-prebuilt/carrier-data-only"]', dockerfile)
+        self.assertNotIn("ENTRYPOINT", dockerfile)
+        self.assertNotIn("alpine", dockerfile.lower())
+        self.assertNotIn("busybox", dockerfile.lower())
+        self.assertNotIn("RUN ", dockerfile)
+        self.assertNotIn("HEALTHCHECK CMD", dockerfile)
+        self.assertNotIn(" sh", dockerfile.lower())
+        self.assertNotIn("--chown", dockerfile)
         self.assertIn(
-            "COPY --chown=carrier:carrier --chmod=0444 runtime-images.tar.gz",
+            "COPY --chmod=0444",
             dockerfile,
         )
-        self.assertNotIn("chown -R carrier:carrier /omero-prebuilt", dockerfile)
+        self.assertIn("prebuilt-manifest.json", dockerfile)
+        self.assertIn("prebuilt-required-images.txt", dockerfile)
+        self.assertIn("runtime-images.tar.gz", dockerfile)
+        self.assertIn("/omero-prebuilt/", dockerfile)
+        self.assertNotIn("chown -R", dockerfile)
         self.assertNotIn("chmod 0444 /omero-prebuilt/runtime-images.tar.gz", dockerfile)
-        self.assertIn("test -r /omero-prebuilt/prebuilt-manifest.json", dockerfile)
-        self.assertIn("test -r /omero-prebuilt/runtime-images.tar.gz", dockerfile)
+        self.assertNotIn("test -r /omero-prebuilt/prebuilt-manifest.json", dockerfile)
+        self.assertNotIn("test -r /omero-prebuilt/runtime-images.tar.gz", dockerfile)
         self.assertIn(
             "The release workflow flattens the bundled runtime service images", readme
         )
-        self.assertIn("must not duplicate the archive", readme)
-        self.assertIn("exactly one large archive copy layer", normalized_quickstart)
+        self.assertIn(
+            "does not include Alpine, BusyBox, a package manager, or a shell",
+            normalized_readme,
+        )
+        self.assertIn("HEALTHCHECK NONE", readme)
+        self.assertNotIn("normal image wrapper", readme)
+        self.assertIn("one payload layer", normalized_quickstart)
+        self.assertIn("HEALTHCHECK NONE", quickstart)
 
     def test_new_prebuilt_files_do_not_contain_build_substitution_wording(self) -> None:
         """Verify prebuilt files do not describe local build substitution.

@@ -1,6 +1,6 @@
 ---
 name: docker-patterns
-description: Docker and Compose patterns for this repo's multi-container OMERO runtime, startup scripts, and hardening rules.
+description: docker and Compose patterns for this repo's multi-container OMERO runtime, startup scripts, and hardening rules.
 origin: ECC v1.10.0 adapted for OMERO Docker Extended
 upstream: third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md
 ---
@@ -19,4 +19,7 @@ Start from `third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md` for generic
 - Keep env and version defaults in `env/*_example.env` or Dockerfile `ARG` defaults, not Compose sprawl.
 - Preserve service health checks and `security_opt: no-new-privileges:true`.
 - Treat startup scripts as runtime contracts that must stay environment-driven and shell-only.
+- The prebuilt carrier is a scratch data image. Do not add an OS base, shell,
+  package manager, healthcheck command, or post-copy permission mutation that
+  duplicates the large runtime archive layer.
 - For live runtime probing, follow the Loki-first and service-user rules in `AGENTS.md`.

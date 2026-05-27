@@ -93,9 +93,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         root_text = root_security.read_text(encoding="utf-8")
         self.assertIn("docs/SECURITY.md", root_text)
         self.assertIn(
-            "https://github.com/ZMB-UZH/omero-docker-extended/security/advisories/new",
+            "https://github.com/ZMB-UZH/omero-docker-extended/security/policy",
             root_text,
         )
+        self.assertNotIn("security/advisories/new", root_text)
         self.assertIn(
             "https://github.com/ZMB-UZH/omero-docker-extended/blob/main/docs/SECURITY.md",
             github_security.read_text(encoding="utf-8"),
@@ -133,10 +134,13 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         pr_template = self.read_text(".github/pull_request_template.md")
 
         self.assertIn("Reporting", code_of_conduct)
-        self.assertIn("security/advisories/new", code_of_conduct)
+        self.assertIn("security/policy", code_of_conduct)
+        self.assertNotIn("security/advisories/new", code_of_conduct)
         self.assertIn("tools/run_local_workflow_gates.py", contributing)
         self.assertIn("blank_issues_enabled: false", issue_config)
         self.assertIn("Security vulnerability", issue_config)
+        self.assertIn("security/policy", issue_config)
+        self.assertNotIn("security/advisories/new", issue_config)
         self.assertIn("## Verification", pr_template)
 
     def test_current_branch_history_uses_exact_ai_agent_identity(self) -> None:
@@ -197,6 +201,70 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                         )
 
         self.assertEqual([], bad_identities)
+
+    def test_readme_repository_layout_paths_exist_and_stay_concise(self) -> None:
+        """Verify README repository layout describes real paths compactly.
+
+        Inputs: repository fixtures. Output: fails on missing paths or verbose descriptions.
+        """
+        readme = self.read_text("README.md")
+        match = re.search(
+            r"<summary><h2>Repository layout</h2></summary>.*?```text\n"
+            r"(?P<layout>.*?)\n```",
+            readme,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "README repository layout block is missing")
+        layout = match.group("layout")
+        stack: dict[int, Path] = {-1: Path(".")}
+        listed_paths: list[Path] = []
+        errors: list[str] = []
+
+        for line in layout.splitlines():
+            if line.strip() == ".":
+                continue
+            line_match = re.match(
+                r"^(?P<prefix>[│ ]*)[├└]── (?P<body>.*?)(?:\s+#\s*(?P<desc>.*))?$",
+                line,
+            )
+            self.assertIsNotNone(line_match, f"Malformed layout line: {line}")
+            prefix = line_match.group("prefix")
+            body = line_match.group("body").strip()
+            description = (line_match.group("desc") or "").strip()
+            depth = len(prefix) // 4
+            parent = stack.get(depth - 1, Path("."))
+            relative = parent / body.rstrip("/")
+            if body.endswith("/"):
+                stack[depth] = relative
+            else:
+                stack.pop(depth, None)
+
+            if len(description) > 72:
+                errors.append(f"description too long: {line}")
+            if "Docker" in description and not description.startswith("Docker"):
+                errors.append(
+                    f"description has mid-sentence Docker capitalization: {line}"
+                )
+            if any(marker in body for marker in ("*", "?")):
+                matches = sorted(self.repo_root.glob(str(relative)))
+                if not matches:
+                    errors.append(f"glob has no matches: {relative}")
+                continue
+
+            full_path = self.repo_root / relative
+            if body.endswith("/"):
+                if not full_path.is_dir():
+                    errors.append(f"missing directory: {relative}")
+            elif not full_path.exists():
+                errors.append(f"missing path: {relative}")
+            listed_paths.append(relative)
+
+        duplicates = sorted(
+            str(path) for path in set(listed_paths) if listed_paths.count(path) > 1
+        )
+        if duplicates:
+            errors.append(f"duplicate layout path(s): {', '.join(duplicates)}")
+        self.assertEqual([], errors)
 
     def test_docs_do_not_imply_multiple_project_maintainers(self) -> None:
         """Verify docs do not imply multiple project maintainers.

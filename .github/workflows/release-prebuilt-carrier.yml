@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "SemVer release and Docker tag. Leave empty to bump beta from existing tags or start 0.1.0-beta.1."
+        description: "SemVer release and docker image tag. Leave empty to bump beta from existing tags or start 0.1.0-beta.1."
         required: false
         type: string
       docker_repository:
-        description: "Docker Hub repository for the single carrier image."
+        description: "docker hub repository for the single carrier image."
         required: false
         default: "strmt7/omero-docker-extended"
         type: string
       runner_label:
-        description: "Runner label. Use a self-hosted runner with sufficient Docker storage for large carrier builds when needed."
+        description: "Runner label. Use a self-hosted runner with sufficient docker storage for large carrier builds when needed."
         required: false
         default: "ubuntu-latest"
         type: string
@@ -107,11 +107,11 @@ jobs:
           case "${status}" in
             404) ;;
             200)
-              echo "Docker Hub image tag already exists: ${CARRIER_IMAGE}" >&2
+              echo "docker hub image tag already exists: ${CARRIER_IMAGE}" >&2
               exit 1
               ;;
             *)
-              echo "Could not verify Docker Hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
+              echo "Could not verify docker hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
               exit 1
               ;;
           esac
@@ -137,6 +137,7 @@ jobs:
           import os
           import re
           import shutil
+          import subprocess
           from pathlib import Path
 
           from tools.env_safety_guard import resolve_env_references
@@ -168,7 +169,6 @@ jobs:
                   env_values[key] = value
 
           env_values["OMERO_INSTALLATION_PATH"] = str(root)
-          env_values.setdefault("COMPOSE_PROFILES", "sysctl-init,crowdsec")
           for key, value in list(env_values.items()):
               try:
                   env_values[key] = resolve_env_references(value, env_values)
@@ -176,6 +176,16 @@ jobs:
                   raise SystemExit(
                       f"Unsafe synthetic environment value for {key}: {exc}"
                   ) from exc
+          discovered_profiles = subprocess.check_output(
+              ["docker", "compose", "-f", "docker-compose.yml", "config", "--profiles"],
+              env={**os.environ, **env_values},
+              text=True,
+          ).splitlines()
+          env_values["COMPOSE_PROFILES"] = ",".join(
+              profile.strip() for profile in discovered_profiles if profile.strip()
+          )
+          if not env_values["COMPOSE_PROFILES"]:
+              raise SystemExit("No Compose profiles discovered for release build.")
           unresolved = {
               key: value for key, value in env_values.items() if "${" in value
           }
@@ -191,7 +201,7 @@ jobs:
           print(f"Prepared {len(copied)} synthetic CI environment file(s).")
           PY
 
-      - name: Authenticate to Docker Hub
+      - name: Authenticate to docker hub
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -205,7 +215,7 @@ jobs:
         run: |
           set -euo pipefail
           COMPOSE_FILE="${GITHUB_WORKSPACE}/docker-compose.yml" \
-          COMPOSE_PROFILES="sysctl-init,crowdsec" \
+          COMPOSE_PROFILES="${COMPOSE_PROFILES:?}" \
           DOCKER_BUILD_PUSH_IMAGES="0" \
           DOCKER_BUILD_INLINE_CACHE="1" \
           DOCKER_BUILD_NO_CACHE="0" \
@@ -221,7 +231,7 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t compose_images < <(
-            COMPOSE_PROFILES="sysctl-init,crowdsec" docker compose -f docker-compose.yml config --images | sort -u
+            COMPOSE_PROFILES="${COMPOSE_PROFILES:?}" docker compose -f docker-compose.yml config --images | sort -u
           )
           [ "${#compose_images[@]}" -gt 0 ] || { echo "No Compose images were discovered." >&2; exit 1; }
           for image_ref in "${compose_images[@]}"; do
@@ -336,7 +346,7 @@ jobs:
 
           ${CARRIER_IMAGE}
 
-          This release contains the source archive and the single Docker carrier image manifest.
+          This release contains the source archive and the single docker carrier image manifest.
           EOF
           gh release create "${RELEASE_VERSION}" \
             "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
@@ -368,12 +378,17 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${CARRIER_IMAGE}"
-          docker run --rm "${CARRIER_IMAGE}" sh -c \
-            'test -s /omero-prebuilt/prebuilt-manifest.json && test -s /omero-prebuilt/prebuilt-required-images.txt && test -s /omero-prebuilt/runtime-images.tar.gz'
           cid="$(docker create "${CARRIER_IMAGE}")"
+          cleanup_verify_container() {
+            docker rm -f "${cid}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_verify_container EXIT
           docker cp "${cid}:/omero-prebuilt/prebuilt-manifest.json" dist/verified-prebuilt-manifest.json
-          docker rm -f "${cid}" >/dev/null
+          docker cp "${cid}:/omero-prebuilt/prebuilt-required-images.txt" dist/verified-prebuilt-required-images.txt
+          cleanup_verify_container
+          trap - EXIT
           cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
+          cmp dist/prebuilt-required-images.txt dist/verified-prebuilt-required-images.txt
 
       - name: Publish GitHub release
         env:

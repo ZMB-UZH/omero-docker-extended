@@ -225,6 +225,7 @@ class RegressionGuardEngineTests(unittest.TestCase):
         """
         for path, text in (
             ("Dockerfile.good", "FROM python:3.12.10-slim\nUSER appuser\n"),
+            ("Dockerfile.good", "FROM scratch\nCOPY payload /payload\n"),
             (
                 "docker-compose.yml",
                 "services:\n  app:\n    image: vendor/app:1.2.3@sha256:"

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Docker Engine and Docker Compose plugin installed.
+- docker engine and docker compose plugin installed.
 - Host storage paths prepared for OMERO data and logs.
 - Appropriate filesystem permissions for container users.
 
@@ -64,9 +64,9 @@ If `.env` is missing, omit only `--env-file .env` from that command.
 
 ## 2) Easy Installation From a Prebuilt Carrier Image
 
-The easy installation path consumes a single manually released Docker Hub
-carrier image instead of building Dockerfiles on the installation host. The
-carrier image tag and GitHub release tag are the same Docker-compatible SemVer
+The easy installation path consumes a single manually released docker hub
+carrier image instead of building dockerfiles on the installation host. The
+carrier image tag and GitHub release tag are the same docker-compatible SemVer
 pre-release string, for example `0.1.0-beta.1`.
 
 From an installation root that already has reviewed runtime env files:
@@ -75,8 +75,8 @@ From an installation root that already has reviewed runtime env files:
 bash installation/easy_installation_script.sh
 ```
 
-The first easy-installer prompt asks which prebuilt Docker image tag to install.
-Enter the Docker Hub carrier image tag, for example `0.1.0-beta.1`.
+The first easy-installer prompt asks which prebuilt docker image tag to install.
+Enter the docker hub carrier image tag, for example `0.1.0-beta.1`.
 `installation/easy_installation_script.sh` then delegates to the canonical
 installer with `PREBUILT_IMAGE_MODE=require`. It removes the local build-only
 questions from the interactive flow:
@@ -84,30 +84,30 @@ questions from the interactive flow:
 - `Enable Buildx compressed build workflow?`
 - `Use build cache?`
 - `Flatten final images into single-layer outputs?`
-- `Enable Docker image security hardening?`
+- `Enable docker image security hardening?`
 
 The three release-build settings are enforced by the manual release workflow
 before publishing the carrier; the build-cache setting has no local build to
 control in strict prebuilt mode. The easy installer asks ten questions total,
-including the first Docker-image-tag prompt, and still uses the same host
+including the first docker-image-tag prompt, and still uses the same host
 paths, runtime env files, UID/GID discovery, permission checks, data-path
 snapshots, container startup, and post-start validation flow as the standard
 installer. If the carrier cannot be pulled, verified, extracted, or loaded, the
 easy installation exits with an error and does not run `docker compose build`.
 
-The carrier stores a manifest and a compressed Docker image archive. The loader
+The carrier stores a manifest and a compressed docker image archive. The loader
 verifies the manifest schema, release value, runtime-image references, archive
-size, uncompressed Docker-save size, and archive SHA-256 before `docker load`.
-It streams the verified archive from the carrier image into Docker instead of
+size, uncompressed docker-save size, and archive SHA-256 before `docker load`.
+It streams the verified archive from the carrier image into docker instead of
 writing an extra full archive copy under `OMERO_TMP_PATH`, checks free space
-under Docker's root directory, then verifies each required image tag exists in
-the local Docker daemon. The final Compose startup uses `--no-build`.
+under docker's root directory, then verifies each required image tag exists in
+the local docker daemon. The final Compose startup uses `--no-build`.
 
 Flattening in the release workflow applies to the bundled runtime service
-images inside `runtime-images.tar.gz`. The Docker Hub carrier remains a normal
-container image with small metadata/setup layers and exactly one large archive
-copy layer; a second full-size layer for ownership or mode changes is a release
-defect.
+images inside `runtime-images.tar.gz`. The docker hub carrier is a scratch-based
+data image with one payload layer for the manifest, required-image list, and
+archive; it has no Alpine, BusyBox, package manager, or shell layer and uses
+`HEALTHCHECK NONE` metadata instead of a runnable healthcheck command.
 
 For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
 
@@ -128,8 +128,8 @@ workflow deletes that draft release and its tag. The release job uses the
 `dockerhub-release` GitHub Actions environment with deployment-record creation
 disabled, so environment secrets and protection rules remain available without
 adding GitHub deployment history entries. The `DOCKERHUB_TOKEN` value must be a
-Docker Hub access token with write access to the carrier repository; do not use
-a Docker Hub account password.
+docker hub access token with write access to the carrier repository; do not use
+a docker hub account password.
 
 ## 3) Build Images
 
@@ -163,7 +163,7 @@ Notes:
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - `DOCKER_BUILD_PROGRESS` defaults to `plain` for both `docker compose build`
   and Buildx helper paths. This keeps installer transcripts line-oriented and
-  stable when terminals are resized. Set it to another Docker-supported
+  stable when terminals are resized. Set it to another docker-supported
   progress mode only when you explicitly need interactive TTY progress.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
 - OMERO.web and OMERO.server image builds now harden Rocky package retrieval by
@@ -173,7 +173,7 @@ Notes:
   transient mirror errors can recover without changing first-attempt behavior.
   The default profile is intentionally strict: 3 attempts, no inter-attempt
   sleep, `--setopt=timeout=20`, and `--setopt=retries=2`.
-- Advanced override: Docker builds can tune these safeguards with `--build-arg DNF_MAX_ATTEMPTS=...`, `--build-arg DNF_RETRY_SLEEP_SECONDS=...`, and `--build-arg DNF_USE_ROCKY_MIRRORLIST=0|1`.
+- Advanced override: docker builds can tune these safeguards with `--build-arg DNF_MAX_ATTEMPTS=...`, `--build-arg DNF_RETRY_SLEEP_SECONDS=...`, and `--build-arg DNF_USE_ROCKY_MIRRORLIST=0|1`.
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
@@ -187,7 +187,7 @@ Notes:
   (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`,
   `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via
   `docker image import --change ...`. This produces a true single-layer final
-  image for the local Docker daemon, but it is intentionally slower because
+  image for the local docker daemon, but it is intentionally slower because
   every selected image is exported and re-imported. Set
   `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` to enable it. Temporary source
   tags/build contexts are cleaned automatically, and flatten metadata
@@ -208,9 +208,9 @@ Notes:
 - The installation workflow prompts whether to enable the compressed Buildx mode during each interactive run (default: `No`). If you disable it, the script uses `docker compose build`.
 - Immediately after the `Use build cache?` prompt, the installation workflow asks whether to flatten final images into single-layer outputs (default: `No`). In unattended automation, the same default applies unless you explicitly set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1`. Run:
 - If you answer **No** to the installation prompt `Use build cache?`, the installer later prints a cache-cleanup notice just before the rebuild starts and performs deterministic local cache cleanup:
-  - always prunes Docker builder cache (`docker builder prune -a -f`),
+  - always prunes docker builder cache (`docker builder prune -a -f`),
   - when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`),
-  - and, for that Buildx run, forces Buildx local cache export off in addition to disabling Docker layer cache and Buildx inline cache.
+  - and, for that Buildx run, forces Buildx local cache export off in addition to disabling docker layer cache and Buildx inline cache.
   This keeps "no cache" runs consistent with operator expectations while avoiding unnecessary Buildx cache deletion when Buildx is disabled.
 
 ```bash
@@ -241,7 +241,7 @@ bash github_pull_project_bash
 
 Vulnerability scanning is disabled by default (it adds several minutes). To
 enable it, answer "yes" to the interactive prompt or set
-`ENABLE_VULNERABILITY_SCAN=1`. When enabled, Docker Scout reports known CVEs in
+`ENABLE_VULNERABILITY_SCAN=1`. When enabled, docker scout reports known CVEs in
 all images referenced by `docker-compose.yml`, both custom-built and
 third-party. When the build ran without cache (fresh pull), the report includes
 a before/after baseline comparison. The output is a compact table with one line

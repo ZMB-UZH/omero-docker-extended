@@ -25,10 +25,10 @@ This repository packages the complete runtime for the OMERO microscopy data
 storage & management platform, extending it with five purpose-built OMERO.web
 plugins (with several subroutines each), a shared utility library, an
 observability stack, automated database maintenance, and deployment/update
-tooling. Every service runs in separate Docker containers with explicit health
+tooling. Every service runs in separate docker containers with explicit health
 checks, pinned image versions, and environment variable driven configuration.
 
-> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility and behavior must be verified by the system administrator.
+> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility and behavior must be verified by the system administrator.
 
 For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
@@ -63,73 +63,128 @@ For the official OMERO documentation, release notes, and guides, your first poin
 
 ```text
 .
-├── .agents/skills/                    # Harness-neutral reusable agent skills (optional, additive)
-├── .cursor/rules/                     # Cursor-specific rule adapters pointing back to AGENTS/skills
-├── .github/copilot-instructions.md    # GitHub Copilot repo-wide instructions
-├── .github/instructions/              # GitHub Copilot path-specific instructions
-├── AGENTS.md                          # Agent navigation map (start here for AI Agents)
+├── .agents/skills/                    # Reusable repo-local agent workflows
+├── .claude/settings.json              # Claude Code local project settings
+├── .cursor/rules/                     # Cursor adapters for AGENTS/skills
+├── .github/                           # GitHub automation and repository metadata
+│   ├── workflows/                     #   CI, security, CodeQL, and release workflows
+│   ├── requirements/                  #   Hash-pinned CI tool requirement files
+│   ├── instructions/                  #   GitHub Copilot path-specific instructions
+│   ├── ISSUE_TEMPLATE/                #   GitHub issue forms
+│   ├── codeql/codeql-config.yml       #   CodeQL configuration
+│   ├── copilot-instructions.md        #   GitHub Copilot repo-wide instructions
+│   ├── dependabot.yml                 #   Dependabot update policy
+│   ├── pull_request_template.md       #   Pull request checklist
+│   ├── readme_badges.json             #   Source for generated README badges
+│   └── SECURITY.md                    #   GitHub security policy pointer
+├── .dockerignore                      # docker build context exclusions
+├── .env_manifest                      # Environment-template manifest used by repo checks
+├── .markdownlint.yaml                 # Markdown lint configuration
+├── .pre-commit-config.yaml            # Optional local pre-commit hook configuration
+├── .ruff.toml                         # Ruff lint/format configuration
+├── .yamllint                          # YAML lint configuration
+├── AGENTS.md                          # AI agent working contract
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
+├── CODE_OF_CONDUCT.md                 # Community conduct policy
+├── CONTRIBUTING.md                    # Contributor workflow and checks
 ├── GEMINI.md                          # Gemini CLI project context
+├── LICENSE                            # Project license
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (21 Compose services total: 19 default long-running containers, 20 with crowdsec; redis-sysctl-init is profile-gated)
-├── docker/                            # Dockerfiles
+├── SECURITY.md                        # Root security policy pointer
+├── codecov.yml                        # Codecov status configuration
+├── conftest.py                        # Pytest repository configuration
+├── docker-compose.yml                 # Compose topology: 21 services, 19 default runtime containers
+├── docker/                            # dockerfiles and image helper scripts
+│   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
+│   ├── firewall-bouncer.Dockerfile    #   CrowdSec firewall bouncer sidecar
+│   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 26.04 LTS)
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery workers
-│   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 26.04 LTS)
-│   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
+│   ├── path-usage-exporter.Dockerfile #   Custom filesystem usage metrics exporter
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
-│   ├── prebuilt-carrier.Dockerfile    #   Release carrier image for easy installation bundles
-│   ├── redis-sysctl-init.Dockerfile   #   Alpine sidecar for kernel parameter tuning
-│   └── redis-sysctl-init.sh
+│   ├── prebuilt-carrier.Dockerfile    #   Scratch data carrier for easy installs
+│   ├── redis-sysctl-init.Dockerfile   #   Redis kernel-tuning helper image
+│   ├── *-entrypoint.sh                #   Service entrypoint helpers
+│   ├── patch_*.py                     #   Runtime patch helpers copied into images
+│   └── redis-sysctl-init.sh           #   Redis sysctl helper script
 ├── env/                               # Environment variable templates
+│   ├── grafana_example.env            #   Grafana credentials and auth
+│   ├── omero-celery_example.env       #   Celery broker, queue, timeouts, worker settings
+│   ├── omero_secrets_example.env      #   Secrets template; runtime copy is host-owned
 │   ├── omeroserver_example.env        #   Server: DB, Java, scripts, security settings
-│   ├── omeroweb_example.env           #   Web: apps, plugins, admin tools, upload config
-│   ├── omero-celery_example.env       #   Celery: broker, queue, timeouts, worker settings
-│   └── grafana_example.env            #   Grafana: credentials and auth
+│   └── omeroweb_example.env           #   Web: apps, plugins, admin tools, upload config
 ├── startup/                           # Container bootstrap scripts
-│   ├── 10-server-bootstrap.sh         #   Server config, certs, job-service user, script reg.
-│   ├── 10-web-bootstrap.sh            #   Log dir validation, Docker socket access
-│   ├── 40-start-imaris-celery-worker.sh # Imaris Celery worker startup
-│   ├── 40-start-tools-celery-worker.sh # Tools enhanced-search Celery worker startup
-│   ├── 50-install-omero-downloader.sh #   OMERO.downloader from GitHub releases
-│   └── 51-install-imarisconvert.sh    #   ImarisConvert build-time install/runtime verification
+│   ├── 10-server-bootstrap.sh         #   Server config, certs, job-service user, scripts
+│   ├── 10-web-bootstrap.sh            #   Log dir validation, docker socket access
+│   ├── 40-start-*-celery-worker.sh    #   Imaris and Tools Celery worker startup helpers
+│   ├── 50-config.py                   #   OMERO.web runtime configuration generator
+│   ├── 50-install-omero-downloader.sh #   OMERO.downloader install/verify helper
+│   ├── 51-install-imarisconvert.sh    #   ImarisConvert install/verify helper
+│   ├── 60-default-web-config.sh       #   Default OMERO.web config handoff
+│   ├── 60-enforce-ext4-project-quota.sh # Project-quota enforcement
+│   ├── 61-storage-quota-reconcile-loop.sh # Quota reconciliation
+│   ├── 98-cleanprevious.sh            #   Image-local startup cleanup hook
+│   ├── dropbox_user_dir_sync.py       #   Dropbox user-directory sync helper
+│   ├── healthcheck-omeroserver.sh     #   OMERO.server healthcheck helper
+│   ├── job_service_group_sync.py      #   Job-service group sync helper
+│   └── repo_root_sync_helper.py       #   Repository root sync helper
 ├── omero_plugin_common/               # Shared Python library for all plugins
-├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
-├── omeroweb_import/                   # Import plugin
-├── omeroweb_tools/                    # User-facing tools plugin (Enhanced search)
-├── omeroweb_admin_tools/              # Admin observability plugin
+├── omero_web_zarr/                    # OMERO.web Zarr preview integration
 ├── omero_imaris_connector/            # Imaris export plugin + XT connector
+├── omeroweb_admin_tools/              # Admin observability plugin
+├── omeroweb_import/                   # Import plugin
+├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
+├── omeroweb_tools/                    # User-facing tools plugin (Enhanced search)
 ├── monitoring/                        # Observability stack configuration
-│   ├── prometheus/prometheus.yml      #   Scrape configs + blackbox probes
+│   ├── alloy/alloy-config.alloy       #   docker + file log collection to Loki
+│   ├── blackbox/config.yml            #   HTTP/TCP probe definitions
+│   ├── cadvisor/                      #   cAdvisor entrypoint helper
+│   ├── crowdsec/                      #   CrowdSec acquisition config
 │   ├── grafana/                       #   Dashboard JSON + provisioning
 │   ├── loki/loki-config.yml           #   Log storage and ingestion settings
-│   ├── alloy/alloy-config.alloy       #   Docker + file log collection to Loki
-│   └── blackbox/config.yml            #   HTTP/TCP probe definitions
+│   ├── path-usage-exporter/           #   Filesystem usage exporter
+│   ├── postgres-exporter/             #   PostgreSQL exporter config and entrypoint
+│   └── prometheus/                    #   Scrape config and disk-monitor helper
 ├── maintenance/postgres/              # Database maintenance automation
 │   ├── pg-maintenance.sh              #   VACUUM ANALYZE + REINDEX CONCURRENTLY
 │   ├── pg-maintenance-entrypoint.sh   #   Private cron environment setup
 │   ├── pg-maintenance-cron-runner     #   Sources cron env before scheduled jobs
 │   └── pg-maintenance-cron            #   Weekly/monthly schedule
 ├── installation/                      # Deployment automation
-│   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
+│   ├── cleanup_build_containers.sh    #   Build container cleanup
+│   ├── crowdsec_install_auto_restart.sh # CrowdSec install-mode restart helper
+│   ├── docker_buildx_compressed_push.sh # Buildx compressed image build/push helper
 │   ├── easy_installation_script.sh    #   Strict prebuilt carrier installation entrypoint
-│   ├── load_prebuilt_carrier.sh       #   Verifies and loads carrier-bundled runtime images
-│   └── docker_buildx_compressed_push.sh # Buildx compressed image build/push helper
+│   ├── env_assignment_utils.sh        #   Shell env-file assignment helpers
+│   ├── install_transcript_utils.sh    #   Installation transcript utilities
+│   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
+│   └── load_prebuilt_carrier.sh       #   Verifies and loads carrier-bundled runtime images
 ├── helper_scripts_debian/             # Host provisioning helpers
 │   ├── docker_debian_13_install_script
 │   ├── extra_packages_debian_13_install_script
 │   └── docker_image_analysis.sh
-├── supervisord.conf                   # Process manager: OMERO.web + co-located Celery workers
+├── scripts/                           # Host service installers and systemd units
+│   ├── enable-storage-quotas.sh       #   Storage quota enablement
+│   ├── install-quota-enforcer.sh      #   Quota enforcer installer
+│   ├── install-tmp-cleaner.sh         #   Temporary-file cleaner installer
+│   ├── omero-host-service-lib.sh      #   Shared host-service installer library
+│   ├── omero-quota-enforcer.*         #   Quota enforcer script and systemd units
+│   └── omero-tmp-cleaner.*            #   Temporary-file cleaner units
+├── supervisord.conf                   # OMERO.web and co-located Celery processes
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
-├── .env_example                       # Template: Compose interpolation defaults mirrored into generated .env
-├── installation_paths_example.env     # Template: all filesystem path definitions
+├── .env_example                       # Template for Compose interpolation defaults
+├── installation_paths_example.env     # Template for filesystem paths
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
+├── iter_test_helpers.py               # Shared test helper functions
+├── mypy.ini                           # Mypy configuration
 ├── docs/                              # Full documentation set (see docs/index.md)
+├── fuzzing/                           # Fuzz targets for parser and input-boundary checks
+├── logo/                              # Runtime logo template asset
 ├── third_party/ecc-v1.10.0/            # Pinned selected ECC v1.10.0 skill snapshot (MIT)
-├── tools/                             # Development tooling (docs linter)
+├── tools/                             # Agent, env-safety, lint, release, and CI tools
 ├── tests/                             # Test suite
-└── .github/                           # CI workflows, Dependabot, and Copilot adapters
+└── typings/                           # Local type stubs
 ```
 
 </details>
@@ -137,7 +192,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-`docker-compose.yml` declares **21 Compose services total** on a single Docker
+`docker-compose.yml` declares **21 Compose services total** on a single docker
 bridge network (`omero`): **19 long-running runtime containers by default**,
 **20 when the profile-gated `crowdsec` service is enabled**. The one-shot
 `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
@@ -155,11 +210,11 @@ The table below lists the long-running services available in the full profile se
 | `redis` | redis:8.6.3-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `ollama` | ollama/ollama:0.23.2 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.40.0-alpine | Docker container management UI | 9000, 9443 |
+| `portainer` | portainer/portainer-ce:2.40.0-alpine | docker container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.11.3 | Metrics scraping and storage | 9090 |
 | `grafana` | grafana/grafana:13.0.1 | Dashboards and visualization | 3000 |
 | `loki` | grafana/loki:3.7.1 | Log aggregation backend | 3100 |
-| `alloy` | grafana/alloy:v1.16.1 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
+| `alloy` | grafana/alloy:v1.16.1 | Log collection pipeline (docker + file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.11.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.56.2 | Container resource metrics | 8080 (internal) |
@@ -167,7 +222,7 @@ The table below lists the long-running services available in the full profile se
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.19.1 | Plugin database metrics | 9187 (internal) |
 | `redis-exporter` | oliver006/redis_exporter:v1.83.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
-| `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
+| `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
 </details>
 
@@ -202,7 +257,7 @@ Operational observability interfaces embedded in OMERO.web.
 
 - Log exploration via Loki (LogQL queries with container filtering)
 - Grafana and Prometheus proxy endpoints for embedded dashboards
-- Docker container resource monitoring (stats, system info)
+- docker container resource monitoring (stats, system info)
 - Storage analytics by user and group
 - Server and database diagnostic scripts
 - Root-only access controls
@@ -265,7 +320,7 @@ Common utilities shared across all plugins:
 - Hardware baseline:
   - CPU: minimum 8 cores for few-user operation
   - RAM: minimum 16 GB (32 GB recommended)
-- Docker Engine and Docker Compose plugin installed on the host.
+- docker engine and docker compose plugin installed on the host.
 - Host storage paths with adequate filesystem permissions.
 - Network access to GitHub configured if using the pull-based update workflow (see `github_pull_project_bash_example`).
 
@@ -302,11 +357,11 @@ workflow.
 >
 > Open `/opt/omero/env/omero_secrets.env` (the non-example renamed file) and replace the right-hand side of every empty variable with strong unique credentials (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services. It is recommended that you use a password manager for maximum security in your everyday web browsing activities.
 
-**3.** Install Docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
+**3.** Install docker using the official documentation for your OS. For example, for Debian, go to <https://docs.docker.com/engine/install/debian/> or use the provided convenience script: <https://docs.docker.com/engine/install/debian/#install-using-the-convenience-script>.
 
 An experimental Debian 13 docker installation script exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
 
-Upon completion, verify Docker runtime health:
+Upon completion, verify docker runtime health:
 
 ```bash
 systemctl status docker
@@ -331,31 +386,32 @@ The pull/update script also saves a full terminal transcript of the visible sess
 
 ### Easy installation with a prebuilt carrier image
 
-The easy installer uses a manually published release carrier image from Docker
-Hub instead of building the repository Dockerfiles on the target host. The
-carrier is a single Docker image tagged with the same SemVer pre-release
+The easy installer uses a manually published release carrier image from docker
+hub instead of building the repository dockerfiles on the target host. The
+carrier is a single docker image tagged with the same SemVer pre-release
 version as the GitHub release. During installation,
 `installation/easy_installation_script.sh` pulls that one carrier, verifies its
 manifest and compressed archive checksum, loads the bundled runtime image tags
-into Docker by streaming the verified archive to `docker load`, then starts the
+into docker by streaming the verified archive to `docker load`, then starts the
 normal multi-container Compose deployment with `--no-build`.
 
 The release workflow flattens the bundled runtime service images before they
-are written into `runtime-images.tar.gz`. The carrier image itself remains a
-normal Docker image with small metadata/setup layers plus one large archive
-layer; it must not duplicate the archive in a later permission-fix layer.
+are written into `runtime-images.tar.gz`. The carrier image itself is a
+scratch-based data image with one payload layer and does not include Alpine,
+BusyBox, a package manager, or a shell; it uses `HEALTHCHECK NONE` metadata
+instead of a runnable healthcheck command.
 
 This path does not switch to the build workflow if the carrier cannot be pulled, verified, streamed, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
 
 Run the easy installer from an updated installation root. The first prompt asks
-which prebuilt Docker image tag to install:
+which prebuilt docker image tag to install:
 
 ```bash
 cd /opt/omero
 sudo bash ./installation/easy_installation_script.sh
 ```
 
-Enter the Docker Hub carrier image tag. Do not use `latest`. For unattended
+Enter the docker hub carrier image tag. Do not use `latest`. For unattended
 runs, set `PREBUILT_IMAGE_RELEASE` explicitly instead of relying on a prompt.
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
@@ -371,8 +427,8 @@ draft release and its tag. The job uses the `dockerhub-release` GitHub Actions
 environment with deployment-record creation disabled, so repository owners can
 add environment protection rules without adding GitHub deployment history
 entries or changing the secret names. The `DOCKERHUB_TOKEN` value must be a
-Docker Hub access token with write access to the carrier repository; do not
-store a Docker Hub account password there.
+docker hub access token with write access to the carrier repository; do not
+store a docker hub account password there.
 
 **5.** After a successful installation, run:
 
@@ -421,7 +477,7 @@ docker compose --env-file .env --env-file installation_paths.env --env-file env/
 
 ### Storage quotas
 
-Storage quotas use Linux ext4 project quotas, not Docker volume limits. Admin
+Storage quotas use Linux ext4 project quotas, not docker volume limits. Admin
 Tools writes quota values to
 `${OMERO_USER_DATA_PATH}/.admin-tools/group-quotas.json`; the host
 `omero-quota-enforcer` systemd path/timer reads that file, assigns one ext4
@@ -471,7 +527,7 @@ writes; privileged host-root writes can bypass quota accounting.
 
 ### Reverse proxy
 
-This is currently disabled, but easy to enable, at least without strong certificate verification. Reverse proxy and TLS termination can be managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the Docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
+This is currently disabled, but easy to enable, at least without strong certificate verification. Reverse proxy and TLS termination can be managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
 
 </details>
 
@@ -483,10 +539,10 @@ The observability stack provides:
 - **Prometheus** scrapes 10 direct metric targets, plus blackbox HTTP probes
   for the configured service endpoints and TCP probes for 5 internal endpoints
   (databases, Redis, OMERO.server SSL, and OMERO.server).
-- **Alloy** collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
+- **Alloy** collects docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
-- **CrowdSec** provides host-wide security telemetry by analyzing host syslog/auth logs and Docker logs via mounted sources.
+- **CrowdSec** provides host-wide security telemetry by analyzing host syslog/auth logs and docker logs via mounted sources.
 
 </details>
 
@@ -531,6 +587,15 @@ once that the first search can take several minutes; later searches reuse the
 external cache. The mirror asks CocoIndex Code 0.2.33 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
+
+MCP search itself never refreshes and can return stale active-index text after
+local edits. Before relying on it for current-tree routing, agents refresh the
+external index explicitly with
+`python3 tools/cocoindex_agent_search.py index --allow-dirty-index` for an
+intentional dirty-worktree index, or
+`python3 tools/cocoindex_agent_search.py search --refresh "<query>"` on a clean
+tree. Exact `rg`, file reads, and tests still confirm every candidate before
+editing.
 
 | Entry point | Purpose |
 | --- | --- |

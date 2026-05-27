@@ -178,6 +178,12 @@ and index work requires an explicit CLI command outside the MCP request path.
 Mirror, index, refresh, and benchmark commands reject dirty or untracked
 worktrees by default and require an explicit dirty flag for intentional
 disk-heavy runs.
+Before relying on MCP search for current local edits, refresh the external
+index with `python3 tools/cocoindex_agent_search.py index --allow-dirty-index`
+for an intentional dirty-worktree index or
+`python3 tools/cocoindex_agent_search.py search --refresh "<query>"` on a clean
+tree. MCP search itself never refreshes and can otherwise return
+stale active-index text.
 After any MCP install, config change, or launcher change, run
 `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target repo root;
 the MCP path is not verified until stdio `initialize`, raw JSON-RPC protocol
