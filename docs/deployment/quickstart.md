@@ -135,7 +135,10 @@ same carrier image tag and release assets after carrier verification. Before
 saving the runtime archive, the workflow derives the required image references
 from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner
-storage pressure without changing the carrier contents. The `DOCKERHUB_TOKEN`
+storage pressure without changing the carrier contents. On GitHub-hosted Linux
+runners it also moves Docker's data root to `/mnt/docker-data` before the heavy
+build and archive steps so the full required image set fits on the runner. The
+`DOCKERHUB_TOKEN`
 value must be a docker hub access token with write access to the carrier
 repository; do not use a docker hub account password.
 

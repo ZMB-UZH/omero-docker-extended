@@ -102,7 +102,10 @@ Examples:
   runner-local docker images outside that required set. Do not replace this
   with service-name hardcoding or image-specific cleanup. The archive stream
   uses bounded `docker save` retries with storage diagnostics because hosted
-  runner Docker daemons can fail the archive stream transiently.
+  runner Docker daemons can fail the archive stream transiently. On
+  GitHub-hosted Linux runners, the workflow must move Docker's data root to
+  `/mnt/docker-data` before the large carrier build so required images such as
+  Ollama are not pulled into the small root filesystem.
 - The workflow uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token must
   be a docker hub access token, never an account password. No workflow in this
   repository may create GitHub deployment records. Do not add job-level

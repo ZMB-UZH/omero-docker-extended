@@ -491,11 +491,25 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "ubuntu-latest",
             triggers["workflow_dispatch"]["inputs"]["runner_label"]["default"],
         )
+        steps = release_job["steps"]
+        hosted_storage_step = next_or_fail(
+            step
+            for step in steps
+            if step["name"] == "Move docker data root to hosted-runner large disk"
+        )
+        self.assertEqual(
+            "runner.os == 'Linux' && runner.environment == 'github-hosted'",
+            hosted_storage_step["if"],
+        )
+        self.assertIn('target_root="/mnt/docker-data"', hosted_storage_step["run"])
+        self.assertIn("sudo systemctl stop docker", hosted_storage_step["run"])
+        self.assertIn("sudo systemctl start docker", hosted_storage_step["run"])
+        self.assertIn("DOCKER_DATA_ROOT", hosted_storage_step["run"])
+        self.assertIn("DockerRootDir", hosted_storage_step["run"])
         replace_input = triggers["workflow_dispatch"]["inputs"]["replace_existing"]
         self.assertFalse(replace_input["default"])
         self.assertEqual("boolean", replace_input["type"])
 
-        steps = release_job["steps"]
         checkout_step = next_or_fail(
             step for step in steps if step["name"] == "Checkout"
         )
@@ -646,6 +660,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("image_archive_sha256", workflow_text)
         self.assertIn("runtime_images_uncompressed_bytes", workflow_text)
         self.assertIn("df -h /", workflow_text)
+        self.assertIn("/mnt/docker-data", workflow_text)
+        self.assertIn("runner.environment == 'github-hosted'", workflow_text)
         self.assertIn("docker system df", workflow_text)
         self.assertIn("docker buildx build", workflow_text)
         self.assertIn("-f docker/prebuilt-carrier.Dockerfile", workflow_text)
