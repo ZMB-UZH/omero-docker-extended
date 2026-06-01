@@ -100,7 +100,9 @@ Examples:
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the
   required image set from the rendered Compose config and may prune only
   runner-local docker images outside that required set. Do not replace this
-  with service-name hardcoding or image-specific cleanup.
+  with service-name hardcoding or image-specific cleanup. The archive stream
+  uses bounded `docker save` retries with storage diagnostics because hosted
+  runner Docker daemons can fail the archive stream transiently.
 - The workflow uses `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`; the token must
   be a docker hub access token, never an account password. No workflow in this
   repository may create GitHub deployment records. Do not add job-level

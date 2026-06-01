@@ -636,6 +636,12 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertNotIn("docker system df || true", workflow_text)
         self.assertIn('docker save "${compose_images[@]}"', workflow_text)
+        self.assertIn("write_runtime_archive()", workflow_text)
+        self.assertIn(
+            "docker save failed on attempt ${attempt}; collecting storage diagnostics.",
+            workflow_text,
+        )
+        self.assertIn("docker save failed after 3 attempts.", workflow_text)
         self.assertIn("tools/write_prebuilt_runtime_archive.py", workflow_text)
         self.assertIn("image_archive_sha256", workflow_text)
         self.assertIn("runtime_images_uncompressed_bytes", workflow_text)
