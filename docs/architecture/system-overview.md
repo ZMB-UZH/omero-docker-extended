@@ -60,7 +60,7 @@ Cache backend and Celery message broker:
 
 Internal-only Ollama service for OMP's `Local` AI provider:
 
-- Version 0.23.2, pinned as `ollama/ollama:0.23.2`.
+- Version 0.24.0, pinned as `ollama/ollama:0.24.0`.
 - Stores model data under `OLLAMA_DATA_PATH` when set, otherwise `/disks/omero_temp/ollama`.
 - Exposes port 11434 only on the Docker network.
 - Health check: `ollama list`.
