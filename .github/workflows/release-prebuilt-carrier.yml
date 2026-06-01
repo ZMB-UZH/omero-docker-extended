@@ -302,10 +302,31 @@ jobs:
               docker pull "${image_ref}"
             fi
           done
-          docker save "${compose_images[@]}" \
-            | python3 tools/write_prebuilt_runtime_archive.py \
-                --archive dist/runtime-images.tar.gz \
-                --raw-bytes-file dist/runtime-images-uncompressed.bytes
+          write_runtime_archive() {
+            docker save "${compose_images[@]}" \
+              | python3 tools/write_prebuilt_runtime_archive.py \
+                  --archive dist/runtime-images.tar.gz \
+                  --raw-bytes-file dist/runtime-images-uncompressed.bytes
+          }
+          archive_written=0
+          for attempt in 1 2 3; do
+            if write_runtime_archive; then
+              archive_written=1
+              break
+            fi
+            rm -f dist/runtime-images.tar.gz dist/runtime-images-uncompressed.bytes
+            echo "docker save failed on attempt ${attempt}; collecting storage diagnostics." >&2
+            df -h /
+            docker system df
+            if [ "${attempt}" = "3" ]; then
+              break
+            fi
+            sleep "$((attempt * 15))"
+          done
+          [ "${archive_written}" = "1" ] || {
+            echo "docker save failed after 3 attempts." >&2
+            exit 1
+          }
           test -s dist/runtime-images-uncompressed.bytes
           df -h /
           docker system df
