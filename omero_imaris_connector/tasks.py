@@ -49,6 +49,7 @@ _PUBLIC_SCRIPT_MESSAGES = {
     "Could not get original file path",
     "Could not prepare source image for IMS conversion",
 }
+_SELECTED_IMAGE_OME_TIFF_EXPORT_FAILED = "Could not export selected Image as OME-TIFF"
 _CLI_OUTPUT_KEYS = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
 _CLI_OUTPUT_LINE_RE = re.compile(
     r"^\s*(?:\*)?\s*([A-Za-z_][A-Za-z0-9_]*)"
@@ -669,6 +670,23 @@ def _ims_export_script_module():
     return ims_export_script
 
 
+def _public_ome_tiff_materialization_error(ims_export_script, exc):
+    """Return a safe public message for selected-image OME-TIFF failures.
+
+    Inputs: IMS export script module and exception. Output: public message.
+    """
+    failure_message = getattr(
+        ims_export_script,
+        "public_ome_tiff_export_failure_message",
+        None,
+    )
+    if callable(failure_message):
+        public_message = failure_message(exc)
+        if public_message:
+            return public_message
+    return _SELECTED_IMAGE_OME_TIFF_EXPORT_FAILED
+
+
 def _run_ome_tiff_export(conn, image_id, status_callback=None):
     """Materialize one OMERO image as an OME-TIFF file on the export volume.
 
@@ -691,16 +709,25 @@ def _run_ome_tiff_export(conn, image_id, status_callback=None):
     )
     if status_callback is not None:
         status_callback("running_export", {"export_name": export_name})
-    export_path = ims_export_script.materialize_ome_tiff_source(
-        conn,
-        image,
-        int(image_id),
-        export_root,
-    )
+    try:
+        export_path = ims_export_script.materialize_ome_tiff_source(
+            conn,
+            image,
+            int(image_id),
+            export_root,
+        )
+    except Exception as exc:
+        raise OMEExportTaskError(
+            "OME-TIFF export failed while materializing source.",
+            public_message=_public_ome_tiff_materialization_error(
+                ims_export_script,
+                exc,
+            ),
+        ) from exc
     if not export_path:
         raise OMEExportTaskError(
             "OME-TIFF export did not produce a file.",
-            public_message="Could not export selected Image as OME-TIFF",
+            public_message=_SELECTED_IMAGE_OME_TIFF_EXPORT_FAILED,
         )
     os.chmod(export_path, _DOWNLOADABLE_EXPORT_FILE_MODE)
     return {

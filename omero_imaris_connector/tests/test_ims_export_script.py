@@ -1045,6 +1045,302 @@ def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(
     assert exporter.closed is True
 
 
+def test_ome_tiff_source_materialization_reports_large_pyramid_failure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Verify OMERO large-image OME-TIFF rejections become sanitized failures.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in selected Image OME-TIFF error reporting.
+    """
+    module = _load_script_module()
+    image_id = 42
+    size_x = 1024
+    size_y = 2048
+    exporter_error = RuntimeError(
+        f"Image:{image_id} is too large for export (sizeX={size_x}, sizeY={size_y})"
+    )
+
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_image_wrapper",
+        lambda *_args: (_ for _ in ()).throw(exporter_error),
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_exporter",
+        lambda *_args: (_ for _ in ()).throw(exporter_error),
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_pixels",
+        lambda *_args: (_ for _ in ()).throw(exporter_error),
+    )
+    image = types.SimpleNamespace(getName=lambda: "large-pyramid.ome.tif")
+
+    public_message = module.public_ome_tiff_export_failure_message(exporter_error)
+    assert public_message == (
+        "Selected Image OME-TIFF export is unsupported for large/pyramidal "
+        f"Image {image_id} (sizeX={size_x}, sizeY={size_y}) "
+        "by OMERO's standard OME-TIFF exporter."
+    )
+    assert (
+        module._materialize_ome_tiff_source(
+            object(),
+            image,
+            image_id,
+            str(tmp_path / "exports-default"),
+        )
+        is None
+    )
+    with pytest.raises(
+        RuntimeError,
+        match=f"large/pyramidal Image {image_id}",
+    ) as exc:
+        module._materialize_ome_tiff_source(
+            object(),
+            image,
+            image_id,
+            str(tmp_path / "exports-raise"),
+            raise_on_known_failure=True,
+        )
+    assert str(exc.value) == public_message
+
+
+def test_ome_tiff_source_materialization_writes_pixels_when_stock_export_rejects(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Verify large-image exports stay inside the selected Imaris converter path.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in custom selected Image OME-TIFF materialization.
+    """
+    module = _load_script_module()
+    image_id = 42
+    size_x = 1024
+    size_y = 2048
+    exporter_error = RuntimeError(
+        f"Image:{image_id} is too large for export (sizeX={size_x}, sizeY={size_y})"
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_image_wrapper",
+        lambda *_args: (_ for _ in ()).throw(exporter_error),
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_exporter",
+        lambda *_args: (_ for _ in ()).throw(exporter_error),
+    )
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_pixels",
+        lambda _image, handle: handle.write(b"custom-ome-tiff") or True,
+    )
+
+    source = module.materialize_ome_tiff_source(
+        object(),
+        types.SimpleNamespace(getName=lambda: "large-pyramid.ome.tif"),
+        image_id,
+        str(tmp_path / "exports"),
+    )
+
+    assert pathlib.Path(source).read_bytes() == b"custom-ome-tiff"
+
+
+def test_ome_tiff_source_materialization_skips_stock_export_for_pyramid_images(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Verify pyramidal images use the connector pixel writer directly.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in pyramid-aware selected Image OME-TIFF materialization.
+    """
+    module = _load_script_module()
+    stock_calls = []
+
+    def fail_stock_export(*_args):
+        """Fail if a stock OMERO exporter path is called.
+
+        Inputs: ignored writer args. Output: raises AssertionError.
+        """
+        stock_calls.append("called")
+        raise AssertionError("stock exporter should not run for pyramid images")
+
+    monkeypatch.setattr(module, "_write_ome_tiff_from_image_wrapper", fail_stock_export)
+    monkeypatch.setattr(module, "_write_ome_tiff_from_exporter", fail_stock_export)
+    monkeypatch.setattr(
+        module,
+        "_write_ome_tiff_from_pixels",
+        lambda _image, handle: handle.write(b"pyramid-ome-tiff") or True,
+    )
+
+    image = types.SimpleNamespace(
+        getName=lambda: "large-pyramid.ome.tif",
+        requiresPixelsPyramid=lambda: True,
+    )
+    source = module.materialize_ome_tiff_source(
+        object(),
+        image,
+        42,
+        str(tmp_path / "exports"),
+    )
+
+    assert stock_calls == []
+    assert pathlib.Path(source).read_bytes() == b"pyramid-ome-tiff"
+
+
+def test_write_ome_tiff_from_pixels_streams_planes_with_ome_metadata(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Verify custom OME-TIFF writing streams OMERO planes in declared axis order.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in OME-TIFF shape, dtype, axis, or physical-size metadata.
+    """
+    module = _load_script_module()
+    plane_requests = []
+    captured = {}
+
+    class _Plane:
+        """Small stand-in for a numpy plane."""
+
+        shape = (2, 3)
+        dtype = "uint16"
+
+    class _Length:
+        """Small stand-in for OMERO physical-size values."""
+
+        def __init__(self, value):
+            """Create `_Length`.
+
+            Inputs: value. Output: initializes fake length value.
+            """
+            self._value = value
+
+        def getValue(self):
+            """Return the fake length value.
+
+            Inputs: none. Output: float.
+            """
+            return self._value
+
+    class _Pixels:
+        """Small stand-in for OMERO pixels."""
+
+        @staticmethod
+        def getPlane(z_index, c_index, t_index):
+            """Return a fake plane and record requested indexes.
+
+            Inputs: z, c, t indexes. Output: `_Plane`.
+            """
+            plane_requests.append((z_index, c_index, t_index))
+            return _Plane()
+
+        @staticmethod
+        def getPhysicalSizeX():
+            """Return fake X physical size.
+
+            Inputs: none. Output: `_Length`.
+            """
+            return _Length(0.25)
+
+        @staticmethod
+        def getPhysicalSizeY():
+            """Return fake Y physical size.
+
+            Inputs: none. Output: `_Length`.
+            """
+            return _Length(0.5)
+
+        @staticmethod
+        def getPhysicalSizeZ():
+            """Return fake Z physical size.
+
+            Inputs: none. Output: `_Length`.
+            """
+            return _Length(1.0)
+
+    pixels = _Pixels()
+    image = types.SimpleNamespace(
+        getPrimaryPixels=lambda: pixels,
+        getSizeX=lambda: 3,
+        getSizeY=lambda: 2,
+        getSizeZ=lambda: 2,
+        getSizeC=lambda: 1,
+        getSizeT=lambda: 2,
+    )
+
+    def _asarray(plane):
+        """Return the fake plane unchanged.
+
+        Inputs: fake plane. Output: same fake plane.
+        """
+        return plane
+
+    def _imwrite(
+        output_handle,
+        data,
+        shape,
+        dtype,
+        ome,
+        metadata,
+        bigtiff,
+        photometric,
+        maxworkers,
+    ):
+        """Capture tifffile write arguments and consume the plane iterator.
+
+        Inputs: tifffile-style arguments. Output: None.
+        """
+        captured.update(
+            {
+                "planes": list(data),
+                "shape": shape,
+                "dtype": dtype,
+                "ome": ome,
+                "metadata": metadata,
+                "bigtiff": bigtiff,
+                "photometric": photometric,
+                "maxworkers": maxworkers,
+            }
+        )
+        output_handle.write(b"ome")
+
+    monkeypatch.setitem(sys.modules, "numpy", types.SimpleNamespace(asarray=_asarray))
+    monkeypatch.setitem(
+        sys.modules,
+        "tifffile",
+        types.SimpleNamespace(imwrite=_imwrite),
+    )
+
+    with (tmp_path / "custom.ome.tif").open("wb") as handle:
+        assert module._write_ome_tiff_from_pixels(image, handle)
+
+    assert plane_requests == [(0, 0, 0), (1, 0, 0), (0, 0, 1), (1, 0, 1)]
+    assert len(captured["planes"]) == 4
+    assert all(isinstance(plane, _Plane) for plane in captured["planes"])
+    assert captured["shape"] == (2, 2, 1, 2, 3)
+    assert captured["dtype"] == "uint16"
+    assert captured["ome"] is True
+    assert captured["metadata"] == {
+        "axes": "TZCYX",
+        "PhysicalSizeX": 0.25,
+        "PhysicalSizeXUnit": "micrometer",
+        "PhysicalSizeY": 0.5,
+        "PhysicalSizeYUnit": "micrometer",
+        "PhysicalSizeZ": 1.0,
+        "PhysicalSizeZUnit": "micrometer",
+    }
+    assert captured["bigtiff"] is True
+    assert captured["photometric"] == "minisblack"
+    assert captured["maxworkers"] == 1
+
+
 def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     monkeypatch, tmp_path
 ) -> None:

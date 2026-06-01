@@ -181,10 +181,12 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 ARG OMERO_CLI_ZARR_VERSION
 ARG OME_ZARR_PY_VERSION
 ARG BIOFORMATS2RAW_VERSION
+ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
     : "${OME_ZARR_PY_VERSION:?OME_ZARR_PY_VERSION must be provided from env/omeroserver.env}"; \
     : "${BIOFORMATS2RAW_VERSION:?BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env}"; \
+    : "${TIFFFILE_VERSION:?TIFFFILE_VERSION must be provided from env/omeroserver.env}"; \
     mapfile -t VIZARR_BUILD_DIRS < <(find /tmp/third_party -mindepth 1 -maxdepth 1 -type d -name 'vizarr-*' | sort); \
     if [[ "${#VIZARR_BUILD_DIRS[@]}" -ne 1 ]]; then \
         echo "ERROR: Expected exactly one vendored Vizarr build under /tmp/third_party, found ${#VIZARR_BUILD_DIRS[@]}" >&2; \
@@ -230,7 +232,8 @@ RUN set -euo pipefail; \
         omero-parade \
         omero-web-zarr \
         "ome-zarr==${OME_ZARR_PY_VERSION}" \
-        "omero-cli-zarr==${OMERO_CLI_ZARR_VERSION}"; \
+        "omero-cli-zarr==${OMERO_CLI_ZARR_VERSION}" \
+        "tifffile==${TIFFFILE_VERSION}"; \
     rm -rf "${SITE_PACKAGES}/omero_web_zarr"; \
     cp -a /tmp/omero_web_zarr "${SITE_PACKAGES}/omero_web_zarr"; \
     chown -R omero-web:omero-web \
