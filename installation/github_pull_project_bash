@@ -667,6 +667,11 @@ replace_working_tree_with_clone() {
 run_installation_script() {
     local installation_script_path="${REPO_ROOT_DIR}/${INSTALLATION_SCRIPT_RELATIVE_PATH}"
 
+    if ! cd "${REPO_ROOT_DIR}"; then
+        echo "ERROR: Failed to enter repository root before installation: ${REPO_ROOT_DIR}" >&2
+        return 1
+    fi
+
     if [ ! -f "${installation_script_path}" ]; then
         echo "ERROR: Installation script not found after pull: ${installation_script_path}" >&2
         return 1
@@ -716,6 +721,10 @@ main() {
 
     select_repo_source_ref
     clone_repository_snapshot
+    if ! cd "${REPO_ROOT_DIR}"; then
+        echo "ERROR: Failed to enter repository root before replacing repository files: ${REPO_ROOT_DIR}" >&2
+        exit 1
+    fi
     replace_working_tree_with_clone "${BOOTSTRAP_CLONE_DIR}" "${REPO_ROOT_DIR}"
     cleanup_bootstrap_clone_dir
     run_installation_script
