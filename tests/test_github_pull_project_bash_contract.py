@@ -79,6 +79,31 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
             )
             self.assertFalse(list(install_root.glob(".project-pull.*")))
 
+    def test_managed_subdirectory_launch_enters_stable_root_before_install(
+        self,
+    ) -> None:
+        """Verify update/install works when launched from a replaced subdirectory.
+
+        Inputs: synthetic installation root and cwd inside installation/. Output:
+        confirms the installer starts without deleted-current-directory noise.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_path = Path(tmp_dir)
+            install_root = self._write_install_root(temp_path)
+            fake_bin, _git_log = self._write_fake_git(temp_path)
+
+            result = self._run_launcher(
+                install_root,
+                fake_bin,
+                extra_env={"INSTALLATION_AUTOMATION_MODE": "1"},
+                cwd=install_root / "installation",
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("INSTALLER_OK standard", result.stdout)
+            self.assertNotIn("getcwd", result.stderr)
+            self.assertNotIn("error retrieving current directory", result.stderr)
+
     def test_release_tag_source_selection_clones_exact_tag(self) -> None:
         """Verify a GitHub release tag is fetched and cloned as an exact tag.
 
@@ -360,6 +385,7 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
         fake_bin: Path,
         *,
         extra_env: dict[str, str],
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Run the launcher against a synthetic installation root.
 
@@ -382,7 +408,7 @@ class GitHubPullProjectBashContractTests(unittest.TestCase):
 
         return subprocess.run(
             [BASH_BIN, str(install_root / "installation" / "github_pull_project_bash")],
-            cwd=install_root,
+            cwd=cwd or install_root,
             env=env,
             check=False,
             text=True,
