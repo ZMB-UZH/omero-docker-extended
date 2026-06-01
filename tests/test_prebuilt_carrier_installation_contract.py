@@ -491,6 +491,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "ubuntu-latest",
             triggers["workflow_dispatch"]["inputs"]["runner_label"]["default"],
         )
+        replace_input = triggers["workflow_dispatch"]["inputs"]["replace_existing"]
+        self.assertFalse(replace_input["default"])
+        self.assertEqual("boolean", replace_input["type"])
 
         steps = release_job["steps"]
         checkout_step = next_or_fail(
@@ -512,6 +515,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertIn("--requested-version", workflow_text)
         self.assertIn("--requested-docker-repository", workflow_text)
+        self.assertIn("REQUESTED_REPLACE_EXISTING", workflow_text)
+        self.assertIn(
+            "replace_existing requires an explicit release_version", workflow_text
+        )
         self.assertIn("--latest=false", workflow_text)
         self.assertIn(".env_example", workflow_text)
         self.assertIn("installation_paths_example.env", workflow_text)
@@ -653,6 +660,23 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertNotIn("docker run --rm", workflow_text)
         self.assertIn("gh release create", workflow_text)
+        self.assertIn("RELEASE_REPLACE_EXISTING", workflow_text)
+        self.assertIn(
+            "Replacement mode: skipping draft release creation until carrier verification.",
+            workflow_text,
+        )
+        self.assertIn(
+            "Replacement requested but release tag does not exist",
+            workflow_text,
+        )
+        self.assertIn(
+            "Replacement requested but GitHub release does not exist",
+            workflow_text,
+        )
+        self.assertIn(
+            "Replacement requested but docker hub image tag does not exist",
+            workflow_text,
+        )
         self.assertIn("Create GitHub draft release", workflow_text)
         self.assertIn("Publish GitHub release", workflow_text)
         self.assertIn(
@@ -672,6 +696,13 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             '--method POST "repos/${GITHUB_REPOSITORY}/git/refs"',
             workflow_text,
         )
+        self.assertIn(
+            '--method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}"',
+            workflow_text,
+        )
+        self.assertIn('-F "force=true"', workflow_text)
+        self.assertIn('gh release upload "${RELEASE_VERSION}"', workflow_text)
+        self.assertIn("--clobber", workflow_text)
         self.assertLess(
             workflow_text.index('--method POST "repos/${GITHUB_REPOSITORY}/git/refs"'),
             workflow_text.index('gh release create "${RELEASE_VERSION}"'),

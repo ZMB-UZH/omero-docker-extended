@@ -127,8 +127,13 @@ release. If the carrier publish fails after the draft was created, the
 workflow deletes that draft release and its tag. The release job deliberately
 does not use a GitHub Actions environment, because job environments create
 deployment records. Keep the Docker Hub credentials as repository secrets with
-the documented names. Before saving the runtime archive,
-the workflow derives the required image references from Compose and prunes only
+the documented names. To rebuild an existing release without changing its
+version, dispatch the workflow with an explicit `release_version` and
+`replace_existing=true`; replacement mode first verifies that the GitHub tag,
+GitHub release, and Docker Hub image tag already exist, then overwrites the
+same carrier image tag and release assets after carrier verification. Before
+saving the runtime archive, the workflow derives the required image references
+from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner
 storage pressure without changing the carrier contents. The `DOCKERHUB_TOKEN`
 value must be a docker hub access token with write access to the carrier
