@@ -93,6 +93,10 @@ Examples:
   source archive and manifest, pushes one carrier image, verifies the copied
   metadata from that image with `docker create`/`docker cp`, and publishes a
   GitHub release with the same docker-compatible SemVer tag as the carrier image.
+  Same-version rebuilds must use an explicit `release_version` with
+  `replace_existing=true`; replacement mode verifies that the GitHub tag,
+  GitHub release, and Docker Hub tag already exist before overwriting the
+  carrier tag and release assets.
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the
   required image set from the rendered Compose config and may prune only
   runner-local docker images outside that required set. Do not replace this
