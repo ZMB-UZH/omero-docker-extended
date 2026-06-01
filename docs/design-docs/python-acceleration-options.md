@@ -3,7 +3,7 @@
 Investigation conducted on 2026-04-12 for the repository-wide question of
 whether the Python-heavy portions of this codebase can be accelerated through
 fully automatic conversion, Cython, or another runtime/compiler approach.
-Repository file counts were refreshed on 2026-05-27.
+Repository file counts were refreshed on 2026-06-01.
 
 ## Goal
 
@@ -36,16 +36,16 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `154`
-- Production Python lines: `79,947`
+- Production Python lines: `80,055`
 - Test Python files: `181`
-- Test Python lines: `127,838`
+- Test Python lines: `129,289`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
 
 ### Largest production modules inspected
 
-- `omero_imaris_connector/XTOmeroConnector.py`: `15,251` lines
+- `omero_imaris_connector/XTOmeroConnector.py`: `15,350` lines
 - `omeroweb_import/views/core_functions.py`: `9,974` lines
 - `omeroweb_admin_tools/views/index_view.py`: `3,423` lines
 - `tools/cocoindex_agent_search.py`: `3,114` lines

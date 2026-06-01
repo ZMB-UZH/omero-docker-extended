@@ -8759,11 +8759,93 @@ def test_download_path_policy_replaces_by_default_and_uniques_only_when_requeste
     assert unique_path.name.startswith("selected__")
     assert unique_path.suffix == ".ims"
 
+    timestamped_path = Path(
+        module._download_path_for_policy(
+            tmp_path,
+            "fresh.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
+        )
+    )
+    assert timestamped_path.parent == tmp_path
+    assert timestamped_path.name.startswith("fresh__")
+    assert timestamped_path.suffix == ".ims"
+
     monkeypatch.setenv(module.UNIQUE_DOWNLOAD_SUFFIX_ENV, "true")
     env_unique_path = Path(module._download_path_for_policy(tmp_path, "selected.ims"))
     assert env_unique_path.parent == tmp_path
     assert env_unique_path.name.startswith("selected__")
     assert env_unique_path.suffix == ".ims"
+
+
+def test_open_download_target_reserves_timestamped_unique_names_atomically(tmp_path):
+    """Verify timestamped unique downloads reserve paths before writing bytes.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on parallel unique-path
+    reservation regressions.
+    """
+    module = _load_xt_module()
+
+    with module._open_download_target(
+        tmp_path,
+        "selected.ims",
+        module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
+    ) as (first_path, first_handle):
+        first_handle.write(b"first")
+        with module._open_download_target(
+            tmp_path,
+            "selected.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
+        ) as (second_path, second_handle):
+            second_handle.write(b"second")
+
+    first = Path(first_path)
+    second = Path(second_path)
+    assert first.parent == tmp_path
+    assert second.parent == tmp_path
+    assert first.name.startswith("selected__")
+    assert second.name.startswith("selected__")
+    assert first != second
+    assert first.read_bytes() == b"first"
+    assert second.read_bytes() == b"second"
+
+
+def test_open_download_target_closes_descriptor_when_fdopen_fails(
+    tmp_path,
+    monkeypatch,
+):
+    """Verify descriptor ownership is released when wrapping an opened file fails.
+
+    Inputs: pytest provides `tmp_path` and `monkeypatch`. Output: fails on
+    descriptor leaks between `os.open` reservation and `os.fdopen` wrapping.
+    """
+    module = _load_xt_module()
+    real_close = module.os.close
+    closed_descriptors = []
+
+    def _recording_close(descriptor):
+        """Record closed descriptors while preserving real close behavior.
+
+        Inputs: opened descriptor. Output: None; records and closes descriptor.
+        """
+        closed_descriptors.append(descriptor)
+        real_close(descriptor)
+
+    monkeypatch.setattr(
+        module.os,
+        "fdopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("fdopen unavailable")),
+    )
+    monkeypatch.setattr(module.os, "close", _recording_close)
+
+    with pytest.raises(OSError, match="fdopen unavailable"):
+        with module._open_download_target(
+            tmp_path,
+            "selected.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
+        ):
+            pass
+
+    assert len(closed_descriptors) == 1
 
 
 def test_duplicate_download_prompt_resolves_replace_unique_and_cancel(tmp_path):
@@ -8853,6 +8935,7 @@ def test_duplicate_download_prompt_detects_repeated_selected_names(tmp_path):
     assert messages[0][0] == "Duplicate Filenames"
     assert "same.ims" in messages[0][1]
     assert "selected images share one name" in messages[0][1]
+    assert "every selected copy" in messages[0][1]
 
 
 def test_xt_log_sanitizer_redacts_session_material_and_user_paths(monkeypatch):
@@ -12077,9 +12160,11 @@ def test_load_multiple_worker_uniques_repeated_selected_filenames(
     monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "1")
     first_ims = tmp_path / "first.ims"
     second_ims = tmp_path / "second.ims"
+    third_ims = tmp_path / "third.ims"
     first_ims.write_bytes(b"\x89HDF\r\n\x1a\nfirst")
     second_ims.write_bytes(b"\x89HDF\r\n\x1a\nsecond")
-    files_by_id = {31: str(first_ims), 32: str(second_ims)}
+    third_ims.write_bytes(b"\x89HDF\r\n\x1a\nthird")
+    files_by_id = {31: str(first_ims), 32: str(second_ims), 33: str(third_ims)}
     downloads = []
 
     def _download_ims_export(
@@ -12120,7 +12205,11 @@ def test_load_multiple_worker_uniques_repeated_selected_filenames(
 
     module.OMEROBrowserDialog._load_multiple_worker(
         dialog,
-        [{"id": 31, "name": "same"}, {"id": 32, "name": "same"}],
+        [
+            {"id": 31, "name": "same"},
+            {"id": 32, "name": "other"},
+            {"id": 33, "name": "same"},
+        ],
         "OMERO",
         module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
     )
@@ -12131,14 +12220,21 @@ def test_load_multiple_worker_uniques_repeated_selected_filenames(
             tmp_path,
             "img_31.ims",
             "same.ims",
-            module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+            module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
         ),
         (
             32,
             tmp_path,
             "img_32.ims",
+            "other.ims",
+            module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+        ),
+        (
+            33,
+            tmp_path,
+            "img_33.ims",
             "same.ims",
-            module.DUPLICATE_DOWNLOAD_POLICY_UNIQUE,
+            module.DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE,
         ),
     ]
 

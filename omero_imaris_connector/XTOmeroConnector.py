@@ -47,7 +47,7 @@ import urllib.request
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO, List, Optional, Set, Tuple, cast
+from typing import Any, BinaryIO, Dict, List, Optional, Set, Tuple, cast
 
 logger = logging.getLogger(__name__)
 _NATIVE_PATH_CLASS = type(Path.cwd())
@@ -320,6 +320,7 @@ CONNECTOR_HELP_SECTIONS = (
 )
 DUPLICATE_DOWNLOAD_POLICY_REPLACE = "replace"
 DUPLICATE_DOWNLOAD_POLICY_UNIQUE = "unique"
+DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE = "timestamped_unique"
 CONNECTOR_SETTINGS_KEY_PREFIX = "OMERO_CONNECTOR_"
 CONNECTOR_SETTINGS_HOST_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "HOST"
 CONNECTOR_SETTINGS_PORT_KEY = CONNECTOR_SETTINGS_KEY_PREFIX + "PORT"
@@ -6226,22 +6227,47 @@ def _safe_download_filename(filename, fallback_name, default_extension=None):
     return safe
 
 
-def _unique_download_path(download_dir, filename):
-    """A download path inside download_dir without overwriting locked files.
+def _unique_download_candidates(download_dir, filename, *, force_suffix=False):
+    """Yield unique download candidates inside `download_dir`.
 
-    Inputs: `download_dir`, `filename`. Output: `Path` or path text. Raises:
-    RuntimeError when validation or the called operation fails.
+    Inputs: `download_dir`, `filename`, `force_suffix`. Output: path strings.
     """
     safe_filename = _safe_download_filename(filename, "download")
-    candidate = os.path.join(download_dir, safe_filename)
-    if not os.path.exists(candidate):
-        return candidate
+    if not force_suffix:
+        yield os.path.join(download_dir, safe_filename)
 
     stem, ext = os.path.splitext(safe_filename)
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     for index in range(1, 1000):
         suffix = f"__{timestamp}" if index == 1 else f"__{timestamp}_{index}"
-        candidate = os.path.join(download_dir, f"{stem}{suffix}{ext}")
+        yield os.path.join(download_dir, f"{stem}{suffix}{ext}")
+
+
+def _download_unique_policy(duplicate_policy):
+    """Return whether the policy needs unique naming and a forced suffix.
+
+    Inputs: duplicate policy string. Output: `(use_unique, force_suffix)`.
+    """
+    if duplicate_policy == DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE:
+        return True, True
+    if duplicate_policy == DUPLICATE_DOWNLOAD_POLICY_UNIQUE:
+        return True, False
+    if duplicate_policy is None and _unique_download_suffix_enabled():
+        return True, False
+    return False, False
+
+
+def _unique_download_path(download_dir, filename, *, force_suffix=False):
+    """A download path inside download_dir without overwriting locked files.
+
+    Inputs: `download_dir`, `filename`, `force_suffix`. Output: path text.
+    Raises: RuntimeError when validation or the called operation fails.
+    """
+    for candidate in _unique_download_candidates(
+        download_dir,
+        filename,
+        force_suffix=force_suffix,
+    ):
         if not os.path.exists(candidate):
             return candidate
     raise RuntimeError("Could not allocate a unique download filename.")
@@ -6253,12 +6279,64 @@ def _download_path_for_policy(download_dir, filename, duplicate_policy=None):
     Inputs: `download_dir`, `filename`, `duplicate_policy`. Output: local path.
     """
     safe_filename = _safe_download_filename(filename, "download")
-    use_unique = duplicate_policy == DUPLICATE_DOWNLOAD_POLICY_UNIQUE
-    if duplicate_policy is None:
-        use_unique = _unique_download_suffix_enabled()
+    use_unique, force_suffix = _download_unique_policy(duplicate_policy)
     if use_unique:
-        return _unique_download_path(download_dir, safe_filename)
+        return _unique_download_path(
+            download_dir,
+            safe_filename,
+            force_suffix=force_suffix,
+        )
     return os.path.join(download_dir, safe_filename)
+
+
+@contextlib.contextmanager
+def _open_download_target(download_dir, filename, duplicate_policy=None):
+    """Open a connector download target according to duplicate naming policy.
+
+    Inputs: target folder, desired filename, duplicate policy. Output: yields
+    `(local_path, binary_handle)`. Unique policies reserve the target with
+    `O_EXCL` so parallel selected-image downloads cannot pick the same path.
+    """
+    safe_filename = _safe_download_filename(filename, "download")
+    use_unique, force_suffix = _download_unique_policy(duplicate_policy)
+    flags = os.O_WRONLY | os.O_CREAT
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+
+    descriptor: Optional[int] = None
+    local_path: Optional[str] = None
+    try:
+        if not use_unique:
+            local_path = os.path.join(download_dir, safe_filename)
+            descriptor = os.open(
+                os.fspath(local_path),
+                flags | os.O_TRUNC,
+                PRIVATE_FILE_MODE,
+            )
+        else:
+            for candidate in _unique_download_candidates(
+                download_dir,
+                safe_filename,
+                force_suffix=force_suffix,
+            ):
+                try:
+                    descriptor = os.open(
+                        os.fspath(candidate),
+                        flags | os.O_EXCL,
+                        PRIVATE_FILE_MODE,
+                    )
+                except FileExistsError:
+                    continue
+                local_path = candidate
+                break
+            if descriptor is None or local_path is None:
+                raise RuntimeError("Could not allocate a unique download filename.")
+
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = None
+            yield local_path, handle
+    finally:
+        _close_file_descriptor_suppressing_os_error(descriptor)
 
 
 def _raise_if_cancelled(cancel_event, context="Operation"):
@@ -8560,12 +8638,6 @@ class OMEROWebClient:
                     fallback_name,
                     default_extension=".ims",
                 )
-                local_path = _download_path_for_policy(
-                    download_dir,
-                    safe_filename,
-                    duplicate_policy,
-                )
-
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
@@ -8574,7 +8646,11 @@ class OMEROWebClient:
                 _xt_debug(
                     "OMERO converter: downloading IMS to selected local connector path"
                 )
-                with open(local_path, "wb") as f:
+                with _open_download_target(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
                             cancel_event,
@@ -8757,16 +8833,15 @@ class OMEROWebClient:
                     ".tf8",
                 }:
                     safe_filename = f"{safe_filename}.ome.tif"
-                local_path = _download_path_for_policy(
-                    download_dir,
-                    safe_filename,
-                    duplicate_policy,
-                )
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 progress = _DownloadProgressReporter(total_size)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
-                with open(local_path, "wb") as f:
+                with _open_download_target(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
                             cancel_event,
@@ -8897,11 +8972,6 @@ class OMEROWebClient:
                     ".tf8",
                 }:
                     safe_filename = f"{safe_filename}.ome.tif"
-                local_path = _download_path_for_policy(
-                    download_dir,
-                    safe_filename,
-                    duplicate_policy,
-                )
                 total_size = int(response.headers.get("content-length", 0) or 0)
                 downloaded = 0
                 chunk_size = _download_chunk_size_bytes()
@@ -8910,7 +8980,11 @@ class OMEROWebClient:
                 _xt_debug(
                     "Imaris converter: downloading selected Image OME-TIFF export"
                 )
-                with open(local_path, "wb") as f:
+                with _open_download_target(
+                    download_dir,
+                    safe_filename,
+                    duplicate_policy,
+                ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
                             cancel_event,
@@ -14314,10 +14388,11 @@ class OMEROBrowserDialog:
             "filenames, or the current selection includes repeated names.\n\n"
             f"{preview}\n\n"
             "Choose Yes to replace matching files in the selected folder. If "
-            "selected images share one name, later copies will be saved with "
-            "unique names so no selected image overwrites another. Choose No "
-            "to keep existing files and save this import with unique names, or "
-            "Cancel to stop before the export starts."
+            "selected images share one name, every selected copy with that "
+            "name will be saved with a timestamped unique name so no selected "
+            "image overwrites another. Choose No to keep existing files and "
+            "save this import with unique names, or Cancel to stop before the "
+            "export starts."
         )
 
     def _resolve_duplicate_download_policy(self, images, converter, download_dir):
@@ -14348,13 +14423,24 @@ class OMEROBrowserDialog:
         target_filename,
         duplicate_policy,
         planned_names_seen,
+        planned_name_counts=None,
     ):
         """Return a per-file duplicate policy that avoids batch self-overwrite.
 
-        Inputs: `target_filename`, `duplicate_policy`, `planned_names_seen`. Output:
-        duplicate policy string or None.
+        Inputs: `target_filename`, `duplicate_policy`, `planned_names_seen`,
+        `planned_name_counts`. Output: duplicate policy string or None.
         """
         safe_filename = _safe_download_filename(target_filename, "download")
+        if (
+            isinstance(planned_name_counts, dict)
+            and planned_name_counts.get(
+                safe_filename,
+                0,
+            )
+            > 1
+        ):
+            planned_names_seen.add(safe_filename)
+            return DUPLICATE_DOWNLOAD_POLICY_TIMESTAMPED_UNIQUE
         if safe_filename in planned_names_seen:
             return DUPLICATE_DOWNLOAD_POLICY_UNIQUE
         planned_names_seen.add(safe_filename)
@@ -14800,16 +14886,29 @@ class OMEROBrowserDialog:
             selected_image_export = converter == "Imaris"
             download_dir = self.export_dir
             planned_names_seen: Set[str] = set()
+            planned_target_filenames = [
+                self._download_filename_for_image(img, converter)
+                for img in selected_images
+            ]
+            planned_name_counts: Dict[str, int] = {}
+            for filename in planned_target_filenames:
+                safe_filename = _safe_download_filename(filename, "download")
+                planned_name_counts[safe_filename] = (
+                    planned_name_counts.get(safe_filename, 0) + 1
+                )
             download_plan = []
-            for index, img in enumerate(selected_images, start=1):
+            for index, (img, target_filename) in enumerate(
+                zip(selected_images, planned_target_filenames),
+                start=1,
+            ):
                 image_id = img.get("id")
                 if image_id is None:
                     raise RuntimeError("A selected image is missing an OMERO image id.")
-                target_filename = self._download_filename_for_image(img, converter)
                 per_file_duplicate_policy = self._per_file_duplicate_download_policy(
                     target_filename,
                     duplicate_policy,
                     planned_names_seen,
+                    planned_name_counts,
                 )
                 download_plan.append(
                     (
