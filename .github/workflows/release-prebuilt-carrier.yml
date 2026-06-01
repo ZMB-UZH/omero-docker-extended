@@ -87,6 +87,41 @@ jobs:
           df -h /
           docker system df
 
+      - name: Move docker data root to hosted-runner large disk
+        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          target_root="/mnt/docker-data"
+          [ -d /mnt ] || { echo "Hosted runner large disk /mnt is not available." >&2; exit 1; }
+          current_root="$(docker info -f '{{.DockerRootDir}}')"
+          if [ "${current_root}" != "${target_root}" ]; then
+            sudo mkdir -p "${target_root}"
+            sudo systemctl stop docker
+            sudo env DOCKER_DATA_ROOT="${target_root}" python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          daemon_config = Path("/etc/docker/daemon.json")
+          if daemon_config.exists() and daemon_config.read_text(encoding="utf-8").strip():
+              data = json.loads(daemon_config.read_text(encoding="utf-8"))
+          else:
+              data = {}
+          data["data-root"] = os.environ["DOCKER_DATA_ROOT"]
+          daemon_config.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+            sudo systemctl start docker
+          fi
+          actual_root="$(docker info -f '{{.DockerRootDir}}')"
+          [ "${actual_root}" = "${target_root}" ] || {
+            echo "Docker data root is ${actual_root}, expected ${target_root}." >&2
+            exit 1
+          }
+          df -h / /mnt "${actual_root}"
+          docker system df
+
       - name: Refuse existing release or image tag
         env:
           GH_TOKEN: ${{ github.token }}

@@ -39,6 +39,9 @@
 - Added a Compose-derived release storage guard that prunes only
   non-required runner-local docker image references before the workflow pulls
   missing required images and saves `runtime-images.tar.gz`.
+- Moved the release workflow's Docker data root to `/mnt/docker-data` on
+  GitHub-hosted Linux runners before heavy carrier builds, avoiding root
+  filesystem exhaustion while pulling the full required image set.
 - Eliminated the prebuilt carrier's duplicate runtime-archive layer and removed
   the carrier wrapper's Alpine base image and BusyBox package surface by making
   `docker/prebuilt-carrier.Dockerfile` a scratch-based data image with a single
