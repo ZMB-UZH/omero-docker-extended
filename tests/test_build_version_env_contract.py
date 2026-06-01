@@ -116,7 +116,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn('image: "ghcr.io/google/cadvisor:0.56.2"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.1"', compose_text)
         self.assertIn('image: "grafana/grafana:13.0.1"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.23.2"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.24.0"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.15.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.11.2", compose_text)

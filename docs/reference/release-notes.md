@@ -62,7 +62,7 @@
 - Refreshed pinned infrastructure images after upstream release-note review:
   CrowdSec `v1.7.8`, Alloy `v1.16.1`, Redis `8.6.3-alpine`,
   Redis exporter `v1.83.0-alpine`, Prometheus `v3.11.3`, and Ollama
-  `0.23.2`.
+  `0.24.0`.
 - Strengthened image-pin regression coverage so Compose, dockerfile, and
   workflow container images cannot use untagged or floating aliases such as
   `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or

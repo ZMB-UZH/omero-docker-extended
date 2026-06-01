@@ -17,7 +17,7 @@ Core services:
 - database (port 5432): PostgreSQL 16.12, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.12, OMERO plugin database.
 - redis (port 6379): Redis 8.6.3-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
-- ollama (port 11434 internal): Ollama 0.23.2 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
+- ollama (port 11434 internal): Ollama 0.24.0 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 
 Supporting services:
 
