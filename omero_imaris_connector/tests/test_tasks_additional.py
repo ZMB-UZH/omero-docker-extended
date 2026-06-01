@@ -1457,6 +1457,34 @@ def test_ome_tiff_task_uses_format_specific_public_failure_contract(monkeypatch)
     )
     assert status_updates == [("running_export", {"export_name": "sample.ome.tif"})]
 
+    image_id = 42
+    size_x = 1024
+    size_y = 2048
+    large_image_message = (
+        "Selected Image OME-TIFF export is unsupported for large/pyramidal "
+        f"Image {image_id} (sizeX={size_x}, sizeY={size_y}) "
+        "by OMERO's standard OME-TIFF exporter."
+    )
+    fake_script = types.SimpleNamespace(
+        safe_filename=lambda name, fallback: "sample",
+        materialize_ome_tiff_source=lambda conn, image, image_id, root: (
+            _ for _ in ()
+        ).throw(
+            RuntimeError(
+                f"Image:{image_id} is too large for export "
+                f"(sizeX={size_x}, sizeY={size_y})"
+            )
+        ),
+        public_ome_tiff_export_failure_message=lambda exc: large_image_message,
+    )
+    monkeypatch.setattr(tasks, "_ims_export_script_module", lambda: fake_script)
+    with pytest.raises(tasks.OMEExportTaskError) as large_image:
+        tasks._run_ome_tiff_export(
+            types.SimpleNamespace(getObject=lambda kind, image_id: image),
+            image_id,
+        )
+    assert large_image.value.public_message == large_image_message
+
     closed = []
     updates = []
     task_self = types.SimpleNamespace(

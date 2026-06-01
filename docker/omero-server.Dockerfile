@@ -157,7 +157,9 @@ ARG APPLY_SECURITY_HARDENING=0
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
+ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
+    : "${TIFFFILE_VERSION:?TIFFFILE_VERSION must be provided from env/omeroserver.env}"; \
     mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
     if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
         echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
@@ -170,7 +172,8 @@ RUN set -euo pipefail; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
             reportlab \
-            markdown; \
+            markdown \
+            "tifffile==${TIFFFILE_VERSION}"; \
     done
 
 # Install several OMERO CLI plugins (official + unofficial)

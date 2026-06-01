@@ -9212,6 +9212,68 @@ def test_client_download_selected_image_ome_tiff_uses_async_custom_endpoint(tmp_
     assert calls[2][0] == f"{client.base_url}/download/job-ome"
 
 
+def test_client_download_selected_image_ome_tiff_surfaces_async_public_error(tmp_path):
+    """Verify async selected Image OME-TIFF public errors reach the XT user.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on public error regressions.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    client.has_async_ome_tiff_export_capability = lambda: True
+    image_id = 42
+    size_x = 1024
+    size_y = 2048
+    public_error = (
+        "Selected Image OME-TIFF export is unsupported for large/pyramidal "
+        f"Image {image_id} (sizeX={size_x}, sizeY={size_y}) "
+        "by OMERO's standard OME-TIFF exporter."
+    )
+    calls = []
+
+    class _FakeOpener:
+        """Test double for async OME-TIFF failure responses."""
+
+        @staticmethod
+        def open(request, timeout=None):
+            """Serve async start and failed poll responses.
+
+            Inputs: request and timeout. Output: fake HTTP response.
+            """
+            calls.append((request.full_url, timeout))
+            if f"imaris-export/?image={image_id}" in request.full_url:
+                return _FakeHTTPResponse(
+                    b'{"job_id": "job-large", "status_url": "/status/job-large"}'
+                )
+            if "/status/job-large" in request.full_url:
+                return _FakeHTTPResponse(
+                    json.dumps(
+                        {
+                            "state": "FAILED",
+                            "failed": True,
+                            "error": public_error,
+                        }
+                    ).encode("utf-8")
+                )
+            raise AssertionError(f"unexpected URL: {request.full_url}")
+
+    client.opener = _FakeOpener()
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"large/pyramidal Image {image_id}",
+    ) as exc:
+        client.download_selected_image_ome_tiff(image_id, tmp_path)
+
+    assert str(exc.value) == f"Selected Image OME-TIFF export failed: {public_error}"
+    assert [url for url, _timeout in calls] == [
+        f"{client.base_url}/omero_imaris_connector/imaris-export/?"
+        f"image={image_id}&format=ome_tiff&async=1&"
+        f"base_url={urllib.parse.quote(client.base_url, safe='')}",
+        f"{client.base_url}/status/job-large",
+    ]
+
+
 def test_client_download_selected_image_ome_tiff_removes_partial_on_cancel(tmp_path):
     """Verify stop during Imaris-converter download removes partial OME-TIFF files.
 

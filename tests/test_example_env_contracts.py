@@ -181,6 +181,7 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "OMERO_CLI_ZARR_VERSION",
             "OME_ZARR_PY_VERSION",
             "BIOFORMATS2RAW_VERSION",
+            "TIFFFILE_VERSION",
             "BIOFORMATS_VERSION",
             "OMERO_IMS_EXPORT_DIR",
         }

@@ -13,6 +13,7 @@ repository. Use it before attempting speculative code changes.
 | OMERO converter job fails and Blitz logs `Cannot read configuration: omero.ims.export.dir` | Processor script subprocess did not receive the trusted IMS export environment | Verify the running `omero/processor.py` allowlist contains `OMERO_IMS_EXPORT_DIR` and `CONFIG_omero_managed_dir` |
 | Imaris converter async OME-TIFF export fails with `Image <id> not found` even though OMERO.web browsing shows the image | Background export joined the wrong effective OMERO session or group | Verify the task uses the requester session key before falling back to the job-service session |
 | Imaris converter async OME-TIFF export fails with `Permission denied: '/OMERO/ImarisExports/image_<id>/source'` | The web worker is using the server IMS export root for OME-TIFF staging | Verify OME-TIFF staging is under `${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source` |
+| Imaris converter async OME-TIFF export fails with `Image:<id> is too large for export (sizeX=<x>, sizeY=<y>)` | OMERO's stock OME-TIFF exporter rejected a large/pyramidal image | Verify the selected-image export task streams planes through the connector's pixel-plane OME-TIFF writer and does not switch to the OMERO converter |
 | OMERO.web calls return `403 Forbidden` immediately after a background export starts | A background task hard-closed the joined requester OMERO.web session during cleanup | Verify requester-session export gateways use non-hard close and job-service gateways remain hard-closed |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
@@ -202,6 +203,39 @@ Fix:
   OME-TIFF staging root,
 - close requester-session task gateways with non-hard cleanup and hard-close
   only worker-owned job-service sessions.
+
+### 6.2. Imaris converter OME-TIFF export failed for large/pyramidal images
+
+Observed behavior:
+
+- the standalone connector selected the `Imaris` converter for selected Image
+  export,
+- OMERO.web login, API browsing, Celery dispatch, and task polling all worked,
+- most selected-image async OME-TIFF jobs finished and downloaded,
+- the failed jobs logged OMERO exporter messages matching
+  `Image:<id> is too large for export (sizeX=<x>, sizeY=<y>)`,
+- the XT client previously surfaced only
+  `Could not export selected Image as OME-TIFF`.
+
+Root cause:
+
+- the `Imaris` converter path used OMERO's stock selected-image OME-TIFF
+  exporter,
+- that exporter refuses images that OMERO stores as large/pyramidal pixel data,
+- the connector did not have an Imaris-converter-native OME-TIFF writer for
+  this case and collapsed the root cause into a generic public error.
+
+Fix:
+
+- keep the selected converter authoritative; the `Imaris` converter does not
+  switch to the `OMERO` converter,
+- after OMERO's stock wrapper/exporter paths refuse or cannot produce the
+  selected-image OME-TIFF, stream planes from the requesting user's OMERO pixel
+  access into a connector-owned OME-TIFF using the pinned `tifffile` runtime,
+- keep selected-image staging under
+  `${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source`,
+- return only sanitized public OME-TIFF failures to the XT client when all
+  materialization paths fail.
 
 ### 7. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
 

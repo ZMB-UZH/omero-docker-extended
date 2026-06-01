@@ -32,6 +32,13 @@ _PRIVATE_FILE_MODE = 0o600
 _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_MANAGED_DIR_ENV = "CONFIG_omero_managed_dir"
 _CONFIG_IMS_EXPORT_DIR = "omero.ims.export.dir"
+_OME_TIFF_TOO_LARGE_RE = re.compile(
+    r"Image:(?P<image_id>\d+) is too large for export "
+    r"\(sizeX=(?P<size_x>\d+), sizeY=(?P<size_y>\d+)\)"
+)
+_OME_TIFF_TOO_LARGE_PUBLIC_PREFIX = (
+    "Selected Image OME-TIFF export is unsupported for large/pyramidal Image"
+)
 subprocess = process_utils
 
 
@@ -730,7 +737,164 @@ def _write_ome_tiff_from_exporter(conn, image_id, output_handle):
             close()
 
 
-def _materialize_ome_tiff_source(conn, image, image_id, export_root):
+def _image_requires_pixels_pyramid(image):
+    """Return whether OMERO marks the image as requiring a pixels pyramid.
+
+    Inputs: OMERO image wrapper. Output: bool.
+    """
+    requires_pyramid = getattr(image, "requiresPixelsPyramid", None)
+    if not callable(requires_pyramid):
+        return False
+    try:
+        return bool(requires_pyramid())
+    except Exception:
+        return False
+
+
+def _positive_int_value(value):
+    """Return a positive integer from OMERO rtypes or plain values.
+
+    Inputs: value. Output: positive int or None.
+    """
+    if hasattr(value, "val"):
+        value = value.val
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _positive_int_from_member(owner, method_name, attr_name):
+    """Return a positive integer from an object method or attribute.
+
+    Inputs: object plus method and attribute names. Output: positive int or None.
+    """
+    if owner is None:
+        return None
+    member = getattr(owner, method_name, None)
+    if callable(member):
+        try:
+            parsed = _positive_int_value(member())
+        except Exception:
+            parsed = None
+        if parsed is not None:
+            return parsed
+    return _positive_int_value(getattr(owner, attr_name, None))
+
+
+def _image_axis_size(image, pixels, axis, inferred=None):
+    """Return a positive image axis size.
+
+    Inputs: OMERO image, pixels wrapper, axis label, optional inferred size.
+    Output: positive int.
+    """
+    for owner in (image, pixels):
+        parsed = _positive_int_from_member(owner, f"getSize{axis}", f"size{axis}")
+        if parsed is not None:
+            return parsed
+    parsed = _positive_int_value(inferred)
+    if parsed is not None:
+        return parsed
+    return 1
+
+
+def _write_ome_tiff_from_pixels(image, output_handle):
+    """Write OME-TIFF directly from OMERO pixel planes.
+
+    Inputs: OMERO image wrapper and output handle. Output: bool.
+    """
+    get_primary_pixels = getattr(image, "getPrimaryPixels", None)
+    if not callable(get_primary_pixels):
+        return False
+    pixels = get_primary_pixels()
+    get_plane = getattr(pixels, "getPlane", None)
+    if not callable(get_plane):
+        return False
+
+    try:
+        import numpy
+        import tifffile
+    except ImportError as exc:
+        raise RuntimeError(
+            "tifffile and numpy are required for OME-TIFF export."
+        ) from exc
+
+    first_plane = numpy.asarray(get_plane(0, 0, 0))
+    if len(getattr(first_plane, "shape", ())) != 2:
+        raise RuntimeError("OMERO pixel plane is not two-dimensional.")
+    inferred_y, inferred_x = [int(part) for part in first_plane.shape]
+    size_x = _image_axis_size(image, pixels, "X", inferred_x)
+    size_y = _image_axis_size(image, pixels, "Y", inferred_y)
+    if (size_y, size_x) != (inferred_y, inferred_x):
+        raise RuntimeError("OMERO pixel plane dimensions do not match image metadata.")
+    size_z = _image_axis_size(image, pixels, "Z")
+    size_c = _image_axis_size(image, pixels, "C")
+    size_t = _image_axis_size(image, pixels, "T")
+
+    def plane_iterator():
+        """Yield planes in the same TZC order declared to tifffile.
+
+        Inputs: none. Output: two-dimensional pixel planes.
+        """
+        for t_index in range(size_t):
+            for z_index in range(size_z):
+                for c_index in range(size_c):
+                    if t_index == 0 and z_index == 0 and c_index == 0:
+                        yield first_plane
+                    else:
+                        yield numpy.asarray(get_plane(z_index, c_index, t_index))
+
+    vx, vy, vz = _get_voxel_size_from_image(image)
+    metadata = {
+        "axes": "TZCYX",
+        "PhysicalSizeX": vx,
+        "PhysicalSizeXUnit": "micrometer",
+        "PhysicalSizeY": vy,
+        "PhysicalSizeYUnit": "micrometer",
+        "PhysicalSizeZ": vz,
+        "PhysicalSizeZUnit": "micrometer",
+    }
+    tifffile.imwrite(
+        output_handle,
+        data=plane_iterator(),
+        shape=(size_t, size_z, size_c, size_y, size_x),
+        dtype=first_plane.dtype,
+        ome=True,
+        metadata=metadata,
+        bigtiff=True,
+        photometric="minisblack",
+        maxworkers=1,
+    )
+    return output_handle.tell() > 0
+
+
+def public_ome_tiff_export_failure_message(exc):
+    """Return a sanitized OME-TIFF export failure message when recognized.
+
+    Inputs: exception or message. Output: public message or None.
+    """
+    message = str(exc or "")
+    if message.startswith(_OME_TIFF_TOO_LARGE_PUBLIC_PREFIX):
+        return message
+    match = _OME_TIFF_TOO_LARGE_RE.search(message)
+    if not match:
+        return None
+    return (
+        "Selected Image OME-TIFF export is unsupported for large/pyramidal "
+        f"Image {match.group('image_id')} "
+        f"(sizeX={match.group('size_x')}, sizeY={match.group('size_y')}) "
+        "by OMERO's standard OME-TIFF exporter."
+    )
+
+
+def _materialize_ome_tiff_source(
+    conn,
+    image,
+    image_id,
+    export_root,
+    raise_on_known_failure=False,
+):
     """A converter-readable OME-TIFF source through OMERO APIs.
 
     Inputs: `conn` OMERO gateway connection, `image`, `image_id` OMERO image ID,
@@ -753,8 +917,22 @@ def _materialize_ome_tiff_source(conn, image, image_id, export_root):
         """
         return _write_ome_tiff_from_exporter(conn, image_id, handle)
 
+    def write_from_pixels(handle):
+        """Write the source from OMERO pixel planes.
+
+        Inputs: `handle`. Output: `_write_ome_tiff_from_pixels` result.
+        """
+        return _write_ome_tiff_from_pixels(image, handle)
+
     os.makedirs(output_dir, exist_ok=True)
-    for writer in (write_from_wrapper, write_from_exporter):
+    public_failures = []
+    unknown_failure = False
+    writers = (
+        (write_from_pixels,)
+        if _image_requires_pixels_pyramid(image)
+        else (write_from_wrapper, write_from_exporter, write_from_pixels)
+    )
+    for writer in writers:
         tmp_file = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -775,6 +953,11 @@ def _materialize_ome_tiff_source(conn, image, image_id, export_root):
                 print(f"Prepared OME-TIFF source via OMERO API: {output_file}")
                 return output_file
         except Exception as exc:
+            public_message = public_ome_tiff_export_failure_message(exc)
+            if public_message and public_message not in public_failures:
+                public_failures.append(public_message)
+            if not public_message:
+                unknown_failure = True
             print(f"WARNING: OMERO OME-TIFF export attempt failed: {exc}")
             try:
                 if tmp_file and os.path.exists(tmp_file):
@@ -793,6 +976,8 @@ def _materialize_ome_tiff_source(conn, image, image_id, export_root):
                         "Suppressed non-fatal exception in IMS_Export.py",
                         exc_info=cleanup_exc,
                     )
+    if raise_on_known_failure and public_failures and not unknown_failure:
+        raise RuntimeError(public_failures[-1])
     print("ERROR: OMERO OME-TIFF export did not produce a readable source file")
     return None
 
@@ -802,7 +987,13 @@ def materialize_ome_tiff_source(conn, image, image_id, export_root):
 
     Inputs: OMERO connection, image, image id, and export root. Output: path or None.
     """
-    return _materialize_ome_tiff_source(conn, image, image_id, export_root)
+    return _materialize_ome_tiff_source(
+        conn,
+        image,
+        image_id,
+        export_root,
+        raise_on_known_failure=True,
+    )
 
 
 def _remove_intermediate_source(path):
