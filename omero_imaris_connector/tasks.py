@@ -198,7 +198,10 @@ def _public_script_message(message: str | None) -> str | None:
     return None
 
 
-def _public_failure_message(exc: Exception) -> str:
+def _public_failure_message(
+    exc: Exception,
+    default_message: str = _GENERIC_EXPORT_ERROR,
+) -> str:
     """Return the public failure message for a task exception.
 
     Inputs: `exc`. Output: `str`.
@@ -207,15 +210,18 @@ def _public_failure_message(exc: Exception) -> str:
         return exc.public_message or _GENERIC_OME_TIFF_EXPORT_ERROR
     if isinstance(exc, IMSExportTaskError):
         return exc.public_message or _GENERIC_EXPORT_ERROR
-    return _GENERIC_EXPORT_ERROR
+    return default_message
 
 
-def _build_failure_meta(exc: Exception) -> dict[str, Any]:
+def _build_failure_meta(
+    exc: Exception,
+    default_message: str = _GENERIC_EXPORT_ERROR,
+) -> dict[str, Any]:
     """Metadata dictionary for failed tasks.
 
     Inputs: `exc`. Output: `dict[str, Any]`.
     """
-    public_message = _public_failure_message(exc)
+    public_message = _public_failure_message(exc, default_message=default_message)
     return {
         "exc_type": exc.__class__.__name__,
         "exc_module": exc.__class__.__module__,
@@ -912,7 +918,10 @@ def run_ome_tiff_export_task(
         )
         if export_task_cancel_requested(self.request.id):
             return _cancelled_task_result(owner_token=owner_token)
-        failure_meta = _build_failure_meta(exc)
+        failure_meta = _build_failure_meta(
+            exc,
+            default_message=_GENERIC_OME_TIFF_EXPORT_ERROR,
+        )
         if owner_token:
             failure_meta["owner_token"] = owner_token
         if isinstance(exc, OMEExportTaskError):

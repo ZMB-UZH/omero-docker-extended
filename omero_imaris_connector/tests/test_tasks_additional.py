@@ -706,6 +706,16 @@ def test_open_export_connection_prefers_requesting_session_when_job_service_enab
     )
     assert calls == [("job-service", configured_host, configured_port, True)]
 
+    calls.clear()
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    assert (
+        tasks._open_export_connection(
+            None, configured_host, configured_port, secure=True
+        )
+        == "session-conn"
+    )
+    assert calls == [("session", None, configured_host, configured_port, True)]
+
 
 def test_close_export_connection_preserves_joined_requester_session(monkeypatch):
     """Verify requester-session task cleanup does not kill the OMERO.web session.
@@ -1099,3 +1109,502 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
         expected_failure_warning,
         "Error closing OMERO connection: close failed",
     ]
+
+
+def test_export_cancel_markers_use_redis_as_best_effort_state(monkeypatch):
+    """Verify cancellation markers are bounded, session-safe, and fail closed.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions that would
+    make user stop requests depend on a brittle Redis connection or unbounded TTL.
+    """
+    tasks = _import_tasks(monkeypatch)
+
+    assert tasks._export_cancel_marker_key("") is None
+    assert tasks._export_cancel_marker_key("task-1").endswith(":task-1")
+    monkeypatch.setattr(tasks, "get_celery_result_expires", lambda: 1)
+    assert (
+        tasks._export_cancel_marker_ttl() == tasks._EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS
+    )
+    monkeypatch.setattr(
+        tasks,
+        "get_celery_result_expires",
+        lambda: (_ for _ in ()).throw(RuntimeError("bad config")),
+    )
+    assert (
+        tasks._export_cancel_marker_ttl() == tasks._EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS
+    )
+
+    monkeypatch.setattr(
+        tasks,
+        "get_celery_broker_url",
+        lambda: (_ for _ in ()).throw(RuntimeError("bad broker")),
+    )
+    assert tasks._export_cancel_redis_client() is None
+    monkeypatch.setattr(tasks, "get_celery_broker_url", lambda: "amqp://broker")
+    assert tasks._export_cancel_redis_client() is None
+    monkeypatch.setattr(tasks, "get_celery_broker_url", lambda: "redis://redis/0")
+    monkeypatch.setitem(sys.modules, "redis", None)
+    assert tasks._export_cancel_redis_client() is None
+
+    redis_state = {"client": None, "raise": True}
+    redis_module = types.ModuleType("redis")
+
+    class _RedisFactory:
+        """Factory double for Redis connection setup."""
+
+        @staticmethod
+        def from_url(url):
+            """Return the configured fake client or raise a connection error.
+
+            Inputs: Redis URL. Output: fake Redis client.
+            """
+            assert url == "redis://redis/0"
+            if redis_state["raise"]:
+                raise RuntimeError("connect failed")
+            return redis_state["client"]
+
+    redis_module.Redis = _RedisFactory
+    monkeypatch.setitem(sys.modules, "redis", redis_module)
+    assert tasks._export_cancel_redis_client() is None
+
+    class _MarkerRedis:
+        """Redis double for cancellation marker set/read semantics."""
+
+        def __init__(self):
+            """Initialize marker storage state.
+
+            Inputs: none. Output: None.
+            """
+            self.fail_set = False
+            self.fail_get = False
+            self.setex_calls = []
+
+        def setex(self, key, ttl, value):
+            """Record marker writes.
+
+            Inputs: Redis key, TTL, value. Output: None.
+            """
+            if self.fail_set:
+                raise RuntimeError("write failed")
+            self.setex_calls.append((key, ttl, value))
+
+        def get(self, key):
+            """Return a stored marker.
+
+            Inputs: Redis key. Output: marker bytes.
+            """
+            if self.fail_get:
+                raise RuntimeError("read failed")
+            assert key == tasks._export_cancel_marker_key("task-1")
+            return b"1"
+
+    client = _MarkerRedis()
+    redis_state.update({"client": client, "raise": False})
+    monkeypatch.setattr(tasks, "get_celery_result_expires", lambda: 1)
+
+    assert tasks._export_cancel_redis_client() is client
+    assert not tasks.mark_export_task_cancel_requested("")
+    assert tasks.mark_export_task_cancel_requested("task-1")
+    assert client.setex_calls == [
+        (
+            tasks._export_cancel_marker_key("task-1"),
+            tasks._EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS,
+            b"1",
+        )
+    ]
+    assert tasks.export_task_cancel_requested("task-1")
+
+    client.fail_set = True
+    assert not tasks.mark_export_task_cancel_requested("task-2")
+    client.fail_get = True
+    assert not tasks.export_task_cancel_requested("task-1")
+
+
+def test_run_script_via_omero_cli_tick_reporting_is_best_effort(
+    monkeypatch,
+    tmp_path,
+    caplog,
+):
+    """Verify CLI process telemetry cannot fail an otherwise valid export.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on
+    regressions that would abort a conversion because progress reporting failed.
+    """
+    tasks = _import_tasks(monkeypatch)
+    cli_path = tmp_path / "omero"
+    cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    export_path = tmp_path / "telemetry.ims"
+    monkeypatch.setattr(tasks, "_resolve_omero_cli", lambda: str(cli_path))
+
+    def streaming_run(*_args, on_tick, **_kwargs):
+        """Simulate a streaming OMERO CLI process.
+
+        Inputs: ignored process arguments plus tick callback. Output: completed process.
+        """
+        on_tick(4242, 1.5)
+        return types.SimpleNamespace(
+            returncode=0,
+            stdout=f"Export_Path = {export_path}\nExport_Name = telemetry.ims",
+            stderr="",
+        )
+
+    monkeypatch.setattr(tasks.subprocess, "run_streaming", streaming_run)
+
+    assert tasks._run_script_via_omero_cli(
+        9,
+        12,
+        "omeroserver",
+        4064,
+        "session-key",
+    ) == {
+        "Export_Path": str(export_path),
+        "Export_Name": "telemetry.ims",
+    }
+
+    with caplog.at_level(logging.ERROR, logger=tasks.logger.name):
+        assert tasks._run_script_via_omero_cli(
+            9,
+            12,
+            "omeroserver",
+            4064,
+            "session-key",
+            status_callback=lambda *_args: (_ for _ in ()).throw(
+                RuntimeError("callback failed")
+            ),
+        )["Export_Path"] == str(export_path)
+    assert "Failed to update IMS export CLI process metadata" in caplog.text
+
+
+def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
+    monkeypatch,
+    tmp_path,
+):
+    """Verify IMS task ownership metadata survives every public terminal state.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    that would make status or cancellation ownership checks lose their token.
+    """
+    tasks = _import_tasks(monkeypatch)
+    closed = []
+    updates = []
+    conn = types.SimpleNamespace(
+        close=lambda **_kwargs: closed.append(True),
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+    )
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-owner"),
+        update_state=lambda state, meta: updates.append((state, meta)),
+    )
+    owner_marker = "owner-marker"
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    monkeypatch.setattr(
+        tasks,
+        "_open_export_connection",
+        lambda session_key, host, port, secure=None: conn,
+    )
+    monkeypatch.setattr(tasks, "_find_script_id", lambda current_conn: 91)
+    monkeypatch.setattr(tasks, "_serialize_outputs", dict)
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: False)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **_kwargs: {
+            "Export_Path": str(tmp_path / "owner.ims"),
+            "Export_Name": "owner.ims",
+        },
+    )
+
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result["owner_token"] == owner_marker
+    assert all(meta["owner_token"] == owner_marker for _state, meta in updates)
+
+    updates.clear()
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            tasks.IMSExportTaskError(
+                "private detail", public_message="Image 12 not found"
+            )
+        ),
+    )
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result == {
+        "state": "FAILED",
+        "outputs": None,
+        "error": "Image 12 not found",
+        "public_error": True,
+        "owner_token": owner_marker,
+    }
+
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: True)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("worker stopped")),
+    )
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result == {
+        "state": "CANCELLED",
+        "outputs": None,
+        "error": "IMS export stopped by user.",
+        "owner_token": owner_marker,
+    }
+    assert len(closed) == 3
+
+
+def test_close_export_connection_accepts_gateway_close_signature_variants(
+    monkeypatch,
+):
+    """Verify gateway cleanup handles supported OMERO.py close signatures.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions that would
+    leak or hard-close the wrong session when gateway versions differ.
+    """
+    tasks = _import_tasks(monkeypatch)
+
+    tasks._close_export_connection(types.SimpleNamespace())
+
+    positional_calls = []
+
+    class _PositionalClose:
+        """Gateway double whose close method only accepts a positional hard flag."""
+
+        @staticmethod
+        def close(*args, **kwargs):
+            """Record close calls or reject keyword usage.
+
+            Inputs: close args and kwargs. Output: None.
+            """
+            if kwargs:
+                raise TypeError("no keyword close")
+            positional_calls.append(args)
+
+    tasks._close_export_connection(_PositionalClose())
+    assert positional_calls == [(True,)]
+
+    no_arg_calls = []
+
+    class _NoArgClose:
+        """Gateway double whose close method accepts no arguments."""
+
+        @staticmethod
+        def close(*args, **kwargs):
+            """Record no-argument close calls.
+
+            Inputs: close args and kwargs. Output: None.
+            """
+            if args or kwargs:
+                raise TypeError("no close arguments")
+            no_arg_calls.append(True)
+
+    tasks._close_export_connection(_NoArgClose())
+    assert no_arg_calls == [True]
+
+
+def test_ome_tiff_task_uses_format_specific_public_failure_contract(monkeypatch):
+    """Verify OME-TIFF task failures never fall back to IMS-specific messages.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in missing
+    image handling, materialization failure reporting, and task failure metadata.
+    """
+    tasks = _import_tasks(monkeypatch)
+
+    with pytest.raises(tasks.OMEExportTaskError) as missing_image:
+        tasks._run_ome_tiff_export(
+            types.SimpleNamespace(getObject=lambda kind, image_id: None),
+            12,
+        )
+    assert missing_image.value.public_message == "Image 12 not found"
+    assert tasks._ims_export_script_module().safe_filename("sample") == "sample"
+
+    status_updates = []
+    fake_script = types.SimpleNamespace(
+        safe_filename=lambda name, fallback: "sample",
+        materialize_ome_tiff_source=lambda conn, image, image_id, root: "",
+    )
+    monkeypatch.setattr(tasks, "_ims_export_script_module", lambda: fake_script)
+    image = types.SimpleNamespace(getName=lambda: "sample")
+    with pytest.raises(tasks.OMEExportTaskError) as missing_file:
+        tasks._run_ome_tiff_export(
+            types.SimpleNamespace(getObject=lambda kind, image_id: image),
+            12,
+            status_callback=lambda status, meta: status_updates.append((status, meta)),
+        )
+    assert missing_file.value.public_message == (
+        "Could not export selected Image as OME-TIFF"
+    )
+    assert status_updates == [("running_export", {"export_name": "sample.ome.tif"})]
+
+    closed = []
+    updates = []
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-ome"),
+        update_state=lambda state, meta: updates.append((state, meta)),
+    )
+    owner_marker = "owner-marker"
+    monkeypatch.setattr(
+        tasks,
+        "_open_export_connection",
+        lambda session_key, host, port, secure=None: types.SimpleNamespace(
+            close=lambda **_kwargs: closed.append(True)
+        ),
+    )
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: False)
+    export_path = str(TEST_RUNTIME_ROOT / "exports" / "image_12" / "sample.ome.tif")
+    monkeypatch.setattr(
+        tasks,
+        "_run_ome_tiff_export",
+        lambda *_args, **_kwargs: {
+            "Export_Path": export_path,
+            "Export_Name": "sample.ome.tif",
+        },
+    )
+    monkeypatch.setattr(tasks, "_serialize_outputs", dict)
+    result = tasks.run_ome_tiff_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result == {
+        "state": "FINISHED",
+        "outputs": {
+            "Export_Path": export_path,
+            "Export_Name": "sample.ome.tif",
+        },
+        "error": None,
+        "owner_token": owner_marker,
+    }
+
+    monkeypatch.setattr(
+        tasks,
+        "_run_ome_tiff_export",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            tasks.OMEExportTaskError(
+                "private path", public_message="Image 12 not found"
+            )
+        ),
+    )
+    result = tasks.run_ome_tiff_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result == {
+        "state": "FAILED",
+        "outputs": None,
+        "error": "Image 12 not found",
+        "public_error": True,
+        "owner_token": owner_marker,
+    }
+
+    monkeypatch.setattr(
+        tasks,
+        "_run_ome_tiff_export",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("backend detail")),
+    )
+    with pytest.raises(RuntimeError, match="backend detail"):
+        tasks.run_ome_tiff_export_task(
+            task_self,
+            image_id=12,
+            session_key="session-key",
+            host="omeroserver",
+            port=4064,
+            owner_token=owner_marker,
+        )
+    assert updates[-1][0] == tasks.states.FAILURE
+    assert updates[-1][1]["error"] == "OME-TIFF export job failed."
+    assert updates[-1][1]["owner_token"] == owner_marker
+
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: True)
+    result = tasks.run_ome_tiff_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+        owner_token=owner_marker,
+    )
+    assert result == {
+        "state": "CANCELLED",
+        "outputs": None,
+        "error": "IMS export stopped by user.",
+        "owner_token": owner_marker,
+    }
+    assert len(closed) == 4
+
+
+def test_ome_tiff_task_logs_close_failures_without_hiding_public_result(
+    monkeypatch,
+):
+    """Verify OME-TIFF task cleanup errors do not replace the public task result.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions that would
+    hide a completed task behind a connection-close compatibility failure.
+    """
+    tasks = _import_tasks(monkeypatch)
+    warnings = []
+    export_path = str(TEST_RUNTIME_ROOT / "exports" / "image_12" / "close.ome.tif")
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-ome-close"),
+        update_state=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_open_export_connection",
+        lambda session_key, host, port, secure=None: types.SimpleNamespace(
+            close=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("close failed"))
+        ),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_run_ome_tiff_export",
+        lambda *_args, **_kwargs: {
+            "Export_Path": export_path,
+            "Export_Name": "close.ome.tif",
+        },
+    )
+    monkeypatch.setattr(tasks, "_serialize_outputs", dict)
+    monkeypatch.setattr(
+        tasks.logger,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append(message % args),
+    )
+
+    result = tasks.run_ome_tiff_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+    )
+
+    assert result["state"] == "FINISHED"
+    assert warnings == ["Error closing OMERO connection: close failed"]

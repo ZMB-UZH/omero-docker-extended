@@ -284,7 +284,10 @@ any planned filename already exists in the selected folder, the XT dialog asks
 before export starts whether to replace those files, keep both copies with
 unique names, or cancel. Timestamped duplicate names are used only for an
 explicit keep-both choice or when `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` is
-enabled for non-GUI callers.
+enabled for non-GUI callers. When the current selection contains repeated
+selected-image names, every selected file with that repeated filename gets a
+timestamped unique name, including the first occurrence, so one selected image
+cannot overwrite another during the batch.
 
 ## Multi-image loading
 

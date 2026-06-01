@@ -418,7 +418,9 @@ Operational rule:
   The GUI prompts before replacing same-name files in the selected folder;
   timestamped unique names are used only when the user chooses to keep both
   files, or when `OMERO_IMARIS_UNIQUE_DOWNLOAD_SUFFIX` is enabled for non-GUI
-  callers.
+  callers. If one multi-image selection contains repeated selected-image names,
+  every selected file with that repeated filename gets a timestamped unique name,
+  including the first occurrence.
 
 ### 8. OMERO converter failed after private config lookup replaced env handoff
 

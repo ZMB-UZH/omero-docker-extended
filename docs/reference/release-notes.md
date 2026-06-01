@@ -72,7 +72,9 @@
   file is imported.
 - The Imaris XT connector preserves selected OMERO image names by default,
   prompts before replacing same-name local files, and uses timestamped duplicate
-  names only by explicit user choice or opt-in setting.
+  names only by explicit user choice or opt-in setting. Repeated selected-image
+  names inside one multi-image load now timestamp every repeated copy, including
+  the first occurrence, before downloads start.
 - The XT connector help button now opens a larger user-focused modal help
   window. Search fields, browser lists, Search, and Append-to-observed-folders
   controls are disabled before connection and after disconnect while preserving
