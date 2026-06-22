@@ -7,6 +7,7 @@ import re
 import signal
 from pathlib import Path
 import time
+from typing import cast
 import urllib.parse
 
 from celery import states as celery_states
@@ -690,7 +691,7 @@ def _remove_queued_redis_task(task_id):
     if not broker_url.startswith(("redis://", "rediss://")):
         return result
     try:
-        from redis import Redis  # type: ignore[import-not-found]
+        from redis import Redis  # type: ignore[import-not-found,unused-ignore]
     except Exception as exc:
         logger.debug(
             "Redis client unavailable for queued export cancellation: %s",
@@ -707,7 +708,7 @@ def _remove_queued_redis_task(task_id):
             for raw_message in client.lrange(queue_key, 0, -1):
                 if needle in raw_message:
                     result["broker_queue_messages_removed"] += int(
-                        client.lrem(queue_key, 1, raw_message)
+                        client.lrem(queue_key, 1, cast(str, raw_message))
                     )
     except Exception as exc:
         logger.warning(
