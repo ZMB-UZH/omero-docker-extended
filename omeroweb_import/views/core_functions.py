@@ -1476,7 +1476,7 @@ def _replace_staged_upload_file_fallback(
             try:
                 target.unlink()
             except FileNotFoundError:
-                pass
+                logger.debug("Oversized staged upload was already removed.")
             except OSError:
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
             return None, limit_error
@@ -1893,7 +1893,7 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
             try:
                 os.unlink(file_name, dir_fd=parent_fd)
             except FileNotFoundError:
-                pass
+                logger.debug("Oversized staged upload was already removed.")
             except OSError:
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
             return None, limit_error
