@@ -12,7 +12,7 @@
         <div class="admin-tools-header-left">
             <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
             <h1 class="admin-tools-title">Resource monitoring</h1>
-            <p class="admin-tools-subtitle">Live monitoring of container/server metrics, entry points and docker compose services status.<br>ATTENTION: For Grafana login in case of unauthorized / page not found error, click the Home button on the top-left, NOT the Sign in button.</p>
+            <p class="admin-tools-subtitle">Live monitoring of container/server metrics, entry points and Docker Compose services status.</p>
         </div>
         <div class="admin-tools-header-actions">
             <a href="{% url 'omeroweb_admin_tools_help' %}" target="_blank" rel="noopener noreferrer" class="help-btn" title="Help" aria-label="Help">?</a>
@@ -258,10 +258,12 @@ function renderDiagnostics(diag, services) {
         diagnosticsCard.style.display = 'none';
         return;
     }
-    const allJustUp = services.length > 0 && services.every(s => normalizeServiceHealth(s.health) === 'up');
+    const normalizedServiceHealth = services.map(s => normalizeServiceHealth(s.health));
+    const hasServiceHealth = normalizedServiceHealth.length > 0;
+    const allServicesOk = hasServiceHealth && normalizedServiceHealth.every(health => health === 'healthy' || health === 'up');
     const noHealthData = !diag.api_reachable || diag.containers_with_health === 0;
 
-    if (!allJustUp && !noHealthData) {
+    if (!noHealthData || (allServicesOk && noHealthData)) {
         diagnosticsCard.style.display = 'none';
         return;
     }
@@ -270,9 +272,9 @@ function renderDiagnostics(diag, services) {
 
     const lines = [];
     if (!diag.socket_exists) {
-        lines.push(`Docker socket not found at ${diag.socket_path}.`);
-        lines.push(`The socket must be mounted into the omeroweb container:`);
-        lines.push(`  volumes: - /var/run/docker.sock:/var/run/docker.sock:ro`);
+        lines.push(`Docker socket diagnostics are unavailable because ${diag.socket_path} is not mounted.`);
+        lines.push(`Service health is using the Docker Compose/Prometheus fallback.`);
+        lines.push(`If service health is missing, optionally mount the host socket read-only for Docker API diagnostics.`);
     } else if (!diag.api_reachable) {
         lines.push(`Docker socket exists but API call failed.`);
         lines.push(`Socket: ${diag.socket_stat}`);
@@ -338,10 +340,10 @@ async function loadData() {
             throw new Error('Monitoring endpoints are not configured.');
         }
 
-        openGrafanaBtn.onclick = () => { window.open(payload?.grafana?.dashboard_external_url || payload?.grafana?.dashboard_proxy_url || dashboardUrl || '', '_blank', 'noopener,noreferrer'); };
-        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_external_url || payload?.grafana?.database_dashboard_proxy_url || payload?.grafana?.database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
-        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_external_url || payload?.grafana?.plugin_database_dashboard_proxy_url || payload?.grafana?.plugin_database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
-        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_external_url || payload?.grafana?.redis_dashboard_proxy_url || payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openGrafanaBtn.onclick = () => { window.open(payload?.grafana?.dashboard_proxy_url || payload?.grafana?.dashboard_external_url || dashboardUrl || '', '_blank', 'noopener,noreferrer'); };
+        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_proxy_url || payload?.grafana?.database_dashboard_external_url || payload?.grafana?.database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_proxy_url || payload?.grafana?.plugin_database_dashboard_external_url || payload?.grafana?.plugin_database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_proxy_url || payload?.grafana?.redis_dashboard_external_url || payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
         grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});

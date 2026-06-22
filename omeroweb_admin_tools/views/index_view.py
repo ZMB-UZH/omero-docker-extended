@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -371,6 +372,19 @@ def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
         headers["Referer"] = f"{backend_origin}/"
 
 
+def _grafana_backend_auth_headers() -> dict[str, str]:
+    """Return backend-only Grafana Basic auth headers when configured.
+
+    Inputs: process environment. Output: `dict[str, str]`.
+    """
+    password = os.environ.get("GF_SECURITY_ADMIN_PASSWORD", "").strip()
+    if not password:
+        return {}
+    username = os.environ.get("GF_SECURITY_ADMIN_USER", "admin").strip() or "admin"
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
 def _proxy_request_body(django_request) -> bytes | None:
     """Return the proxy request body.
 
@@ -487,11 +501,13 @@ def _proxy_http_request(
     proxy_prefix: str = "",
     rewrite_origin_headers: bool = False,
     extra_forwarded_headers: tuple = (),
+    forced_backend_headers: dict[str, str] | None = None,
 ) -> HttpResponse:
     """Proxy an HTTP request to a backend URL and return the response body.
 
     Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-    `rewrite_origin_headers`, `extra_forwarded_headers`. Output: `HttpResponse`.
+    `rewrite_origin_headers`, `extra_forwarded_headers`, `forced_backend_headers`.
+    Output: `HttpResponse`.
     """
     try:
         normalized_path, target_url = _build_proxy_target_url(base_url, path, query)
@@ -500,6 +516,8 @@ def _proxy_http_request(
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
     forwarded_headers = _collect_proxy_headers(django_request, extra_forwarded_headers)
+    if forced_backend_headers:
+        forwarded_headers.update(forced_backend_headers)
     if rewrite_origin_headers:
         _rewrite_origin_headers(forwarded_headers, base_url)
 
@@ -624,6 +642,7 @@ def _build_proxied_response(
             f'"appUrl":"{escaped_app_url}"',
             text,
         )
+        text = _inject_proxy_csrf_bridge(text)
 
         payload = text.encode("utf-8")
     proxied = HttpResponse(payload, status=status_code, content_type=content_type)
@@ -666,6 +685,58 @@ def _origin_from_url(url: str) -> str:
     if not parsed.scheme or not parsed.netloc:
         return ""
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _inject_proxy_csrf_bridge(html: str) -> str:
+    """Inject JavaScript that forwards Django CSRF tokens for proxied apps.
+
+    Inputs: `html`. Output: `str`.
+    """
+    marker = "admin-tools-proxy-csrf-bridge"
+    if marker in html:
+        return html
+    script = f"""<script id="{marker}">
+(function () {{
+  function csrfToken() {{
+    return document.cookie.split(';').map(function (part) {{ return part.trim(); }})
+      .filter(function (part) {{ return part.indexOf('csrftoken=') === 0; }})
+      .map(function (part) {{ return decodeURIComponent(part.slice('csrftoken='.length)); }})[0] || '';
+  }}
+  function isUnsafe(method) {{
+    return !/^(GET|HEAD|OPTIONS|TRACE)$/i.test(method || 'GET');
+  }}
+  var originalFetch = window.fetch;
+  if (originalFetch) {{
+    window.fetch = function (input, init) {{
+      init = init || {{}};
+      var method = init.method || (input && input.method) || 'GET';
+      if (isUnsafe(method)) {{
+        var headers = new Headers(init.headers || (input && input.headers) || {{}});
+        if (!headers.has('X-CSRFToken')) {{
+          headers.set('X-CSRFToken', csrfToken());
+        }}
+        init = Object.assign({{}}, init, {{headers: headers}});
+      }}
+      return originalFetch.call(this, input, init);
+    }};
+  }}
+  var originalOpen = XMLHttpRequest.prototype.open;
+  var originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method) {{
+    this.__adminToolsProxyMethod = method;
+    return originalOpen.apply(this, arguments);
+  }};
+  XMLHttpRequest.prototype.send = function () {{
+    if (isUnsafe(this.__adminToolsProxyMethod)) {{
+      this.setRequestHeader('X-CSRFToken', csrfToken());
+    }}
+    return originalSend.apply(this, arguments);
+  }};
+}})();
+</script>"""
+    if "</head>" in html:
+        return html.replace("</head>", f"{script}</head>", 1)
+    return script + html
 
 
 def _rewrite_proxied_location(location: str, base_url: str, proxy_prefix: str) -> str:
@@ -2711,6 +2782,7 @@ def resource_monitoring_data(request, conn=None, _url=None, **kwargs):
 
 @login_required()
 @require_root_user
+@ensure_csrf_cookie
 def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
     """Proxy Grafana HTTP responses through OMERO.web.
 
@@ -2760,6 +2832,7 @@ def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
             proxy_prefix=proxy_prefix,
             rewrite_origin_headers=True,
             extra_forwarded_headers=("X-Grafana-Csrf-Token",),
+            forced_backend_headers=_grafana_backend_auth_headers(),
         )
         last_response = response
         if getattr(response, "status_code", 502) != 502:
