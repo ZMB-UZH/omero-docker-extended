@@ -823,15 +823,15 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
             "RUNNING",
             {"Export_Path": str(export_path), "File_Annotation_Id": "9"},
             None,
-                {
-                    "status": "running_script",
-                    "image_id": 12,
-                    "started_at": 0.0,
-                    "cli_pid": 345,
-                    "owner_token": views._hash_job_owner_token("session-key"),
-                },
-            ),
-        )
+            {
+                "status": "running_script",
+                "image_id": 12,
+                "started_at": 0.0,
+                "cli_pid": 345,
+                "owner_token": views._hash_job_owner_token("session-key"),
+            },
+        ),
+    )
     monkeypatch.setattr(
         views.celery_app,
         "AsyncResult",
@@ -890,7 +890,7 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
 
     conn = SimpleNamespace(
         getSessionId=lambda: "session-key",
-        deleteObjects=lambda obj_type, ids, wait: deleted.append((obj_type, ids, wait))
+        deleteObjects=lambda obj_type, ids, wait: deleted.append((obj_type, ids, wait)),
     )
 
     payload = views._cancel_celery_job("celery-task-123", conn)
@@ -2164,9 +2164,7 @@ def test_imaris_export_dispatches_ome_tiff_without_requiring_ims_script(
     block Imaris-converter handoff when only OME-TIFF staging is needed.
     """
     views = _import_views()
-    request = _post_export_request(
-        {"image": "12", "format": "ome-tiff", "async": "1"}
-    )
+    request = _post_export_request({"image": "12", "format": "ome-tiff", "async": "1"})
     dispatched = []
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(

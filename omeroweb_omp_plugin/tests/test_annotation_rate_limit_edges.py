@@ -274,7 +274,9 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
         if annotation_id in deleted_annotation_ids:
             return []
         if annotation_id == 11:
-            return [link_id for link_id in (401, 402) if link_id not in deleted_link_ids]
+            return [
+                link_id for link_id in (401, 402) if link_id not in deleted_link_ids
+            ]
         if annotation_id == 12:
             return [] if 501 in deleted_link_ids else [501]
         if annotation_id == 14:

@@ -32,6 +32,7 @@ except ImportError:
         """
         raise KeyError(gid)
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"

@@ -1426,7 +1426,9 @@ def _append_upload_chunks_to_staged_path_fallback(
     return bytes_written, saved_size, None
 
 
-def _replace_staged_upload_file_fallback(upload_root: Path, normalized_path: str, upload):
+def _replace_staged_upload_file_fallback(
+    upload_root: Path, normalized_path: str, upload
+):
     """Replace a staged upload file using path APIs where directory fds are absent.
 
     Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
@@ -6267,7 +6269,9 @@ def _uploaded_entry_actual_size(job_id: str, entry: dict) -> int:
                 staged_path,
             )
         except Exception:
-            logger.debug("Suppressed exception while reading staged size", exc_info=True)
+            logger.debug(
+                "Suppressed exception while reading staged size", exc_info=True
+            )
         else:
             if staged_error is None:
                 return _nonnegative_int(actual_size)

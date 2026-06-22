@@ -264,7 +264,9 @@ def resolve_local_zarr_store(location):
         parsed = urlparse(location_text)
         if parsed.scheme not in ("", "file"):
             return None
-        candidate_text = unquote(parsed.path if parsed.scheme == "file" else location_text)
+        candidate_text = unquote(
+            parsed.path if parsed.scheme == "file" else location_text
+        )
     if not candidate_text:
         return None
 

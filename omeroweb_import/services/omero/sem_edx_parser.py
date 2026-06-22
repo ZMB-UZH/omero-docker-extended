@@ -52,7 +52,9 @@ def _env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
     """
     raw = os.environ.get(env_key)
     try:
-        value = int(str(raw).strip()) if raw is not None and str(raw).strip() else default
+        value = (
+            int(str(raw).strip()) if raw is not None and str(raw).strip() else default
+        )
     except (TypeError, ValueError):
         value = default
     return max(min_value, min(max_value, value))
