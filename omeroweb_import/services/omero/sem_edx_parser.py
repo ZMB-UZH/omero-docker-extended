@@ -176,9 +176,9 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
         return empty_result
 
     title = ""
-    metadata = {}
-    elements = []
-    spectrum = []
+    metadata: Dict[str, str] = {}
+    elements: List[Dict[str, Any]] = []
+    spectrum: List[Tuple[float, float]] = []
     in_spectrum = False
     max_lines = _sem_edx_max_lines()
     max_spectrum_points = _sem_edx_max_spectrum_points()

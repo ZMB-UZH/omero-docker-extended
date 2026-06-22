@@ -11,26 +11,17 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 try:
-    from pwd import getpwuid
-    from grp import getgrgid
+    import grp as _grp_module
+    import pwd as _pwd_module
 except ImportError:
-
-    def getpwuid(uid):
-        """Report that POSIX passwd lookup is unavailable on this host.
-
-        Inputs: numeric `uid`. Output: raises KeyError for the missing passwd row.
-        """
-        raise KeyError(uid)
-
-    def getgrgid(gid):
-        """Report that POSIX group lookup is unavailable on this host.
-
-        Inputs: numeric `gid`. Output: raises KeyError for the missing group row.
-        """
-        raise KeyError(gid)
+    _grp: Any | None = None
+    _pwd: Any | None = None
+else:
+    _grp = _grp_module
+    _pwd = _pwd_module
 
 
 logger = logging.getLogger(__name__)
@@ -182,8 +173,10 @@ def _safe_username(uid: int) -> str:
 
     Inputs: `uid`. Output: `str`.
     """
+    if _pwd is None:
+        return str(uid)
     try:
-        return getpwuid(uid).pw_name
+        return _pwd.getpwuid(uid).pw_name
     except KeyError:
         return str(uid)
 
@@ -193,8 +186,10 @@ def _safe_groupname(gid: int) -> str:
 
     Inputs: `gid`. Output: `str`.
     """
+    if _grp is None:
+        return str(gid)
     try:
-        return getgrgid(gid).gr_name
+        return _grp.getgrgid(gid).gr_name
     except KeyError:
         return str(gid)
 

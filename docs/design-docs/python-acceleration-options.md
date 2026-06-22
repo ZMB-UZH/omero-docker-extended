@@ -36,7 +36,7 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `154`
-- Production Python lines: `81,411`
+- Production Python lines: `81,408`
 - Test Python files: `181`
 - Test Python lines: `130,359`
 
@@ -46,7 +46,7 @@ strategy would mostly compile tests unless the build is carefully filtered.
 ### Largest production modules inspected
 
 - `omero_imaris_connector/XTOmeroConnector.py`: `15,358` lines
-- `omeroweb_import/views/core_functions.py`: `10,342` lines
+- `omeroweb_import/views/core_functions.py`: `10,344` lines
 - `omeroweb_admin_tools/views/index_view.py`: `3,422` lines
 - `tools/cocoindex_agent_search.py`: `3,114` lines
 - `omeroweb_import/views/index_view.py`: `1,888` lines
