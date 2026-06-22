@@ -245,7 +245,7 @@ def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
             SimpleNamespace(bad_id=3),
         ]
     )
-    assert job_view._resolve_image_ids(fallback_conn, 5, []) == [3, 7]
+    assert job_view._resolve_image_ids(fallback_conn, 5, []) == []
 
     assert (
         job_view._save_annotation_link(
@@ -439,6 +439,7 @@ def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypat
     monkeypatch.setattr(
         job_view, "save_job", lambda payload: saved.update(payload) or True
     )
+    monkeypatch.setattr(job_view, "_validate_user_password", lambda *_args: (True, None))
     monkeypatch.setattr(job_view.uuid, "uuid4", lambda: SimpleNamespace(hex="job123"))
     monkeypatch.setattr(job_view.time, "time", lambda: 50.0)
 
@@ -454,6 +455,7 @@ def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypat
                 "separator_mode": "chars",
                 "var_names": ["Cell", "Channel"],
                 "delete_mode": "plugin",
+                "password": TEST_AUTH_INPUT,
                 "chunk_size": 500,
             }
         ),

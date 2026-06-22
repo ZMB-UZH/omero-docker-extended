@@ -280,6 +280,62 @@ def test_replace_staged_upload_file_creates_private_modes(tmp_path) -> None:
     assert (created_file.stat().st_mode & 0o777) == 0o600
 
 
+def test_staged_upload_file_helpers_enforce_server_side_byte_limit(
+    monkeypatch, tmp_path
+) -> None:
+    """Verify staged upload helpers cap actual bytes written server-side.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in staged upload byte accounting.
+    """
+
+    class _Upload:
+        """Test double for upload behavior in this module."""
+
+        def __init__(self, *chunks):
+            """Create `_Upload` with its default state.
+
+            Inputs: `*chunks`. Output: None.
+            """
+            self._chunks = chunks
+
+        def chunks(self):
+            """Return the chunks for `_Upload`.
+
+            Inputs: none. Output: `list`.
+            """
+            return list(self._chunks)
+
+    monkeypatch.setenv(core_functions.UPLOAD_STAGED_FILE_MAX_BYTES_ENV, "5")
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+
+    size, replace_error = core_functions._replace_staged_upload_file(
+        upload_root,
+        "_staged/folder/file.bin",
+        _Upload(b"123", b"456"),
+    )
+    assert size is None
+    assert replace_error == "Upload file exceeds the staged file limit of 5 bytes."
+    assert not (upload_root / "_staged" / "folder" / "file.bin").exists()
+
+    staged_file = upload_root / "_staged" / "folder" / "file.bin"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_bytes(b"1234")
+
+    bytes_written, saved_size, append_error = (
+        core_functions._append_upload_chunks_to_staged_path(
+            upload_root,
+            "_staged/folder/file.bin",
+            _Upload(b"56"),
+        )
+    )
+    assert bytes_written is None
+    assert saved_size is None
+    assert append_error == "Upload file exceeds the staged file limit of 5 bytes."
+    assert staged_file.read_bytes() == b"1234"
+
+
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
     """Verify write read job file and apply upload updates.
 
@@ -310,14 +366,15 @@ def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> 
     updated = core_functions._apply_upload_updates(
         job_id,
         updates=[
-            {"upload_id": "u1", "status": "uploaded"},
+            {"upload_id": "u1", "status": "uploaded", "saved_size": 3},
             {"upload_id": "u2", "status": "error", "errors": ["broken"]},
             {"upload_id": "missing", "status": "uploaded"},
         ],
         errors=["job-level"],
     )
 
-    assert updated["uploaded_bytes"] == 5
+    assert updated["uploaded_bytes"] == 3
+    assert updated["files"][0]["saved_size"] == 3
     assert updated["files"][0]["status"] == "uploaded"
     assert updated["files"][1]["status"] == "error"
     assert updated["files"][1]["errors"] == ["broken"]

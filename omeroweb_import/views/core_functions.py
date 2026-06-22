@@ -233,6 +233,7 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
+UPLOAD_STAGED_FILE_MAX_BYTES_ENV = "OMERO_WEB_UPLOAD_STAGED_FILE_MAX_BYTES"
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
 NATIVE_ZARR_IMPORT_ENABLED_ENV = "OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT"
 MAX_IMPORT_LOG_LINES = 1000
@@ -619,6 +620,19 @@ def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> 
     except (TypeError, ValueError):
         value = default
     return max(min_value, min(max_value, value))
+
+
+def _get_upload_staged_file_max_bytes() -> int:
+    """Return the maximum server-side staged upload file size.
+
+    Inputs: none. Output: `int`.
+    """
+    return _get_env_int(
+        UPLOAD_STAGED_FILE_MAX_BYTES_ENV,
+        MAX_UPLOAD_BATCH_BYTES,
+        1,
+        MAX_UPLOAD_BATCH_BYTES,
+    )
 
 
 def _get_env_bool(env_key: str, default: bool = False) -> bool:
@@ -1291,6 +1305,180 @@ def _validate_staged_target_path(upload_root: Path, staged_path: str):
     return error
 
 
+def _managed_fd_fallback_enabled() -> bool:
+    """Return whether managed upload helpers need path-based fallback behavior.
+
+    Inputs: none. Output: `bool`.
+    """
+    return os.name == "nt"
+
+
+def _path_is_within_root(path: Path, root: Path) -> bool:
+    """Return whether `path` stays within `root`.
+
+    Inputs: `path` (Path), `root` (Path). Output: `bool`.
+    """
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _fallback_staged_target_path(
+    upload_root: Path,
+    normalized_path: str,
+    *,
+    create_parents: bool = False,
+) -> tuple[Path | None, str | None]:
+    """Resolve a staged upload target without directory fds on platforms needing it.
+
+    Inputs: `upload_root`, `normalized_path`, `create_parents`. Output: `(path,
+    error)`.
+    """
+    relative_parts = PurePosixPath(normalized_path).parts
+    validation_error = _managed_relative_path_validation_error(
+        Path(upload_root),
+        relative_parts,
+        max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+    )
+    if validation_error:
+        return None, validation_error
+
+    root_path = Path(upload_root)
+    try:
+        root_path.mkdir(parents=True, exist_ok=True)
+        root_resolved = root_path.resolve(strict=True)
+    except OSError:
+        return None, errors.invalid_filename("/".join(relative_parts))
+
+    current = root_path
+    for directory_name in relative_parts[:-1]:
+        current = current / directory_name
+        try:
+            if current.exists():
+                if current.is_symlink() or not current.is_dir():
+                    return None, errors.invalid_filename("/".join(relative_parts))
+            elif create_parents:
+                current.mkdir(mode=_MANAGED_DIRECTORY_CREATE_MODE)
+            else:
+                return None, errors.invalid_filename("/".join(relative_parts))
+        except OSError:
+            return None, errors.invalid_filename("/".join(relative_parts))
+
+    try:
+        parent_resolved = current.resolve(strict=True)
+    except OSError:
+        return None, errors.invalid_filename("/".join(relative_parts))
+    if not _path_is_within_root(parent_resolved, root_resolved):
+        return None, errors.invalid_filename("/".join(relative_parts))
+
+    target = current / relative_parts[-1]
+    if target.exists() and target.is_symlink():
+        return None, errors.invalid_filename("/".join(relative_parts))
+    return target, None
+
+
+def _append_upload_chunks_to_staged_path_fallback(
+    upload_root: Path, normalized_path: str, upload
+):
+    """Append upload chunks using path APIs on platforms without directory fds.
+
+    Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
+    """
+    target, target_error = _fallback_staged_target_path(
+        upload_root,
+        normalized_path,
+        create_parents=True,
+    )
+    if target_error:
+        return None, None, target_error
+
+    initial_size = target.stat().st_size if target and target.exists() else 0
+    max_size = _get_upload_staged_file_max_bytes()
+    bytes_written = 0
+    try:
+        with open(target, "ab") as handle:
+            for chunk in upload.chunks():
+                chunk_size = len(chunk)
+                if initial_size + bytes_written + chunk_size > max_size:
+                    try:
+                        handle.truncate(initial_size)
+                    except OSError:
+                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    return None, None, errors.upload_file_too_large(max_size)
+                handle.write(chunk)
+                bytes_written += chunk_size
+        saved_size = target.stat().st_size if target else 0
+    except OSError as exc:
+        logger.warning(
+            "Failed to append staged upload chunks for %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            None,
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
+    return bytes_written, saved_size, None
+
+
+def _replace_staged_upload_file_fallback(upload_root: Path, normalized_path: str, upload):
+    """Replace a staged upload file using path APIs where directory fds are absent.
+
+    Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
+    """
+    target, target_error = _fallback_staged_target_path(
+        upload_root,
+        normalized_path,
+        create_parents=True,
+    )
+    if target_error:
+        return None, target_error
+
+    max_size = _get_upload_staged_file_max_bytes()
+    bytes_written = 0
+    limit_error = None
+    try:
+        with open(target, "wb") as handle:
+            for chunk in upload.chunks():
+                chunk_size = len(chunk)
+                if bytes_written + chunk_size > max_size:
+                    limit_error = errors.upload_file_too_large(max_size)
+                    try:
+                        handle.truncate(0)
+                    except OSError:
+                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    break
+                handle.write(chunk)
+                bytes_written += chunk_size
+        if limit_error:
+            try:
+                target.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
+            return None, limit_error
+        saved_size = target.stat().st_size if target else 0
+    except OSError as exc:
+        logger.warning(
+            "Failed to replace staged upload file %s: %s",
+            sanitize_log_value(normalized_path),
+            sanitize_log_value(exc),
+        )
+        return (
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
+    return saved_size, None
+
+
 def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
     """Append the upload chunks to staged path.
 
@@ -1299,6 +1487,10 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, None, normalize_error
+    if _managed_fd_fallback_enabled():
+        return _append_upload_chunks_to_staged_path_fallback(
+            upload_root, normalized_path, upload
+        )
 
     bytes_written = 0
     relative_parts = PurePosixPath(normalized_path).parts
@@ -1320,6 +1512,10 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
         )
+        stat_result = _managed_child_lstat(parent_fd, file_name, display_path)
+        initial_size = stat_result.st_size if stat_result is not None else 0
+        max_size = _get_upload_staged_file_max_bytes()
+        limit_error = None
         with os.fdopen(
             _open_managed_upload_file_fd(
                 parent_fd,
@@ -1330,8 +1526,18 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
             "ab",
         ) as handle:
             for chunk in upload.chunks():
+                chunk_size = len(chunk)
+                if initial_size + bytes_written + chunk_size > max_size:
+                    limit_error = errors.upload_file_too_large(max_size)
+                    try:
+                        handle.truncate(initial_size)
+                    except OSError:
+                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    break
                 handle.write(chunk)
-                bytes_written += len(chunk)
+                bytes_written += chunk_size
+        if limit_error:
+            return None, None, limit_error
         stat_result = _managed_child_lstat(parent_fd, file_name, display_path)
         saved_size = stat_result.st_size if stat_result is not None else 0
     except ValueError:
@@ -1363,6 +1569,27 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return normalize_error
+    if _managed_fd_fallback_enabled():
+        target, target_error = _fallback_staged_target_path(
+            upload_root,
+            normalized_path,
+            create_parents=True,
+        )
+        if target_error:
+            return target_error
+        if target and target.exists():
+            try:
+                target.unlink()
+            except OSError as exc:
+                logger.warning(
+                    "Failed to reset staged upload file %s: %s",
+                    sanitize_log_value(normalized_path),
+                    sanitize_log_value(exc),
+                )
+                return _managed_upload_internal_error(
+                    errors.unexpected_server_error_uploading_files()
+                )
+        return None
 
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
@@ -1415,6 +1642,32 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
+    if _managed_fd_fallback_enabled():
+        target, target_error = _fallback_staged_target_path(
+            upload_root,
+            normalized_path,
+            create_parents=True,
+        )
+        if target_error:
+            return None, target_error
+        if not target or not target.exists():
+            return 0, None
+        if not target.is_file() or target.is_symlink():
+            return None, errors.invalid_filename(normalized_path)
+        try:
+            return target.stat().st_size, None
+        except OSError as exc:
+            logger.warning(
+                "Failed to inspect staged upload file %s: %s",
+                sanitize_log_value(normalized_path),
+                sanitize_log_value(exc),
+            )
+            return (
+                None,
+                _managed_upload_internal_error(
+                    errors.unexpected_server_error_uploading_files()
+                ),
+            )
 
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
@@ -1479,6 +1732,38 @@ def _staged_upload_chunk_matches(
         )
 
     expected_size = max(0, int(chunk_end) - int(chunk_start))
+    if _managed_fd_fallback_enabled():
+        target, target_error = _fallback_staged_target_path(
+            upload_root,
+            normalized_path,
+            create_parents=False,
+        )
+        if target_error:
+            return False, target_error
+        if not target or not target.exists():
+            return False, None
+        if not target.is_file() or target.is_symlink():
+            return False, errors.invalid_filename(normalized_path)
+        try:
+            with open(target, "rb") as handle:
+                handle.seek(int(chunk_start))
+                staged_bytes = handle.read(expected_size)
+        except OSError as exc:
+            logger.warning(
+                "Failed to inspect staged upload chunk for %s: %s",
+                sanitize_log_value(normalized_path),
+                sanitize_log_value(exc),
+            )
+            return (
+                False,
+                _managed_upload_internal_error(
+                    errors.unexpected_server_error_uploading_files()
+                ),
+            )
+        if len(staged_bytes) != expected_size:
+            return False, None
+        return hashlib.sha256(staged_bytes).hexdigest() == digest, None
+
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
         Path(upload_root),
@@ -1540,6 +1825,10 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
+    if _managed_fd_fallback_enabled():
+        return _replace_staged_upload_file_fallback(
+            upload_root, normalized_path, upload
+        )
 
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
@@ -1560,6 +1849,8 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
             max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
             create_parents=True,
         )
+        max_size = _get_upload_staged_file_max_bytes()
+        limit_error = None
         with os.fdopen(
             _open_managed_upload_file_fd(
                 parent_fd,
@@ -1569,8 +1860,26 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
             ),
             "wb",
         ) as handle:
+            bytes_written = 0
             for chunk in upload.chunks():
+                chunk_size = len(chunk)
+                if bytes_written + chunk_size > max_size:
+                    limit_error = errors.upload_file_too_large(max_size)
+                    try:
+                        handle.truncate(0)
+                    except OSError:
+                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    break
                 handle.write(chunk)
+                bytes_written += chunk_size
+        if limit_error:
+            try:
+                os.unlink(file_name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
+            return None, limit_error
         stat_result = _managed_child_lstat(parent_fd, file_name, display_path)
         saved_size = stat_result.st_size if stat_result is not None else 0
     except ValueError:
@@ -5811,6 +6120,22 @@ def _resolve_managed_child_parts(
         relative_parts,
         max_bytes=max_bytes,
     )
+    if _managed_fd_fallback_enabled():
+        root_resolved = root_path.resolve(strict=True)
+        parent = root_path
+        for directory_name in normalized_parts[:-1]:
+            parent = parent / directory_name
+            if not parent.exists():
+                break
+            if parent.is_symlink() or not parent.is_dir():
+                raise _invalid_managed_path("/".join(normalized_parts))
+        parent_resolved = parent.resolve(strict=False)
+        if not _path_is_within_root(parent_resolved, root_resolved):
+            raise _invalid_managed_path("/".join(normalized_parts))
+        target = _managed_child_path(root_path, normalized_parts)
+        if target.exists() and target.is_symlink():
+            raise _invalid_managed_path("/".join(normalized_parts))
+        return target
     _validate_existing_managed_path_segments(root_path, normalized_parts)
     return _managed_child_path(root_path, normalized_parts)
 
@@ -5913,6 +6238,43 @@ def _write_job_file(job_id: str, job_dict):
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
+def _nonnegative_int(value, default: int = 0) -> int:
+    """Return `value` as a non-negative integer.
+
+    Inputs: `value`, `default` (int). Output: `int`.
+    """
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        normalized = default
+    return max(0, normalized)
+
+
+def _uploaded_entry_actual_size(job_id: str, entry: dict) -> int:
+    """Return server-observed uploaded bytes for a job entry when available.
+
+    Inputs: `job_id` (str), `entry` (dict). Output: `int`.
+    """
+    saved_size = entry.get("saved_size")
+    if saved_size is not None:
+        return _nonnegative_int(saved_size)
+
+    staged_path = entry.get("staged_path") or entry.get("relative_path")
+    if staged_path:
+        try:
+            actual_size, staged_error = _staged_upload_size(
+                _get_upload_root() / job_id,
+                staged_path,
+            )
+        except Exception:
+            logger.debug("Suppressed exception while reading staged size", exc_info=True)
+        else:
+            if staged_error is None:
+                return _nonnegative_int(actual_size)
+
+    return _nonnegative_int(entry.get("size"))
+
+
 def _apply_upload_updates(
     job_id: str,
     updates: list,
@@ -5944,12 +6306,14 @@ def _apply_upload_updates(
             if not entry:
                 continue
             entry["status"] = update.get("status", entry.get("status"))
+            if "saved_size" in update:
+                entry["saved_size"] = _nonnegative_int(update.get("saved_size"))
             if update.get("errors"):
                 entry.setdefault("errors", []).extend(update["errors"])
         if upload_errors:
             job_dict.setdefault("errors", []).extend(upload_errors)
         uploaded_bytes = sum(
-            entry.get("size", 0)
+            _uploaded_entry_actual_size(job_id, entry)
             for entry in job_dict.get("files", [])
             if entry.get("status") == "uploaded"
         )

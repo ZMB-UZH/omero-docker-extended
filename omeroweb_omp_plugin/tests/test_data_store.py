@@ -305,6 +305,44 @@ def test_crud_helpers_cover_variable_sets_credentials_and_user_cleanup(monkeypat
     }
 
 
+def test_ai_credential_encryption_helpers_round_trip(monkeypatch):
+    """Check AI credentials encrypt and legacy plaintext can still be read.
+
+    Inputs: pytest `monkeypatch`. Output: asserts encrypted round trip behavior.
+    """
+    monkeypatch.setattr(
+        data_store,
+        "get_env",
+        lambda name, env_file=None: None,
+    )
+
+    encrypted = data_store._encrypt_ai_credential("api-key")
+
+    assert encrypted.startswith(data_store.AI_CREDENTIAL_ENCRYPTION_PREFIX)
+    assert "api-key" not in encrypted
+    assert data_store._decrypt_ai_credential(encrypted) == "api-key"
+    assert data_store._decrypt_ai_credential("legacy-key") == "legacy-key"
+
+
+def test_save_ai_credentials_encrypts_database_value(monkeypatch):
+    """Check saved AI credentials are not persisted as plaintext.
+
+    Inputs: pytest `monkeypatch`. Output: asserts database value is encrypted.
+    """
+    monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
+    monkeypatch.setattr(data_store, "_ensure_ai_schema", lambda conn: None)
+    cursor = _FakeCursor()
+    _patch_connection_queue(monkeypatch, [_FakeConnection([cursor])])
+
+    data_store.save_ai_credentials("alice", "openai", "api-key")
+
+    stored_value = cursor.executed[0][1][2]
+    assert stored_value.startswith(data_store.AI_CREDENTIAL_ENCRYPTION_PREFIX)
+    assert stored_value != "api-key"
+    assert "api-key" not in stored_value
+    assert data_store._decrypt_ai_credential(stored_value) == "api-key"
+
+
 def test_delete_validation_and_table_listing_reject_unconfirmed_removals(monkeypatch):
     """Confirm delete validation and table listing reject unconfirmed removals is rejected at the boundary.
 

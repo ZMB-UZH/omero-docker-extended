@@ -346,42 +346,97 @@ quota_projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-${admin_tools_dir}/quota/pro
 quota_marker_path="${ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH:-${admin_tools_dir}/quota-enforcer-installed}"
 quota_runtime_user="${runtime_user}"
 quota_runtime_group="${runtime_group}"
+quota_runtime_gid="$(id -g "${quota_runtime_user}" 2>/dev/null || printf '%s' "${quota_runtime_group}")"
 
-# Normalize quota path. Inputs: shell arguments and environment. Output: command status and side effects.
-normalize_quota_path() {
+# Return whether a path is unsafe for quota metadata. Inputs: path. Output: status.
+quota_path_is_symlink() {
+    local target_path="$1"
+    [[ -L "${target_path}" ]]
+}
+
+# Repair the quota metadata root. Inputs: none. Output: command status and side effects.
+prepare_quota_metadata_root() {
+    mkdir -p "${admin_tools_dir}/quota" 2>/dev/null || {
+        echo "[web-bootstrap] WARNING: Could not create quota metadata directories under ${admin_tools_dir}" >&2
+        return 0
+    }
+
+    if quota_path_is_symlink "${admin_tools_dir}" || quota_path_is_symlink "${admin_tools_dir}/quota"; then
+        echo "[web-bootstrap] WARNING: Refusing to repair symlinked quota metadata path under ${admin_tools_dir}" >&2
+        return 0
+    fi
+
+    chown "root:${quota_runtime_gid}" "${admin_tools_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not chown ${admin_tools_dir} to root:${quota_runtime_gid}" >&2
+    chmod 1770 "${admin_tools_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not set secure mode 1770 on ${admin_tools_dir}" >&2
+
+    chown root:root "${admin_tools_dir}/quota" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not chown ${admin_tools_dir}/quota to root:root" >&2
+    chmod 0700 "${admin_tools_dir}/quota" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not set secure mode 0700 on ${admin_tools_dir}/quota" >&2
+}
+
+# Normalize quota state path. Inputs: shell arguments and environment. Output: command status and side effects.
+normalize_quota_state_path() {
     local target_path="$1"
     local target_dir
     target_dir="$(dirname "${target_path}")"
 
-    mkdir -p "${target_dir}" 2>/dev/null || \
-        echo "[web-bootstrap] WARNING: Could not create quota metadata directory ${target_dir}" >&2
-
-    if [[ -d "${target_dir}" && ! -w "${target_dir}" ]]; then
-        echo "[web-bootstrap] WARNING: ${target_dir} is not writable; attempting chmod 0777"
-        chmod 0777 "${target_dir}" 2>/dev/null || \
-            echo "[web-bootstrap] WARNING: Could not fix permissions on ${target_dir}. Quota state persistence may fail." >&2
-    fi
-
-    if [[ ! -e "${target_path}" ]]; then
+    if quota_path_is_symlink "${target_dir}" || quota_path_is_symlink "${target_path}"; then
+        echo "[web-bootstrap] WARNING: Refusing to repair symlinked quota state path ${target_path}" >&2
         return 0
     fi
 
-    if id "${quota_runtime_user}" >/dev/null 2>&1; then
-        chown "${quota_runtime_user}:${quota_runtime_group}" "${target_path}" 2>/dev/null || \
-            echo "[web-bootstrap] WARNING: Could not chown quota metadata file ${target_path} to ${quota_runtime_user}:${quota_runtime_group}" >&2
+    mkdir -p "${target_dir}" 2>/dev/null || {
+        echo "[web-bootstrap] WARNING: Could not create quota state directory ${target_dir}" >&2
+        return 0
+    }
+
+    chown "root:${quota_runtime_gid}" "${target_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not chown quota state directory ${target_dir} to root:${quota_runtime_gid}" >&2
+    chmod 1770 "${target_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not set secure mode 1770 on quota state directory ${target_dir}" >&2
+
+    if [[ ! -e "${target_path}" ]]; then
+        install -m 0600 -o "${quota_runtime_user}" -g "${quota_runtime_group}" /dev/null "${target_path}" 2>/dev/null || \
+            touch "${target_path}" 2>/dev/null || true
     fi
 
-    if [[ ! -r "${target_path}" || ! -w "${target_path}" ]]; then
-        chmod 0664 "${target_path}" 2>/dev/null || \
-            chmod 0666 "${target_path}" 2>/dev/null || \
-            echo "[web-bootstrap] WARNING: Could not fix permissions on quota metadata file ${target_path}" >&2
+    if [[ -e "${target_path}" ]]; then
+        chown "${quota_runtime_user}:${quota_runtime_group}" "${target_path}" 2>/dev/null || \
+            echo "[web-bootstrap] WARNING: Could not chown quota state file ${target_path} to ${quota_runtime_user}:${quota_runtime_group}" >&2
+        chmod 0600 "${target_path}" 2>/dev/null || \
+            echo "[web-bootstrap] WARNING: Could not set secure mode 0600 on quota state file ${target_path}" >&2
     fi
 }
 
-normalize_quota_path "${quota_state_path}"
-normalize_quota_path "${quota_projects_file}"
-normalize_quota_path "${quota_projid_file}"
-normalize_quota_path "${quota_marker_path}"
+# Normalize host-owned quota metadata path. Inputs: shell arguments and environment. Output: command status and side effects.
+normalize_host_quota_metadata_path() {
+    local target_path="$1"
+    if [[ ! -e "${target_path}" ]]; then
+        return 0
+    fi
+    if quota_path_is_symlink "${target_path}"; then
+        echo "[web-bootstrap] WARNING: Refusing to repair symlinked host quota metadata file ${target_path}" >&2
+        return 0
+    fi
+    chown root:root "${target_path}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not chown host quota metadata file ${target_path} to root:root" >&2
+    chmod 0600 "${target_path}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not set secure mode 0600 on host quota metadata file ${target_path}" >&2
+}
+
+prepare_quota_metadata_root
+normalize_quota_state_path "${quota_state_path}"
+normalize_host_quota_metadata_path "${quota_projects_file}"
+normalize_host_quota_metadata_path "${quota_projid_file}"
+if [[ -e "${quota_marker_path}" && ! -L "${quota_marker_path}" ]]; then
+    chown "root:${quota_runtime_gid}" "${quota_marker_path}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not chown quota marker ${quota_marker_path} to root:${quota_runtime_gid}" >&2
+    chmod 0640 "${quota_marker_path}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not set secure mode 0640 on quota marker ${quota_marker_path}" >&2
+fi
 
 configure_docker_socket_access
 

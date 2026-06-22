@@ -8448,15 +8448,20 @@ class OMEROWebClient:
             "base_url": base,
         }
 
-        encoded_query = urllib.parse.urlencode(query_params)
-        export_url = f"{base}/omero_imaris_connector/imaris-export/?{encoded_query}"
+        encoded_query = urllib.parse.urlencode(query_params).encode("utf-8")
+        export_url = f"{base}/omero_imaris_connector/imaris-export/"
         _xt_debug(
             "OMERO converter: requesting custom IMS export endpoint="
             f"{_safe_url_for_log(export_url)}"
         )
 
         # Create request with explicit cookies
-        req = self._create_request_with_cookies(export_url)
+        req = self._create_request_with_cookies(
+            export_url,
+            data=encoded_query,
+            method="POST",
+        )
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
         status_url = None
         local_path = None
 
@@ -8729,10 +8734,8 @@ class OMEROWebClient:
             "async": 1,
             "base_url": base,
         }
-        export_url = (
-            f"{base}/omero_imaris_connector/imaris-export/?"
-            f"{urllib.parse.urlencode(query_params)}"
-        )
+        encoded_query = urllib.parse.urlencode(query_params).encode("utf-8")
+        export_url = f"{base}/omero_imaris_connector/imaris-export/"
         _xt_debug(
             "Imaris converter: requesting async selected Image OME-TIFF export "
             f"endpoint={_safe_url_for_log(export_url)}"
@@ -8740,7 +8743,12 @@ class OMEROWebClient:
         status_url = None
         local_path = None
         try:
-            req = self._create_request_with_cookies(export_url)
+            req = self._create_request_with_cookies(
+                export_url,
+                data=encoded_query,
+                method="POST",
+            )
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
             with self._open_request_response(
                 req,
                 timeout=30,

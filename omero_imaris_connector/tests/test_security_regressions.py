@@ -88,12 +88,19 @@ class _DummyQueryDict(dict):
 class _DummyRequest:
     """Test double for dummy request."""
 
-    def __init__(self, query: dict[str, str], path: str = "/imaris/export/"):
+    def __init__(
+        self,
+        query: dict[str, str],
+        path: str = "/imaris/export/",
+        method: str = "GET",
+    ):
         """Create `_DummyRequest` with `query` and `path`.
 
-        Inputs: `query`, `path`. Output: None.
+        Inputs: `query`, `path`, `method`. Output: None.
         """
         self.GET = _DummyQueryDict(query)
+        self.POST = _DummyQueryDict(query if method == "POST" else {})
+        self.method = method
         self.path = path
         self.META = {}
         self.session = types.SimpleNamespace(session_key=None)
@@ -296,7 +303,8 @@ def test_imaris_export_ignores_request_backend_override_params(
             "omero_host": "169.254.169.254",
             "omero_port": "4444",
             "omero_secure": "0",
-        }
+        },
+        method="POST",
     )
     conn = object()
     captured = {}
@@ -338,6 +346,7 @@ def test_imaris_export_status_hides_backend_failure_details(
     """
     _tasks, views = _import_modules(monkeypatch)
     request = _DummyRequest({"job": "celery-123"})
+    conn = types.SimpleNamespace(getSessionId=lambda: "session-key")
 
     monkeypatch.setattr(
         views,
@@ -346,11 +355,14 @@ def test_imaris_export_status_hides_backend_failure_details(
             "FAILED",
             None,
             "super-secret backend error",
-            {"status": "FAILED"},
+            {
+                "status": "FAILED",
+                "owner_token": views._hash_job_owner_token("session-key"),
+            },
         ),
     )
 
-    response = views.imaris_export(request, conn=None)
+    response = views.imaris_export(request, conn=conn)
 
     assert response.status_code == 200
     payload = json.loads(response.content.decode("utf-8"))

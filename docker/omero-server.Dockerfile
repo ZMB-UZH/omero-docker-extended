@@ -56,6 +56,8 @@ RUN set -euo pipefail; \
 # Update to OMEZarrReader 0.6.0 (Jan 2025) + JZarr 0.4.2 (Oct 2023).
 ARG OMEZARR_READER_VERSION=0.6.0
 ARG JZARR_VERSION=0.4.2
+ARG OMEZARR_READER_SHA256=26e5b2e99a64abd1ba83ee52eeb5fcbd560190fed1097afb404c38bf24579e55
+ARG JZARR_SHA256=43f265b26dc8de384802853a2df34e18f0d836eae8bf4538f6c61c479b366cd8
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
@@ -66,8 +68,10 @@ RUN set -euo pipefail; \
     JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
     echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION} from ${OMEZARR_URL}"; \
     curl -fsSL -o /tmp/OMEZarrReader.jar "${OMEZARR_URL}"; \
+    printf '%s  %s\n' "${OMEZARR_READER_SHA256}" /tmp/OMEZarrReader.jar | sha256sum -c -; \
     echo "Downloading JZarr ${JZARR_VERSION} from ${JZARR_URL}"; \
     curl -fsSL -o /tmp/jzarr.jar "${JZARR_URL}"; \
+    printf '%s  %s\n' "${JZARR_SHA256}" /tmp/jzarr.jar | sha256sum -c -; \
     for subdir in lib/client lib/server; do \
         target="${SERVER_DIR}/${subdir}"; \
         if [[ -d "${target}" ]]; then \
@@ -85,6 +89,13 @@ RUN set -euo pipefail; \
 # Required by omero-cli-zarr imported images.  Without this server-side
 # plugin, zarr-imported images have no accessible pixel data.
 ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.6.1
+ARG OMERO_ZARR_PIXEL_BUFFER_SHA256=9cb3d1ed491ef866bc1703415b809097693fda13eb4818dc0eb6959f8fe94f97
+ARG CAFFEINE_3_1_8_SHA256=7dd15f9df1be238ffaa367ce6f556737a88031de4294dad18eef57c474ddf1d3
+ARG AWS_JAVA_SDK_S3_1_12_659_SHA256=44ed3a329a14c486a3f1c3b46eb47d26db4d93426a630790d2eefe542983dfa9
+ARG AWS_JAVA_SDK_CORE_1_12_659_SHA256=f7713aa96c49f3e9f8c2a67b2d9b2d431d746fbfa9a73083be67f914043d23eb
+ARG AWS_JAVA_SDK_KMS_1_12_659_SHA256=828c441cb154326f9dec238c498eeb346ea2a19f60e36f5910cccc7570b9bd10
+ARG S3FS_2_2_3_SHA256=a22e94403de3dcf6e08fe233718d9364b578cf91555eb0dd6edc628443f44602
+ARG TIKA_CORE_1_28_5_SHA256=e64b3dc06c60b98ecbdfb9dbc3857f4ab54f9548eedd449ee0de39c0df5e3170
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
@@ -94,19 +105,26 @@ RUN set -euo pipefail; \
     PIXEL_BUFFER_URL="https://artifacts.glencoesoftware.com/artifactory/gs-omero-snapshots-local/com/glencoesoftware/omero/omero-zarr-pixel-buffer/${OMERO_ZARR_PIXEL_BUFFER_VERSION}/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar"; \
     echo "Downloading omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION}"; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${PIXEL_BUFFER_URL}"; \
+    printf '%s  %s\n' "${OMERO_ZARR_PIXEL_BUFFER_SHA256}" "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" | sha256sum -c -; \
     echo "Downloading omero-zarr-pixel-buffer runtime dependencies"; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" \
         "https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar"; \
+    printf '%s  %s\n' "${CAFFEINE_3_1_8_SHA256}" "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" \
         "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.659/aws-java-sdk-s3-1.12.659.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_S3_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.659.jar" \
         "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.12.659/aws-java-sdk-core-1.12.659.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_CORE_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.659.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.659.jar" \
         "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-kms/1.12.659/aws-java-sdk-kms-1.12.659.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_KMS_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.659.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" \
         "https://repo1.maven.org/maven2/org/lasersonlab/s3fs/2.2.3/s3fs-2.2.3.jar"; \
+    printf '%s  %s\n' "${S3FS_2_2_3_SHA256}" "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-1.28.5.jar" \
         "https://repo1.maven.org/maven2/org/apache/tika/tika-core/1.28.5/tika-core-1.28.5.jar"; \
+    printf '%s  %s\n' "${TIKA_CORE_1_28_5_SHA256}" "${SERVER_DIR}/lib/server/tika-core-1.28.5.jar" | sha256sum -c -; \
     chown omero-server:omero-server "${SERVER_DIR}"/lib/server/omero-zarr-pixel-buffer-*.jar \
         "${SERVER_DIR}"/lib/server/caffeine-*.jar \
         "${SERVER_DIR}"/lib/server/aws-java-sdk-*.jar \
@@ -339,6 +357,7 @@ RUN set -euo pipefail; \
 # --------------------------------------------------
 ARG OME_OMERO_SCRIPTS_REPO="https://github.com/ome/omero-scripts.git"
 ARG OME_OMERO_SCRIPTS_REF="develop" # Recommended branch: "develop"; change to "master" for old/stable scripts
+ARG OME_OMERO_SCRIPTS_COMMIT="5b4d76862a7141257c9ff221ff7f009f7ec416c0"
 RUN set -euo pipefail; \
     echo "Installing official OMERO scripts from ${OME_OMERO_SCRIPTS_REPO} @ ${OME_OMERO_SCRIPTS_REF}"; \
     \
@@ -346,6 +365,11 @@ RUN set -euo pipefail; \
     git clone --depth 1 --branch "${OME_OMERO_SCRIPTS_REF}" \
         "${OME_OMERO_SCRIPTS_REPO}" \
         /tmp/ome-omero-scripts; \
+    actual_commit="$(git -C /tmp/ome-omero-scripts rev-parse HEAD)"; \
+    if [[ "${actual_commit}" != "${OME_OMERO_SCRIPTS_COMMIT}" ]]; then \
+        echo "ERROR: omero-scripts commit mismatch: expected=${OME_OMERO_SCRIPTS_COMMIT} actual=${actual_commit}" >&2; \
+        exit 1; \
+    fi; \
     \
     if [[ ! -d /tmp/ome-omero-scripts/omero ]]; then \
         echo "ERROR: Expected path 'omero/' not found in omero-scripts repo" >&2; \
@@ -401,10 +425,16 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
 ARG BIOP_OMERO_SCRIPTS_REF="main"
+ARG BIOP_OMERO_SCRIPTS_COMMIT="96c32450c3516a7c0d23731b71e1e10df2c48e72"
 RUN set -euo pipefail; \
     echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_REF}"; \
     rm -rf /tmp/biop-omero-scripts; \
     git clone --depth 1 --branch "${BIOP_OMERO_SCRIPTS_REF}" "${BIOP_OMERO_SCRIPTS_REPO}" /tmp/biop-omero-scripts; \
+    actual_commit="$(git -C /tmp/biop-omero-scripts rev-parse HEAD)"; \
+    if [[ "${actual_commit}" != "${BIOP_OMERO_SCRIPTS_COMMIT}" ]]; then \
+        echo "ERROR: BIOP OMERO-scripts commit mismatch: expected=${BIOP_OMERO_SCRIPTS_COMMIT} actual=${actual_commit}" >&2; \
+        exit 1; \
+    fi; \
     \
     SCRIPT_SRC="$(find /tmp/biop-omero-scripts -type f -name 'Export_CellProfiler_IDs.py' -print -quit)"; \
     if [[ -z "${SCRIPT_SRC}" ]]; then \

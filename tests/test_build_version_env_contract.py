@@ -228,14 +228,14 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 with self.subTest(workflow=workflow_path.name, image_ref=image_ref):
                     self.assert_explicit_nonfloating_image_ref(image_ref)
 
-    def test_alpine_323_base_images_use_current_verified_digest(self) -> None:
-        """Verify alpine 323 base images use current verified digest.
+    def test_alpine_324_base_images_use_current_verified_digest(self) -> None:
+        """Verify alpine 324 base images use current verified digest.
 
         Inputs: repository fixtures. Output: fails on regressions in alpine 323 base images use current verified digest.
         """
         expected_from = (
-            "FROM alpine:3.23@"
-            "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11"
+            "FROM alpine:3.24.1@"
+            "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
         )
         for relative_path in (
             "docker/firewall-bouncer.Dockerfile",
@@ -246,9 +246,25 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 dockerfile_text = self.read_text(relative_path)
                 self.assertIn(expected_from, dockerfile_text)
                 self.assertNotIn(
-                    "sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659",
+                    "sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11",
                     dockerfile_text,
                 )
+
+    def test_ubuntu_2604_base_images_use_current_verified_digest(self) -> None:
+        """Verify Ubuntu 26.04 base images use current verified digest.
+
+        Inputs: repository fixtures. Output: fails on regressions in Ubuntu base image pins.
+        """
+        dockerfile_text = self.read_text("docker/omero-celery-worker.Dockerfile")
+        self.assertIn(
+            "FROM ubuntu:26.04@"
+            "sha256:53958ec7b67c2c9355df922dd08dbf0360611f8c3cdb656875e81873db9ffdba",
+            dockerfile_text,
+        )
+        self.assertNotIn(
+            "sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64",
+            dockerfile_text,
+        )
 
     def test_omero_base_images_use_current_verified_digests(self) -> None:
         """Verify OMERO base images use current verified digests.
@@ -261,8 +277,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 "sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f"
             ),
             "docker/omero-web.Dockerfile": (
-                "FROM openmicroscopy/omero-web-standalone:5.31.1@"
-                "sha256:eee6e0472dead6572f4da789202d2d4b7f55571904483d35930328a5f74ccb00"
+                "FROM openmicroscopy/omero-web-standalone:5.32.0@"
+                "sha256:21eda1b301b6e68fab4382df31a4b797218de3aaff3bba08c05b498c20eec8b7"
             ),
         }
         for relative_path, expected_from in expected_from_by_path.items():

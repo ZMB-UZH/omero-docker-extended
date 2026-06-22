@@ -123,15 +123,29 @@ def _text_response(message, status):
     return response
 
 
+def _request_param(request, name, default=None):
+    """Return a request parameter, preferring POST body values for POST requests.
+
+    Inputs: Django `request`, parameter `name`, and optional `default`. Output: value.
+    """
+    if getattr(request, "method", "GET") == "POST":
+        post_data = getattr(request, "POST", None)
+        if post_data is not None:
+            value = post_data.get(name)
+            if value not in (None, ""):
+                return value
+    return request.GET.get(name, default)
+
+
 def _export_format_from_request(request):
     """Return the requested export format.
 
     Inputs: Django request. Output: normalized export format string.
     """
     raw_format = (
-        request.GET.get("format")
-        or request.GET.get("export_format")
-        or request.GET.get("kind")
+        _request_param(request, "format")
+        or _request_param(request, "export_format")
+        or _request_param(request, "kind")
         or ""
     )
     normalized = str(raw_format).strip().lower().replace("-", "_")
@@ -256,7 +270,7 @@ def _export_job_belongs_to_current_session(job_id, conn, meta=None):
         meta
     )
     if not current_token or not registered_token:
-        return True
+        return False
     return hmac.compare_digest(current_token, registered_token)
 
 
@@ -829,14 +843,14 @@ def imaris_export(request, conn=None, **kwargs):
     )
 
     base_url_override = None
-    if "base_url" in request.GET:
+    if _request_param(request, "base_url") is not None:
         try:
-            base_url_override = _parse_base_url(request.GET.get("base_url"))
+            base_url_override = _parse_base_url(_request_param(request, "base_url"))
         except ValueError:
             return HttpResponseBadRequest(INVALID_BASE_URL_MESSAGE)
-    if "omero_port" in request.GET:
+    if _request_param(request, "omero_port") is not None:
         try:
-            _parse_port_param(request.GET.get("omero_port"))
+            _parse_port_param(_request_param(request, "omero_port"))
         except ValueError:
             return HttpResponseBadRequest(INVALID_OMERO_PORT_MESSAGE)
 
@@ -930,7 +944,10 @@ def imaris_export(request, conn=None, **kwargs):
             payload["error"] = _job_error_message(meta)
         return JsonResponse(payload)
 
-    image_id = request.GET.get("image") or request.GET.get("image_id")
+    if request.method != "POST":
+        return HttpResponse("IMS export launch requires POST.", status=405)
+
+    image_id = _request_param(request, "image") or _request_param(request, "image_id")
     if not image_id:
         return HttpResponseBadRequest("Missing image id")
     try:
@@ -938,9 +955,9 @@ def imaris_export(request, conn=None, **kwargs):
     except (TypeError, ValueError):
         return HttpResponseBadRequest("Invalid image id")
 
-    async_mode = _bool_from_request(request.GET.get("async"))
+    async_mode = _bool_from_request(_request_param(request, "async"))
     export_format = _export_format_from_request(request)
-    wait_param = request.GET.get("wait")
+    wait_param = _request_param(request, "wait")
     safe_wait_param = sanitize_log_value(wait_param)
     if wait_param is not None:
         async_mode = not _bool_from_request(wait_param)
@@ -1111,7 +1128,11 @@ def _poll_celery_job(job_id):
         logger.debug(
             "Celery job %s success payload=%s", sanitize_log_value(task_id), payload
         )
-        result_meta = payload if payload.get("public_error") else meta
+        result_meta = dict(meta or {})
+        if payload.get("owner_token") and not result_meta.get("owner_token"):
+            result_meta["owner_token"] = payload.get("owner_token")
+        if payload.get("public_error"):
+            result_meta.update(payload)
         return (
             payload.get("state", "FINISHED"),
             payload.get("outputs"),

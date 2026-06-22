@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import warnings
 from functools import lru_cache
 from pathlib import Path
@@ -13,6 +14,7 @@ import zarr
 LOGGER = logging.getLogger(__name__)
 _MISSING = object()
 _STORE_BACKED_NODE_CACHE_SIZE = 64
+ZARR_ALLOWED_STORE_ROOTS_ENV = "OMERO_WEB_ZARR_ALLOWED_STORE_ROOTS"
 DEFAULT_CHANNEL_COLORS = (
     (255, 255, 255),
     (255, 0, 0),
@@ -255,11 +257,14 @@ def resolve_local_zarr_store(location):
     if not location:
         return None
 
-    parsed = urlparse(location)
-    if parsed.scheme not in ("", "file"):
-        return None
-
-    candidate_text = unquote(parsed.path if parsed.scheme == "file" else location)
+    location_text = str(location)
+    if Path(location_text).is_absolute():
+        candidate_text = location_text
+    else:
+        parsed = urlparse(location_text)
+        if parsed.scheme not in ("", "file"):
+            return None
+        candidate_text = unquote(parsed.path if parsed.scheme == "file" else location_text)
     if not candidate_text:
         return None
 
@@ -278,7 +283,67 @@ def resolve_local_zarr_store(location):
     if not is_local_zarr_store(resolved):
         return None
 
+    if not _is_allowed_local_zarr_store(resolved):
+        LOGGER.warning("Rejecting Zarr store outside configured roots: %s", resolved)
+        return None
+
     return resolved
+
+
+def _configured_allowed_zarr_roots():
+    """Return configured local roots that may back OMERO.web Zarr responses.
+
+    Inputs: environment. Output: resolved existing directory list.
+    """
+    configured = os.environ.get(ZARR_ALLOWED_STORE_ROOTS_ENV)
+    if configured:
+        candidates = [part.strip() for part in configured.split(os.pathsep)]
+    else:
+        candidates = []
+        managed_dir = os.environ.get("CONFIG_omero_managed_dir")
+        if managed_dir:
+            candidates.append(managed_dir)
+        else:
+            data_dir = os.environ.get("OMERO_DATA_DIR")
+            if data_dir:
+                candidates.append(str(Path(data_dir) / "ManagedRepository"))
+            tmp_root = os.environ.get("OMERO_TMP_PATH")
+            if not candidates and tmp_root:
+                candidates.append(tmp_root)
+
+    roots = []
+    for candidate_text in candidates:
+        if not candidate_text:
+            continue
+        try:
+            candidate = Path(candidate_text).resolve(strict=True)
+        except OSError:
+            LOGGER.debug(
+                "Skipping unavailable Zarr allowed root %s",
+                candidate_text,
+                exc_info=True,
+            )
+            continue
+        if candidate.is_dir():
+            roots.append(candidate)
+    return roots
+
+
+def _is_allowed_local_zarr_store(path):
+    """Return whether `path` is below a configured allowed local store root.
+
+    Inputs: `path`. Output: bool.
+    """
+    roots = _configured_allowed_zarr_roots()
+    if not roots:
+        return False
+    for root in roots:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 def resolve_local_zarr_file(store_root, *parts):

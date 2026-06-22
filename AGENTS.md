@@ -43,6 +43,7 @@ verification, or required workflow checks.
 ## Single-session rule
 
 - AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Use minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
 ## Default-branch development rule
 
@@ -164,9 +165,7 @@ ruff check .
 ruff format --check .
 ```
 
-If the active host exposes Ruff only as a Python module, replace those two
-Ruff commands with `python3 -m ruff check .` and
-`python3 -m ruff format --check .`.
+If the active host exposes Ruff only as a Python module, replace those two Ruff commands with `python3 -m ruff check .` and `python3 -m ruff format --check .`.
 
 Use the routing doc and `verification-loop` skill to choose the minimal subset during normal iteration, but report the exact verification level achieved.
 

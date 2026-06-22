@@ -6,6 +6,7 @@ one OMERO Table containing the spectrum X,Y data.
 """
 
 import math
+import os
 import random
 
 import logging
@@ -30,6 +31,96 @@ with warnings.catch_warnings():
     from matplotlib.figure import Figure
 
 logger = logging.getLogger(__name__)
+
+SEM_EDX_MAX_FILE_BYTES_ENV = "OMERO_WEB_UPLOAD_SEM_EDX_MAX_FILE_BYTES"
+SEM_EDX_MAX_LINES_ENV = "OMERO_WEB_UPLOAD_SEM_EDX_MAX_LINES"
+SEM_EDX_MAX_SPECTRUM_POINTS_ENV = "OMERO_WEB_UPLOAD_SEM_EDX_MAX_SPECTRUM_POINTS"
+SEM_EDX_MAX_ELEMENTS_ENV = "OMERO_WEB_UPLOAD_SEM_EDX_MAX_ELEMENTS"
+SEM_EDX_MAX_PLOT_LABELS_ENV = "OMERO_WEB_UPLOAD_SEM_EDX_MAX_PLOT_LABELS"
+
+DEFAULT_SEM_EDX_MAX_FILE_BYTES = 10 * 1024 * 1024
+DEFAULT_SEM_EDX_MAX_LINES = 200000
+DEFAULT_SEM_EDX_MAX_SPECTRUM_POINTS = 20000
+DEFAULT_SEM_EDX_MAX_ELEMENTS = 512
+DEFAULT_SEM_EDX_MAX_PLOT_LABELS = 64
+
+
+def _env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    """Return an integer environment limit within bounds.
+
+    Inputs: `env_key`, `default`, `min_value`, `max_value`. Output: `int`.
+    """
+    raw = os.environ.get(env_key)
+    try:
+        value = int(str(raw).strip()) if raw is not None and str(raw).strip() else default
+    except (TypeError, ValueError):
+        value = default
+    return max(min_value, min(max_value, value))
+
+
+def _sem_edx_max_file_bytes() -> int:
+    """Return max SEM-EDX input file bytes.
+
+    Inputs: none. Output: `int`.
+    """
+    return _env_int(
+        SEM_EDX_MAX_FILE_BYTES_ENV,
+        DEFAULT_SEM_EDX_MAX_FILE_BYTES,
+        1,
+        1024 * 1024 * 1024,
+    )
+
+
+def _sem_edx_max_lines() -> int:
+    """Return max SEM-EDX input lines.
+
+    Inputs: none. Output: `int`.
+    """
+    return _env_int(
+        SEM_EDX_MAX_LINES_ENV,
+        DEFAULT_SEM_EDX_MAX_LINES,
+        1,
+        10_000_000,
+    )
+
+
+def _sem_edx_max_spectrum_points() -> int:
+    """Return max SEM-EDX spectrum points.
+
+    Inputs: none. Output: `int`.
+    """
+    return _env_int(
+        SEM_EDX_MAX_SPECTRUM_POINTS_ENV,
+        DEFAULT_SEM_EDX_MAX_SPECTRUM_POINTS,
+        1,
+        10_000_000,
+    )
+
+
+def _sem_edx_max_elements() -> int:
+    """Return max SEM-EDX element labels.
+
+    Inputs: none. Output: `int`.
+    """
+    return _env_int(
+        SEM_EDX_MAX_ELEMENTS_ENV,
+        DEFAULT_SEM_EDX_MAX_ELEMENTS,
+        0,
+        100000,
+    )
+
+
+def _sem_edx_max_plot_labels() -> int:
+    """Return max SEM-EDX labels passed into plot placement.
+
+    Inputs: none. Output: `int`.
+    """
+    return _env_int(
+        SEM_EDX_MAX_PLOT_LABELS_ENV,
+        DEFAULT_SEM_EDX_MAX_PLOT_LABELS,
+        0,
+        10000,
+    )
 
 
 class _PyplotCompat:
@@ -65,101 +156,131 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
 
     Inputs: `txt_path` (Path). Output: `Dict[str, Any]`.
     """
+    empty_result = {"title": "", "metadata": {}, "elements": [], "spectrum": []}
     try:
-        content = txt_path.read_text(encoding="utf-8", errors="ignore")
+        file_size = txt_path.stat().st_size
     except Exception as exc:
         logger.error("Failed to read EMSA file %s: %s", txt_path, exc)
-        return {"title": "", "metadata": {}, "elements": [], "spectrum": []}
+        return empty_result
 
-    lines = content.split("\n")
+    max_file_bytes = _sem_edx_max_file_bytes()
+    if file_size > max_file_bytes:
+        logger.warning(
+            "Rejected SEM EDX file %s: %d bytes exceeds configured limit %d",
+            txt_path,
+            file_size,
+            max_file_bytes,
+        )
+        return empty_result
+
     title = ""
     metadata = {}
     elements = []
     spectrum = []
     in_spectrum = False
+    max_lines = _sem_edx_max_lines()
+    max_spectrum_points = _sem_edx_max_spectrum_points()
+    max_elements = _sem_edx_max_elements()
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
+    try:
+        with txt_path.open(encoding="utf-8", errors="ignore") as handle:
+            for line_number, raw_line in enumerate(handle, 1):
+                if line_number > max_lines:
+                    logger.warning(
+                        "Stopped parsing SEM EDX file %s at configured line limit %d",
+                        txt_path,
+                        max_lines,
+                    )
+                    break
 
-        normalized = line.lstrip("#").strip()
-        normalized_upper = normalized.upper()
+                line = raw_line.strip()
+                if not line:
+                    continue
 
-        # Check if we've entered the spectrum data section
-        if normalized_upper.startswith("SPECTRUM"):
-            in_spectrum = True
-            # Also capture this as metadata
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                key = parts[0].replace("#", "").strip()
-                value = parts[1].strip()
-                metadata[key] = value
-            continue
+                normalized = line.lstrip("#").strip()
+                normalized_upper = normalized.upper()
 
-        # Check for end of data
-        if normalized_upper.startswith("ENDOFDATA"):
-            break
+                # Check if we've entered the spectrum data section
+                if normalized_upper.startswith("SPECTRUM"):
+                    in_spectrum = True
+                    # Also capture this as metadata
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        key = parts[0].replace("#", "").strip()
+                        value = parts[1].strip()
+                        metadata[key] = value
+                    continue
 
-        # If we're in the spectrum section, parse X,Y pairs
-        if in_spectrum:
-            if line.startswith("#"):
-                continue
-            # Parse X, Y pairs (format: "0.01000, 1057.0" or "0.01000 1057.0")
-            parts = [p for p in re.split(r"[,\s]+", line) if p]
-            if len(parts) >= 2:
-                for idx in range(0, len(parts) - 1, 2):
-                    try:
-                        x = float(parts[idx])
-                        y = float(parts[idx + 1])
-                        spectrum.append((x, y))
-                    except ValueError:
+                # Check for end of data
+                if normalized_upper.startswith("ENDOFDATA"):
+                    break
+
+                # If we're in the spectrum section, parse X,Y pairs
+                if in_spectrum:
+                    if line.startswith("#"):
                         continue
-            continue
+                    # Parse X, Y pairs ("0.01000, 1057.0" or "0.01000 1057.0")
+                    parts = [p for p in re.split(r"[,\s]+", line) if p]
+                    if len(parts) >= 2:
+                        for idx in range(0, len(parts) - 1, 2):
+                            if len(spectrum) >= max_spectrum_points:
+                                break
+                            try:
+                                x = float(parts[idx])
+                                y = float(parts[idx + 1])
+                                spectrum.append((x, y))
+                            except ValueError:
+                                continue
+                    continue
 
-        # Parse metadata lines (format: "#KEY : value")
-        if line.startswith("#") and ":" in line:
-            # Special handling for ##OXINSTLABEL
-            if line.startswith("##OXINSTLABEL"):
-                # Format: "##OXINSTLABEL: Z, energy, symbol"
-                # Example: "##OXINSTLABEL: 29, 8.048, Cu"
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    label_data = parts[1].strip()
-                    label_parts = [p.strip() for p in label_data.split(",")]
-                    if len(label_parts) >= 3:
-                        try:
-                            atomic_number = int(label_parts[0])
-                            energy = float(label_parts[1])
-                            symbol = label_parts[2]
-                            elements.append(
-                                {
-                                    "atomic_number": atomic_number,
-                                    "energy_kev": energy,
-                                    "symbol": symbol,
-                                }
-                            )
-                        except (ValueError, IndexError):
+                # Parse metadata lines (format: "#KEY : value")
+                if line.startswith("#") and ":" in line:
+                    # Special handling for ##OXINSTLABEL
+                    if line.startswith("##OXINSTLABEL"):
+                        # Format: "##OXINSTLABEL: Z, energy, symbol"
+                        # Example: "##OXINSTLABEL: 29, 8.048, Cu"
+                        if len(elements) >= max_elements:
                             continue
-            else:
-                # Regular metadata
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    key = parts[0].replace("#", "").strip()
-                    value = parts[1].strip()
+                        parts = line.split(":", 1)
+                        if len(parts) == 2:
+                            label_data = parts[1].strip()
+                            label_parts = [p.strip() for p in label_data.split(",")]
+                            if len(label_parts) >= 3:
+                                try:
+                                    atomic_number = int(label_parts[0])
+                                    energy = float(label_parts[1])
+                                    symbol = label_parts[2]
+                                    elements.append(
+                                        {
+                                            "atomic_number": atomic_number,
+                                            "energy_kev": energy,
+                                            "symbol": symbol,
+                                        }
+                                    )
+                                except (ValueError, IndexError):
+                                    continue
+                    else:
+                        # Regular metadata
+                        parts = line.split(":", 1)
+                        if len(parts) == 2:
+                            key = parts[0].replace("#", "").strip()
+                            value = parts[1].strip()
 
-                    # Store the title separately
-                    if key == "TITLE":
-                        title = value
+                            # Store the title separately
+                            if key == "TITLE":
+                                title = value
 
-                    # Handle duplicate keys by appending numbers
-                    original_key = key
-                    counter = 1
-                    while key in metadata:
-                        key = f"{original_key}_{counter}"
-                        counter += 1
+                            # Handle duplicate keys by appending numbers
+                            original_key = key
+                            counter = 1
+                            while key in metadata:
+                                key = f"{original_key}_{counter}"
+                                counter += 1
 
-                    metadata[key] = value
+                            metadata[key] = value
+    except Exception as exc:
+        logger.error("Failed to read EMSA file %s: %s", txt_path, exc)
+        return empty_result
 
     return {
         "title": title,
@@ -641,6 +762,9 @@ def genetic_label_placement(
     """
     if not labels_data:
         return []
+    labels_data = list(labels_data)[: _sem_edx_max_plot_labels()]
+    if not labels_data:
+        return []
 
     # IMPROVEMENT 3: Don't merge elements with same symbol but very different Y values
     from collections import defaultdict
@@ -757,7 +881,7 @@ def create_edx_spectrum_plot(
     Inputs: `txt_path`, `output_path`. Output: `Optional[Path]`.
     """
     parsed = parse_emsa_file(txt_path)
-    spectrum = parsed.get("spectrum") or []
+    spectrum = list(parsed.get("spectrum") or [])[: _sem_edx_max_spectrum_points()]
     if not spectrum:
         logger.warning("No spectrum data available to plot for %s", txt_path.name)
         return None
@@ -820,6 +944,8 @@ def create_edx_spectrum_plot(
         if energy < x_min or energy > x_max:
             continue
         element_labels.append((energy, symbol))
+        if len(element_labels) >= _sem_edx_max_plot_labels():
+            break
 
     # Prepare labels data with spectrum y positions
     labels_data = []
@@ -916,7 +1042,7 @@ def build_spectrum_columns(
         DoubleColumn("Counts", "", []),
     ]
 
-    for x, y in spectrum:
+    for x, y in list(spectrum)[: _sem_edx_max_spectrum_points()]:
         columns[0].values.append(image_id)
         columns[1].values.append(x)
         columns[2].values.append(y)

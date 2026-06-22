@@ -158,7 +158,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
             for aid in plugin_ann_ids:
                 try:
                     aid = _validated_delete_object_id(aid, "annotation id")
-                    link_ids = find_annotation_link_ids(conn, aid)
+                    link_ids = find_annotation_link_ids(conn, aid, image_id=iid)
                     for lid in link_ids:
                         lid = _validated_delete_object_id(lid, "annotation link id")
                         link_result = _run_omero_delete(
@@ -187,7 +187,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
                                 }
                             )
 
-                    remaining_links = find_annotation_link_ids(conn, aid)
+                    remaining_links = find_annotation_link_ids(conn, aid, image_id=iid)
                     if remaining_links:
                         deletion_errors.append(
                             {
