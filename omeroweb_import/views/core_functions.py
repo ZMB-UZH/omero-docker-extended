@@ -1393,7 +1393,14 @@ def _append_upload_chunks_to_staged_path_fallback(
     )
     if target_error:
         return None, None, target_error
-    assert target is not None
+    if target is None:
+        return (
+            None,
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
 
     initial_size = target.stat().st_size if target and target.exists() else 0
     max_size = _get_upload_staged_file_max_bytes()
@@ -1441,7 +1448,13 @@ def _replace_staged_upload_file_fallback(
     )
     if target_error:
         return None, target_error
-    assert target is not None
+    if target is None:
+        return (
+            None,
+            _managed_upload_internal_error(
+                errors.unexpected_server_error_uploading_files()
+            ),
+        )
 
     max_size = _get_upload_staged_file_max_bytes()
     bytes_written = 0

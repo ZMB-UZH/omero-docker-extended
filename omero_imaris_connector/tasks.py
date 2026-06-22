@@ -114,7 +114,7 @@ def _export_cancel_redis_client():
     if not redis_url.startswith(("redis://", "rediss://")):
         return None
     try:
-        from redis import Redis  # type: ignore[import-not-found]
+        from redis import Redis  # type: ignore[import-not-found,unused-ignore]
     except Exception:
         return None
     try:

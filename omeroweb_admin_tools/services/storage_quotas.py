@@ -24,6 +24,26 @@ else:
     _pwd = _pwd_module
 
 
+def getpwuid(uid: int) -> Any:
+    """Return the passwd entry for a uid when POSIX lookup is available.
+
+    Inputs: numeric `uid`. Output: passwd entry. Raises: KeyError when unavailable.
+    """
+    if _pwd is None:
+        raise KeyError(uid)
+    return _pwd.getpwuid(uid)
+
+
+def getgrgid(gid: int) -> Any:
+    """Return the group entry for a gid when POSIX lookup is available.
+
+    Inputs: numeric `gid`. Output: group entry. Raises: KeyError when unavailable.
+    """
+    if _grp is None:
+        raise KeyError(gid)
+    return _grp.getgrgid(gid)
+
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
@@ -173,10 +193,8 @@ def _safe_username(uid: int) -> str:
 
     Inputs: `uid`. Output: `str`.
     """
-    if _pwd is None:
-        return str(uid)
     try:
-        return _pwd.getpwuid(uid).pw_name
+        return getpwuid(uid).pw_name
     except KeyError:
         return str(uid)
 
@@ -186,10 +204,8 @@ def _safe_groupname(gid: int) -> str:
 
     Inputs: `gid`. Output: `str`.
     """
-    if _grp is None:
-        return str(gid)
     try:
-        return _grp.getgrgid(gid).gr_name
+        return getgrgid(gid).gr_name
     except KeyError:
         return str(gid)
 
