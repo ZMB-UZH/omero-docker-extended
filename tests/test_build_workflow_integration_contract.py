@@ -1855,7 +1855,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354",
+            "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f",
             upload_step["uses"],
         )
         self.assertEqual(
