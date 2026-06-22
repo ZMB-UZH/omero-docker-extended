@@ -396,7 +396,9 @@ def test_quota_full_installer_is_idempotent_and_purges_stale_artifacts(
     assert (data_dir / ".admin-tools" / "quota-enforcer-installed").is_file()
     assert (
         data_dir / ".admin-tools" / "group-quotas.json"
-    ).stat().st_mode & 0o777 == 0o666
+    ).stat().st_mode & 0o777 == 0o600
+    assert (data_dir / ".admin-tools").stat().st_mode & 0o777 == 0o750
+    assert (data_dir / ".admin-tools" / "quota").stat().st_mode & 0o777 == 0o700
     systemctl_text = systemctl_log.read_text(encoding="utf-8")
     assert systemctl_text.count("enable omero-quota-enforcer.timer") == 2
     assert systemctl_text.count("start omero-quota-enforcer.timer") == 2

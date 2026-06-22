@@ -163,6 +163,66 @@ ensure_regular_or_absent() {
     fi
 }
 
+# Reject world-writable quota control paths. Inputs: path and label. Output: command status.
+reject_world_writable_path() {
+    local path="$1"
+    local label="$2"
+    local mode
+
+    [[ -e "${path}" ]] || return 0
+    mode="$(stat -Lc '%a' -- "${path}")" || die "Unable to stat ${label}: ${path}"
+    if (( (8#${mode} & 0002) != 0 )); then
+        die "${label} must not be world-writable: ${path} (mode ${mode})"
+    fi
+}
+
+# Require a quota control path to stay inside OMERO_DATA_DIR. Inputs: path and label. Output: returns after validation or exits with an error.
+require_control_path_within_data_dir() {
+    local raw_path="$1"
+    local label="$2"
+    local resolved_path
+
+    resolved_path="$(readlink -m -- "${raw_path}")" || {
+        die "Unable to resolve ${label}: ${raw_path}"
+    }
+    if ! path_is_strict_child "${resolved_path}" "${OMERO_DATA_DIR}"; then
+        die "${label} must be inside OMERO_DATA_DIR: ${raw_path}"
+    fi
+}
+
+# Secure the directory that stores host-owned mapping files. Inputs: file path and label. Output: creates root-only metadata paths.
+secure_host_mapping_path() {
+    local file_path="$1"
+    local label="$2"
+    local mapping_dir
+
+    mapping_dir="$(dirname -- "${file_path}")"
+    if [[ -L "${mapping_dir}" ]]; then
+        die "${label} parent must not be a symlink: ${mapping_dir}"
+    fi
+    mkdir -p "${mapping_dir}"
+    reject_world_writable_path "${mapping_dir}" "${label} parent"
+    chown root:root "${mapping_dir}"
+    chmod 0700 "${mapping_dir}"
+
+    ensure_regular_or_absent "${file_path}"
+    if [[ -e "${file_path}" ]]; then
+        reject_world_writable_path "${file_path}" "${label}"
+        chown root:root "${file_path}"
+        chmod 0600 "${file_path}"
+    fi
+}
+
+# Validate the state file before root reads quota instructions from it. Inputs: environment paths. Output: returns after safety checks.
+validate_quota_state_file_security() {
+    local state_dir
+
+    state_dir="$(dirname -- "${QUOTA_STATE_FILE}")"
+    [[ ! -L "${state_dir}" ]] || die "QUOTA_STATE_FILE parent must not be a symlink: ${state_dir}"
+    reject_world_writable_path "${state_dir}" "QUOTA_STATE_FILE parent"
+    reject_world_writable_path "${QUOTA_STATE_FILE}" "QUOTA_STATE_FILE"
+}
+
 # Perform mount context. Inputs: shell arguments and environment. Output: command status and side effects.
 mount_context() {
     local target_path="$1"
@@ -602,7 +662,7 @@ process_group_quota() {
 main() {
     parse_args "$@"
     require_root
-    for cmd in chattr setquota python3 flock find awk readlink mktemp; do
+    for cmd in chattr setquota python3 flock find awk readlink mktemp stat chown chmod; do
         require_command "${cmd}"
     done
     is_unsigned_integer "${PROJECT_ID_MIN}" || die "PROJECT_ID_MIN must be an unsigned integer."
@@ -611,7 +671,15 @@ main() {
     if [[ ! -f "${QUOTA_STATE_FILE}" ]]; then
         exit 0
     fi
+    ensure_regular_or_absent "${QUOTA_STATE_FILE}"
+    [[ ! -L "$(dirname -- "${QUOTA_STATE_FILE}")" ]] || {
+        die "QUOTA_STATE_FILE parent must not be a symlink: $(dirname -- "${QUOTA_STATE_FILE}")"
+    }
+    require_control_path_within_data_dir "${QUOTA_STATE_FILE}" "QUOTA_STATE_FILE"
+    require_control_path_within_data_dir "${PROJECTS_FILE}" "PROJECTS_FILE"
+    require_control_path_within_data_dir "${PROJID_FILE}" "PROJID_FILE"
     QUOTA_STATE_FILE="$(canonical_existing_file "${QUOTA_STATE_FILE}" "QUOTA_STATE_FILE")"
+    validate_quota_state_file_security
     MANAGED_REPO_ROOT="$(canonical_existing_dir "${MANAGED_REPO_ROOT}" "MANAGED_REPO_ROOT")"
 
     IFS=$'\t' read -r FS_TYPE MOUNT_POINT _mount_source MOUNT_OPTIONS \
@@ -626,8 +694,8 @@ main() {
         die "Filesystem at ${MOUNT_POINT} is not mounted with prjquota."
     fi
 
-    ensure_regular_or_absent "${PROJECTS_FILE}"
-    ensure_regular_or_absent "${PROJID_FILE}"
+    secure_host_mapping_path "${PROJECTS_FILE}" "PROJECTS_FILE"
+    secure_host_mapping_path "${PROJID_FILE}" "PROJID_FILE"
 
     mkdir -p "$(dirname -- "${LOCK_PATH}")"
     exec 9>"${LOCK_PATH}"
@@ -636,8 +704,9 @@ main() {
         exit 0
     fi
 
-    mkdir -p "$(dirname -- "${PROJECTS_FILE}")" "$(dirname -- "${PROJID_FILE}")"
     touch "${PROJECTS_FILE}" "${PROJID_FILE}"
+    chown root:root "${PROJECTS_FILE}" "${PROJID_FILE}"
+    chmod 0600 "${PROJECTS_FILE}" "${PROJID_FILE}"
 
     records_file="$(mktemp)"
     trap 'rm -f -- "${records_file}"' EXIT

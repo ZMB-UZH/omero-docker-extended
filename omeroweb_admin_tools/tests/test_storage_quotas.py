@@ -20,6 +20,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
     managed_group_root,
     managed_repository_compatibility,
     import_quotas_csv,
+    get_state,
     QuotaError,
     quota_csv_template,
     reconcile_quotas,
@@ -93,6 +94,9 @@ def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
 
     Inputs: pytest provides `tmp_path`. Output: fails on regressions in write state temp file is not world writable.
     """
+    if os.name == "nt":
+        pytest.skip("Windows chmod does not preserve POSIX 0600 semantics")
+
     state_path = tmp_path / "quotas.json"
     seen_modes = []
 
@@ -114,6 +118,33 @@ def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
 
     assert seen_modes
     assert seen_modes[0] == 0o600
+
+
+def test_quota_state_file_must_not_be_world_writable(tmp_path, monkeypatch) -> None:
+    """Verify world-writable quota state is rejected before use.
+
+    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions
+    in quota state path mode validation.
+    """
+    if os.name == "nt":
+        pytest.skip("Windows mode bits do not model POSIX world-write safety")
+
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+                "quotas_gb": {},
+                "logs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_path.chmod(0o666)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    with pytest.raises(QuotaError, match="world-writable"):
+        get_state()
 
 
 def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None:

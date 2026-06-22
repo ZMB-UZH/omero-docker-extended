@@ -5,7 +5,8 @@ import logging
 import hashlib
 import hmac
 
-from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from django.conf import settings
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_optional_env
 from omero.rtypes import rstring, rlong
 from omero.sys import ParametersI
 
@@ -24,9 +25,27 @@ logger = logging.getLogger(__name__)
 def get_hash_secret():
     """Return secret used to compute/verify plugin hash marker.
 
-    Inputs: none. Output: `get_env` result.
+    Inputs: none. Output: secret from env or Django settings.
     """
-    return get_env(HASH_HMAC_KEY_ENV, env_file=ENV_FILE_OMEROWEB)
+    return get_optional_env(HASH_HMAC_KEY_ENV, env_file=ENV_FILE_OMEROWEB) or str(
+        getattr(settings, "SECRET_KEY", "") or ""
+    )
+
+
+def _effective_hash_secret():
+    """Return the non-empty secret used for ownership-marker HMAC.
+
+    Inputs: none. Output: secret string. Raises RuntimeError if no private secret exists.
+    """
+    secret = str(
+        get_hash_secret() or getattr(settings, "SECRET_KEY", "") or ""
+    )
+    if secret:
+        return secret
+    raise RuntimeError(
+        f"Missing non-empty {HASH_HMAC_KEY_ENV} or Django SECRET_KEY for "
+        "OMP annotation ownership hashing."
+    )
 
 
 def canonicalize_mapping(mapping):
@@ -62,16 +81,12 @@ def compute_plugin_hash(mapping):
     Inputs: `mapping`. Output: `f'{HASH_PREFIX}{digest}'`.
     """
     payload = canonicalize_mapping(mapping)
-    secret = get_hash_secret()
-
-    if secret:
-        digest = hmac.new(
-            secret.encode("utf-8"),
-            payload.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-    else:
-        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    secret = _effective_hash_secret()
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
     return f"{HASH_PREFIX}{digest}"
 
@@ -270,15 +285,18 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
     return ann_ids
 
 
-def find_annotation_link_ids(conn, annotation_id):
-    """Return the imageannotationlink IDs for an annotation value exposed by this
-    OMERO-compatible object.
+def find_annotation_link_ids(conn, annotation_id, image_id=None):
+    """Return ImageAnnotationLink IDs for an annotation and optional image.
 
-    Inputs: `conn` OMERO gateway connection, `annotation_id` OMERO annotation ID.
-    Output: ID value.
+    Inputs: `conn` OMERO gateway connection, `annotation_id`, optional `image_id`.
+    Output: ID value list.
     """
     try:
         aid = int(annotation_id)
+    except Exception:
+        return []
+    try:
+        iid = None if image_id is None else int(image_id)
     except Exception:
         return []
 
@@ -288,8 +306,16 @@ def find_annotation_link_ids(conn, annotation_id):
 
         params = ParametersI()
         params.add("aid", rlong(aid))
+        if iid is not None:
+            params.add("iid", rlong(iid))
 
-        hql = "select l.id from ImageAnnotationLink l where l.child.id = :aid"
+        if iid is None:
+            hql = "select l.id from ImageAnnotationLink l where l.child.id = :aid"
+        else:
+            hql = (
+                "select l.id from ImageAnnotationLink l "
+                "where l.child.id = :aid and l.parent.id = :iid"
+            )
 
         rows = qs.projection(hql, params, service_opts) or []
         return [r[0].getValue() for r in rows if r and r[0]]
@@ -371,11 +397,69 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
         except Exception:
             return True
 
-    def _delete_by_id(aid):
-        """Delete the by ID.
+    image_id = get_id(img)
+
+    def _delete_link_by_id(aid, lid):
+        """Delete one image-annotation link by ID.
+
+        Inputs: `aid`, `lid`. Output: `bool`.
+        """
+        try:
+            link_obj = conn.getObject("ImageAnnotationLink", int(lid))
+        except Exception:
+            link_obj = None
+
+        try:
+            if link_obj is not None:
+                _update.deleteObject(getattr(link_obj, "_obj", link_obj))
+            else:
+                conn.deleteObjects("ImageAnnotationLink", [int(lid)], wait=True)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete annotation link %s for annotation %s: %s",
+                lid,
+                aid,
+                e,
+            )
+            return False
+
+        try:
+            remaining_links = find_annotation_link_ids(conn, aid, image_id=image_id)
+        except Exception as e:
+            logger.warning(
+                "Failed to confirm annotation link %s cleanup for annotation %s: %s",
+                lid,
+                aid,
+                e,
+            )
+            return False
+        if int(lid) in [int(link_id) for link_id in remaining_links]:
+            logger.warning(
+                "Annotation %s still has scoped link %s after delete attempt",
+                aid,
+                lid,
+            )
+            return False
+        return True
+
+    def _delete_annotation_if_unlinked(aid):
+        """Delete an annotation only when no image links remain.
 
         Inputs: `aid`. Output: `bool`.
         """
+        try:
+            remaining_links = find_annotation_link_ids(conn, aid)
+        except Exception as e:
+            logger.warning("Failed to load remaining links for annotation %s: %s", aid, e)
+            return False
+        if remaining_links:
+            logger.info(
+                "Preserving annotation %s because it still has %s link(s)",
+                aid,
+                len(remaining_links),
+            )
+            return True
+
         try:
             conn.deleteObjects("Annotation", [int(aid)], wait=True)
         except Exception as e:
@@ -466,7 +550,7 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
 
     deleted_sets = 0
     deleted_pairs = 0
-    for aid in target_ids:
+    for aid in sorted(target_ids):
         try:
             ann_obj = conn.getObject("MapAnnotation", int(aid))
         except Exception:
@@ -481,7 +565,53 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
                     pair_count = len(map_values)
             except Exception:
                 logger.warning("Failed to read map values for annotation %s", aid)
-        deleted = _delete_by_id(aid)
+        try:
+            scoped_links = find_annotation_link_ids(conn, aid, image_id=image_id)
+        except Exception as e:
+            logger.warning(
+                "Failed to load scoped annotation links for annotation %s on image %s: %s",
+                aid,
+                image_id,
+                e,
+            )
+            continue
+        if not scoped_links:
+            logger.warning(
+                "No image-scoped annotation links found for annotation %s on image %s",
+                aid,
+                image_id,
+            )
+            continue
+
+        links_deleted = True
+        for lid in scoped_links:
+            links_deleted = _delete_link_by_id(aid, lid) and links_deleted
+        if not links_deleted:
+            continue
+
+        try:
+            remaining_scoped_links = find_annotation_link_ids(
+                conn, aid, image_id=image_id
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to confirm scoped annotation cleanup for annotation %s on image %s: %s",
+                aid,
+                image_id,
+                e,
+            )
+            continue
+        if remaining_scoped_links:
+            logger.warning(
+                "Annotation %s still has %s scoped link(s) on image %s: %s",
+                aid,
+                len(remaining_scoped_links),
+                image_id,
+                remaining_scoped_links,
+            )
+            continue
+
+        deleted = _delete_annotation_if_unlinked(aid)
         if deleted:
             deleted_sets += 1
             deleted_pairs += pair_count

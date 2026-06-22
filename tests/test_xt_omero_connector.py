@@ -159,6 +159,18 @@ class _FakeHTTPResponse:
         return self._final_url
 
 
+def _request_form_data(request):
+    """Decode URL-encoded request body sent to the connector endpoint.
+
+    Inputs: `request` urllib request test double. Output: dict of first form values.
+    """
+    body = getattr(request, "data", None) or b""
+    if isinstance(body, str):
+        body = body.encode("utf-8")
+    parsed = urllib.parse.parse_qs(body.decode("utf-8"), keep_blank_values=True)
+    return {key: values[0] for key, values in parsed.items()}
+
+
 class _FakeHTTPError(Exception):
     """Test double for fake httperror."""
 
@@ -1068,8 +1080,14 @@ def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_p
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
-            calls.append((request.full_url, timeout))
-            if "imaris-export/?image=63" in request.full_url:
+            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            calls.append((request.full_url, timeout, form_data))
+            if (
+                request.full_url
+                == f"{client.base_url}/omero_imaris_connector/imaris-export/"
+                and form_data
+                and form_data["image"] == "63"
+            ):
                 return _FakeHTTPResponse(
                     json.dumps(
                         {
@@ -1110,22 +1128,22 @@ def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_p
     assert Path(local_path).name == "original image name.ims"
     assert module.is_ims_file(local_path) is True
     assert calls[0] == (
-        (
-            f"{client.base_url}/omero_imaris_connector/imaris-export/?image=63"
-            f"&async=1&base_url={urllib.parse.quote(client.base_url, safe='')}"
-        ),
+        f"{client.base_url}/omero_imaris_connector/imaris-export/",
         30,
+        {"image": "63", "async": "1", "base_url": client.base_url},
     )
     assert calls[1] == (
         f"{client.base_url}/omero_imaris_connector/imaris-export/?job=job-1",
         30,
+        None,
     )
     assert calls[2] == (
         f"{client.base_url}/omero_imaris_connector/imaris-export/?download=job-1",
         module.EXPORT_TIMEOUT + 60,
+        None,
     )
-    assert all("archived_files" not in url for url, _timeout in calls)
-    assert all("render_ome_tiff" not in url for url, _timeout in calls)
+    assert all("archived_files" not in url for url, _timeout, _data in calls)
+    assert all("render_ome_tiff" not in url for url, _timeout, _data in calls)
 
 
 def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
@@ -1147,7 +1165,13 @@ def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
-            if "imaris-export/?image=64" in request.full_url:
+            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            if (
+                request.full_url
+                == f"{client.base_url}/omero_imaris_connector/imaris-export/"
+                and form_data
+                and form_data["image"] == "64"
+            ):
                 return _FakeHTTPResponse(
                     b'{"job_id": "job-2", "status_url": "/status/job-2"}'
                 )
@@ -1203,8 +1227,14 @@ def test_client_download_ims_export_cancels_server_job_when_stopped(tmp_path):
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
+            form_data = _request_form_data(request) if getattr(request, "data", None) else None
             calls.append((request.full_url, getattr(request, "data", None), timeout))
-            if "imaris-export/?image=65" in request.full_url:
+            if (
+                request.full_url
+                == f"{client.base_url}/omero_imaris_connector/imaris-export/"
+                and form_data
+                and form_data["image"] == "65"
+            ):
                 return _FakeHTTPResponse(
                     b'{"job_id": "job-3", "status_url": "/status/job-3"}'
                 )
@@ -9174,9 +9204,15 @@ def test_client_download_selected_image_ome_tiff_uses_async_custom_endpoint(tmp_
 
             Inputs: request and timeout. Output: fake HTTP response.
             """
-            calls.append((request.full_url, timeout, getattr(request, "data", None)))
-            if "imaris-export/?image=19" in request.full_url:
-                assert "format=ome_tiff" in request.full_url
+            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            calls.append((request.full_url, timeout, form_data))
+            if (
+                request.full_url
+                == f"{client.base_url}/omero_imaris_connector/imaris-export/"
+                and form_data
+                and form_data["image"] == "19"
+            ):
+                assert form_data["format"] == "ome_tiff"
                 return _FakeHTTPResponse(
                     b'{"job_id": "job-ome", "status_url": "/status/job-ome"}'
                 )
@@ -9205,8 +9241,15 @@ def test_client_download_selected_image_ome_tiff_uses_async_custom_endpoint(tmp_
 
     assert Path(local_path).name == "async selected.ome.tif"
     assert Path(local_path).read_bytes() == b"II*\x00async-selected-image"
-    assert calls[0][0].startswith(
-        f"{client.base_url}/omero_imaris_connector/imaris-export/?"
+    assert calls[0] == (
+        f"{client.base_url}/omero_imaris_connector/imaris-export/",
+        30,
+        {
+            "image": "19",
+            "format": "ome_tiff",
+            "async": "1",
+            "base_url": client.base_url,
+        },
     )
     assert calls[1][0] == f"{client.base_url}/status/job-ome"
     assert calls[2][0] == f"{client.base_url}/download/job-ome"
@@ -9240,8 +9283,14 @@ def test_client_download_selected_image_ome_tiff_surfaces_async_public_error(tmp
 
             Inputs: request and timeout. Output: fake HTTP response.
             """
-            calls.append((request.full_url, timeout))
-            if f"imaris-export/?image={image_id}" in request.full_url:
+            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            calls.append((request.full_url, timeout, form_data))
+            if (
+                request.full_url
+                == f"{client.base_url}/omero_imaris_connector/imaris-export/"
+                and form_data
+                and form_data["image"] == str(image_id)
+            ):
                 return _FakeHTTPResponse(
                     b'{"job_id": "job-large", "status_url": "/status/job-large"}'
                 )
@@ -9266,11 +9315,18 @@ def test_client_download_selected_image_ome_tiff_surfaces_async_public_error(tmp
         client.download_selected_image_ome_tiff(image_id, tmp_path)
 
     assert str(exc.value) == f"Selected Image OME-TIFF export failed: {public_error}"
-    assert [url for url, _timeout in calls] == [
-        f"{client.base_url}/omero_imaris_connector/imaris-export/?"
-        f"image={image_id}&format=ome_tiff&async=1&"
-        f"base_url={urllib.parse.quote(client.base_url, safe='')}",
-        f"{client.base_url}/status/job-large",
+    assert calls == [
+        (
+            f"{client.base_url}/omero_imaris_connector/imaris-export/",
+            30,
+            {
+                "image": str(image_id),
+                "format": "ome_tiff",
+                "async": "1",
+                "base_url": client.base_url,
+            },
+        ),
+        (f"{client.base_url}/status/job-large", 30, None),
     ]
 
 

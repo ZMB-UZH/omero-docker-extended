@@ -45,8 +45,7 @@ Practices and invariants that keep the platform running predictably.
   for both the OMERO.web log tree and every supervisor-managed log file
   declared in `supervisord.conf`, normalizes site-local versus generated
   branding logos at `branding/logo.png`, refreshes known legacy generated
-  placeholders, and configures Docker socket permissions before supervisord
-  starts.
+  placeholders, and secures quota metadata before supervisord starts.
 - Bootstrap scripts are idempotent: re-running after a restart produces the same result.
 
 ## Health checks
@@ -106,5 +105,5 @@ All four processes have dedicated log files with rotation (20MB max, 3 backups).
 
 Capture recurring incident classes in `docs/troubleshooting/` and link mitigation steps. Current troubleshooting guides:
 
-- `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker socket
+- `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, optional Docker diagnostics
 - `troubleshooting/imaris-export.md` -- auth regressions, `waiting_for_processor`, processor startup failures, CLI validation, recovery actions

@@ -69,9 +69,9 @@ class AgentSkillUpstreamSources:
         """
         relative_paths: dict[str, str] = {}
         for skill_name, vendor_path in self.skill_vendor_paths.items():
-            relative_paths[skill_name] = str(
-                Path(vendor_path).relative_to(self.vendor_root_path)
-            )
+            relative_paths[skill_name] = Path(vendor_path).relative_to(
+                self.vendor_root_path
+            ).as_posix()
         return relative_paths
 
     @property

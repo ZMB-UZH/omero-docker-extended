@@ -5,14 +5,32 @@ import io
 import json
 import logging
 import os
+import stat
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pwd import getpwuid
-from grp import getgrgid
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
+
+try:
+    from pwd import getpwuid
+    from grp import getgrgid
+except ImportError:
+
+    def getpwuid(uid):
+        """Report that POSIX passwd lookup is unavailable on this host.
+
+        Inputs: numeric `uid`. Output: raises KeyError for the missing passwd row.
+        """
+        raise KeyError(uid)
+
+    def getgrgid(gid):
+        """Report that POSIX group lookup is unavailable on this host.
+
+        Inputs: numeric `gid`. Output: raises KeyError for the missing group row.
+        """
+        raise KeyError(gid)
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +203,10 @@ def _path_access_summary(path: Path) -> Dict[str, object]:
 
     Inputs: `path`. Output: `Dict[str, object]`.
     """
-    uid = os.geteuid()
-    gid = os.getegid()
+    uid_func = getattr(os, "geteuid", getattr(os, "getuid", lambda: 0))
+    gid_func = getattr(os, "getegid", getattr(os, "getgid", lambda: 0))
+    uid = uid_func()
+    gid = gid_func()
     summary: Dict[str, object] = {
         "path": str(path),
         "exists": path.exists(),
@@ -277,7 +297,55 @@ def _ensure_parent(path: Path) -> None:
 
     Inputs: `path` (Path) path. Output: None.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _assert_quota_state_path_safe(path)
+
+
+def _assert_not_symlink(path: Path, label: str) -> None:
+    """Reject symlinks in quota metadata paths.
+
+    Inputs: `path`, `label`. Output: None. Raises: QuotaError on unsafe paths.
+    """
+    try:
+        is_symlink = path.is_symlink()
+    except OSError as exc:
+        raise QuotaError(f"Could not inspect {label}: {path}") from exc
+    if is_symlink:
+        raise QuotaError(f"{label} must not be a symlink: {path}")
+
+
+def _assert_not_world_writable(path: Path, label: str) -> None:
+    """Reject world-writable quota metadata files or directories.
+
+    Inputs: `path`, `label`. Output: None. Raises: QuotaError on unsafe modes.
+    """
+    if os.name == "nt":
+        return
+    try:
+        mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)
+    except OSError as exc:
+        raise QuotaError(f"Could not inspect {label}: {path}") from exc
+    if mode & stat.S_IWOTH:
+        raise QuotaError(f"{label} must not be world-writable: {path} ({mode:04o})")
+
+
+def _assert_quota_state_path_safe(path: Path) -> None:
+    """Validate quota state storage before reading or writing it.
+
+    Inputs: `path`. Output: None. Raises: QuotaError on unsafe paths.
+    """
+    parent = path.parent
+    if parent.exists():
+        _assert_not_symlink(parent, "Quota state directory")
+        if not parent.is_dir():
+            raise QuotaError(f"Quota state parent is not a directory: {parent}")
+        _assert_not_world_writable(parent, "Quota state directory")
+
+    if path.exists():
+        _assert_not_symlink(path, "Quota state file")
+        if not path.is_file():
+            raise QuotaError(f"Quota state path is not a regular file: {path}")
+        _assert_not_world_writable(path, "Quota state file")
 
 
 def _fresh_state() -> Dict[str, object]:
@@ -298,6 +366,7 @@ def _load_state(path: Path) -> Dict[str, object]:
     Inputs: `path` (Path) path. Output: `Dict[str, object]`. Raises: QuotaError when validation
     or the called operation fails.
     """
+    _assert_quota_state_path_safe(path)
     if not path.exists():
         return _fresh_state()
     raw = path.read_text(encoding="utf-8")
@@ -365,12 +434,14 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
         if not path.exists() or not os.access(path, os.W_OK):
             raise QuotaError(
                 f"Quota state path is not replaceable/writable: {path}. "
-                "Ensure /OMERO/.admin-tools is mode 0777 without sticky-bit "
-                "and writable by the omeroweb UID."
+                "Ensure /OMERO/.admin-tools is not world-writable, is writable "
+                "by the omeroweb runtime group, and the state file is owned by "
+                "the omeroweb runtime user."
             ) from exc
 
         # Last resort fallback: direct write to existing file
         path.write_text(serialized, encoding="utf-8")
+        os.chmod(path, 0o600)
     finally:
         # Clean up any unique random tmp files we created if something went terribly wrong
         if temp_path.exists():

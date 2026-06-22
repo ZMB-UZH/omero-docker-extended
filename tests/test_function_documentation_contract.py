@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_PARTS = {
     ".cache",
     ".git",
+    ".venv",
     "node_modules",
     "omero_data",
     "omero_temp",

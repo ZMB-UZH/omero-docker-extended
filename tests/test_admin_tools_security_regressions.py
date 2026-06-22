@@ -5,7 +5,7 @@ import sys
 import tempfile
 import types
 from pathlib import Path
-from unittest import TestCase, mock, main as unittest_main
+from unittest import TestCase, mock, main as unittest_main, skipIf
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -261,6 +261,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
             json.loads(response.content.decode("utf-8")),
         )
 
+    @skipIf(os.name == "nt", "Windows chmod does not expose POSIX file modes")
     def test_write_state_temp_file_is_not_world_writable(self):
         """Verify write state temp file is not world writable.
 

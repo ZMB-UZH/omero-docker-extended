@@ -18,6 +18,9 @@ INSTALL_DIR="${IMARISCONVERT_INSTALL_DIR:-/opt/omero/imarisconvert}"
 WRAPPER_PATH="${IMARISCONVERT_WRAPPER_PATH:-/usr/local/bin/imarisconvert}"
 VERSION_FILE="${INSTALL_DIR}/.version"
 TARGET_VERSION="1.0.0"
+IMARISCONVERT_REPO_URL="${IMARISCONVERT_REPO_URL:-https://github.com/imaris/ImarisConvertBioformats.git}"
+IMARISCONVERT_GIT_REF="${IMARISCONVERT_GIT_REF:-master}"
+IMARISCONVERT_GIT_COMMIT="${IMARISCONVERT_GIT_COMMIT:-b363fe927914dfdcf1c7fdbf721e50e8cce67cc3}"
 BIOFORMATS_SUBDIR="bioformats"
 BIOFORMATS_JAR_NAME="bioformats_package.jar"
 : "${BIOFORMATS_VERSION:?BIOFORMATS_VERSION must be set in env/omeroserver.env}"
@@ -246,11 +249,15 @@ mkdir -p "${BUILD_ROOT}"
 
 cd "${BUILD_ROOT}"
 
-# Clone ImarisConvertBioformats
-if ! git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git; then
+# Clone ImarisConvertBioformats and verify the exact expected commit.
+if ! git clone --depth 1 --branch "${IMARISCONVERT_GIT_REF}" "${IMARISCONVERT_REPO_URL}" ImarisConvertBioformats; then
     fail "Failed to clone ImarisConvertBioformats repository"
 fi
 cd ImarisConvertBioformats
+actual_commit="$(git rev-parse HEAD)"
+if [[ "${actual_commit}" != "${IMARISCONVERT_GIT_COMMIT}" ]]; then
+    fail "ImarisConvertBioformats commit mismatch: expected=${IMARISCONVERT_GIT_COMMIT} actual=${actual_commit}"
+fi
 
 # PATCH: Fix missing #include <limits> in bpUtils.cxx
 echo "Patching bpUtils.cxx to add missing #include <limits>..."

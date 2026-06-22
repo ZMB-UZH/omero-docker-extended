@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import os
 import re
 import tempfile
 import time
@@ -52,6 +53,9 @@ from .utils import resolve_image_backing_zarr_store
 from .utils import resolve_local_zarr_file
 
 LOGGER = logging.getLogger(__name__)
+_DEFAULT_STORE_DOWNLOAD_MAX_FILES = 250000
+_DEFAULT_STORE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024 * 1024
+_DEFAULT_STORE_OME_TIFF_MAX_SOURCE_BYTES = 8 * 1024 * 1024 * 1024
 
 
 class _UnlinkOnCloseFile:
@@ -182,6 +186,55 @@ PIXEL_TYPES = {
     PixelsTypefloat: np.float32,
     PixelsTypedouble: np.float64,
 }
+
+
+def _int_env(name, default, minimum=1):
+    """Return a bounded integer environment value.
+
+    Inputs: `name`, `default`, `minimum`. Output: integer.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return int(default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        LOGGER.warning("Ignoring invalid integer environment value for %s", name)
+        return int(default)
+    return max(int(minimum), value)
+
+
+def _store_download_limits():
+    """Return file and byte limits for store-backed ZIP downloads.
+
+    Inputs: environment. Output: `(max_files, max_bytes)`.
+    """
+    return (
+        _int_env("OMERO_WEB_ZARR_DOWNLOAD_MAX_FILES", _DEFAULT_STORE_DOWNLOAD_MAX_FILES),
+        _int_env("OMERO_WEB_ZARR_DOWNLOAD_MAX_BYTES", _DEFAULT_STORE_DOWNLOAD_MAX_BYTES),
+    )
+
+
+def _store_ome_tiff_source_limit():
+    """Return uncompressed source-byte limit for store-backed OME-TIFF export.
+
+    Inputs: environment. Output: integer byte count.
+    """
+    return _int_env(
+        "OMERO_WEB_ZARR_OME_TIFF_MAX_SOURCE_BYTES",
+        _DEFAULT_STORE_OME_TIFF_MAX_SOURCE_BYTES,
+    )
+
+
+def _array_nbytes(array):
+    """Return uncompressed byte size for a Zarr/Numpy-like array.
+
+    Inputs: `array`. Output: byte count.
+    """
+    size = 1
+    for axis_size in getattr(array, "shape", ()):
+        size *= int(axis_size)
+    return size * np.dtype(getattr(array, "dtype")).itemsize
 
 
 def _runtime_generated_zarray_metadata(shape, chunks, dtype) -> dict[str, object]:
@@ -912,20 +965,46 @@ def download_store_original(request, iid, conn=None, **kwargs):
     store_root = resolve_image_backing_zarr_store(image)
     if store_root is None:
         raise Http404("store-backed image not found")
+    try:
+        resolved_store_root = store_root.resolve(strict=True)
+    except OSError:
+        raise Http404("store-backed image not found") from None
 
+    max_files, max_bytes = _store_download_limits()
     archive = tempfile.TemporaryFile()
-    with zipfile.ZipFile(
-        archive,
-        mode="w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=1,
-    ) as zf:
-        for path in sorted(store_root.rglob("*")):
-            if not path.is_file():
-                continue
-            zf.write(
-                path, arcname=str(Path(store_root.name) / path.relative_to(store_root))
-            )
+    file_count = 0
+    byte_count = 0
+    try:
+        with zipfile.ZipFile(
+            archive,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=1,
+        ) as zf:
+            for path in sorted(store_root.rglob("*")):
+                try:
+                    relative_path = path.relative_to(store_root)
+                    resolved_path = path.resolve(strict=True)
+                    resolved_path.relative_to(resolved_store_root)
+                except (OSError, ValueError):
+                    LOGGER.warning(
+                        "Skipping unsafe store-backed download path: %s",
+                        sanitize_log_value(path),
+                    )
+                    continue
+                if not resolved_path.is_file():
+                    continue
+                file_count += 1
+                byte_count += resolved_path.stat().st_size
+                if file_count > max_files or byte_count > max_bytes:
+                    raise Http404("store-backed image download exceeds size limits")
+                zf.write(
+                    resolved_path,
+                    arcname=str(Path(store_root.name) / relative_path),
+                )
+    except Exception:
+        archive.close()
+        raise
 
     archive.seek(0)
     return FileResponse(
@@ -983,6 +1062,8 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
         raise Http404("store-backed image data not found")
 
     array, axes = _store_backed_ome_axes_and_array(node)
+    if _array_nbytes(array) > _store_ome_tiff_source_limit():
+        raise Http404("store-backed OME-TIFF export exceeds size limits")
     metadata = _store_backed_ome_tiff_metadata(image, node, axes)
 
     target = tempfile.NamedTemporaryFile(suffix=".ome.tif", delete=False)

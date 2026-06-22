@@ -606,6 +606,28 @@ def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> N
     assert "Refusing to use non-regular file" in result.stdout
 
 
+def test_quota_control_paths_reject_world_writable_modes(tmp_path: Path) -> None:
+    """Verify quota control paths reject world-writable modes.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on regressions in quota control
+    path mode validation.
+    """
+    unsafe_dir = tmp_path / "unsafe-control"
+    unsafe_dir.mkdir()
+    unsafe_dir.chmod(0o777)
+
+    result = _run_bash(
+        f"""
+        set -euo pipefail
+        source {_sh(SCRIPT_DIR / "omero-quota-enforcer.sh")}
+        reject_world_writable_path {_sh(unsafe_dir)} QUOTA_STATE_FILE
+        """
+    )
+
+    assert result.returncode == 1
+    assert "must not be world-writable" in result.stderr
+
+
 def test_quota_mapping_rewrites_are_exact_not_regex_based(tmp_path: Path) -> None:
     """Verify quota mapping rewrites are exact not regex based.
 

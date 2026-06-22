@@ -12,8 +12,8 @@ group_name=""
 group_path=""
 quota_gb=""
 mount_point=""
-projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-/tmp/omero-admin-tools/quota/projects}"
-projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-/tmp/omero-admin-tools/quota/projid}"
+projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-${OMERO_DATA_DIR:-/OMERO}/.admin-tools/quota/projects}"
+projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-${OMERO_DATA_DIR:-/OMERO}/.admin-tools/quota/projid}"
 project_id_min="${ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN:-200000}"
 minimum_quota_gb="${ADMIN_TOOLS_MIN_QUOTA_GB:-0.10}"
 lock_path="${ADMIN_TOOLS_QUOTA_LOCK_PATH:-/tmp/omero-ext4-quota.lock}"
@@ -32,6 +32,56 @@ is_safe_group_name() {
     ""|*[!A-Za-z0-9._-]*) return 1 ;;
     *) return 0 ;;
   esac
+}
+
+# Reject non-regular files. Inputs: path. Output: command status.
+ensure_regular_or_absent() {
+  local path="$1"
+  if [[ -L "$path" || ( -e "$path" && ! -f "$path" ) ]]; then
+    echo "Refusing to use non-regular quota metadata file: $path" >&2
+    exit 1
+  fi
+}
+
+# Reject world-writable paths used as root quota controls. Inputs: path and label. Output: returns after validation or exits with an error.
+reject_world_writable_path() {
+  local path="$1"
+  local label="$2"
+  local mode
+
+  [[ -e "$path" ]] || return 0
+  mode="$(stat -Lc '%a' -- "$path")" || {
+    echo "Unable to stat $label: $path" >&2
+    exit 1
+  }
+  if (( (8#${mode} & 0002) != 0 )); then
+    echo "$label must not be world-writable: $path (mode $mode)" >&2
+    exit 1
+  fi
+}
+
+# Secure host-owned quota mapping paths before root uses them. Inputs: file path and label. Output: creates root-only metadata paths.
+secure_quota_mapping_path() {
+  local file_path="$1"
+  local label="$2"
+  local mapping_dir
+
+  mapping_dir="$(dirname -- "$file_path")"
+  if [[ -L "$mapping_dir" ]]; then
+    echo "$label parent must not be a symlink: $mapping_dir" >&2
+    exit 1
+  fi
+  mkdir -p "$mapping_dir"
+  reject_world_writable_path "$mapping_dir" "$label parent"
+  chown root:root "$mapping_dir"
+  chmod 0700 "$mapping_dir"
+
+  ensure_regular_or_absent "$file_path"
+  if [[ -e "$file_path" ]]; then
+    reject_world_writable_path "$file_path" "$label"
+    chown root:root "$file_path"
+    chmod 0600 "$file_path"
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -59,7 +109,7 @@ if ! is_non_negative_integer "$project_id_min"; then
   exit 1
 fi
 
-for cmd in chattr setquota awk flock; do
+for cmd in chattr setquota awk flock stat chown chmod; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Required command '$cmd' is not available" >&2
     exit 1
@@ -90,12 +140,14 @@ case "$resolved_group_path" in
 esac
 
 mkdir -p "$(dirname "$lock_path")"
-mkdir -p "$(dirname "$projects_file")"
-mkdir -p "$(dirname "$projid_file")"
+secure_quota_mapping_path "$projects_file" "ADMIN_TOOLS_QUOTA_PROJECTS_FILE"
+secure_quota_mapping_path "$projid_file" "ADMIN_TOOLS_QUOTA_PROJID_FILE"
 exec 9>"$lock_path"
 flock -x 9
 
 touch "$projects_file" "$projid_file"
+chown root:root "$projects_file" "$projid_file"
+chmod 0600 "$projects_file" "$projid_file"
 
 project_id="$(
   awk -F: -v group="$group_name" '

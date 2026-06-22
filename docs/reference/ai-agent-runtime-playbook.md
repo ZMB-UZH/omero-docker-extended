@@ -39,7 +39,9 @@ Deep operational guidance for AI Agents. `AGENTS.md` should route here instead o
   code, tests, tools, and live probes must read configured values or discover
   active runtime state instead of assuming default host ports, container names,
   absolute paths, service users, or enabled profiles.
-- Treat a Docker socket permission error as a sandbox or privilege problem, not proof that Docker is down.
+- Treat Docker socket access as optional. A permission error matters only when
+  Docker-backed diagnostics were explicitly enabled; it is not proof that
+  Docker or OMERO is down.
 - Treat plugin tmp helpers as non-mutating path resolvers unless the immediate runtime sink truly needs the directory to exist. Import-time or root-context helper calls that eagerly create `OMERO_TMP_PATH` plugin subtrees can leave `omeroweb-*` paths owned by the wrong UID and break later non-root request handling.
 
 ## OMERO.web env variable naming convention (CRITICAL)
@@ -90,11 +92,12 @@ Examples:
   manager, a healthcheck command, or a later ownership/mode mutation layer.
 - The manual `release-prebuilt-carrier` workflow is the only manual release
   workflow. It builds hardened flattened runtime service images, writes the
-  source archive and manifest, pushes one carrier image, verifies the copied
-  metadata from that image with `docker create`/`docker cp`, and publishes a
-  GitHub release with the same docker-compatible SemVer tag as the carrier image.
-  Same-version rebuilds must use an explicit `release_version` with
-  `replace_existing=true`; replacement mode verifies that the GitHub tag,
+  source archive and manifest, pushes one attested carrier image, verifies the
+  copied metadata from that image with `docker create`/`docker cp`, runs Docker
+  Scout `quickview`, `cves`, and `sbom` against the pushed Docker Hub tag, and
+  publishes a GitHub release with the same docker-compatible SemVer tag as the
+  carrier image. Same-version rebuilds must use an explicit `release_version`
+  with `replace_existing=true`; replacement mode verifies that the GitHub tag,
   GitHub release, and Docker Hub tag already exist before overwriting the
   carrier tag and release assets.
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the

@@ -131,8 +131,10 @@ Quota helper:
     service run so reinstalling the timer cannot leave it active with no next
     trigger,
   - creates `${OMERO_DATA_DIR}/.admin-tools/quota`,
-  - sets `.admin-tools` and `.admin-tools/quota` to `0777`,
-  - sets `group-quotas.json` to `0666` so host root and non-root `omeroweb` can both update quota state.
+  - sets `.admin-tools` to `0750` and `.admin-tools/quota` to `0700`,
+  - sets `group-quotas.json` to `0600`; the `omeroweb` container bootstrap
+    later assigns runtime ownership without making the state path
+    world-writable.
 
 Managed-repository shared-prefix bridge:
 
@@ -385,7 +387,7 @@ Host-side installer:
 
 ## 3. Special Runtime Permission Bridges
 
-### Docker socket access from `omeroweb`
+### Optional Docker socket access from `omeroweb`
 
 Script:
 
@@ -393,13 +395,16 @@ Script:
 
 Behavior:
 
-- reads the GID of `/var/run/docker.sock`,
+- when a Docker socket is explicitly mounted, reads the GID of
+  `/var/run/docker.sock`,
 - creates a matching group if needed,
 - adds `omero-web` to that group.
 
 Purpose:
 
-- allows Admin Tools to inspect containers and collect Docker-backed metrics without running OMERO.web as root.
+- allows Admin Tools to inspect containers and collect Docker-backed metrics
+  without running OMERO.web as root. The default Compose deployment does not
+  mount the Docker socket.
 
 ### Quota metadata interoperability
 
@@ -411,13 +416,16 @@ Scripts:
 
 Behavior:
 
-- quota state directories may be intentionally `0777`,
-- quota state files may fall back to `0664` or `0666`,
-- this is deliberate to support both host-side root automation and non-root web-side updates.
+- quota state directories must not be world-writable,
+- quota state files must not be world-writable,
+- the host enforcer refuses symlinked or world-writable quota control paths
+  before it reads quota JSON or rewrites ext4 mapping files.
 - quota enforcement parses quota JSON once per run, rewrites mapping files by
   exact group/path matches, and refuses non-regular root-managed mapping files.
 
-This is one of the few intentionally broad write-permission exceptions in the stack.
+The `.admin-tools` directory may be group-writable with the sticky bit after
+`startup/10-web-bootstrap.sh` assigns the `omeroweb` runtime group, but it must
+not be writable by arbitrary local users or containers.
 
 ## 4. Pull / Update Scripts
 
@@ -475,11 +483,12 @@ Relevant files:
 - `startup/10-server-bootstrap.sh`
 - `docs/troubleshooting/common.md`
 
-### Symptom: Admin Tools cannot inspect Docker
+### Symptom: optional Admin Tools Docker diagnostics cannot inspect Docker
 
 Likely cause:
 
-- `omero-web` is not in the Docker socket group matching `/var/run/docker.sock`.
+- Docker diagnostics were explicitly enabled, but `omero-web` is not in the
+  Docker socket group matching `/var/run/docker.sock`.
 
 Relevant file:
 

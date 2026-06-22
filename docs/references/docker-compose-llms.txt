@@ -23,14 +23,14 @@ Supporting services:
 
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
-- portainer (ports 9000, 9443): container management UI, portainer/portainer-ce:2.40.0-alpine.
+- portainer (management profile, 127.0.0.1:9443): optional container management UI, portainer/portainer-ce:2.40.0-alpine.
 
 Monitoring services:
 
-- prometheus (port 9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.11.3.
-- grafana (port 3000): 4 auto-provisioned dashboards, grafana/grafana:13.0.1.
-- loki (port 3100): log aggregation backend, grafana/loki:3.7.1.
-- alloy (port 12345): log collection from Docker containers + OMERO log files, grafana/alloy:v1.16.1.
+- prometheus (127.0.0.1:9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.11.3.
+- grafana (127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.0.1.
+- loki (127.0.0.1:3100): log aggregation backend, grafana/loki:3.7.1.
+- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.16.1.
 - blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.28.0.
 - node-exporter: host metrics, prom/node-exporter:v1.11.1.
 - cadvisor: container metrics, ghcr.io/google/cadvisor:0.56.2.
@@ -54,7 +54,7 @@ Volume mount patterns:
 - PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
 - Redis uses tmpfs for /data (512MB).
 - OMERO_TMP_PATH bind-mounted into omeroweb at /opt/omero/omero_temp for all plugin temporary data.
-- Docker socket mounted read-only in omeroweb for admin tools container stats.
+- Docker socket is not mounted by default; mount it read-only only for explicit admin diagnostics.
 - Monitoring configs mounted read-only from ./monitoring/ directories.
 
 Compose commands (explicit manual form: include installation paths, secrets,
@@ -67,4 +67,4 @@ and OMERO.server env files when not relying on repo-root `.env`):
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
-Only 7 services expose host ports: omeroserver (`OMERO_SERVER_HOST_PORT`, default 4064), omeroweb (`OMERO_WEB_HOST_PORT`, default 4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).
+Default host exposure: omeroserver (`OMERO_SERVER_HOST_PORT`, default 4064) and omeroweb (`OMERO_WEB_HOST_PORT`, default 4090) bind publicly; loki, prometheus, and grafana bind to loopback; portainer is profile-gated on loopback HTTPS; crowdsec uses host networking only when its profile is enabled.

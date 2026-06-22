@@ -379,6 +379,47 @@ def test_parse_emsa_file_extracts_metadata_elements_and_spectrum(tmp_path: Path)
     }
 
 
+def test_parse_emsa_file_enforces_configured_resource_limits(
+    monkeypatch, tmp_path: Path
+):
+    """Verify SEM EDX parsing enforces file, element, and spectrum limits.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in SEM EDX parser resource limits.
+    """
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_FILE_BYTES_ENV, "10")
+    oversized = tmp_path / "oversized.txt"
+    oversized.write_text("x" * 11, encoding="utf-8")
+    assert sem_edx_parser.parse_emsa_file(oversized) == {
+        "title": "",
+        "metadata": {},
+        "elements": [],
+        "spectrum": [],
+    }
+
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_FILE_BYTES_ENV, "10000")
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_ELEMENTS_ENV, "1")
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_SPECTRUM_POINTS_ENV, "2")
+    capped = tmp_path / "capped.txt"
+    capped.write_text(
+        "\n".join(
+            [
+                "#TITLE : capped",
+                "##OXINSTLABEL: 29, 8.048, Cu",
+                "##OXINSTLABEL: 30, 8.638, Zn",
+                "#SPECTRUM : counts",
+                "1, 10 2, 20 3, 30",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    parsed = sem_edx_parser.parse_emsa_file(capped)
+    assert parsed["elements"] == [
+        {"atomic_number": 29, "energy_kev": 8.048, "symbol": "Cu"}
+    ]
+    assert parsed["spectrum"] == [(1.0, 10.0), (2.0, 20.0)]
+
+
 def test_sem_edx_geometry_and_genetic_label_helpers_cover_selection_mutation_and_layout(
     monkeypatch,
 ):
@@ -551,6 +592,13 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
     assert columns[0].values == [7, 7]
     assert columns[1].values == [1.0, 2.0]
     assert columns[2].values == [10.0, 20.0]
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_SPECTRUM_POINTS_ENV, "1")
+    limited_columns = sem_edx_parser.build_spectrum_columns(
+        7, [(1.0, 10.0), (2.0, 20.0)]
+    )
+    assert limited_columns[0].values == [7]
+    assert limited_columns[1].values == [1.0]
+    assert limited_columns[2].values == [10.0]
     assert (
         sem_edx_parser.create_spectrum_table(
             conn,
@@ -756,6 +804,51 @@ def test_sem_edx_parser_remaining_edges_cover_empty_layouts_and_default_plot_pat
     output_path = sem_edx_parser.create_edx_spectrum_plot(txt_path)
     assert output_path == tmp_path / "spectrum_edx.png"
     assert output_path.exists()
+
+
+def test_create_edx_spectrum_plot_caps_labels_before_layout(monkeypatch, tmp_path):
+    """Verify SEM EDX plot creation caps labels before expensive layout.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    in SEM EDX label placement bounds.
+    """
+    captured = {}
+    txt_path = tmp_path / "labels.txt"
+    txt_path.write_text("synthetic", encoding="utf-8")
+
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_PLOT_LABELS_ENV, "2")
+    monkeypatch.setattr(
+        sem_edx_parser,
+        "parse_emsa_file",
+        lambda _path: {
+            "title": "",
+            "metadata": {},
+            "spectrum": [(1.0, 10.0), (2.0, 20.0), (3.0, 30.0)],
+            "elements": [
+                {"energy_kev": 1.0, "symbol": "A"},
+                {"energy_kev": 2.0, "symbol": "B"},
+                {"energy_kev": 3.0, "symbol": "C"},
+            ],
+        },
+    )
+
+    def fake_label_placement(labels_data, *_args):
+        """Capture labels passed to the expensive layout step.
+
+        Inputs: `labels_data`, `*_args`. Output: empty placements.
+        """
+        captured["labels_data"] = list(labels_data)
+        return []
+
+    monkeypatch.setattr(
+        sem_edx_parser,
+        "genetic_label_placement",
+        fake_label_placement,
+    )
+
+    output_path = tmp_path / "labels.png"
+    assert sem_edx_parser.create_edx_spectrum_plot(txt_path, output_path) == output_path
+    assert captured["labels_data"] == [(1.0, 10.0, "A"), (2.0, 20.0, "B")]
 
 
 def test_sem_edx_table_creation_covers_cleanup_and_attach_failure_logging(
