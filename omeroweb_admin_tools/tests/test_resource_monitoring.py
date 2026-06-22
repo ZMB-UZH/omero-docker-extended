@@ -4,6 +4,7 @@ import json
 from http.client import HTTPMessage
 from types import SimpleNamespace
 
+from django.http import HttpResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory
 
@@ -22,6 +23,7 @@ from omeroweb_admin_tools.views.index_view import (
     _build_proxy_backend_urls,
     _cookie_path_for_proxy,
     _origin_from_url,
+    _grafana_backend_auth_headers,
     _grafana_proxy_home_fallback_response,
     _rewrite_proxied_location,
     _send_proxy_backend_request,
@@ -405,6 +407,61 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
         captured["headers"]["Referer"]
         == "https://omero.example.org/omeroweb_admin_tools/resource-monitoring/"
     )
+
+
+def test_proxy_http_request_forced_headers_override_browser_auth(monkeypatch) -> None:
+    """Backend-only auth replaces browser auth before forwarding.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts forwarded header selection.
+    """
+    captured = {}
+
+    def fake_request(
+        method, url, data=None, headers=None, timeout=10.0, allow_redirects=False
+    ):
+        """Capture headers from the proxy backend request.
+
+        Inputs: `method`, `url`, `data`, `headers`, `timeout`, `allow_redirects`.
+        Output: `_RequestsResponse`.
+        """
+        captured["headers"] = dict(headers or {})
+        return _RequestsResponse(
+            200,
+            headers={"Content-Type": "application/json"},
+            payload=b'{"status":"ok"}',
+        )
+
+    _install_proxy_backend_stub(monkeypatch, fake_request)
+
+    class DummyDjangoRequest:
+        """Test double for dummy django request."""
+
+        method = "GET"
+        body = b""
+        headers = {"Authorization": "Bearer browser-token"}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "https://grafana:3000",
+        "api/user",
+        forced_backend_headers={"Authorization": "Basic backend-token"},
+    )
+
+    assert response.status_code == 200
+    assert captured["headers"]["Authorization"] == "Basic backend-token"
+
+
+def test_grafana_backend_auth_headers_use_configured_secret(monkeypatch) -> None:
+    """Grafana proxy credentials are prepared for backend requests only.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts generated Basic header.
+    """
+    monkeypatch.setenv("GF_SECURITY_ADMIN_USER", "admin")
+    monkeypatch.setenv("GF_SECURITY_ADMIN_PASSWORD", "secret")
+
+    assert _grafana_backend_auth_headers() == {
+        "Authorization": "Basic YWRtaW46c2VjcmV0"
+    }
 
 
 def test_normalize_proxy_request_target_rejects_traversal() -> None:
@@ -1169,12 +1226,13 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         proxy_prefix="",
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
+        forced_backend_headers=None,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
         Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
-        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
-        `DummyResponse` result.
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`,
+        `forced_backend_headers`. Output: `DummyResponse` result.
         """
         captured.update(
             {
@@ -1185,13 +1243,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
             }
         )
 
-        class DummyResponse:
-            """Test double for dummy response."""
-
-            status_code = 200
-            content = b"{}"
-
-        return DummyResponse()
+        return HttpResponse(b"{}", status=200)
 
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._proxy_http_request",
@@ -1245,12 +1297,13 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         proxy_prefix="",
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
+        forced_backend_headers=None,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
         Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
-        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
-        `DummyResponse` result.
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`,
+        `forced_backend_headers`. Output: `DummyResponse` result.
         """
         captured.update(
             {
@@ -1312,12 +1365,13 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         proxy_prefix="",
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
+        forced_backend_headers=None,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
         Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
-        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
-        `DummyResponse` result.
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`,
+        `forced_backend_headers`. Output: `DummyResponse` result.
         """
         captured.update(
             {
@@ -1441,17 +1495,6 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
 
     attempts = []
 
-    class DummyResponse:
-        """Test double for dummy response."""
-
-        def __init__(self, status_code: int):
-            """Create `DummyResponse` with `status_code`.
-
-            Inputs: `status_code`. Output: None.
-            """
-            self.status_code = status_code
-            self.content = b"{}"
-
     def fake_proxy_http_request(
         django_request,
         base_url,
@@ -1461,17 +1504,18 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         proxy_prefix="",
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
+        forced_backend_headers=None,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
         Inputs: `django_request`, `base_url` base URL, `path` path, `query`,
-        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`. Output:
-        `DummyResponse` result.
+        `proxy_prefix`, `rewrite_origin_headers`, `extra_forwarded_headers`,
+        `forced_backend_headers`. Output: `DummyResponse` result.
         """
         attempts.append(base_url)
         if base_url == "https://grafana:3000":
-            return DummyResponse(status_code=502)
-        return DummyResponse(status_code=200)
+            return HttpResponse(b"{}", status=502)
+        return HttpResponse(b"{}", status=200)
 
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._proxy_http_request",
@@ -1644,6 +1688,8 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
         '"appSubUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy"'
         in content
     )
+    assert "admin-tools-proxy-csrf-bridge" in content
+    assert "X-CSRFToken" in content
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:

@@ -143,6 +143,32 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("security/advisories/new", issue_config)
         self.assertIn("## Verification", pr_template)
 
+    def test_resource_monitoring_prefers_same_origin_dashboards(self) -> None:
+        """Dashboard buttons stay behind the authenticated OMERO.web origin.
+
+        Inputs: repository fixtures. Output: asserts dashboard URL ordering and
+        diagnostic copy.
+        """
+        template = self.read_text(
+            "omeroweb_admin_tools/templates/omeroweb_admin_tools/resource_monitoring.html"
+        )
+        expected_orders = (
+            ("dashboard_proxy_url", "dashboard_external_url"),
+            ("database_dashboard_proxy_url", "database_dashboard_external_url"),
+            (
+                "plugin_database_dashboard_proxy_url",
+                "plugin_database_dashboard_external_url",
+            ),
+            ("redis_dashboard_proxy_url", "redis_dashboard_external_url"),
+        )
+        for proxy_key, external_key in expected_orders:
+            with self.subTest(proxy_key=proxy_key):
+                self.assertLess(template.index(proxy_key), template.index(external_key))
+
+        self.assertIn("allServicesOk && noHealthData", template)
+        self.assertIn("Docker Compose/Prometheus fallback", template)
+        self.assertNotIn("volumes: - /var/run/docker.sock", template)
+
     def test_current_branch_history_uses_exact_ai_agent_identity(self) -> None:
         """Verify current branch history uses exact ai agent identity.
 
