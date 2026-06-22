@@ -97,13 +97,17 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=False):
     )
 
 
-def find_annotation_link_ids(conn, annotation_ids):
+def find_annotation_link_ids(conn, annotation_ids, image_id=None):
     """Find the annotation link IDs.
 
-    Inputs: `conn` OMERO gateway connection, `annotation_ids`. Output:
+    Inputs: `conn` OMERO gateway connection, `annotation_ids`, `image_id`. Output:
     `find_annotation_link_ids` result.
     """
-    return _annotation_service.find_annotation_link_ids(conn, annotation_ids)
+    if image_id is None:
+        return _annotation_service.find_annotation_link_ids(conn, annotation_ids)
+    return _annotation_service.find_annotation_link_ids(
+        conn, annotation_ids, image_id=image_id
+    )
 
 
 def find_map_annotation_ids(conn, image_id):
@@ -246,7 +250,9 @@ def _delete_existing_annotations_by_ids(
     if link_ids is None:
         derived_link_ids = []
         for annotation_id in resolved_annotation_ids:
-            derived_link_ids.extend(find_annotation_link_ids(conn, annotation_id))
+            derived_link_ids.extend(
+                find_annotation_link_ids(conn, annotation_id, image_id=image_id)
+            )
         resolved_link_ids = _normalize_annotation_ids(derived_link_ids)
     else:
         resolved_link_ids = _normalize_annotation_ids(link_ids)

@@ -186,10 +186,7 @@ def _resolve_image_ids(conn, project_id, selected_image_ids):
                 selected.add(iid)
         return sorted(selected)
 
-    if not images:
-        images = list(conn.getObjects("Image"))
-
-    return _image_ids_from_objects(images)
+    return project_image_ids
 
 
 def _save_annotation_link(update, link):
@@ -306,6 +303,13 @@ def start_job(request, conn=None, _url=None, **kwargs):
             )
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+        if not image_ids:
+            return JsonResponse({"error": error_messages.no_images_found()}, status=400)
+
+        if delete_mode in ("all", "plugin"):
+            valid, error = _validate_user_password(conn, data.get("password"))
+            if not valid:
+                return JsonResponse({"error": error}, status=403)
 
         allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:

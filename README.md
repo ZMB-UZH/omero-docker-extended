@@ -116,7 +116,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── omeroweb_example.env           #   Web: apps, plugins, admin tools, upload config
 ├── startup/                           # Container bootstrap scripts
 │   ├── 10-server-bootstrap.sh         #   Server config, certs, job-service user, scripts
-│   ├── 10-web-bootstrap.sh            #   Log dir validation, docker socket access
+│   ├── 10-web-bootstrap.sh            #   Runtime dirs, quota metadata, log validation
 │   ├── 40-start-*-celery-worker.sh    #   Imaris and Tools Celery worker startup helpers
 │   ├── 50-config.py                   #   OMERO.web runtime configuration generator
 │   ├── 50-install-omero-downloader.sh #   OMERO.downloader install/verify helper
@@ -210,11 +210,11 @@ The table below lists the long-running services available in the full profile se
 | `redis` | redis:8.6.3-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `ollama` | ollama/ollama:0.24.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.40.0-alpine | docker container management UI | 9000, 9443 |
-| `prometheus` | prom/prometheus:v3.11.3 | Metrics scraping and storage | 9090 |
-| `grafana` | grafana/grafana:13.0.1 | Dashboards and visualization | 3000 |
-| `loki` | grafana/loki:3.7.1 | Log aggregation backend | 3100 |
-| `alloy` | grafana/alloy:v1.16.1 | Log collection pipeline (docker + file-based) | 12345 (internal) |
+| `portainer` | portainer/portainer-ce:2.40.0-alpine | docker container management UI (management profile) | 127.0.0.1:9443 |
+| `prometheus` | prom/prometheus:v3.11.3 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `grafana` | grafana/grafana:13.0.1 | Dashboards and visualization | 127.0.0.1:3000 |
+| `loki` | grafana/loki:3.7.1 | Log aggregation backend | 127.0.0.1:3100 |
+| `alloy` | grafana/alloy:v1.16.1 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.11.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.56.2 | Container resource metrics | 8080 (internal) |
@@ -427,12 +427,17 @@ built-in `GITHUB_TOKEN` with job-scoped `contents: write` permission to create
 the GitHub release; no separate GitHub PAT secret is required when repository
 Actions settings allow workflow write permissions. The release targets the
 default branch ref, creates a draft GitHub release with source artifacts,
-pushes and verifies the carrier image, then publishes the release. If the
-carrier publish fails after the draft was created, the workflow deletes that
-draft release and its tag. The release job deliberately does not use a GitHub
-Actions environment, because job environments create deployment records. Keep
-the Docker Hub credentials as repository secrets with the documented names.
-Before the runtime archive is saved, the
+pushes and verifies the carrier image, runs Docker Scout `quickview`, `cves`,
+and `sbom` against the pushed Docker Hub tag, then publishes the release. The
+carrier push includes BuildKit SBOM and provenance attestations so Docker Hub
+and Docker Scout have metadata for automatic image analysis. Docker Hub still
+requires image security insights to be enabled for the repository; otherwise
+the Hub UI can continue to show `Security unknown` even when CI has run Scout.
+If the carrier publish or Scout analysis fails after the draft was created, the
+workflow deletes that draft release and its tag. The release job deliberately
+does not use a GitHub Actions environment, because job environments create
+deployment records. Keep the Docker Hub credentials as repository secrets with
+the documented names. Before the runtime archive is saved, the
 workflow derives the required image references from Compose and prunes only
 runner-local docker images outside that required set to keep hosted-runner
 storage available without changing the released image list. The
@@ -441,7 +446,8 @@ the carrier repository; do not store a docker hub account password there.
 
 **5.** After a successful installation, run:
 
-- Portainer: <http://localhost:9000> (set admin password on first login)
+- Portainer: <https://localhost:9443> when launched with the `management`
+  profile (set admin password on first login)
 - OMERO.web: <http://localhost:4090>
 
 Log in to OMERO.web using the root credential configured in `env/omero_secrets.env`.
@@ -548,10 +554,10 @@ The observability stack provides:
 - **Prometheus** scrapes 10 direct metric targets, plus blackbox HTTP probes
   for the configured service endpoints and TCP probes for 5 internal endpoints
   (databases, Redis, OMERO.server SSL, and OMERO.server).
-- **Alloy** collects docker container logs and OMERO server/web internal log files, pushes to Loki.
+- **Alloy** collects OMERO server/web internal log files and pushes them to Loki.
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
-- **CrowdSec** provides host-wide security telemetry by analyzing host syslog/auth logs and docker logs via mounted sources.
+- **CrowdSec** provides host-wide security telemetry by analyzing mounted host syslog/auth logs.
 
 </details>
 

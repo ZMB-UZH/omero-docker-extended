@@ -89,7 +89,7 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
     monkeypatch.setattr(
         annotation_service,
         "find_annotation_link_ids",
-        lambda conn, annotation_ids: ["links", annotation_ids],
+        lambda conn, annotation_ids, image_id=None: ["links", annotation_ids, image_id],
     )
     monkeypatch.setattr(
         annotation_service,
@@ -108,7 +108,7 @@ def test_core_wrapper_and_filename_parser_paths_follow_runtime_contracts(
         7,
         False,
     ]
-    assert core.find_annotation_link_ids(object(), [1, 2]) == ["links", [1, 2]]
+    assert core.find_annotation_link_ids(object(), [1, 2]) == ["links", [1, 2], None]
     assert core.find_map_annotation_ids(object(), 9) == [9, "map"]
     assert core.delete_existing_annotations(
         object(),
@@ -262,7 +262,7 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
     monkeypatch.setattr(
         annotation_service,
         "find_annotation_link_ids",
-        lambda _conn, annotation_id: [annotation_id + 100],
+        lambda _conn, annotation_id, image_id=None: [annotation_id + image_id + 100],
     )
     monkeypatch.setattr(core, "MapAnnotationI", _Stub)
     monkeypatch.setattr(core, "ImageAnnotationLinkI", _Stub)
@@ -272,8 +272,8 @@ def test_core_delete_existing_annotations_falls_back_to_id_based_deletion(
 
     assert result == (2, 2, 2)
     assert deleted == [
-        107,
-        108,
+        118,
+        119,
         ("Annotation", 7, True),
         ("Annotation", 8, True),
     ]

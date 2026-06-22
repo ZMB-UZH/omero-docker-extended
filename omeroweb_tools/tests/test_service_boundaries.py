@@ -342,7 +342,7 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
     )
     assert service._visible_group_ids(conn) == [5]
     monkeypatch.setattr(service, "_current_user_id", lambda conn: None)
-    assert service._visible_group_ids(conn) is None
+    assert service._visible_group_ids(conn) == []
     monkeypatch.setattr(service, "_current_user_id", lambda conn: 9)
     assert (
         service._visible_group_ids(
@@ -350,7 +350,7 @@ def test_visible_group_ids_range_math_and_row_merging_boundaries(monkeypatch):
                 getAdminService=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
             )
         )
-        is None
+        == []
     )
 
     monkeypatch.setattr(service, "rtime", lambda milliseconds: ("rtime", milliseconds))

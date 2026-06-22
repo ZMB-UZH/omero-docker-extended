@@ -75,6 +75,30 @@ def test_prompt_and_regex_helpers_cover_strict_hints_cleanup_and_validation():
     assert ai_assist._is_regex_too_generic(".", filenames) is True
 
 
+def test_ai_regex_validation_uses_safe_separator_parser(monkeypatch):
+    """Check AI regex validation avoids Python regex splitting.
+
+    Inputs: pytest `monkeypatch`. Output: asserts separator parser behavior.
+    """
+    filenames = [
+        "sample-cond-ctrl_rep-3.tif",
+        "sample-cond-treated_rep-4.tif",
+    ]
+
+    def fail_split(*_args, **_kwargs):
+        """Raise if the unsafe regex split engine is used.
+
+        Inputs: ignored split args. Output: raises AssertionError.
+        """
+        raise AssertionError("re.split must not validate AI regex suggestions")
+
+    monkeypatch.setattr(ai_assist.re, "split", fail_split)
+
+    assert ai_assist._is_regex_reasonable("(?:-|_)+", filenames) is True
+    assert ai_assist._is_regex_reasonable("(a+)+", filenames) is False
+    assert ai_assist._is_regex_too_generic("(a+)+", filenames) is True
+
+
 def test_post_json_and_provider_dispatch_cover_success_and_failure_paths(monkeypatch):
     """Verify post JSON and provider dispatch cover success and failure paths.
 

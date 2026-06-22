@@ -717,11 +717,11 @@ def _visible_group_ids(conn) -> list[int] | None:
         admin_service = conn.getAdminService()
         user_id = _current_user_id(conn)
         if user_id is None:
-            return None
+            return []
         groups = admin_service.containedGroups(user_id)
     except Exception:
         logger.debug("Failed to resolve visible groups for search.", exc_info=True)
-        return None
+        return []
 
     group_ids: list[int] = []
     for group in groups or []:

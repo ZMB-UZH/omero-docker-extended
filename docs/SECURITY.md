@@ -72,12 +72,17 @@ Locale data is intentionally preserved across the hardened images for compatibil
 
 The prebuilt carrier release workflow always builds the bundled custom runtime
 images with `APPLY_SECURITY_HARDENING=1` and
-`DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` before publishing the carrier. The easy
+`DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` before publishing the carrier. The carrier
+image itself is pushed with BuildKit SBOM and provenance attestations, then the
+release workflow runs Docker Scout `quickview`, `cves`, and `sbom` against the
+pushed Docker Hub tag before the GitHub release is published. The easy
 installation path therefore skips the local hardening prompt and loads only the
 release-built images from the verified carrier bundle. The carrier wrapper is a
 scratch-based data image with no OS package layer, shell, or package manager;
 it uses `HEALTHCHECK NONE` metadata instead of a runnable healthcheck command,
-and only the bundled runtime service images carry OS package surfaces.
+and only the bundled runtime service images carry OS package surfaces. Docker
+Hub must still have image security insights enabled for the repository for the
+Hub UI to replace `Security unknown` with automatic analysis results.
 
 ## Image pinning
 
@@ -111,12 +116,20 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
 
 ## Network exposure
 
-- By default, only `omeroserver` (`OMERO_SERVER_HOST_PORT`, default 4064), `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090), `portainer` (9000/9443), `prometheus` (9090), `grafana` (3000), and `loki` (3100) are exposed to the host.
+- By default, only `omeroserver` (`OMERO_SERVER_HOST_PORT`, default 4064) and
+  `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090) are exposed on all host
+  interfaces. Loki (`127.0.0.1:3100`), Prometheus (`127.0.0.1:9090`), and
+  Grafana (`127.0.0.1:3000`) bind to loopback.
+- Portainer is disabled by default and is available only with the `management`
+  Compose profile on `127.0.0.1:9443`.
 - When the `crowdsec` profile is enabled, CrowdSec uses host networking and exposes its LAPI on host port 8080.
 - All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` docker network.
-- Restrict public access to monitoring interfaces (Grafana, Prometheus, Portainer) using firewall rules or a reverse proxy with authentication.
+- Keep monitoring interfaces on loopback or place them behind a TLS reverse
+  proxy with authentication before exposing them.
 - OMERO.web should be behind a TLS-terminating reverse proxy for production use.
-- Docker socket is mounted read-only in `omeroweb` for container stats (admin tools plugin).
+- Docker socket access is not mounted by default. If an operator explicitly
+  enables Docker-backed diagnostics, mount the socket read-only and restrict it
+  to trusted administrators.
 
 ## CSRF protection
 

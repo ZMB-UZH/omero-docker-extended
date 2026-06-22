@@ -85,7 +85,9 @@ flowchart TD
   login CSRF token/cookie after the proxy rewrites origin/referrer headers.
 - Prometheus queries are proxied as standard request/response traffic; the SSE notifications endpoint is short-circuited with `204 No Content`.
 - The Prometheus proxy root redirects to `/targets`.
-- Docker container stats and system info are fetched via the mounted Docker socket (read-only).
+- Docker container stats and system info are fetched only when operators
+  explicitly mount the Docker socket read-only; the default deployment leaves
+  socket-backed diagnostics unavailable.
 
 ### 3. Storage analytics
 

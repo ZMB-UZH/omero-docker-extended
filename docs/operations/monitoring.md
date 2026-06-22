@@ -160,16 +160,13 @@ before writing textfile metrics atomically.
 
 ## Alloy log collection
 
-Alloy collects logs from two sources:
-
-1. **Docker container logs**: discovered via Docker socket (`/var/run/docker.sock`), relabeled with `compose_service` and `container` labels.
-2. **OMERO internal log files**: discovered by file path patterns in mounted
-   OMERO server and web log directories (`*.log`, `*.out`, `*.err`). Compose
-   mounts the installation-specific host paths into Alloy under neutral
-   collector paths (`/logs/omeroserver`, `/logs/omeroweb`, and
-   `/logs/omeroweb-supervisor`), so the Alloy config does not encode the host
-   installation root. Labeled with `compose_service`, `log_type=internal`, and
-   `filepath`.
+Alloy collects OMERO internal log files discovered by file path patterns in
+mounted OMERO server and web log directories (`*.log`, `*.out`, `*.err`).
+Compose mounts the installation-specific host paths into Alloy under neutral
+collector paths (`/logs/omeroserver`, `/logs/omeroweb`, and
+`/logs/omeroweb-supervisor`), so the Alloy config does not encode the host
+installation root. Labeled with `compose_service`, `log_type=internal`, and
+`filepath`.
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
@@ -179,11 +176,10 @@ installations from skipping log lines that were written before Alloy discovered
 the file. Existing installations still resume from `/data-alloy` positions, so
 normal restarts do not replay already-collected logs.
 
-Alloy stores Docker and file-tail positions under `/data-alloy`, backed by
+Alloy stores file-tail positions under `/data-alloy`, backed by
 `ALLOY_DATA_PATH` from `installation_paths.env`. That path must persist across
-container restarts so `loki.source.docker` and `loki.source.file` resume at the
-recorded offsets instead of replaying historical container logs that Loki would
-reject as stale.
+container restarts so `loki.source.file` resumes at the recorded offsets instead
+of replaying historical log lines that Loki would reject as stale.
 
 Loki does not configure a repository-specific retention period in
 `monitoring/loki/loki-config.yml`; search visibility is controlled by the log
@@ -192,7 +188,9 @@ line before source files rotated away.
 
 ## CrowdSec log expectations
 
-- `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is expected on hosts that do not expose those files (for example journald-only systems). Docker log acquisition still starts normally via `source: docker`.
+- `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is
+  expected on hosts that do not expose those files (for example journald-only
+  systems). Docker socket acquisition is disabled in the default configuration.
 - The CrowdSec healthcheck is HTTP-based (`/health`) and should not generate repeated `POST /v1/watchers/login` entries by itself.
 
 ## CrowdSec firewall bouncer
@@ -353,4 +351,4 @@ For the `Swap usage` panel specifically, only presentation options (for example 
 - Restrict Grafana dashboard write access to admin users.
 - Rotate Grafana admin credentials (configured in `env/grafana.env`).
 - Grafana outbound analytics, update checks, and automatic preinstalled-plugin updates are disabled in `env/grafana_example.env` for offline or restricted-network deployments; this prevents recurring startup warnings when egress is blocked and avoids write attempts against bundled plugin directories.
-- Alloy has read-only access to the Docker socket and log files.
+- Alloy has read-only access to the mounted OMERO log directories.

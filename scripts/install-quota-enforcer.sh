@@ -149,28 +149,22 @@ DEFAULTS
 
 # Prepare admin tools directory. Inputs: shell arguments and environment. Output: command status and side effects.
 prepare_admin_tools_dir() {
-    mkdir -p "${OMERO_DATA_DIR}/.admin-tools/quota"
-    # The .admin-tools directory must be writable by both:
-    # - the host-side enforcer (root)
-    # - the omeroweb container (non-root)
-    #
-    # DO NOT use sticky-bit (1777) here: it can break atomic replace (os.replace)
-    # if group-quotas.json ownership differs from the current writer UID.
-    # Use 0777 (world-writable, no sticky) to allow safe atomic updates.
-    chmod 0777 "${OMERO_DATA_DIR}/.admin-tools"
-    chmod 0777 "${OMERO_DATA_DIR}/.admin-tools/quota"
+    install -d -m 0750 "${OMERO_DATA_DIR}/.admin-tools"
+    install -d -m 0700 "${OMERO_DATA_DIR}/.admin-tools/quota"
 
-    # Ensure the quota state file remains writable for the non-root omeroweb
-    # container user even when this installer is executed as root during upgrades.
+    # The omeroweb bootstrap assigns the runtime UID/GID on container start.
+    # The host installer only guarantees that quota paths are never
+    # world-writable while still remaining readable by the root enforcer.
     state_file="${OMERO_DATA_DIR}/.admin-tools/group-quotas.json"
     if [[ -f "${state_file}" ]]; then
-        chmod 0666 "${state_file}"
+        chmod 0600 "${state_file}"
     else
-        install -m 0666 /dev/null "${state_file}"
+        install -m 0600 /dev/null "${state_file}"
     fi
 
-    echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 0777)"
-    echo "  Ensured writable quota state: ${state_file} (mode 0666)"
+    echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 0750)"
+    echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/quota/ (mode 0700)"
+    echo "  Ensured private quota state: ${state_file} (mode 0600)"
 }
 
 # Install systemd units. Inputs: shell arguments and environment. Output: command status and side effects.

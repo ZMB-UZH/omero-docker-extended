@@ -12,12 +12,15 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 - Log retrieval is optimized for large log volumes: the UI applies text/severity filters locally after load, auto-refresh uses incremental fetches, repeated identical requests are served from process-local RAM cache, and internal log file selections are batched with bounded split retries so a slow multi-file query does not silently drop a source.
 - Log severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference, with traceback-continuation and RedisBloom `bf-error-rate` lines treated as non-error noise.
 - Embedded/proxied Grafana dashboards and Prometheus query interface.
-- Docker container resource monitoring (stats, system info, process lists).
+- Grafana/Prometheus resource monitoring, with Docker API diagnostics only when
+  operators explicitly mount a read-only Docker socket.
 - Storage usage analytics by user and group from OMERO API.
 - Quota management tab for group-level quota definitions with CSV import/template export and enforcement reconciliation logs.
 - Server and database diagnostic scripts (platform end-to-end health checks).
 - Root-only access enforcement on all endpoints.
-- Docker-backed compose-state inspection via the mounted engine socket and direct PostgreSQL sanity checks from the `omeroweb` runtime.
+- Direct PostgreSQL sanity checks from the `omeroweb` runtime, plus optional
+  Docker-backed compose-state inspection when a read-only engine socket is
+  explicitly mounted.
 
 ## Key routes
 
@@ -80,7 +83,7 @@ the log-query backend instead of using code-side defaults:
 | `ADMIN_TOOLS_PROMETHEUS_URL`                   | Prometheus base URL for metric queries                                                                                                                             | `http://prometheus:9090`                       |
 | `ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL`            | Optional browser-facing Prometheus base URL; also used as a proxy fallback when the internal URL is unreachable                                                    | unset                                          |
 | `ADMIN_TOOLS_INTERNAL_SERVICE_SCHEME`          | Fallback scheme for generated internal Grafana/Prometheus URLs when their explicit URL variables are unset; invalid values fall back to `http`                     | `http`                                         |
-| `ADMIN_TOOLS_DOCKER_SOCKET`                    | Docker API Unix socket used for container stats, compose-state inspection, and Docker diagnostic checks                                                            | `/var/run/docker.sock`                         |
+| `ADMIN_TOOLS_DOCKER_SOCKET`                    | Optional Docker API Unix socket used for container stats, compose-state inspection, and Docker diagnostic checks when explicitly mounted                            | `/var/run/docker.sock`                         |
 | `ADMIN_TOOLS_COMPOSE_PROJECT_NAME`             | Compose project label used when diagnostics inspect service containers through the Docker API                                                                      | `omero`                                        |
 | `GRAFANA_HOST_PORT`                            | Host port used to synthesize a direct Grafana browser URL when no public URL is configured and the request is not behind a reverse proxy                           | `3000`                                         |
 | `PROMETHEUS_HOST_PORT`                         | Host port used to synthesize a direct Prometheus browser URL when no public URL is configured and the request is not behind a reverse proxy                        | `9090`                                         |
@@ -109,9 +112,9 @@ the log-query backend instead of using code-side defaults:
 | `ADMIN_TOOLS_QUOTA_PROJID_FILE`                | ext4 project-name mapping file updated by the host enforcer                                                                                                        | `/OMERO/.admin-tools/quota/projid`             |
 | `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN`             | Minimum project ID used when assigning new group IDs                                                                                                               | `200000`                                       |
 
-The Docker socket path is controlled by `ADMIN_TOOLS_DOCKER_SOCKET`; the
-default `/var/run/docker.sock` must be mounted read-only for container stats
-and diagnostics compose-state inspection.
+The Docker socket is not mounted by default. If Docker-backed diagnostics are
+required, mount the path from `ADMIN_TOOLS_DOCKER_SOCKET` read-only and restrict
+the Admin Tools routes to trusted root users.
 
 Server/database diagnostics resolve PostgreSQL connection settings from the
 live `omeroweb` runtime environment. OMERO database checks use
@@ -170,7 +173,9 @@ Quota state writes are atomic by default and include a compatibility fallback fo
 - Restrict plugin access to authorized admin users (plugin enforces root-only access).
 - Review Grafana dashboard provisioning files after monitoring configuration changes.
 - Keep query timeouts and entry caps aligned with cluster scale.
-- Verify Docker socket is accessible (check `docker compose logs omeroweb` for socket permission errors).
+- If Docker-backed diagnostics are enabled, verify the Docker socket is
+  read-only and accessible (check `docker compose logs omeroweb` for socket
+  permission errors).
 - Verify `psycopg2-binary` remains installed in the OMERO.web image after image rebuilds or package updates.
 
 ### ext4 project-quota enforcement behavior
@@ -196,9 +201,13 @@ future reconciliation trigger.
 The runtime enforcer parses quota JSON once per run, rewrites mapping files by
 exact group/path matches, and applies quotas only to existing OMERO.server group
 directories that resolve under the configured managed repository.
-The installer and `installation/installation_script.sh` both enforce `.admin-tools` directories with mode `0777` (no sticky bit) so quota-state persistence survives container restarts and project updates without `os.replace` rename failures.
-During installation and upgrades, the installer also repairs (or creates) `.admin-tools/group-quotas.json` with mode `0666` so the non-root `omeroweb` container process can always persist quota edits while the host-side systemd enforcer (root) continues to read the same file.
-At runtime, `startup/10-web-bootstrap.sh` now re-validates the configured quota-state path and related shared quota metadata files on every `omeroweb` container start, repairing stale ownership or unreadable file modes that may have been introduced on the host between deployments.
+The installer creates `.admin-tools` with mode `0750`, `.admin-tools/quota`
+with mode `0700`, and `.admin-tools/group-quotas.json` with mode `0600`.
+At runtime, `startup/10-web-bootstrap.sh` assigns the quota state file to the
+non-root `omeroweb` runtime user and keeps the parent directory non-world-
+writable. The host-side enforcer refuses symlinked or world-writable quota
+state and mapping paths before it reads quota JSON, rewrites project mappings,
+or invokes `chattr`/`setquota`.
 
 The enforcer performs the following for each group directory with a configured quota:
 

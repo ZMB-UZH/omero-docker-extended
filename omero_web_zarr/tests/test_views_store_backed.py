@@ -28,9 +28,21 @@ warnings.filterwarnings(
 )
 django.setup()
 
+from omero_web_zarr import utils as zarr_utils
 from omero_web_zarr import views
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _default_test_zarr_roots(monkeypatch):
+    """Keep store-backed tests isolated from deployment-specific root allowlists.
+
+    Inputs: pytest `monkeypatch`. Output: clears root allowlist environment.
+    """
+    monkeypatch.delenv("CONFIG_omero_managed_dir", raising=False)
+    monkeypatch.delenv("OMERO_DATA_DIR", raising=False)
+    monkeypatch.delenv("OMERO_WEB_ZARR_ALLOWED_STORE_ROOTS", raising=False)
 
 
 def _response_text(response) -> str:
@@ -276,6 +288,26 @@ def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
     assert json.loads(response.content) == {
         "multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}]
     }
+
+
+def test_resolve_local_zarr_store_requires_allowed_root(tmp_path, monkeypatch):
+    """Check externalInfo.lsid paths are constrained to configured roots.
+
+    Inputs: pytest `tmp_path` and `monkeypatch`. Output: asserts deny/allow behavior.
+    """
+    allowed = tmp_path / "allowed.zarr"
+    denied = tmp_path / "denied.zarr"
+    _write_store(allowed)
+    _write_store(denied)
+    monkeypatch.setenv(
+        "OMERO_WEB_ZARR_ALLOWED_STORE_ROOTS",
+        str(allowed.resolve()),
+    )
+
+    assert zarr_utils.resolve_local_zarr_store(str(allowed.resolve())) == (
+        allowed.resolve()
+    )
+    assert zarr_utils.resolve_local_zarr_store(str(denied.resolve())) is None
 
 
 def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
@@ -639,6 +671,47 @@ def test_download_store_original_returns_zip_file(tmp_path):
         response.close()
 
 
+def test_download_store_original_skips_symlink_escape(tmp_path):
+    """Check store ZIP creation does not follow symlinks outside the store root.
+
+    Inputs: pytest `tmp_path`. Output: asserts escaped file content is absent.
+    """
+    _write_store(tmp_path)
+    outside_file = tmp_path.parent / "outside-secret.txt"
+    outside_file.write_text("secret", encoding="utf-8")
+    link_path = tmp_path / "escaped.txt"
+    try:
+        link_path.symlink_to(outside_file)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+
+    image = _FakeImage(str(tmp_path.resolve()), image_id=18, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/18/original/")
+
+    response = views.download_store_original(request, 18, conn=_FakeConn(image))
+    try:
+        payload = b"".join(response.streaming_content)
+        with zipfile.ZipFile(BytesIO(payload), "r") as zf:
+            assert f"{tmp_path.name}/escaped.txt" not in zf.namelist()
+            assert b"secret" not in payload
+    finally:
+        response.close()
+
+
+def test_download_store_original_enforces_file_count_limit(tmp_path, monkeypatch):
+    """Check store ZIP creation stops before unbounded materialization.
+
+    Inputs: pytest `tmp_path` and `monkeypatch`. Output: asserts limit rejection.
+    """
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=19, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/19/original/")
+    monkeypatch.setenv("OMERO_WEB_ZARR_DOWNLOAD_MAX_FILES", "1")
+
+    with pytest.raises(Http404, match="size limits"):
+        views.download_store_original(request, 19, conn=_FakeConn(image))
+
+
 def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
     """Verify download store ome tiff returns ome tiff file result shape.
 
@@ -680,6 +753,36 @@ def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
             assert 'SizeZ="1"' in tif.ome_metadata
     finally:
         response.close()
+
+
+def test_download_store_ome_tiff_enforces_source_size_limit(tmp_path, monkeypatch):
+    """Check OME-TIFF export rejects oversized source arrays before writing.
+
+    Inputs: pytest `tmp_path` and `monkeypatch`. Output: asserts limit rejection.
+    """
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=20, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/20/ome-tiff/")
+    fake_node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [np.arange(4, dtype=np.uint16).reshape(1, 1, 2, 2)],
+            "metadata": {
+                "axes": [
+                    {"name": "c", "type": "channel"},
+                    {"name": "z", "type": "space"},
+                    {"name": "y", "type": "space"},
+                    {"name": "x", "type": "space"},
+                ],
+            },
+        },
+    )()
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
+    monkeypatch.setenv("OMERO_WEB_ZARR_OME_TIFF_MAX_SOURCE_BYTES", "1")
+
+    with pytest.raises(Http404, match="size limits"):
+        views.download_store_ome_tiff(request, 20, conn=_FakeConn(image))
 
 
 def test_download_store_ome_tiff_cleans_up_temp_file_when_writer_fails(

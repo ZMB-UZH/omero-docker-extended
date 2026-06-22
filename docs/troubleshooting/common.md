@@ -85,20 +85,24 @@ Checks:
 - maintenance cron execution timestamps,
 - index bloat and table growth trends in monitoring dashboards.
 
-## 6. Docker health diagnostics reports socket permission error
+## 6. Optional Docker health diagnostics reports socket permission error
 
 Symptom in Resource Monitoring:
 
 - `Docker socket exists but API call failed`
 - current process UID/GIDs do not include the docker socket group
 
+Default deployments do not mount `/var/run/docker.sock` into `omeroweb`; in
+that case Docker-backed diagnostics are intentionally unavailable and this is
+not a service health failure.
+
 Fix (host shell, deterministic):
 
 ```bash
 stat -c '%g' /var/run/docker.sock
 id
-# Then rerun your OMERO deployment/update script so it can auto-apply
-# runtime socket permissions for omeroweb.
+# If you explicitly mounted the socket read-only, rerun your OMERO
+# deployment/update script so it can refresh runtime socket permissions.
 ```
 
 `docker-compose.yml` no longer requires manual `DOCKER_SOCKET_GID` injection.

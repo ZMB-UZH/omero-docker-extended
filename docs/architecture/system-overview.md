@@ -32,11 +32,11 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 - Installs all five plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
 - Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export and Tools enhanced-search indexing), and pinned `pytest` for in-container plugin regression tests.
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web, the Imaris Celery worker, the Tools Celery worker, and the storage-quota reconciliation loop as four supervised processes.
-- Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
+- Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and secures quota metadata.
 - Compose starts the service as `root` only for bind-mount reconciliation; the
   supervised OMERO.web and worker processes run as `omero-web`.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
-- Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), Docker socket (read-only), server logs (read-only for admin tools).
+- Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), and server logs (read-only for admin tools).
 
 ### PostgreSQL databases
 
@@ -70,15 +70,15 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 - **Prometheus** (v3.11.3): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
 - **Grafana** (13.0.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 - **Loki** (3.7.1): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.16.1): collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
+- **Alloy** (v1.16.1): collects OMERO server/web internal log files and pushes them to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
 - **Node exporter** (v1.11.1): host-level metrics.
 - **cAdvisor** (v0.56.2): container resource metrics.
 - **Postgres exporters** (v0.19.1, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.83.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
-- **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing host syslog,
-  SSH auth logs, and Docker container logs. The firewall bouncer auto-detects
+- **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing mounted host
+  syslog and SSH auth logs. The firewall bouncer auto-detects
   the host's firewall backend at startup: on Ubuntu 26.04 LTS and Debian 13
   (Trixie) it uses `mode: nftables` with dedicated `crowdsec`/`crowdsec6`
   tables, INPUT-hook chains (host protection) and supplementary FORWARD-hook
@@ -103,7 +103,8 @@ Custom image based on postgres:16.12 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.40.0) for Docker container management UI, exposed on ports 9000 and 9443.
+Portainer CE (2.40.0) is profile-gated behind the `management` Compose profile.
+When enabled, it exposes HTTPS only on `127.0.0.1:9443`.
 
 ## Plugin architecture
 
@@ -160,7 +161,7 @@ Authenticated OME-Zarr browsing and store-backed rendering:
 Operational observability for platform administrators:
 
 - Log exploration: Loki LogQL queries with container filtering, internal log file browsing.
-- Resource monitoring: Docker container stats via Docker socket, Grafana/Prometheus embedded via proxy.
+- Resource monitoring: Grafana/Prometheus embedded via proxy, with Docker socket diagnostics only when operators explicitly mount a read-only socket.
 - Storage analytics: per-user and per-group disk usage computed from OMERO API.
 - Server diagnostics: platform end-to-end health scripts, database connectivity tests.
 - Access: restricted to OMERO root users.
@@ -202,8 +203,11 @@ variable name for fast debugging.
 
 - All containers: `security_opt: no-new-privileges:true`.
 - Secrets in `env/*.env` (gitignored). Rotate all defaults before deployment.
-- Only 7 services expose host ports; all others are internal to the `omero` network.
+- Only OMERO.server and OMERO.web expose public host ports by default. Monitoring
+  interfaces bind to loopback, and Portainer is disabled unless the
+  `management` profile is enabled.
 - OMERO.web should run behind a TLS-terminating reverse proxy.
-- Docker socket is read-only in omeroweb (admin tools container stats only).
+- Docker socket access is not mounted by default; enable it only for explicit
+  diagnostics and keep it read-only.
 - Validate health checks and logs after each deployment change.
 - See `docs/SECURITY.md` for full security documentation.
