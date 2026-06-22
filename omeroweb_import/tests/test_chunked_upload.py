@@ -99,7 +99,9 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
         """
         assert current_job_id == job_id
         assert upload_errors == []
-        assert updates == [{"upload_id": "u1", "status": "uploaded"}]
+        assert updates == [
+            {"upload_id": "u1", "status": "uploaded", "saved_size": 10}
+        ]
         job["files"][0]["status"] = "uploaded"
         job["uploaded_bytes"] = 10
         job["status"] = "ready"
@@ -370,7 +372,9 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
         """
         assert current_job_id == job_id
         assert upload_errors == []
-        assert updates == [{"upload_id": "u1", "status": "uploaded"}]
+        assert updates == [
+            {"upload_id": "u1", "status": "uploaded", "saved_size": 5}
+        ]
         job["files"][0]["status"] = "uploaded"
         job["uploaded_bytes"] = 5
         job["status"] = "ready"

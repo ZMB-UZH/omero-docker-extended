@@ -457,12 +457,14 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
         107: "boom",
     }
 
-    def _find_link_ids(_conn, annotation_id):
+    def _find_link_ids(_conn, annotation_id, image_id=None):
         """Find the link IDs.
 
-        Inputs: `_conn`, `annotation_id` OMERO annotation ID. Output: `list`. Raises:
-        RuntimeError when validation or the called operation fails.
+        Inputs: `_conn`, `annotation_id` OMERO annotation ID, optional `image_id`.
+        Output: `list`. Raises: RuntimeError when validation or the called operation
+        fails.
         """
+        assert image_id in {3, 4, 5, 6, 7}
         state = link_lookup[annotation_id]
         if state == "boom":
             raise RuntimeError("link lookup failed")

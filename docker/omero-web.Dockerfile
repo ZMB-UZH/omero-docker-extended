@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.31.1@sha256:eee6e0472dead6572f4da789202d2d4b7f55571904483d35930328a5f74ccb00
+FROM openmicroscopy/omero-web-standalone:5.32.0@sha256:21eda1b301b6e68fab4382df31a4b797218de3aaff3bba08c05b498c20eec8b7
 
 # Run image build steps as root
 # -----------------------------
@@ -181,6 +181,7 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 ARG OMERO_CLI_ZARR_VERSION
 ARG OME_ZARR_PY_VERSION
 ARG BIOFORMATS2RAW_VERSION
+ARG BIOFORMATS2RAW_SHA256=ea5352eb684ed989622559e2cd594077ce5f58b6fe375ede08518856622a3864
 ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
@@ -261,6 +262,7 @@ RUN set -euo pipefail; \
     install_dir="/opt/bioformats2raw-${BIOFORMATS2RAW_VERSION}"; \
     stable_link="/opt/bioformats2raw"; \
     curl -fsSL "https://github.com/glencoesoftware/bioformats2raw/releases/download/v${BIOFORMATS2RAW_VERSION}/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip" -o "${archive}"; \
+    printf '%s  %s\n' "${BIOFORMATS2RAW_SHA256}" "${archive}" | sha256sum -c -; \
     rm -rf "${install_dir}" "${stable_link}"; \
     unzip -q "${archive}" -d /opt; \
     if [[ ! -d "${install_dir}" ]]; then \
@@ -275,8 +277,8 @@ RUN set -euo pipefail; \
 
 # Patch OMERO.web API server discovery and keep optional top-logo context keys
 # defined when unset. The API patch makes `/api/v0/servers/` return the
-# request host for this deployment's configured OMERO endpoint, so desktop
-# clients can use either a LAN IP or DNS name without seeing Docker-only names.
+# explicit public host or allowlisted request host for this deployment's
+# configured OMERO endpoint, so desktop clients do not see Docker-only names.
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \

@@ -973,14 +973,17 @@ def _is_sha256_digest(value):
     return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
-def _complete_chunk_upload_response(job_id, conn, entry, rel_path):
+def _complete_chunk_upload_response(job_id, conn, entry, rel_path, saved_size=None):
     """Mark an uploaded file complete and return the chunk response.
 
-    Inputs: `job_id`, `conn` OMERO gateway connection, `entry`, `rel_path`. Output:
-    Django `JsonResponse`.
+    Inputs: `job_id`, `conn` OMERO gateway connection, `entry`, `rel_path`,
+    `saved_size`. Output: Django `JsonResponse`.
     """
+    update = {"upload_id": entry.get("upload_id"), "status": "uploaded"}
+    if saved_size is not None:
+        update["saved_size"] = saved_size
     updated_job = _apply_upload_updates(
-        job_id, [{"upload_id": entry.get("upload_id"), "status": "uploaded"}], []
+        job_id, [update], []
     )
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state(), status=500)
@@ -1183,7 +1186,7 @@ def _idempotent_chunk_retry_response(
         return _chunk_upload_incomplete_retry_response(rel_path, existing_size)
     if entry.get("status") == "uploaded":
         return _chunk_upload_already_complete_response(job, rel_path)
-    return _complete_chunk_upload_response(job_id, conn, entry, rel_path)
+    return _complete_chunk_upload_response(job_id, conn, entry, rel_path, existing_size)
 
 
 def _reset_staged_chunk_upload(job_id, job_root, entry, rel_path, staged_path):
@@ -1417,7 +1420,7 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
     if validation_response is not None:
         return validation_response
 
-    return _complete_chunk_upload_response(job_id, conn, entry, rel_path)
+    return _complete_chunk_upload_response(job_id, conn, entry, rel_path, saved_size)
 
 
 def _upload_files(request, job_id, conn):
@@ -1563,7 +1566,13 @@ def _upload_files(request, job_id, conn):
 
         saved.append(rel_path)
         entry["status"] = "uploaded"
-        updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
+        updates.append(
+            {
+                "upload_id": entry.get("upload_id"),
+                "status": "uploaded",
+                "saved_size": saved_size,
+            }
+        )
 
     updated_job = _apply_upload_updates(job_id, updates, upload_errors)
     if not updated_job:

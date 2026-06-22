@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch OMERO.web API server discovery to return the request host."""
+"""Patch OMERO.web API server discovery to avoid Docker-internal host leakage."""
 
 from __future__ import annotations
 
@@ -39,9 +39,32 @@ NEW_API_SERVERS_BLOCK = '''def _api_request_host_without_port(request):
     return host
 
 
+def _api_request_host_allowlist():
+    raw = os.environ.get("OMERO_WEB_API_SERVER_HOST_ALLOWLIST", "")
+    return {
+        host.strip().lower()
+        for host in raw.split(",")
+        if host.strip()
+    }
+
+
+def _api_public_server_host_for_request(request):
+    configured_public_host = os.environ.get("OMERO_WEB_API_SERVER_PUBLIC_HOST", "")
+    configured_public_host = configured_public_host.strip()
+    if configured_public_host:
+        return configured_public_host
+
+    request_host = _api_request_host_without_port(request).strip()
+    if request_host.lower() in _api_request_host_allowlist():
+        return request_host
+    return ""
+
+
 def _api_server_host_for_request(request, configured_host):
     if configured_host == os.environ.get("OMEROHOST", ""):
-        return _api_request_host_without_port(request)
+        public_host = _api_public_server_host_for_request(request)
+        if public_host:
+            return public_host
     return configured_host
 
 

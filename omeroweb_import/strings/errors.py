@@ -102,6 +102,14 @@ def upload_batch_too_large(max_gb):
     return f"Upload batch exceeds the limit of {max_gb} GB."
 
 
+def upload_file_too_large(max_bytes):
+    """Format the staged-file size limit message.
+
+    Inputs: `max_bytes`. Output: user-facing error string.
+    """
+    return f"Upload file exceeds the staged file limit of {max_bytes} bytes."
+
+
 def unable_initialize_upload_folder():
     """Return the unable initialize upload folder.
 

@@ -70,7 +70,7 @@ def test_annotation_service_covers_wrapped_values_and_query_failures(monkeypatch
     """
     monkeypatch.setattr(
         annotation_service,
-        "get_env",
+        "get_optional_env",
         lambda name, env_file=None: "shared-hash-value",
     )
     assert annotation_service.get_hash_secret() == "shared-hash-value"
@@ -260,24 +260,25 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
     assert plugin_cleanup_result == (0, 0, 0)
 
     deleted_annotation_ids = set()
+    deleted_link_ids = set()
     delete_attempts = []
 
-    def _find_link_ids(_conn, annotation_id):
+    def _find_link_ids(_conn, annotation_id, image_id=None):
         """Find the link IDs.
 
-        Inputs: `_conn`, `annotation_id` OMERO annotation ID. Output: `list`. Raises:
-        RuntimeError when validation or the called operation fails.
+        Inputs: `_conn`, `annotation_id`, optional `image_id`. Output: `list`.
+        Raises: RuntimeError when validation or the called operation fails.
         """
         if annotation_id == 13:
             raise RuntimeError("link query failed")
         if annotation_id in deleted_annotation_ids:
             return []
         if annotation_id == 11:
-            return [401, 402]
+            return [link_id for link_id in (401, 402) if link_id not in deleted_link_ids]
         if annotation_id == 12:
-            return [501]
+            return [] if 501 in deleted_link_ids else [501]
         if annotation_id == 14:
-            return [701]
+            return [] if 701 in deleted_link_ids else [701]
         return []
 
     monkeypatch.setattr(annotation_service, "find_annotation_link_ids", _find_link_ids)
@@ -365,6 +366,9 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
             """
             delete_attempts.extend((kind, object_id, wait) for object_id in object_ids)
             for object_id in object_ids:
+                if kind == "ImageAnnotationLink":
+                    deleted_link_ids.add(object_id)
+                    continue
                 if object_id == 12:
                     raise RuntimeError("delete failed")
                 deleted_annotation_ids.add(object_id)
@@ -391,9 +395,12 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
 
     assert (deleted_sets, deleted_pairs, attempted) == (1, 0, 4)
     assert delete_attempts == [
+        ("ImageAnnotationLink", 401, True),
+        ("ImageAnnotationLink", 402, True),
         ("Annotation", 11, True),
+        ("ImageAnnotationLink", 501, True),
         ("Annotation", 12, True),
-        ("Annotation", 13, True),
+        ("ImageAnnotationLink", 701, True),
         ("Annotation", 14, True),
     ]
 

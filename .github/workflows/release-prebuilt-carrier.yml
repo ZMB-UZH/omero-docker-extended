@@ -47,6 +47,7 @@ jobs:
           fetch-depth: 0
 
       - name: Resolve release metadata
+        id: release-metadata
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_RELEASE_VERSION: ${{ inputs.release_version }}
@@ -64,6 +65,14 @@ jobs:
             --default-docker-repository "${DEFAULT_DOCKER_REPOSITORY}" \
             --existing-tags-file dist/existing-release-tags.txt \
             --repo-root "${GITHUB_WORKSPACE}"
+          metadata_value() {
+            grep -E "^${1}=" "${GITHUB_ENV}" | tail -n 1 | cut -d= -f2-
+          }
+          {
+            printf 'release_version=%s\n' "$(metadata_value RELEASE_VERSION)"
+            printf 'docker_repository=%s\n' "$(metadata_value DOCKER_REPOSITORY)"
+            printf 'carrier_image=%s\n' "$(metadata_value CARRIER_IMAGE)"
+          } >> "${GITHUB_OUTPUT}"
           case "${REQUESTED_REPLACE_EXISTING}" in
             true|True|1)
               [ -n "${REQUESTED_RELEASE_VERSION}" ] || {
@@ -481,7 +490,8 @@ jobs:
           set -euo pipefail
           docker buildx build \
             --push \
-            --provenance=false \
+            --provenance=true \
+            --sbom=true \
             --progress plain \
             -f docker/prebuilt-carrier.Dockerfile \
             -t "${CARRIER_IMAGE}" \
@@ -504,6 +514,52 @@ jobs:
           trap - EXIT
           cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
           cmp dist/prebuilt-required-images.txt dist/verified-prebuilt-required-images.txt
+
+      - name: Analyze Docker Hub carrier image with Docker Scout
+        uses: docker/scout-action@cd72f264beff1cd72735de31148b9d3244a0234a # v1.21.0
+        with:
+          command: quickview,cves
+          image: registry://${{ steps.release-metadata.outputs.carrier_image }}
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          registry-user: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          organization: strmt7
+          output: dist/docker-scout-sbom.json
+          write-comment: false
+          summary: true
+          exit-code: false
+
+      - name: Export Docker Scout carrier SBOM
+        uses: docker/scout-action@cd72f264beff1cd72735de31148b9d3244a0234a # v1.21.0
+        with:
+          command: sbom
+          image: registry://${{ steps.release-metadata.outputs.carrier_image }}
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          registry-user: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          output: dist/docker-scout-sbom.json
+          write-comment: false
+          summary: true
+
+      - name: Verify Docker Scout release scan output
+        run: |
+          set -euo pipefail
+          test -s dist/docker-scout-sbom.json
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+          sbom = json.loads(Path("dist/docker-scout-sbom.json").read_text(encoding="utf-8"))
+          if not isinstance(sbom, dict):
+              raise SystemExit("Docker Scout SBOM output is not a JSON object.")
+          if not sbom:
+              raise SystemExit("Docker Scout SBOM output is empty.")
+          print("Docker Scout SBOM output verified.")
+          PY
 
       - name: Publish GitHub release
         env:

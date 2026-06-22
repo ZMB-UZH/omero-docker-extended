@@ -19,7 +19,11 @@ LOGGER = logging.getLogger(__name__)
 OME_ZARR_IMPORT_KIND_IMAGE = "ome_zarr_image"
 OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW = "bioformats2raw_layout3"
 OME_ZARR_NATIVE_GZIP_LEVEL_ENV = "OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL"
+OME_ZARR_NATIVE_MAX_ARRAY_BYTES_ENV = "OMERO_WEB_UPLOAD_NATIVE_ZARR_MAX_ARRAY_BYTES"
+OME_ZARR_NATIVE_MAX_CHUNKS_ENV = "OMERO_WEB_UPLOAD_NATIVE_ZARR_MAX_CHUNKS"
 DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL = 1
+DEFAULT_OME_ZARR_NATIVE_MAX_ARRAY_BYTES = 1024 * 1024 * 1024
+DEFAULT_OME_ZARR_NATIVE_MAX_CHUNKS = 250000
 
 
 @dataclass(frozen=True)
@@ -984,21 +988,108 @@ def _normalize_dtype_name(raw_dtype) -> tuple[str, Optional[str]]:
         return "", "OME-Zarr primary array dtype metadata is invalid."
 
 
+def _int_env(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    """Return an integer environment value within bounds.
+
+    Inputs: `env_key`, `default`, `min_value`, `max_value`. Output: `int`.
+    """
+    raw_value = str(os.environ.get(env_key) or "").strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < min_value or parsed > max_value:
+        return default
+    return parsed
+
+
 def _native_ome_zarr_gzip_level() -> int:
     """Native ome Zarr gzip level.
 
     Inputs: none. Output: `int`.
     """
-    raw_value = str(os.environ.get(OME_ZARR_NATIVE_GZIP_LEVEL_ENV) or "").strip()
-    if not raw_value:
-        return DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
-    try:
-        parsed = int(raw_value)
-    except (TypeError, ValueError):
-        return DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
-    if parsed < 0:
-        return DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL
-    return parsed
+    return _int_env(
+        OME_ZARR_NATIVE_GZIP_LEVEL_ENV,
+        DEFAULT_OME_ZARR_NATIVE_GZIP_LEVEL,
+        0,
+        9,
+    )
+
+
+def _native_ome_zarr_max_array_bytes() -> int:
+    """Return max native OME-Zarr array bytes for in-process normalization.
+
+    Inputs: none. Output: `int`.
+    """
+    return _int_env(
+        OME_ZARR_NATIVE_MAX_ARRAY_BYTES_ENV,
+        DEFAULT_OME_ZARR_NATIVE_MAX_ARRAY_BYTES,
+        1,
+        64 * 1024 * 1024 * 1024,
+    )
+
+
+def _native_ome_zarr_max_chunks() -> int:
+    """Return max native OME-Zarr chunk count for in-process normalization.
+
+    Inputs: none. Output: `int`.
+    """
+    return _int_env(
+        OME_ZARR_NATIVE_MAX_CHUNKS_ENV,
+        DEFAULT_OME_ZARR_NATIVE_MAX_CHUNKS,
+        1,
+        100000000,
+    )
+
+
+def _array_nbytes(shape: tuple[int, ...], dtype) -> int:
+    """Return the byte size for an array shape and dtype.
+
+    Inputs: `shape`, `dtype`. Output: `int`.
+    """
+    total = 1
+    for size in shape:
+        total *= int(size)
+    return total * int(dtype.itemsize)
+
+
+def _zarr_chunk_grid_size(shape: tuple[int, ...], chunks: tuple[int, ...]) -> int:
+    """Return the total Zarr chunk count implied by shape and chunks.
+
+    Inputs: `shape`, `chunks`. Output: `int`.
+    """
+    total = 1
+    for size, chunk in zip(shape, chunks):
+        total *= math.ceil(size / chunk)
+    return total
+
+
+def _validate_native_array_bounds(
+    shape: tuple[int, ...],
+    chunks: tuple[int, ...],
+    dtype,
+    label: str,
+) -> None:
+    """Raise when native OME-Zarr normalization would exceed configured bounds.
+
+    Inputs: `shape`, `chunks`, `dtype`, `label`. Output: None.
+    """
+    array_bytes = _array_nbytes(shape, dtype)
+    max_bytes = _native_ome_zarr_max_array_bytes()
+    if array_bytes > max_bytes:
+        raise RuntimeError(
+            f"{label} array size {array_bytes} bytes exceeds configured limit "
+            f"{max_bytes} bytes"
+        )
+
+    chunk_count = _zarr_chunk_grid_size(shape, chunks)
+    max_chunks = _native_ome_zarr_max_chunks()
+    if chunk_count > max_chunks:
+        raise RuntimeError(
+            f"{label} chunk grid {chunk_count} exceeds configured limit {max_chunks}"
+        )
 
 
 def _rewrite_problematic_native_image_arrays(
@@ -1234,6 +1325,7 @@ def _read_zarr_v2_array(array_dir: Path, metadata: dict):
     if dtype_error:
         raise RuntimeError(f"invalid zarr array metadata: {dtype_error}")
     dtype = np.dtype(dtype_name)
+    _validate_native_array_bounds(shape, chunks, dtype, "native OME-Zarr")
 
     fill_value = metadata.get("fill_value", 0)
     filters_spec = metadata.get("filters")
@@ -1494,6 +1586,12 @@ def _write_zarr_v2_level(
     output_dir.mkdir(parents=True, exist_ok=True)
     shape = list(data.shape)
     ndim = len(shape)
+    try:
+        _validate_native_array_bounds(
+            tuple(shape), tuple(chunks), data.dtype, "native OME-Zarr"
+        )
+    except RuntimeError as exc:
+        return f"Cannot write OME-Zarr level: {exc}"
 
     zarray_meta = {
         "zarr_format": 2,

@@ -7,20 +7,19 @@ services:
   portainer:
     image: "portainer/portainer-ce:2.40.0-alpine"
     container_name: portainer
+    profiles:
+      - management
     restart: unless-stopped
     networks:
       omero:
         aliases:
           - portainer
     ports:
-      - "9000:9000"
-      - "9443:9443"
+      - "127.0.0.1:9443:9443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${PORTAINER_DATA_PATH:?Set PORTAINER_DATA_PATH (run installation/installation_script.sh)}:/data:rw
-    command: --http-enabled
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost:9443/api/system/status || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -37,7 +36,7 @@ services:
         aliases:
           - loki
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
@@ -65,7 +64,6 @@ services:
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - ${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroserver:ro
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroweb:ro
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroweb-supervisor:ro
@@ -92,8 +90,7 @@ services:
         sed "s/__OMERO_CLI_PORT__/$${OMERO_CLI_PORT}/g" /etc/prometheus/prometheus.yml.template > /tmp/prometheus.yml
         exec /bin/prometheus \
           --config.file=/tmp/prometheus.yml \
-          --storage.tsdb.path=/prometheus \
-          --web.enable-lifecycle
+          --storage.tsdb.path=/prometheus
     environment:
       OMERO_CLI_PORT: "${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}"
     networks:
@@ -101,7 +98,7 @@ services:
         aliases:
           - prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml.template:ro
       - ${PROMETHEUS_DATA_PATH:?Set PROMETHEUS_DATA_PATH (run installation/installation_script.sh)}:/prometheus:rw
@@ -300,7 +297,7 @@ services:
         aliases:
           - grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     env_file:
       - ./env/grafana.env
       - ./env/omero_secrets.env
@@ -512,7 +509,6 @@ services:
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test:
         [
@@ -629,7 +625,6 @@ services:
       - ${CROWDSEC_DB_PATH:?Set CROWDSEC_DB_PATH (run installation/installation_script.sh)}:/var/lib/crowdsec/data/
       - ${CROWDSEC_CONFIG_PATH:?Set CROWDSEC_CONFIG_PATH (run installation/installation_script.sh)}:/etc/crowdsec/
       - /var/log:/var/log:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]

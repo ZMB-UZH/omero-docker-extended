@@ -432,7 +432,10 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
                 return rows_by_id.get(aid, [])
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
-                return [] if aid in deleted_annotation_ids else [[_Value(aid + 1000)]]
+                link_id = aid + 1000
+                if aid in deleted_annotation_ids or link_id in deleted_link_ids:
+                    return []
+                return [[_Value(link_id)]]
             if "join a.mapValue mv" in hql and "where l.parent.id = :iid" in hql:
                 return [[_Value(1)], [_Value(4)]]
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
@@ -456,6 +459,8 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
             Inputs: `obj`. Output: None.
             """
             self.deleted.append(obj)
+            if isinstance(obj, tuple) and len(obj) == 2 and obj[0] == "link":
+                deleted_link_ids.add(obj[1])
 
     ann1 = _MapAnnotation(1, plugin_mapping)
     ann2 = _MapAnnotation(2, legacy_mapping, ns="other-ns")
@@ -497,7 +502,7 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (1, 2, 1)
-    assert update.deleted == []
+    assert update.deleted == [("link", 1001)]
     assert 1 in deleted_annotation_ids
     assert 1002 not in deleted_link_ids
 
@@ -533,6 +538,7 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     ) == (0, 0, 0)
 
     deleted_annotation_ids = set()
+    deleted_link_ids = set()
 
     class _QueryService:
         """Test double for query service behavior in this module."""
@@ -546,7 +552,9 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             """
             if "where l.child.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
-                return [] if aid in deleted_annotation_ids else [[_Value(401)]]
+                if aid in deleted_annotation_ids or 401 in deleted_link_ids:
+                    return []
+                return [[_Value(401)]]
             if "select a.id from MapAnnotation a where a.id = :aid" in hql:
                 aid = params.values["aid"].getValue()
                 return [] if aid in deleted_annotation_ids else [[_Value(aid)]]
@@ -582,7 +590,12 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
             else (None if obj_id in deleted_annotation_ids else ann)
         ),
         deleteObjects=lambda kind, object_ids, wait=True: [
-            deleted_annotation_ids.add(object_id) for object_id in object_ids
+            (
+                deleted_link_ids.add(object_id)
+                if kind == "ImageAnnotationLink"
+                else deleted_annotation_ids.add(object_id)
+            )
+            for object_id in object_ids
         ],
     )
     monkeypatch.setattr(
@@ -607,6 +620,7 @@ def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch)
     assert (deleted_sets, deleted_pairs, attempted) == (1, 1, 1)
     assert update.deleted == []
     assert deleted_annotation_ids == {7}
+    assert deleted_link_ids == {401}
 
 
 def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monkeypatch):
@@ -753,7 +767,7 @@ def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annota
     )
 
     assert (deleted_sets, deleted_pairs, attempted) == (0, 0, 1)
-    assert deleted == [("Annotation", (7,), True)]
+    assert deleted == [("ImageAnnotationLink", (1007,), True)]
 
 
 class _FakeOriginalFile:

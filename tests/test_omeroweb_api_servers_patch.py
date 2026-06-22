@@ -68,16 +68,18 @@ class OmeroWebApiServersPatchTests(TestCase):
             self.assertEqual(patched_text.count("def _api_server_host_for_request"), 1)
             self.assertIn("request.get_host()", patched_text)
             self.assertIn('os.environ.get("OMEROHOST", "")', patched_text)
+            self.assertIn('OMERO_WEB_API_SERVER_PUBLIC_HOST', patched_text)
+            self.assertIn('OMERO_WEB_API_SERVER_HOST_ALLOWLIST', patched_text)
             self.assertIn(
                 '"host": _api_server_host_for_request(request, obj.host)',
                 patched_text,
             )
             compile(patched_text, str(target_path), "exec")
 
-    def test_patched_helpers_strip_web_port_and_preserve_other_servers(self) -> None:
-        """Verify patched helpers strip the web port and preserve unrelated servers.
+    def test_patched_helpers_require_public_host_or_allowlist(self) -> None:
+        """Verify patched helpers avoid reflecting arbitrary request hosts.
 
-        Inputs: repository fixtures. Output: validates host rewriting and server preservation.
+        Inputs: repository fixtures. Output: validates safe host rewriting and server preservation.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_path = Path(tmp_dir) / "views.py"
@@ -116,7 +118,15 @@ class OmeroWebApiServersPatchTests(TestCase):
                         ),
                     },
                 ),
-                mock.patch.dict(os.environ, {"OMEROHOST": "omeroserver"}),
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "OMEROHOST": "omeroserver",
+                        "OMERO_WEB_API_SERVER_PUBLIC_HOST": "",
+                        "OMERO_WEB_API_SERVER_HOST_ALLOWLIST": "omero.example.org,2001:db8::1",
+                    },
+                    clear=False,
+                ),
             ):
                 spec.loader.exec_module(module)
 
@@ -128,7 +138,7 @@ class OmeroWebApiServersPatchTests(TestCase):
 
                 self.assertEqual(
                     module.api_servers(ported_domain_request, "0")["data"][0]["host"],
-                    "omero-web.example.test",
+                    "omeroserver",
                 )
                 self.assertEqual(
                     module.api_servers(domain_request, "0")["data"][0]["host"],
@@ -141,6 +151,21 @@ class OmeroWebApiServersPatchTests(TestCase):
                 self.assertEqual(
                     module.api_servers(domain_request, "0")["data"][1]["host"],
                     "remote.example.org",
+                )
+
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "OMEROHOST": "omeroserver",
+                        "OMERO_WEB_API_SERVER_PUBLIC_HOST": "public.example.org",
+                    },
+                    clear=False,
+                ),
+            ):
+                self.assertEqual(
+                    module.api_servers(ported_domain_request, "0")["data"][0]["host"],
+                    "public.example.org",
                 )
 
 

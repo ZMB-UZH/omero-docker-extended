@@ -14,6 +14,7 @@ from .filename_utils import (
     suggest_separator_regex,
 )
 from .http_utils import extract_error_details
+from .parsing.filename_parser import is_supported_separator_pattern, parse_filename
 from ..constants import (
     COMMON_SEPARATORS,
     OLLAMA_BASE_URL,
@@ -202,7 +203,7 @@ def _split_filename_with_regex(regex, filename):
     Inputs: `regex`, `filename`. Output: `tuple`.
     """
     base = extract_base_name(filename)
-    parts = [part.strip() for part in re.split(regex, base) if part and part.strip()]
+    parts = [part.strip() for part in parse_filename(filename, regex) if part.strip()]
     return base, parts
 
 
@@ -213,13 +214,7 @@ def _is_regex_reasonable(regex, filenames):
     """
     if not regex or not filenames:
         return False
-    try:
-        compiled = re.compile(regex)
-    except re.error:
-        return False
-    if compiled.groups:
-        return False
-    if compiled.search(""):
+    if not is_supported_separator_pattern(regex):
         return False
 
     sample = filenames[:20]
@@ -253,11 +248,7 @@ def _is_regex_too_generic(regex, filenames):
     """
     if not regex:
         return True
-    try:
-        compiled = re.compile(regex)
-    except re.error:
-        return True
-    if compiled.search(""):
+    if not is_supported_separator_pattern(regex):
         return True
 
     stripped = regex.strip()

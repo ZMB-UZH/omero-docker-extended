@@ -1,9 +1,12 @@
+import base64
+import hashlib
 import logging
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from django.conf import settings
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..strings import errors
@@ -20,6 +23,8 @@ ENV_AUTH = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
 ENV_DB = "OMP_DATA_DB"
 ENV_PORT = "OMP_DATA_PORT"
+ENV_AI_CREDENTIAL_ENCRYPTION_KEY = "OMP_AI_CREDENTIAL_ENCRYPTION_KEY"
+AI_CREDENTIAL_ENCRYPTION_PREFIX = "fernet:v1:"
 
 
 class VariableStoreError(Exception):
@@ -95,6 +100,118 @@ def _safe_query(template, *identifiers):
     """
     sql_mod = _load_psycopg2_sql()
     return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
+
+
+def _load_fernet():
+    """Load Fernet primitives for AI credential encryption.
+
+    Inputs: none. Output: Fernet class and InvalidToken exception type.
+    """
+    try:
+        from cryptography.fernet import Fernet, InvalidToken
+    except ImportError as exc:
+        raise AiCredentialStoreError(errors.ai_credentials_save_failed()) from exc
+    return Fernet, InvalidToken
+
+
+def _ai_credential_key_material():
+    """Return secret material used to derive the AI credential encryption key.
+
+    Inputs: deployment environment and Django settings. Output: secret string.
+    """
+    try:
+        explicit = get_env(
+            ENV_AI_CREDENTIAL_ENCRYPTION_KEY,
+            env_file=ENV_FILE_OMEROWEB,
+        )
+    except RuntimeError:
+        explicit = None
+    if explicit:
+        return str(explicit)
+    secret_key = getattr(settings, "SECRET_KEY", "")
+    if not secret_key:
+        raise AiCredentialStoreError(errors.ai_credentials_save_failed())
+    return str(secret_key)
+
+
+def _ai_credential_fernet():
+    """Return a Fernet instance derived from deployment-local secret material.
+
+    Inputs: configured key material. Output: Fernet instance.
+    """
+    Fernet, _invalid_token = _load_fernet()
+    material = _ai_credential_key_material().encode("utf-8", errors="surrogatepass")
+    digest = hashlib.sha256(b"omp-ai-credential-v1\0" + material).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _encrypt_ai_credential(api_key):
+    """Encrypt an AI provider credential before database persistence.
+
+    Inputs: `api_key` plaintext or encrypted value. Output: stored credential value.
+    """
+    if api_key is None:
+        return None
+    value = str(api_key)
+    if value.startswith(AI_CREDENTIAL_ENCRYPTION_PREFIX):
+        return value
+    token = _ai_credential_fernet().encrypt(
+        value.encode("utf-8", errors="surrogatepass")
+    )
+    return f"{AI_CREDENTIAL_ENCRYPTION_PREFIX}{token.decode('ascii')}"
+
+
+def _decrypt_ai_credential(stored_value):
+    """Decrypt an AI provider credential, preserving legacy plaintext rows.
+
+    Inputs: `stored_value` from the database. Output: plaintext credential.
+    """
+    if stored_value is None:
+        return None
+    value = str(stored_value)
+    if not value.startswith(AI_CREDENTIAL_ENCRYPTION_PREFIX):
+        return value
+    _fernet, InvalidToken = _load_fernet()
+    token = value[len(AI_CREDENTIAL_ENCRYPTION_PREFIX) :].encode("ascii")
+    try:
+        plaintext = _ai_credential_fernet().decrypt(token)
+    except InvalidToken as exc:
+        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed()) from exc
+    return plaintext.decode("utf-8", errors="surrogatepass")
+
+
+def _migrate_legacy_ai_credentials(conn):
+    """Encrypt pre-existing plaintext AI credentials in place.
+
+    Inputs: database `conn`. Output: updates legacy credential rows.
+    """
+    _load_psycopg2_sql()
+    with conn.cursor() as cur:
+        select_stmt = _safe_query(
+            """
+                SELECT id, api_key
+                FROM {}
+                WHERE api_key NOT LIKE %s
+                """,
+            TABLE_NAME_AI_CREDENTIALS,
+        )
+        cur.execute(select_stmt, (f"{AI_CREDENTIAL_ENCRYPTION_PREFIX}%",))
+        rows = cur.fetchall()
+    if not rows:
+        return
+    with conn.cursor() as cur:
+        update_stmt = _safe_query(
+            """
+                UPDATE {}
+                SET api_key = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+            TABLE_NAME_AI_CREDENTIALS,
+        )
+        for row in rows:
+            if not row or row[0] is None or row[1] is None:
+                continue
+            cur.execute(update_stmt, (_encrypt_ai_credential(row[1]), row[0]))
 
 
 def _db_params():
@@ -210,6 +327,7 @@ def _ensure_schema(conn):
             TABLE_NAME,
         )
         cur.execute(stmt)
+    _migrate_legacy_ai_credentials(conn)
     conn.commit()
 
 
@@ -505,7 +623,7 @@ def get_ai_credential(username, provider):
                 )
                 cur.execute(stmt, (username, provider))
                 row = cur.fetchone()
-                return row[0] if row and row[0] is not None else None
+                return _decrypt_ai_credential(row[0]) if row and row[0] is not None else None
     except AiCredentialStoreError:
         raise
     except Exception as e:
@@ -539,7 +657,7 @@ def save_ai_credentials(username, provider, api_key):
                         """,
                     TABLE_NAME_AI_CREDENTIALS,
                 )
-                cur.execute(stmt, (username, provider, api_key))
+                cur.execute(stmt, (username, provider, _encrypt_ai_credential(api_key)))
             conn.commit()
     except AiCredentialStoreError:
         raise

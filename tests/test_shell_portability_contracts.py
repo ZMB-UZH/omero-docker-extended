@@ -152,6 +152,7 @@ class ShellPortabilityContractTests(unittest.TestCase):
             fake_bin.mkdir()
             self._write_fake_command(fake_bin / "chattr")
             self._write_fake_command(fake_bin / "setquota")
+            self._write_fake_command(fake_bin / "chown")
 
             mount_path = temp_path / "mount"
             group_path = mount_path / "team.a"

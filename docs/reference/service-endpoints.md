@@ -1,6 +1,6 @@
 # Service and Plugin Endpoints Reference
 
-## Infrastructure endpoints (default host-exposed)
+## Infrastructure endpoints
 
 These are the shipped defaults. Treat live env files and Compose overrides as
 authoritative: before operational probes, discover current bindings from the
@@ -10,10 +10,10 @@ running containers or `docker compose config`; do not assume these host ports.
 | --- | --- | --- |
 | OMERO.server | `${OMERO_CLI_HOST}:${OMERO_CLI_PORT}` inside the stack; `${OMERO_SERVER_HOST_PORT}` on the host | OMERO API (Ice protocol) |
 | OMERO.web | `http://localhost:4090` | Web frontend and plugin UIs |
-| Portainer | `https://localhost:9443` / `http://localhost:9000` | Container management |
-| Prometheus | `http://localhost:9090` | Metrics and targets |
-| Grafana | `http://localhost:3000` | Dashboards |
-| Loki | `http://localhost:3100` | Log query API |
+| Portainer | `https://localhost:9443` on `127.0.0.1` when the `management` profile is enabled | Container management |
+| Prometheus | `http://localhost:9090` on `127.0.0.1` | Metrics and targets |
+| Grafana | `http://localhost:3000` on `127.0.0.1` | Dashboards |
+| Loki | `http://localhost:3100` on `127.0.0.1` | Log query API |
 
 ## Internal-only endpoints (Docker network)
 
@@ -158,7 +158,7 @@ Base: `/omero_imaris_connector/`
 
 | Service | Health check method |
 | --- | --- |
-| `portainer` | `wget http://localhost:9000/api/system/status` |
+| `portainer` | `wget --no-check-certificate https://localhost:9443/api/system/status` |
 | `loki` | `loki -version` |
 | `alloy` | `alloy --help` |
 | `prometheus` | `wget http://localhost:9090/-/ready` |

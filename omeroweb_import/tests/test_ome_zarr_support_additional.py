@@ -1176,6 +1176,45 @@ def test_ome_zarr_support_downscale_and_codec_edges_cover_remaining_branches(
     loaded = support._read_zarr_v2_array(codec_store, metadata)
     assert loaded.tolist() == [9]
 
+    monkeypatch.setenv(support.OME_ZARR_NATIVE_MAX_ARRAY_BYTES_ENV, "4")
+    with pytest.raises(RuntimeError, match="array size 5 bytes exceeds"):
+        support._read_zarr_v2_array(
+            codec_store,
+            {
+                "shape": [5],
+                "chunks": [5],
+                "dtype": "|u1",
+                "filters": None,
+            },
+        )
+
+    monkeypatch.setenv(support.OME_ZARR_NATIVE_MAX_ARRAY_BYTES_ENV, "100")
+    monkeypatch.setenv(support.OME_ZARR_NATIVE_MAX_CHUNKS_ENV, "2")
+    with pytest.raises(RuntimeError, match="chunk grid 3 exceeds"):
+        support._read_zarr_v2_array(
+            codec_store,
+            {
+                "shape": [3],
+                "chunks": [1],
+                "dtype": "|u1",
+                "filters": None,
+            },
+        )
+
+    monkeypatch.setenv(support.OME_ZARR_NATIVE_MAX_CHUNKS_ENV, "100")
+    monkeypatch.setenv(support.OME_ZARR_NATIVE_MAX_ARRAY_BYTES_ENV, "1")
+    assert "array size 2 bytes exceeds" in (
+        support._write_zarr_v2_level(
+            tmp_path / "bounded-level",
+            np.zeros((2,), dtype=np.uint8),
+            [1],
+            None,
+            None,
+            None,
+        )
+        or ""
+    )
+
     with pytest.raises(RuntimeError, match="filters are not supported"):
         support._read_zarr_v2_array(
             codec_store,

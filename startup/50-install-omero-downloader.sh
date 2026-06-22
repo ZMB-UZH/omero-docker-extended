@@ -5,6 +5,24 @@ if [[ -z "${OMERO_DOWNLOADER_VERSION:-}" ]]; then
     echo "ERROR: OMERO_DOWNLOADER_VERSION is not set (expected from env/omeroserver.env)." >&2
     exit 1
 fi
+if [[ -z "${OMERO_DOWNLOADER_SHA256:-}" ]]; then
+    echo "ERROR: OMERO_DOWNLOADER_SHA256 is not set (expected from env/omeroserver.env)." >&2
+    exit 1
+fi
+if [[ "${#OMERO_DOWNLOADER_SHA256}" -ne 64 ]]; then
+    echo "ERROR: OMERO_DOWNLOADER_SHA256 must be a 64-character SHA-256 digest." >&2
+    exit 1
+fi
+case "${OMERO_DOWNLOADER_SHA256}" in
+    *[!0123456789abcdefABCDEF]*)
+        echo "ERROR: OMERO_DOWNLOADER_SHA256 must be a 64-character SHA-256 digest." >&2
+        exit 1
+        ;;
+esac
+if [[ -z "${OMERO_DOWNLOADER_SHA256}" ]]; then
+    echo "ERROR: OMERO_DOWNLOADER_SHA256 must be a 64-character SHA-256 digest." >&2
+    exit 1
+fi
 
 OMERO_DOWNLOADER_URL="https://github.com/ome/omero-downloader/releases/download/v${OMERO_DOWNLOADER_VERSION}/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}-release.zip"
 VERSION_FILE="/opt/omero/downloader/.version"
@@ -23,6 +41,7 @@ fi
 echo "Installing OMERO.downloader ${OMERO_DOWNLOADER_VERSION}..."
 mkdir -p /opt/omero/downloader
 curl -fsSL "${OMERO_DOWNLOADER_URL}" -o /tmp/omero-downloader.zip
+printf '%s  %s\n' "${OMERO_DOWNLOADER_SHA256,,}" /tmp/omero-downloader.zip | sha256sum -c -
 unzip -q /tmp/omero-downloader.zip -d /tmp
 cp -a "/tmp/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}/." /opt/omero/downloader/
 chmod 0755 /opt/omero/downloader/download.sh

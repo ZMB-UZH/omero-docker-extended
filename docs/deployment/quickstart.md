@@ -122,16 +122,22 @@ workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
 permission to create the GitHub release; no separate GitHub PAT secret is
 required when repository Actions settings allow workflow write permissions. The
 release targets the default branch ref, creates a draft GitHub release with
-source artifacts, pushes and verifies the carrier image, then publishes the
-release. If the carrier publish fails after the draft was created, the
-workflow deletes that draft release and its tag. The release job deliberately
-does not use a GitHub Actions environment, because job environments create
-deployment records. Keep the Docker Hub credentials as repository secrets with
-the documented names. To rebuild an existing release without changing its
-version, dispatch the workflow with an explicit `release_version` and
-`replace_existing=true`; replacement mode first verifies that the GitHub tag,
-GitHub release, and Docker Hub image tag already exist, then overwrites the
-same carrier image tag and release assets after carrier verification. Before
+source artifacts, pushes and verifies the carrier image, runs Docker Scout
+`quickview`, `cves`, and `sbom` against the pushed Docker Hub tag, then
+publishes the release. The carrier push includes BuildKit SBOM and provenance
+attestations so Docker Hub and Docker Scout have metadata for automatic image
+analysis. Docker Hub still requires image security insights to be enabled for
+the repository; otherwise the Hub UI can continue to show `Security unknown`
+even when CI has run Scout. If the carrier publish or Scout analysis fails
+after the draft was created, the workflow deletes that draft release and its
+tag. The release job deliberately does not use a GitHub Actions environment,
+because job environments create deployment records. Keep the Docker Hub
+credentials as repository secrets with the documented names. To rebuild an
+existing release without changing its version, dispatch the workflow with an
+explicit `release_version` and `replace_existing=true`; replacement mode first
+verifies that the GitHub tag, GitHub release, and Docker Hub image tag already
+exist, then overwrites the same carrier image tag and release assets after
+carrier verification and Scout analysis. Before
 saving the runtime archive, the workflow derives the required image references
 from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner
