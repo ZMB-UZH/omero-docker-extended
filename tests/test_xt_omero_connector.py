@@ -1080,7 +1080,9 @@ def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_p
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
-            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            form_data = (
+                _request_form_data(request) if getattr(request, "data", None) else None
+            )
             calls.append((request.full_url, timeout, form_data))
             if (
                 request.full_url
@@ -1165,7 +1167,9 @@ def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
-            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            form_data = (
+                _request_form_data(request) if getattr(request, "data", None) else None
+            )
             if (
                 request.full_url
                 == f"{client.base_url}/omero_imaris_connector/imaris-export/"
@@ -1227,7 +1231,9 @@ def test_client_download_ims_export_cancels_server_job_when_stopped(tmp_path):
 
             Inputs: `request`, `timeout`. Output: `_FakeHTTPResponse`.
             """
-            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            form_data = (
+                _request_form_data(request) if getattr(request, "data", None) else None
+            )
             calls.append((request.full_url, getattr(request, "data", None), timeout))
             if (
                 request.full_url
@@ -9204,7 +9210,9 @@ def test_client_download_selected_image_ome_tiff_uses_async_custom_endpoint(tmp_
 
             Inputs: request and timeout. Output: fake HTTP response.
             """
-            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            form_data = (
+                _request_form_data(request) if getattr(request, "data", None) else None
+            )
             calls.append((request.full_url, timeout, form_data))
             if (
                 request.full_url
@@ -9283,7 +9291,9 @@ def test_client_download_selected_image_ome_tiff_surfaces_async_public_error(tmp
 
             Inputs: request and timeout. Output: fake HTTP response.
             """
-            form_data = _request_form_data(request) if getattr(request, "data", None) else None
+            form_data = (
+                _request_form_data(request) if getattr(request, "data", None) else None
+            )
             calls.append((request.full_url, timeout, form_data))
             if (
                 request.full_url

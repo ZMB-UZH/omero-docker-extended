@@ -982,9 +982,7 @@ def _complete_chunk_upload_response(job_id, conn, entry, rel_path, saved_size=No
     update = {"upload_id": entry.get("upload_id"), "status": "uploaded"}
     if saved_size is not None:
         update["saved_size"] = saved_size
-    updated_job = _apply_upload_updates(
-        job_id, [update], []
-    )
+    updated_job = _apply_upload_updates(job_id, [update], [])
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state(), status=500)
 

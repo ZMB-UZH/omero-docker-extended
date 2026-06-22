@@ -623,7 +623,11 @@ def get_ai_credential(username, provider):
                 )
                 cur.execute(stmt, (username, provider))
                 row = cur.fetchone()
-                return _decrypt_ai_credential(row[0]) if row and row[0] is not None else None
+                return (
+                    _decrypt_ai_credential(row[0])
+                    if row and row[0] is not None
+                    else None
+                )
     except AiCredentialStoreError:
         raise
     except Exception as e:

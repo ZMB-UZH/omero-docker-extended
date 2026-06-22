@@ -37,9 +37,7 @@ def _effective_hash_secret():
 
     Inputs: none. Output: secret string. Raises RuntimeError if no private secret exists.
     """
-    secret = str(
-        get_hash_secret() or getattr(settings, "SECRET_KEY", "") or ""
-    )
+    secret = str(get_hash_secret() or getattr(settings, "SECRET_KEY", "") or "")
     if secret:
         return secret
     raise RuntimeError(
@@ -450,7 +448,9 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
         try:
             remaining_links = find_annotation_link_ids(conn, aid)
         except Exception as e:
-            logger.warning("Failed to load remaining links for annotation %s: %s", aid, e)
+            logger.warning(
+                "Failed to load remaining links for annotation %s: %s", aid, e
+            )
             return False
         if remaining_links:
             logger.info(

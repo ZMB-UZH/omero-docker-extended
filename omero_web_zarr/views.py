@@ -210,8 +210,12 @@ def _store_download_limits():
     Inputs: environment. Output: `(max_files, max_bytes)`.
     """
     return (
-        _int_env("OMERO_WEB_ZARR_DOWNLOAD_MAX_FILES", _DEFAULT_STORE_DOWNLOAD_MAX_FILES),
-        _int_env("OMERO_WEB_ZARR_DOWNLOAD_MAX_BYTES", _DEFAULT_STORE_DOWNLOAD_MAX_BYTES),
+        _int_env(
+            "OMERO_WEB_ZARR_DOWNLOAD_MAX_FILES", _DEFAULT_STORE_DOWNLOAD_MAX_FILES
+        ),
+        _int_env(
+            "OMERO_WEB_ZARR_DOWNLOAD_MAX_BYTES", _DEFAULT_STORE_DOWNLOAD_MAX_BYTES
+        ),
     )
 
 

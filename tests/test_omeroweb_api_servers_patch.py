@@ -68,8 +68,8 @@ class OmeroWebApiServersPatchTests(TestCase):
             self.assertEqual(patched_text.count("def _api_server_host_for_request"), 1)
             self.assertIn("request.get_host()", patched_text)
             self.assertIn('os.environ.get("OMEROHOST", "")', patched_text)
-            self.assertIn('OMERO_WEB_API_SERVER_PUBLIC_HOST', patched_text)
-            self.assertIn('OMERO_WEB_API_SERVER_HOST_ALLOWLIST', patched_text)
+            self.assertIn("OMERO_WEB_API_SERVER_PUBLIC_HOST", patched_text)
+            self.assertIn("OMERO_WEB_API_SERVER_HOST_ALLOWLIST", patched_text)
             self.assertIn(
                 '"host": _api_server_host_for_request(request, obj.host)',
                 patched_text,
