@@ -663,7 +663,11 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("/mnt/docker-data", workflow_text)
         self.assertIn("runner.environment == 'github-hosted'", workflow_text)
         self.assertIn("docker system df", workflow_text)
+        self.assertIn("Set up carrier Buildx builder", workflow_text)
+        self.assertIn("--driver docker-container", workflow_text)
+        self.assertIn("BUILDX_BUILDER=", workflow_text)
         self.assertIn("docker buildx build", workflow_text)
+        self.assertIn('--builder "${BUILDX_BUILDER:?}"', workflow_text)
         self.assertIn("-f docker/prebuilt-carrier.Dockerfile", workflow_text)
         self.assertIn('-t "${CARRIER_IMAGE}"', workflow_text)
         self.assertIn('docker create "${CARRIER_IMAGE}"', workflow_text)
@@ -751,6 +755,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             '--method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}"',
             workflow_text,
         )
+        self.assertIn(">/dev/null 2>&1 || true", workflow_text)
+        self.assertIn("Remove carrier Buildx builder", workflow_text)
+        self.assertIn('docker buildx rm -f "${BUILDX_BUILDER}"', workflow_text)
         self.assertIn(
             "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url",
             workflow_text,

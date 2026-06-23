@@ -485,10 +485,31 @@ jobs:
             --latest=false
           echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
 
+      - name: Set up carrier Buildx builder
+        run: |
+          set -euo pipefail
+          BUILDX_BUILDER_NAME="release-carrier-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx rm -f "${BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
+          docker buildx create \
+            --name "${BUILDX_BUILDER_NAME}" \
+            --driver docker-container \
+            --use \
+            --bootstrap
+          buildx_driver="$(
+            docker buildx inspect "${BUILDX_BUILDER_NAME}" \
+              | awk '/^Driver:/ {print $2; exit}'
+          )"
+          [ "${buildx_driver}" = "docker-container" ] || {
+            echo "Buildx builder ${BUILDX_BUILDER_NAME} uses ${buildx_driver}, expected docker-container." >&2
+            exit 1
+          }
+          echo "BUILDX_BUILDER=${BUILDX_BUILDER_NAME}" >> "${GITHUB_ENV}"
+
       - name: Build and push single carrier image
         run: |
           set -euo pipefail
           docker buildx build \
+            --builder "${BUILDX_BUILDER:?}" \
             --push \
             --provenance=true \
             --sbom=true \
@@ -689,6 +710,14 @@ jobs:
           fi
           if [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
             if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
-              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" >/dev/null
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" >/dev/null 2>&1 || true
             fi
+          fi
+
+      - name: Remove carrier Buildx builder
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -n "${BUILDX_BUILDER:-}" ]; then
+            docker buildx rm -f "${BUILDX_BUILDER}" >/dev/null 2>&1 || true
           fi
