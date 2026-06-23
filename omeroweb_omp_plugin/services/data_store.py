@@ -109,7 +109,7 @@ def _load_fernet():
     """
     try:
         from cryptography.fernet import Fernet, InvalidToken
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover - dependency present in CI image
         raise AiCredentialStoreError(errors.ai_credentials_save_failed()) from exc
     return Fernet, InvalidToken
 

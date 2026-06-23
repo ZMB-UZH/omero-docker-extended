@@ -562,6 +562,17 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
         None,
         {"status": "finished"},
     )
+    _set_result(
+        views.celery_states.SUCCESS,
+        result={"state": "FINISHED", "owner_token": "owner-marker"},
+        info={},
+    )
+    assert views._poll_celery_job("celery-job-3b") == (
+        "FINISHED",
+        None,
+        None,
+        {"owner_token": "owner-marker"},
+    )
 
     _set_result(views.celery_states.REVOKED, info={"status": "cancelled"})
     assert views._poll_celery_job("celery-job-4") == (
@@ -1365,6 +1376,7 @@ def test_export_job_identifiers_and_cache_entries_are_strict(monkeypatch) -> Non
     assert views._celery_task_id("celery-bad.task") is None
     assert views._celery_task_id("celery-task_1") == "task_1"
     assert views._export_job_cache_key("job-1") is None
+    assert views._registered_export_owner_token("../bad") is None
     assert views._hash_job_owner_token("") is None
 
     monkeypatch.setattr(

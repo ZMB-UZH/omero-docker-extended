@@ -489,6 +489,7 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
         conn, 55, allow_legacy=True
     ) == [1, 2]
     assert annotation_service.find_annotation_link_ids(conn, 1) == [1001]
+    assert annotation_service.find_annotation_link_ids(conn, 1, image_id="bad") == []
     assert annotation_service.find_map_annotation_ids(conn, 55) == [1, 4]
 
     deleted_sets, deleted_pairs, attempted = (

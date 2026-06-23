@@ -712,6 +712,27 @@ def test_download_store_original_enforces_file_count_limit(tmp_path, monkeypatch
         views.download_store_original(request, 19, conn=_FakeConn(image))
 
 
+def test_download_store_original_handles_invalid_limits_and_unresolvable_store(
+    tmp_path, monkeypatch
+):
+    """Verify store download handles invalid env limits and disappearing stores.
+
+    Inputs: pytest fixtures. Output: asserts defaults and 404 behavior.
+    """
+    monkeypatch.setenv("OMERO_WEB_ZARR_DOWNLOAD_MAX_FILES", "not-an-int")
+    assert views._store_download_limits()[0] == views._DEFAULT_STORE_DOWNLOAD_MAX_FILES
+
+    image = _FakeImage("file:///unused.zarr", image_id=20)
+    monkeypatch.setattr(
+        views,
+        "resolve_image_backing_zarr_store",
+        lambda _image: tmp_path / "missing-store.zarr",
+    )
+    request = RequestFactory().get("/zarr/download/image/20/original/")
+    with pytest.raises(Http404):
+        views.download_store_original(request, 20, conn=_FakeConn(image))
+
+
 def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
     """Verify download store ome tiff returns ome tiff file result shape.
 

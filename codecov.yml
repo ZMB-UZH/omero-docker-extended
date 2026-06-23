@@ -24,29 +24,29 @@ coverage:
     project:
       default: false
       plugin-common:
-        target: auto
+        target: 100%
         paths:
           - 'omero_plugin_common/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       omp-plugin:
-        target: auto
+        target: 100%
         paths:
           - 'omeroweb_omp_plugin/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       import-plugin:
-        target: auto
+        target: 100%
         paths:
           - 'omeroweb_import/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       admin-tools:
-        target: auto
+        target: 100%
         paths:
           - 'omeroweb_admin_tools/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       imaris-connector:
         target: 100%
         paths:
@@ -54,22 +54,22 @@ coverage:
           - '!.*/tests/.*'
         threshold: 0%
       tools-plugin:
-        target: auto
+        target: 100%
         paths:
           - 'omeroweb_tools/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
       web-zarr:
-        target: auto
+        target: 100%
         paths:
           - 'omero_web_zarr/'
           - '!.*/tests/.*'
-        threshold: 1%
+        threshold: 0%
     # Patch coverage: only newly added / changed lines are evaluated.
     patch:
       default:
-        target: 0%
-        threshold: 1%
+        target: 100%
+        threshold: 0%
 
 codecov:
   notify:

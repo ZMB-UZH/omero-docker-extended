@@ -197,9 +197,10 @@ def test_image_ids_from_objects_skips_unusable_ids() -> None:
     Inputs: OMP service fakes. Output: fails on regressions in image IDs from objects skips unusable IDs.
     """
     broken = SimpleNamespace(getId=lambda: "not-an-int")
+    missing = SimpleNamespace(getId=lambda: None)
     valid = SimpleNamespace(getId=lambda: _Value(9))
 
-    assert job_view._image_ids_from_objects([broken, valid, valid]) == [9]
+    assert job_view._image_ids_from_objects([missing, broken, valid, valid]) == [9]
     assert job_view._is_safe_separator_regex(r"[_-]+") is True
     assert job_view._is_safe_separator_regex(123) is False
     assert job_view._is_safe_separator_regex("") is False
@@ -555,6 +556,16 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
         _json_request({"project_id": 5, "separator_mode": "wat", "chunk_size": "bad"}),
         conn=conn,
     )
+    monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [])
+    no_images = inspect.unwrap(job_view.start_job)(
+        _json_request({"project_id": 5}),
+        conn=conn,
+    )
+    monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [31])
+    delete_forbidden = inspect.unwrap(job_view.start_job)(
+        _json_request({"project_id": 5, "delete_mode": "all", "password": "bad"}),
+        conn=conn,
+    )
     acq_get = inspect.unwrap(job_view.start_acq_job)(factory.get("/"), conn=conn)
     acq_missing = inspect.unwrap(job_view.start_acq_job)(
         _json_request({"chunk_size": "bad"}),
@@ -576,6 +587,8 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
     assert get_response.status_code == 400
     assert missing_project.status_code == 400
     assert rate_limited.status_code == 429
+    assert no_images.status_code == 400
+    assert delete_forbidden.status_code == 403
     assert acq_get.status_code == 400
     assert acq_missing.status_code == 400
     assert acq_rate_limited.status_code == 429

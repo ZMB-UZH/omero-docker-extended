@@ -23,6 +23,8 @@ omit =
     conftest.py
 
 [report]
+precision = 2
+fail_under = 100
 skip_empty = true
 show_missing = true
 # Suppress empty package-marker modules from report noise while still

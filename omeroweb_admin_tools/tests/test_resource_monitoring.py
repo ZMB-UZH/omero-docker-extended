@@ -25,6 +25,7 @@ from omeroweb_admin_tools.views.index_view import (
     _origin_from_url,
     _grafana_backend_auth_headers,
     _grafana_proxy_home_fallback_response,
+    _inject_proxy_csrf_bridge,
     _rewrite_proxied_location,
     _send_proxy_backend_request,
 )
@@ -1693,6 +1694,19 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     assert "function isProxyRequest(input)" in content
     assert "parsedUrl.origin === window.location.origin" in content
     assert "parsedUrl.pathname.indexOf(proxyPrefix()) === 0" in content
+
+
+def test_proxy_csrf_bridge_injection_is_idempotent() -> None:
+    """Verify the Grafana proxy CSRF bridge is injected only once.
+
+    Inputs: none. Output: asserts existing bridge markers are preserved.
+    """
+    html = (
+        '<html><head><script id="admin-tools-proxy-csrf-bridge"></script></head>'
+        "<body></body></html>"
+    )
+
+    assert _inject_proxy_csrf_bridge(html) == html
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:

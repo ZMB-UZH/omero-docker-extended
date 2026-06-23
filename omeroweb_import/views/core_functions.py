@@ -1313,7 +1313,9 @@ def _managed_fd_fallback_enabled() -> bool:
     return os.name == "nt"
 
 
-def _path_is_within_root(path: Path, root: Path) -> bool:
+def _path_is_within_root(
+    path: Path, root: Path
+) -> bool:  # pragma: no cover - Windows fallback
     """Return whether `path` stays within `root`.
 
     Inputs: `path` (Path), `root` (Path). Output: `bool`.
@@ -1330,7 +1332,7 @@ def _fallback_staged_target_path(
     normalized_path: str,
     *,
     create_parents: bool = False,
-) -> tuple[Path | None, str | None]:
+) -> tuple[Path | None, str | None]:  # pragma: no cover - Windows fallback
     """Resolve a staged upload target without directory fds on platforms needing it.
 
     Inputs: `upload_root`, `normalized_path`, `create_parents`. Output: `(path,
@@ -1381,7 +1383,7 @@ def _fallback_staged_target_path(
 
 def _append_upload_chunks_to_staged_path_fallback(
     upload_root: Path, normalized_path: str, upload
-):
+):  # pragma: no cover - Windows fallback
     """Append upload chunks using path APIs on platforms without directory fds.
 
     Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
@@ -1412,7 +1414,7 @@ def _append_upload_chunks_to_staged_path_fallback(
                 if initial_size + bytes_written + chunk_size > max_size:
                     try:
                         handle.truncate(initial_size)
-                    except OSError:
+                    except OSError:  # pragma: no cover - cleanup failure guard
                         logger.debug("Suppressed exception in cleanup", exc_info=True)
                     return None, None, errors.upload_file_too_large(max_size)
                 handle.write(chunk)
@@ -1436,7 +1438,7 @@ def _append_upload_chunks_to_staged_path_fallback(
 
 def _replace_staged_upload_file_fallback(
     upload_root: Path, normalized_path: str, upload
-):
+):  # pragma: no cover - Windows fallback
     """Replace a staged upload file using path APIs where directory fds are absent.
 
     Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
@@ -1467,7 +1469,7 @@ def _replace_staged_upload_file_fallback(
                     limit_error = errors.upload_file_too_large(max_size)
                     try:
                         handle.truncate(0)
-                    except OSError:
+                    except OSError:  # pragma: no cover - cleanup failure guard
                         logger.debug("Suppressed exception in cleanup", exc_info=True)
                     break
                 handle.write(chunk)
@@ -1475,9 +1477,9 @@ def _replace_staged_upload_file_fallback(
         if limit_error:
             try:
                 target.unlink()
-            except FileNotFoundError:
+            except FileNotFoundError:  # pragma: no cover - cleanup race guard
                 logger.debug("Oversized staged upload was already removed.")
-            except OSError:
+            except OSError:  # pragma: no cover - cleanup failure guard
                 logger.debug("Suppressed exception in cleanup", exc_info=True)
             return None, limit_error
         saved_size = target.stat().st_size if target else 0
@@ -1504,7 +1506,7 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, None, normalize_error
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         return _append_upload_chunks_to_staged_path_fallback(
             upload_root, normalized_path, upload
         )
@@ -1548,8 +1550,10 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
                     limit_error = errors.upload_file_too_large(max_size)
                     try:
                         handle.truncate(initial_size)
-                    except OSError:
-                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    except OSError:  # pragma: no cover - cleanup failure guard
+                        logger.debug(  # pragma: no cover - cleanup failure guard
+                            "Suppressed exception in cleanup", exc_info=True
+                        )
                     break
                 handle.write(chunk)
                 bytes_written += chunk_size
@@ -1586,7 +1590,7 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return normalize_error
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         target, target_error = _fallback_staged_target_path(
             upload_root,
             normalized_path,
@@ -1659,7 +1663,7 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         target, target_error = _fallback_staged_target_path(
             upload_root,
             normalized_path,
@@ -1749,7 +1753,7 @@ def _staged_upload_chunk_matches(
         )
 
     expected_size = max(0, int(chunk_end) - int(chunk_start))
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         target, target_error = _fallback_staged_target_path(
             upload_root,
             normalized_path,
@@ -1842,7 +1846,7 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         return _replace_staged_upload_file_fallback(
             upload_root, normalized_path, upload
         )
@@ -1884,18 +1888,24 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
                     limit_error = errors.upload_file_too_large(max_size)
                     try:
                         handle.truncate(0)
-                    except OSError:
-                        logger.debug("Suppressed exception in cleanup", exc_info=True)
+                    except OSError:  # pragma: no cover - cleanup failure guard
+                        logger.debug(  # pragma: no cover - cleanup failure guard
+                            "Suppressed exception in cleanup", exc_info=True
+                        )
                     break
                 handle.write(chunk)
                 bytes_written += chunk_size
         if limit_error:
             try:
                 os.unlink(file_name, dir_fd=parent_fd)
-            except FileNotFoundError:
-                logger.debug("Oversized staged upload was already removed.")
-            except OSError:
-                logger.debug("Suppressed exception in cleanup", exc_info=True)
+            except FileNotFoundError:  # pragma: no cover - cleanup race guard
+                logger.debug(  # pragma: no cover - cleanup race guard
+                    "Oversized staged upload was already removed."
+                )
+            except OSError:  # pragma: no cover - cleanup failure guard
+                logger.debug(  # pragma: no cover - cleanup failure guard
+                    "Suppressed exception in cleanup", exc_info=True
+                )
             return None, limit_error
         stat_result = _managed_child_lstat(parent_fd, file_name, display_path)
         saved_size = stat_result.st_size if stat_result is not None else 0
@@ -6137,7 +6147,7 @@ def _resolve_managed_child_parts(
         relative_parts,
         max_bytes=max_bytes,
     )
-    if _managed_fd_fallback_enabled():
+    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
         root_resolved = root_path.resolve(strict=True)
         parent = root_path
         for directory_name in normalized_parts[:-1]:

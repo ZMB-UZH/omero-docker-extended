@@ -136,6 +136,68 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
 
     assert storage_quotas.list_group_directories(tmp_path / "missing") == []
 
+    class _FakePath:
+        """Path-like object for quota safety edge coverage."""
+
+        def __init__(self, action):
+            """Create `_FakePath` with `action`.
+
+            Inputs: `action` string. Output: initialized fake path.
+            """
+            self.action = action
+
+        def __str__(self):
+            """Return a stable display path.
+
+            Inputs: none. Output: fake path text.
+            """
+            return "/tmp/fake-quota-path"
+
+        def is_symlink(self):
+            """Return or raise the configured symlink result.
+
+            Inputs: none. Output: bool symlink result. Raises: OSError for the
+            configured read-failure case.
+            """
+            if self.action == "raise-symlink":
+                raise OSError("denied")
+            return self.action == "symlink"
+
+        def stat(self, follow_symlinks=False):
+            """Raise a deterministic stat failure.
+
+            Inputs: `follow_symlinks` flag. Output: none. Raises: OSError.
+            """
+            raise OSError("denied")
+
+    with pytest.raises(storage_quotas.QuotaError, match="must not be a symlink"):
+        storage_quotas._assert_not_symlink(_FakePath("symlink"), "Quota state file")
+    with pytest.raises(storage_quotas.QuotaError, match="Could not inspect"):
+        storage_quotas._assert_not_symlink(
+            _FakePath("raise-symlink"), "Quota state file"
+        )
+
+    original_os_name = storage_quotas.os.name
+    monkeypatch.setattr(storage_quotas.os, "name", "posix", raising=False)
+    with pytest.raises(storage_quotas.QuotaError, match="Could not inspect"):
+        storage_quotas._assert_not_world_writable(
+            _FakePath("raise-stat"), "Quota state file"
+        )
+    monkeypatch.setattr(storage_quotas.os, "name", original_os_name, raising=False)
+    monkeypatch.setattr(
+        storage_quotas, "_assert_not_world_writable", lambda *args: None
+    )
+
+    file_parent = tmp_path / "not-a-dir"
+    file_parent.write_text("plain", encoding="utf-8")
+    with pytest.raises(storage_quotas.QuotaError, match="parent is not a directory"):
+        storage_quotas._assert_quota_state_path_safe(file_parent / "state.json")
+
+    directory_state = tmp_path / "state-directory.json"
+    directory_state.mkdir()
+    with pytest.raises(storage_quotas.QuotaError, match="not a regular file"):
+        storage_quotas._assert_quota_state_path_safe(directory_state)
+
     real_exists = Path.exists
     monkeypatch.setattr(
         Path,

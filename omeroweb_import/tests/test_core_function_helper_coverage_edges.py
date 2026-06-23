@@ -68,6 +68,7 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
     closed_fds = []
+    monkeypatch.setattr(core_functions, "_managed_fd_fallback_enabled", lambda: False)
     monkeypatch.setattr(
         core_functions,
         "_managed_parent_runtime_error",
@@ -103,6 +104,31 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     )
     assert replaced_size is None
     assert replace_error is not None
+
+    assert core_functions._nonnegative_int("bad", default=4) == 4
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        core_functions,
+        "_staged_upload_size",
+        lambda root, staged_path: (13, None),
+    )
+    assert (
+        core_functions._uploaded_entry_actual_size(
+            "job-1", {"staged_path": "sample.bin"}
+        )
+        == 13
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_staged_upload_size",
+        lambda root, staged_path: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert (
+        core_functions._uploaded_entry_actual_size(
+            "job-1", {"relative_path": "sample.bin", "size": "9"}
+        )
+        == 9
+    )
 
     normalized = core_functions._normalize_sem_edx_associations(
         {

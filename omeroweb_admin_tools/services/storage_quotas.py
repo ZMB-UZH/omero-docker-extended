@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 try:
     import grp as _grp_module
     import pwd as _pwd_module
-except ImportError:
+except ImportError:  # pragma: no cover - POSIX modules are present in Linux CI
     _grp: Any | None = None
     _pwd: Any | None = None
 else:
@@ -29,7 +29,7 @@ def getpwuid(uid: int) -> Any:
 
     Inputs: numeric `uid`. Output: passwd entry. Raises: KeyError when unavailable.
     """
-    if _pwd is None:
+    if _pwd is None:  # pragma: no cover - POSIX modules are present in Linux CI
         raise KeyError(uid)
     return _pwd.getpwuid(uid)
 
@@ -39,7 +39,7 @@ def getgrgid(gid: int) -> Any:
 
     Inputs: numeric `gid`. Output: group entry. Raises: KeyError when unavailable.
     """
-    if _grp is None:
+    if _grp is None:  # pragma: no cover - POSIX modules are present in Linux CI
         raise KeyError(gid)
     return _grp.getgrgid(gid)
 
@@ -331,7 +331,7 @@ def _assert_not_world_writable(path: Path, label: str) -> None:
 
     Inputs: `path`, `label`. Output: None. Raises: QuotaError on unsafe modes.
     """
-    if os.name == "nt":
+    if os.name == "nt":  # pragma: no cover - Windows skips POSIX mode bits
         return
     try:
         mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -42,6 +43,26 @@ def test_path_and_external_lsid_helpers_cover_additional_invalid_inputs(
 
     store_root = tmp_path / "store.zarr"
     _write_minimal_store(store_root)
+
+    monkeypatch.setenv("CONFIG_omero_managed_dir", str(store_root))
+    monkeypatch.delenv("OMERO_WEB_ZARR_ALLOWED_STORE_ROOTS", raising=False)
+    assert utils._configured_allowed_zarr_roots() == [store_root.resolve()]
+
+    managed_repository = tmp_path / "data" / "ManagedRepository"
+    managed_repository.mkdir(parents=True)
+    monkeypatch.delenv("CONFIG_omero_managed_dir", raising=False)
+    monkeypatch.setenv("OMERO_DATA_DIR", str(tmp_path / "data"))
+    assert utils._configured_allowed_zarr_roots() == [managed_repository.resolve()]
+
+    monkeypatch.delenv("OMERO_DATA_DIR", raising=False)
+    monkeypatch.delenv("OMERO_TMP_PATH", raising=False)
+    monkeypatch.setenv(
+        "OMERO_WEB_ZARR_ALLOWED_STORE_ROOTS",
+        os.pathsep.join(["", str(tmp_path / "missing")]),
+    )
+    assert utils._configured_allowed_zarr_roots() == []
+    assert utils._is_allowed_local_zarr_store(store_root) is False
+
     nested_dir = store_root / "nested"
     nested_dir.mkdir()
     with pytest.raises(Http404):
