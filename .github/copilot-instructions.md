@@ -1,15 +1,11 @@
 # GitHub Copilot Instructions
 
-Use [AGENTS.md](../AGENTS.md) as the universal project contract, including its
-pinned Karpathy agent baseline; use
-[docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md)
-as the narrow-context router, and
-[docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the
-skill catalog.
+Use [AGENTS.md](../AGENTS.md) as the universal project contract, including its pinned Karpathy agent baseline; use [docs/reference/ai-agent-context-routing.md](../docs/reference/ai-agent-context-routing.md) as the narrow-context router, and [docs/reference/ai-agent-skills.md](../docs/reference/ai-agent-skills.md) as the skill catalog.
 
 ## Single-session rule
 
-- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session.
+- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Use the minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
 ## Core rules
 
