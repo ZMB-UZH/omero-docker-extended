@@ -1374,7 +1374,7 @@ def test_ome_tiff_pixel_export_helper_edges(monkeypatch, tmp_path) -> None:
     assert module._image_axis_size(object(), object(), "X", inferred="11") == 11
     assert module._image_axis_size(object(), object(), "X") == 1
 
-    no_plane = types.SimpleNamespace(getPrimaryPixels=lambda: object())
+    no_plane = types.SimpleNamespace(getPrimaryPixels=object)
     with (tmp_path / "no-plane.ome.tif").open("wb") as handle:
         assert module._write_ome_tiff_from_pixels(no_plane, handle) is False
 
