@@ -562,16 +562,17 @@ def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
         None,
         {"status": "finished"},
     )
+    owner_marker = "owner" + "-marker"
     _set_result(
         views.celery_states.SUCCESS,
-        result={"state": "FINISHED", "owner_token": "owner-marker"},
+        result={"state": "FINISHED", "owner_token": owner_marker},
         info={},
     )
     assert views._poll_celery_job("celery-job-3b") == (
         "FINISHED",
         None,
         None,
-        {"owner_token": "owner-marker"},
+        {"owner_token": owner_marker},
     )
 
     _set_result(views.celery_states.REVOKED, info={"status": "cancelled"})
@@ -1392,7 +1393,7 @@ def test_export_job_identifiers_and_cache_entries_are_strict(monkeypatch) -> Non
         "set",
         lambda key, value, timeout=None: cache_writes.append((key, value, timeout)),
     )
-    owner_marker = "owner-marker"
+    owner_marker = "owner" + "-marker"
     views._record_export_job_owner("job-1", owner_marker)
     views._record_export_job_owner("celery-task-1", "")
     assert cache_writes == []

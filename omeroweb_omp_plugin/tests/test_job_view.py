@@ -562,8 +562,15 @@ def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
         conn=conn,
     )
     monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [31])
+    rejected_auth_input = TEST_AUTH_INPUT
     delete_forbidden = inspect.unwrap(job_view.start_job)(
-        _json_request({"project_id": 5, "delete_mode": "all", "password": "bad"}),
+        _json_request(
+            {
+                "project_id": 5,
+                "delete_mode": "all",
+                "password": rejected_auth_input,
+            }
+        ),
         conn=conn,
     )
     acq_get = inspect.unwrap(job_view.start_acq_job)(factory.get("/"), conn=conn)

@@ -1348,9 +1348,14 @@ def test_ome_tiff_pixel_export_helper_edges(monkeypatch, tmp_path) -> None:
     """
     module = _load_script_module()
 
-    raising_pyramid = types.SimpleNamespace(
-        requiresPixelsPyramid=lambda: (_ for _ in ()).throw(RuntimeError())
-    )
+    def raise_runtime_error():
+        """Raise RuntimeError for fake OMERO methods.
+
+        Inputs: none. Output: none. Raises: RuntimeError.
+        """
+        raise RuntimeError()
+
+    raising_pyramid = types.SimpleNamespace(requiresPixelsPyramid=raise_runtime_error)
     assert module._image_requires_pixels_pyramid(raising_pyramid) is False
     assert module._positive_int_value(types.SimpleNamespace(val="7")) == 7
     assert module._positive_int_value("not-an-int") is None
@@ -1358,7 +1363,7 @@ def test_ome_tiff_pixel_export_helper_edges(monkeypatch, tmp_path) -> None:
     assert (
         module._positive_int_from_member(
             types.SimpleNamespace(
-                getSizeX=lambda: (_ for _ in ()).throw(RuntimeError()),
+                getSizeX=raise_runtime_error,
                 sizeX="5",
             ),
             "getSizeX",

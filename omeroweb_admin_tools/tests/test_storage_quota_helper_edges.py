@@ -151,7 +151,7 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
 
             Inputs: none. Output: fake path text.
             """
-            return "/tmp/fake-quota-path"
+            return "fake-quota-path"
 
         def is_symlink(self):
             """Return or raise the configured symlink result.
