@@ -324,6 +324,68 @@ def test_ai_credential_encryption_helpers_round_trip(monkeypatch):
     assert data_store._decrypt_ai_credential("legacy-key") == "legacy-key"
 
 
+def test_ai_credential_helpers_cover_null_existing_and_invalid_values(monkeypatch):
+    """Cover AI credential encryption edge cases.
+
+    Inputs: pytest `monkeypatch`. Output: asserts safe credential handling.
+    """
+    monkeypatch.setattr(data_store, "get_env", lambda name, env_file=None: None)
+
+    encrypted = data_store._encrypt_ai_credential("api-key")
+    assert data_store._encrypt_ai_credential(None) is None
+    assert data_store._encrypt_ai_credential(encrypted) == encrypted
+    assert data_store._decrypt_ai_credential(None) is None
+
+    with pytest.raises(data_store.AiCredentialStoreError):
+        data_store._decrypt_ai_credential(
+            f"{data_store.AI_CREDENTIAL_ENCRYPTION_PREFIX}invalid-token"
+        )
+
+    monkeypatch.setattr(
+        data_store,
+        "get_env",
+        lambda name, env_file=None: (_ for _ in ()).throw(RuntimeError()),
+    )
+    monkeypatch.setattr(data_store.settings, "SECRET_KEY", "fallback-secret")
+    assert data_store._ai_credential_key_material() == "fallback-secret"
+
+    monkeypatch.setattr(data_store, "settings", SimpleNamespace(SECRET_KEY=""))
+    with pytest.raises(data_store.AiCredentialStoreError):
+        data_store._ai_credential_key_material()
+
+    monkeypatch.setattr(data_store, "get_env", lambda name, env_file=None: "explicit")
+    assert data_store._ai_credential_key_material() == "explicit"
+
+
+def test_migrate_legacy_ai_credentials_skips_sparse_rows(monkeypatch):
+    """Verify legacy AI credential migration handles sparse and valid rows.
+
+    Inputs: pytest `monkeypatch`. Output: asserts only complete rows are updated.
+    """
+    select_cursor = _FakeCursor(
+        fetchall=[(), (None, "missing-id"), (3, None), (7, "legacy-key")]
+    )
+    update_cursor = _FakeCursor()
+    conn = _FakeConnection([select_cursor, update_cursor])
+    monkeypatch.setattr(data_store, "_load_psycopg2_sql", lambda: _FakeSqlModule)
+    monkeypatch.setattr(
+        data_store, "_encrypt_ai_credential", lambda value: f"enc:{value}"
+    )
+
+    data_store._migrate_legacy_ai_credentials(conn)
+
+    assert update_cursor.executed == [
+        (
+            """
+                UPDATE {}
+                SET api_key = %s, updated_at = NOW()
+                WHERE id = %s
+                """,
+            ("enc:legacy-key", 7),
+        )
+    ]
+
+
 def test_save_ai_credentials_encrypts_database_value(monkeypatch):
     """Check saved AI credentials are not persisted as plaintext.
 

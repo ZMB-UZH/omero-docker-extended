@@ -1011,3 +1011,74 @@ def test_sem_edx_parser_covers_remaining_parse_and_fitness_edges(tmp_path: Path)
         )
     )
     assert crossing_and_bounds_fitness > fitness
+
+
+def test_sem_edx_parser_covers_env_limits_and_read_failures(monkeypatch, tmp_path):
+    """Verify SEM-EDX parser limit and file-read fallback branches.
+
+    Inputs: pytest fixtures. Output: asserts safe parser defaults and caps.
+    """
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_LINES_ENV, "not-an-int")
+    assert sem_edx_parser._sem_edx_max_lines() == (
+        sem_edx_parser.DEFAULT_SEM_EDX_MAX_LINES
+    )
+
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_LINES_ENV, "1")
+    limited = tmp_path / "limited.txt"
+    limited.write_text("#TITLE: Demo\n#DATE: ignored\n", encoding="utf-8")
+    parsed = sem_edx_parser.parse_emsa_file(limited)
+    assert parsed["title"] == "Demo"
+    assert "DATE" not in parsed["metadata"]
+
+    class _UnreadablePath:
+        """Path-like object whose read open fails."""
+
+        def __init__(self, path):
+            """Create `_UnreadablePath` with `path`.
+
+            Inputs: `path` filesystem path. Output: initialized fake path.
+            """
+            self.path = path
+
+        def __fspath__(self):
+            """Return filesystem path text.
+
+            Inputs: none. Output: path string.
+            """
+            return str(self.path)
+
+        def exists(self):
+            """Report existence.
+
+            Inputs: none. Output: bool.
+            """
+            return True
+
+        def stat(self):
+            """Return small file stats.
+
+            Inputs: none. Output: object with `st_size`.
+            """
+            return SimpleNamespace(st_size=1)
+
+        def open(self, *args, **kwargs):
+            """Raise a deterministic read failure.
+
+            Inputs: file open args. Output: none. Raises: OSError.
+            """
+            raise OSError("denied")
+
+    empty = sem_edx_parser.parse_emsa_file(_UnreadablePath(tmp_path / "blocked.txt"))
+    assert empty == {"title": "", "metadata": {}, "elements": [], "spectrum": []}
+
+    monkeypatch.setenv(sem_edx_parser.SEM_EDX_MAX_PLOT_LABELS_ENV, "0")
+    assert (
+        sem_edx_parser.genetic_label_placement(
+            [(1.0, 1.0, "A")],
+            sem_edx_parser.BBox(0.0, 0.0, 1.0, 1.0),
+            object(),
+            object(),
+            object(),
+        )
+        == []
+    )

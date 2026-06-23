@@ -815,7 +815,7 @@ def _write_ome_tiff_from_pixels(image, output_handle):
     try:
         import numpy
         import tifffile
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover - dependencies are present in CI
         raise RuntimeError(
             "tifffile and numpy are required for OME-TIFF export."
         ) from exc

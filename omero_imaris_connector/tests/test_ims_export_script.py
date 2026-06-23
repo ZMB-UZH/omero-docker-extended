@@ -1341,6 +1341,66 @@ def test_write_ome_tiff_from_pixels_streams_planes_with_ome_metadata(
     assert captured["maxworkers"] == 1
 
 
+def test_ome_tiff_pixel_export_helper_edges(monkeypatch, tmp_path) -> None:
+    """Cover defensive OME-TIFF pixel-export helper branches.
+
+    Inputs: pytest fixtures. Output: asserts fallback and validation behavior.
+    """
+    module = _load_script_module()
+
+    raising_pyramid = types.SimpleNamespace(
+        requiresPixelsPyramid=lambda: (_ for _ in ()).throw(RuntimeError())
+    )
+    assert module._image_requires_pixels_pyramid(raising_pyramid) is False
+    assert module._positive_int_value(types.SimpleNamespace(val="7")) == 7
+    assert module._positive_int_value("not-an-int") is None
+    assert module._positive_int_from_member(None, "getSizeX", "sizeX") is None
+    assert (
+        module._positive_int_from_member(
+            types.SimpleNamespace(
+                getSizeX=lambda: (_ for _ in ()).throw(RuntimeError()),
+                sizeX="5",
+            ),
+            "getSizeX",
+            "sizeX",
+        )
+        == 5
+    )
+    assert module._image_axis_size(object(), object(), "X", inferred="11") == 11
+    assert module._image_axis_size(object(), object(), "X") == 1
+
+    no_plane = types.SimpleNamespace(getPrimaryPixels=lambda: object())
+    with (tmp_path / "no-plane.ome.tif").open("wb") as handle:
+        assert module._write_ome_tiff_from_pixels(no_plane, handle) is False
+
+    import numpy as np
+
+    one_dim_pixels = types.SimpleNamespace(
+        getPlane=lambda *_args: np.asarray([1, 2, 3])
+    )
+    one_dim_image = types.SimpleNamespace(getPrimaryPixels=lambda: one_dim_pixels)
+    with (tmp_path / "one-dim.ome.tif").open("wb") as handle:
+        with pytest.raises(RuntimeError, match="not two-dimensional"):
+            module._write_ome_tiff_from_pixels(one_dim_image, handle)
+
+    mismatched_pixels = types.SimpleNamespace(getPlane=lambda *_args: np.zeros((2, 3)))
+    mismatched_image = types.SimpleNamespace(
+        getPrimaryPixels=lambda: mismatched_pixels,
+        getSizeX=lambda: 4,
+        getSizeY=lambda: 2,
+    )
+    with (tmp_path / "mismatch.ome.tif").open("wb") as handle:
+        with pytest.raises(RuntimeError, match="dimensions do not match"):
+            module._write_ome_tiff_from_pixels(mismatched_image, handle)
+
+    public_message = (
+        module._OME_TIFF_TOO_LARGE_PUBLIC_PREFIX + " Image 5 (sizeX=1, sizeY=2)"
+    )
+    assert (
+        module.public_ome_tiff_export_failure_message(public_message) == public_message
+    )
+
+
 def test_ome_tiff_source_materialization_covers_chunk_and_cleanup_edges(
     monkeypatch, tmp_path
 ) -> None:

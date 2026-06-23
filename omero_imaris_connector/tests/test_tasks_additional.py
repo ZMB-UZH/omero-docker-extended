@@ -1485,6 +1485,14 @@ def test_ome_tiff_task_uses_format_specific_public_failure_contract(monkeypatch)
         )
     assert large_image.value.public_message == large_image_message
 
+    fake_script.public_ome_tiff_export_failure_message = lambda exc: None
+    assert (
+        tasks._public_ome_tiff_materialization_error(
+            fake_script, RuntimeError("private details")
+        )
+        == "Could not export selected Image as OME-TIFF"
+    )
+
     closed = []
     updates = []
     task_self = types.SimpleNamespace(

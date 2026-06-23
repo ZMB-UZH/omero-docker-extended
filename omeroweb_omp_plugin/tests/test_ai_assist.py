@@ -368,6 +368,14 @@ def test_ai_assist_helper_edges_cover_empty_inputs_and_provider_shape_failures(
         )
         is True
     )
+    with monkeypatch.context() as context:
+        context.setattr(
+            ai_assist, "_split_filename_with_regex", lambda regex, filename: ("", [])
+        )
+        assert ai_assist._is_regex_reasonable("_", ["plain"]) is False
+    with monkeypatch.context() as context:
+        context.setattr(ai_assist, "is_supported_separator_pattern", lambda regex: True)
+        assert ai_assist._is_regex_too_generic(".", filenames) is True
 
     with pytest.raises(ai_assist.AiAssistError):
         ai_assist._parse_ai_value_rows("", 1)
