@@ -495,14 +495,6 @@ jobs:
             --driver docker-container \
             --use \
             --bootstrap
-          buildx_driver="$(
-            docker buildx inspect "${BUILDX_BUILDER_NAME}" \
-              | awk '/^Driver:/ {print $2; exit}'
-          )"
-          [ "${buildx_driver}" = "docker-container" ] || {
-            echo "Buildx builder ${BUILDX_BUILDER_NAME} uses ${buildx_driver}, expected docker-container." >&2
-            exit 1
-          }
           echo "BUILDX_BUILDER=${BUILDX_BUILDER_NAME}" >> "${GITHUB_ENV}"
 
       - name: Build and push single carrier image
