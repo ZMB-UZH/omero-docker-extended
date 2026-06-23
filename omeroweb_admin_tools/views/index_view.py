@@ -705,12 +705,41 @@ def _inject_proxy_csrf_bridge(html: str) -> str:
   function isUnsafe(method) {{
     return !/^(GET|HEAD|OPTIONS|TRACE)$/i.test(method || 'GET');
   }}
+  function proxyPrefix() {{
+    var marker = '/grafana-proxy';
+    var markerIndex = window.location.pathname.indexOf(marker);
+    return markerIndex === -1 ? window.location.pathname : window.location.pathname.slice(0, markerIndex + marker.length);
+  }}
+  function requestUrl(input) {{
+    if (typeof input === 'string') {{
+      return input;
+    }}
+    if (input && typeof input.url === 'string') {{
+      return input.url;
+    }}
+    if (input && typeof input.href === 'string') {{
+      return input.href;
+    }}
+    return '';
+  }}
+  function isProxyRequest(input) {{
+    var url = requestUrl(input);
+    if (!url) {{
+      return false;
+    }}
+    try {{
+      var parsedUrl = new URL(url, window.location.href);
+      return parsedUrl.origin === window.location.origin && parsedUrl.pathname.indexOf(proxyPrefix()) === 0;
+    }} catch (_error) {{
+      return false;
+    }}
+  }}
   var originalFetch = window.fetch;
   if (originalFetch) {{
     window.fetch = function (input, init) {{
       init = init || {{}};
       var method = init.method || (input && input.method) || 'GET';
-      if (isUnsafe(method)) {{
+      if (isUnsafe(method) && isProxyRequest(input)) {{
         var headers = new Headers(init.headers || (input && input.headers) || {{}});
         if (!headers.has('X-CSRFToken')) {{
           headers.set('X-CSRFToken', csrfToken());
@@ -722,12 +751,13 @@ def _inject_proxy_csrf_bridge(html: str) -> str:
   }}
   var originalOpen = XMLHttpRequest.prototype.open;
   var originalSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (method) {{
+  XMLHttpRequest.prototype.open = function (method, url) {{
     this.__adminToolsProxyMethod = method;
+    this.__adminToolsProxyUrl = url;
     return originalOpen.apply(this, arguments);
   }};
   XMLHttpRequest.prototype.send = function () {{
-    if (isUnsafe(this.__adminToolsProxyMethod)) {{
+    if (isUnsafe(this.__adminToolsProxyMethod) && isProxyRequest(this.__adminToolsProxyUrl)) {{
       this.setRequestHeader('X-CSRFToken', csrfToken());
     }}
     return originalSend.apply(this, arguments);
