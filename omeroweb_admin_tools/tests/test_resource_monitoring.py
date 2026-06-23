@@ -853,7 +853,7 @@ def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
     assert _is_internal_hostname("localhost") is True
     assert _is_internal_hostname("127.0.0.1") is True
     assert _is_internal_hostname("prometheus") is True
-    assert _is_internal_hostname("192.168.1.189") is False
+    assert _is_internal_hostname("198.51.100.42") is False
 
 
 def test_build_public_service_url_uses_request_host_and_public_port() -> None:
@@ -864,11 +864,11 @@ def test_build_public_service_url_uses_request_host_and_public_port() -> None:
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
-        "192.168.1.189",
+        "198.51.100.42",
         3000,
     )
 
-    assert built == "https://192.168.1.189:3000"
+    assert built == "https://198.51.100.42:3000"
 
 
 def test_build_public_service_url_preserves_base_path() -> None:
@@ -1416,7 +1416,7 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
     class DummyRequest:
         """Test double for dummy request."""
 
-        META = {"HTTP_HOST": "172.23.208.90:4090"}
+        META = {"HTTP_HOST": "198.51.100.90:4090"}
 
         @staticmethod
         def get_host() -> str:
@@ -1426,7 +1426,7 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
             """
             raise ValueError("invalid host header")
 
-    assert _safe_request_host(DummyRequest()) == "172.23.208.90"
+    assert _safe_request_host(DummyRequest()) == "198.51.100.90"
 
 
 def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
@@ -1612,11 +1612,11 @@ def test_build_public_service_url_omits_port_when_proxied() -> None:
     built = _build_public_service_url(
         "https://grafana:3000",
         "https",
-        "omero.core.uzh.ch",
+        "omero.example.org",
         3000,
         is_proxied=True,
     )
-    assert built == "https://omero.core.uzh.ch"
+    assert built == "https://omero.example.org"
 
 
 def test_build_public_service_url_uses_forwarded_proto() -> None:
@@ -1627,11 +1627,11 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
-        "omero.core.uzh.ch",
+        "omero.example.org",
         3000,
         forwarded_proto="https",
     )
-    assert built == "https://omero.core.uzh.ch:3000"
+    assert built == "https://omero.example.org:3000"
 
 
 def test_build_public_service_url_direct_access_unchanged() -> None:
@@ -1642,10 +1642,10 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
     built = _build_public_service_url(
         "https://grafana:3000",
         "http",
-        "192.168.1.189",
+        "198.51.100.42",
         3000,
     )
-    assert built == "https://192.168.1.189:3000"
+    assert built == "https://198.51.100.42:3000"
 
 
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
@@ -1690,6 +1690,9 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     )
     assert "admin-tools-proxy-csrf-bridge" in content
     assert "X-CSRFToken" in content
+    assert "function isProxyRequest(input)" in content
+    assert "parsedUrl.origin === window.location.origin" in content
+    assert "parsedUrl.pathname.indexOf(proxyPrefix()) === 0" in content
 
 
 def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
@@ -2065,7 +2068,7 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
         HTTP_X_FORWARDED_PROTO="https",
-        HTTP_X_FORWARDED_HOST="omero.core.uzh.ch",
+        HTTP_X_FORWARDED_HOST="omero.example.org",
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
