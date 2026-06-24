@@ -6,6 +6,8 @@ import stat
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from omeroweb_import.views import core_functions
 
 
@@ -249,6 +251,39 @@ def test_project_listing_and_payload_helpers_cover_restore_and_failure_paths(
     }
 
 
+def test_find_image_by_name_covers_global_not_found_and_errors(monkeypatch) -> None:
+    """Verify image lookup fallback returns None for miss and query failures.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts image lookup failure paths.
+    """
+    monkeypatch.setattr(
+        core_functions.omero.sys,
+        "ParametersI",
+        lambda: SimpleNamespace(values={}),
+    )
+
+    empty_query = SimpleNamespace(findAllByQuery=lambda *_args: [])
+    empty_conn = SimpleNamespace(
+        SERVICE_OPTS=object(),
+        getQueryService=lambda: empty_query,
+    )
+    assert core_functions._find_image_by_name(empty_conn, "missing.ome.tif") is None
+
+    failing_query = SimpleNamespace(
+        findAllByQuery=lambda *_args: _raise(RuntimeError("query failed"))
+    )
+    failing_conn = SimpleNamespace(
+        SERVICE_OPTS=object(),
+        getQueryService=lambda: failing_query,
+    )
+    assert core_functions._find_image_by_name(failing_conn, "missing.ome.tif") is None
+
+    broken_conn = SimpleNamespace(
+        getQueryService=lambda: _raise(RuntimeError("service failed"))
+    )
+    assert core_functions._find_image_by_name(broken_conn, "missing.ome.tif") is None
+
+
 def test_dataset_and_native_zarr_helpers_cover_unhappy_paths(
     monkeypatch, tmp_path
 ) -> None:
@@ -482,6 +517,138 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
         assert key is None
 
 
+def test_open_admin_connection_covers_connect_error_cleanup(monkeypatch) -> None:
+    """Verify failed admin connections clean up without leaking exceptions.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts failed connections return None.
+    """
+    monkeypatch.setenv("ROOTPASS", "root-password")
+    monkeypatch.setattr(
+        core_functions,
+        "_get_job_service_credentials",
+        lambda: core_functions.JobServiceCredentials("root", "password", "", False),
+    )
+
+    class _ConnectFalse:
+        """Gateway double for a failed connect path."""
+
+        SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda _group: None)
+
+        @staticmethod
+        def connect():
+            """Return failed connection status.
+
+            Inputs: none. Output: False.
+            """
+            return False
+
+        @staticmethod
+        def getLastError():
+            """Raise while reading the last error.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("last error unavailable")
+
+        @staticmethod
+        def close():
+            """Raise during cleanup.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        core_functions, "BlitzGateway", lambda *args, **kwargs: _ConnectFalse()
+    )
+    assert core_functions._open_admin_connection("omeroserver", 4064) is None
+
+    class _ConnectRaises:
+        """Gateway double for an exception during connect."""
+
+        SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda _group: None)
+
+        @staticmethod
+        def connect():
+            """Raise while connecting.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("connect failed")
+
+        @staticmethod
+        def close():
+            """Raise during cleanup.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        core_functions, "BlitzGateway", lambda *args, **kwargs: _ConnectRaises()
+    )
+    assert core_functions._open_admin_connection("omeroserver", 4064) is None
+
+
+def test_open_service_connection_closes_on_outer_exception(monkeypatch) -> None:
+    """Verify unexpected group-context errors close the job-service connection.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts outer exception cleanup.
+    """
+    monkeypatch.setattr(
+        core_functions,
+        "_get_job_service_credentials",
+        lambda: core_functions.JobServiceCredentials(
+            "job-service",
+            "secret",
+            "",
+            False,
+        ),
+    )
+
+    class _Gateway:
+        """Gateway double that connects, then raises during cleanup."""
+
+        SERVICE_OPTS = SimpleNamespace(setOmeroGroup=lambda _group: None)
+
+        @staticmethod
+        def connect():
+            """Return a successful connection.
+
+            Inputs: none. Output: True.
+            """
+            return True
+
+        @staticmethod
+        def close():
+            """Raise during exception cleanup.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("close failed")
+
+    class _BadGroupId:
+        """Value whose integer conversion fails unexpectedly."""
+
+        @staticmethod
+        def __int__():
+            """Raise while converting the group id.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("bad group")
+
+    monkeypatch.setattr(
+        core_functions, "BlitzGateway", lambda *args, **kwargs: _Gateway()
+    )
+    with pytest.raises(RuntimeError, match="bad group"):
+        core_functions._open_service_connection(
+            "omeroserver",
+            4064,
+            group_id=_BadGroupId(),
+        )
+
+
 def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -565,6 +732,189 @@ def test_shared_transfer_helpers_cover_symlink_and_cleanup_error_paths(
     cleanup_target.mkdir()
     core_functions._cleanup_shared_zarr_transfer(cleanup_target)
     assert cleanup_target.exists()
+
+
+def test_prepare_server_readable_zarr_source_rejects_staged_symlink_member(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Verify shared native-Zarr transfer copying refuses staged symlinks.
+
+    Inputs: pytest fixtures. Output: asserts symlinked staged members are rejected.
+    """
+    source = tmp_path / "upload" / "sample.zarr"
+    (source / "0").mkdir(parents=True)
+    outside_payload = tmp_path / "outside-payload.bin"
+    outside_payload.write_bytes(b"outside")
+    try:
+        (source / "0" / "0.0").symlink_to(outside_payload)
+    except OSError as exc:
+        pytest.skip(f"filesystem does not allow symlinks: {exc}")
+
+    transfer_root = tmp_path / "shared-transfer"
+    transfer_root.mkdir()
+    monkeypatch.setattr(
+        core_functions,
+        "get_plugin_tmp_dir",
+        lambda name, create=False: transfer_root,
+    )
+
+    def unexpected_native_prepare(path):
+        """Fail if native preparation receives a symlinked tree.
+
+        Inputs: staged path. Output: raises AssertionError.
+        """
+        raise AssertionError(f"native prepare should not receive {path}")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_prepare_native_zarr_copy",
+        unexpected_native_prepare,
+    )
+
+    shared_source, shared_parent, error = (
+        core_functions._prepare_server_readable_zarr_source(source)
+    )
+
+    assert shared_source is None
+    assert shared_parent is None
+    assert "symlinked member" in (error or "")
+    assert outside_payload.read_bytes() == b"outside"
+    assert list(transfer_root.iterdir()) == []
+
+
+def test_zarr_tree_posix_copy_rejects_racy_and_special_entries(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Verify import Zarr copy rejects unsafe POSIX filesystem races.
+
+    Inputs: pytest fixtures. Output: asserts racy and special entries are rejected.
+    """
+    if core_functions.os.name != "posix" or not hasattr(
+        core_functions.os, "O_NOFOLLOW"
+    ):
+        pytest.skip("POSIX no-follow copy path is not available")
+
+    with pytest.raises(RuntimeError, match="Failed to open staged Zarr source safely"):
+        core_functions._copy_zarr_tree_without_symlinks_posix(
+            tmp_path / "missing.zarr",
+            tmp_path / "dest-missing.zarr",
+        )
+
+    source = tmp_path / "source.zarr"
+    source.mkdir()
+    directory_fd = core_functions.os.open(
+        source,
+        core_functions.os.O_RDONLY
+        | getattr(core_functions.os, "O_DIRECTORY", 0)
+        | getattr(core_functions.os, "O_NOFOLLOW", 0),
+    )
+    try:
+        with monkeypatch.context() as scoped:
+            scoped.setattr(core_functions.os, "listdir", lambda _fd: ["bad/name"])
+            with pytest.raises(RuntimeError, match="Invalid staged Zarr member name"):
+                core_functions._copy_zarr_tree_from_directory_fd(
+                    directory_fd,
+                    tmp_path / "dest-invalid-name.zarr",
+                    "source.zarr",
+                )
+
+        (source / "0").write_text("pixels", encoding="utf-8")
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                core_functions.os,
+                "stat",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("stat failed")),
+            )
+            with pytest.raises(
+                RuntimeError, match="Failed to inspect staged Zarr member"
+            ):
+                core_functions._copy_zarr_tree_from_directory_fd(
+                    directory_fd,
+                    tmp_path / "dest-stat.zarr",
+                    "source.zarr",
+                )
+    finally:
+        core_functions.os.close(directory_fd)
+
+    dir_source = tmp_path / "dir-source.zarr"
+    (dir_source / "0").mkdir(parents=True)
+    real_fstat = core_functions.os.fstat
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            core_functions.os,
+            "fstat",
+            lambda fd: SimpleNamespace(st_mode=stat.S_IFREG),
+        )
+        with pytest.raises(RuntimeError, match="Staged Zarr source is not a directory"):
+            core_functions._copy_zarr_tree_without_symlinks_posix(
+                dir_source,
+                tmp_path / "dest-source-not-dir.zarr",
+            )
+    with monkeypatch.context() as scoped:
+        fstat_calls = {"count": 0}
+
+        def fake_child_dir_fstat(fd):
+            """Return regular-file mode for a child directory fd.
+
+            Inputs: file descriptor. Output: fake stat result.
+            """
+            fstat_calls["count"] += 1
+            if fstat_calls["count"] == 2:
+                return SimpleNamespace(st_mode=stat.S_IFREG)
+            return real_fstat(fd)
+
+        scoped.setattr(core_functions.os, "fstat", fake_child_dir_fstat)
+        with pytest.raises(RuntimeError, match="member is not a directory"):
+            core_functions._copy_zarr_tree_without_symlinks_posix(
+                dir_source,
+                tmp_path / "dest-child-dir-race.zarr",
+            )
+
+    file_source = tmp_path / "file-source.zarr"
+    file_source.mkdir()
+    (file_source / "0").write_text("pixels", encoding="utf-8")
+    with monkeypatch.context() as scoped:
+        fstat_calls = {"count": 0}
+
+        def fake_child_file_fstat(fd):
+            """Return directory mode for a child regular-file fd.
+
+            Inputs: file descriptor. Output: fake stat result.
+            """
+            fstat_calls["count"] += 1
+            if fstat_calls["count"] == 2:
+                return SimpleNamespace(st_mode=stat.S_IFDIR)
+            return real_fstat(fd)
+
+        scoped.setattr(core_functions.os, "fstat", fake_child_file_fstat)
+        with pytest.raises(RuntimeError, match="member is not a regular file"):
+            core_functions._copy_zarr_tree_without_symlinks_posix(
+                file_source,
+                tmp_path / "dest-child-file-race.zarr",
+            )
+
+    if not hasattr(core_functions.os, "mkfifo"):
+        pytest.skip("FIFO creation is not available")
+    special_source = tmp_path / "special-source.zarr"
+    special_source.mkdir()
+    core_functions.os.mkfifo(special_source / "pipe")
+    with pytest.raises(RuntimeError, match="unsupported member"):
+        core_functions._copy_zarr_tree_without_symlinks_posix(
+            special_source,
+            tmp_path / "dest-special.zarr",
+        )
+
+    wrapper_source = tmp_path / "wrapper-source.zarr"
+    wrapper_source.mkdir()
+    (wrapper_source / "0").write_text("pixels", encoding="utf-8")
+    wrapper_destination = tmp_path / "wrapper-dest.zarr"
+    with monkeypatch.context() as scoped:
+        scoped.setattr(core_functions.os, "name", "nt", raising=False)
+        core_functions._copy_zarr_tree_without_symlinks(
+            wrapper_source, wrapper_destination
+        )
+    assert (wrapper_destination / "0").read_text(encoding="utf-8") == "pixels"
 
 
 def test_script_service_helpers_cover_deduping_and_selection() -> None:

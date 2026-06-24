@@ -347,6 +347,16 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn('mount --rbind "$rootfs_entry" "/$d"', self.cadvisor_entrypoint)
         self.assertNotIn("ls -1 /rootfs", self.cadvisor_entrypoint)
 
+    def test_cadvisor_runtime_directory_is_not_write_mounted(self) -> None:
+        """Verify cAdvisor does not receive write access to host runtime sockets.
+
+        Inputs: repository fixtures. Output: fails on cAdvisor mount regressions.
+        """
+        service_text = self._compose_service_text(self.compose_text, "cadvisor")
+
+        self.assertIn("- /var/run:/var/run:ro", service_text)
+        self.assertNotIn("- /var/run:/var/run:rw", service_text)
+
     def test_smart_disk_monitor_is_env_driven_and_validates_df_output(self) -> None:
         """Verify smart disk monitor is env driven and validates df output.
 

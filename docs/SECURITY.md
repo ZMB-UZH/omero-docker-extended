@@ -74,15 +74,16 @@ The prebuilt carrier release workflow always builds the bundled custom runtime
 images with `APPLY_SECURITY_HARDENING=1` and
 `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` before publishing the carrier. The carrier
 image itself is pushed with BuildKit SBOM and provenance attestations, then the
-release workflow runs Docker Scout `quickview`, `cves`, and `sbom` against the
-pushed Docker Hub tag before the GitHub release is published. The easy
-installation path therefore skips the local hardening prompt and loads only the
-release-built images from the verified carrier bundle. The carrier wrapper is a
-scratch-based data image with no OS package layer, shell, or package manager;
+release workflow enables and verifies Docker Scout repository analysis for the
+Docker Hub repository and runs Docker Scout `quickview`, `cves`, and `sbom`
+against the pushed Docker Hub tag before the GitHub release is published. The
+easy installation path therefore skips the local hardening prompt, requires the
+expected `sha256:` carrier digest from the GitHub release asset
+`prebuilt-carrier-digest.txt`, and loads only the release-built images from the
+verified carrier bundle. The carrier wrapper is a scratch-based data image with
+no OS package layer, shell, or package manager;
 it uses `HEALTHCHECK NONE` metadata instead of a runnable healthcheck command,
-and only the bundled runtime service images carry OS package surfaces. Docker
-Hub must still have image security insights enabled for the repository for the
-Hub UI to replace `Security unknown` with automatic analysis results.
+and only the bundled runtime service images carry OS package surfaces.
 
 ## Image pinning
 

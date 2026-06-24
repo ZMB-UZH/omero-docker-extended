@@ -15,6 +15,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
@@ -75,6 +76,62 @@ def _validate_git_argument(name: str, value: str) -> None:
         raise SystemExit(f"{name} must not contain control characters")
 
 
+def _is_direct_remote_url(remote: str) -> bool:
+    """Return whether a remote argument is a URL rather than a configured name.
+
+    Inputs: `remote` (str). Output: `bool`.
+    """
+    return "://" in remote or remote.startswith("git@") or remote.startswith("ssh://")
+
+
+def _resolve_remote_url(
+    git_bin: str,
+    remote: str,
+    *,
+    env: Mapping[str, str],
+    runner: RunCommand,
+) -> str:
+    """Resolve a remote name or URL to its configured push URL.
+
+    Inputs: `git_bin` (str), `remote` (str), `env`, `runner`. Output: remote URL.
+    Raises: SystemExit when the configured remote cannot be resolved.
+    """
+    if _is_direct_remote_url(remote):
+        return remote
+
+    for args in (
+        [git_bin, "remote", "get-url", "--push", remote],
+        [git_bin, "remote", "get-url", remote],
+    ):
+        result = runner(
+            args,
+            env=dict(env),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            remote_url = (result.stdout or "").strip().splitlines()
+            if remote_url:
+                return remote_url[0].strip()
+
+    raise SystemExit(f"Could not resolve Git remote URL for {remote!r}")
+
+
+def _validate_github_https_remote(remote_url: str) -> None:
+    """Validate that a PAT-backed push targets GitHub over HTTPS.
+
+    Inputs: `remote_url` (str). Output: None. Raises: SystemExit on unsafe remotes.
+    """
+    parsed = urlparse(remote_url)
+    if parsed.scheme != "https" or parsed.hostname != "github.com":
+        raise SystemExit(
+            "PAT-backed pushes are allowed only to https://github.com remotes"
+        )
+    if parsed.password:
+        raise SystemExit("GitHub remote URL must not embed credentials")
+
+
 def _validate_force_with_lease(value: str | None) -> str | None:
     """Validate the force with lease.
 
@@ -129,6 +186,9 @@ def _write_askpass(path: Path) -> None:
                 "import sys",
                 "",
                 "prompt = sys.argv[1] if len(sys.argv) > 1 else ''",
+                "allowed_host = os.environ.get('GIT_PAT_ALLOWED_HOST', '')",
+                "if allowed_host and allowed_host not in prompt:",
+                "    raise SystemExit(1)",
                 "if 'sername' in prompt:",
                 "    username = os.environ.get('GIT_PAT_USERNAME', '')",
                 "    if not username:",
@@ -222,10 +282,17 @@ def run_push(
     force_with_lease = _validate_force_with_lease(args.force_with_lease)
 
     base_env = dict(os.environ if env is None else env)
-    token = _read_token(base_env, args.token_env, token_reader)
     git_bin = shutil.which("git")
     if git_bin is None:
         raise SystemExit("git is required")
+    remote_url = _resolve_remote_url(
+        git_bin,
+        args.remote,
+        env=base_env,
+        runner=runner,
+    )
+    _validate_github_https_remote(remote_url)
+    token = _read_token(base_env, args.token_env, token_reader)
 
     temp_root = Path(tempfile.mkdtemp(prefix="git-pat-askpass-"))
     temp_root.chmod(stat.S_IRWXU)
@@ -240,6 +307,7 @@ def run_push(
         push_env.update(
             {
                 "GIT_ASKPASS": str(askpass_path),
+                "GIT_PAT_ALLOWED_HOST": "github.com",
                 "GIT_PAT_SOCKET": str(socket_path),
                 "GIT_PAT_USERNAME": args.username,
                 "GIT_TERMINAL_PROMPT": "0",

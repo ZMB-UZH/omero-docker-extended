@@ -767,12 +767,20 @@
         // Build Download Tsv. Inputs: entries. Output: return value.
         function buildDownloadTsv(entries) {
             const header = ['Timestamp', 'Container/File', 'Severity', 'Message'];
+            // Escape Spreadsheet Cell. Inputs: value. Output: sanitized TSV cell text.
+            const escapeSpreadsheetCell = (value) => {
+                let text = String(value ?? '').replace(/[\t\r\n]+/g, ' ');
+                if (/^[=+\-@\t\r\n]/.test(text)) {
+                    text = `'${text}`;
+                }
+                return text;
+            };
             const lines = entries.map((entry) => [
                 formatTimestamp(entry.timestamp),
                 displayContainerName(entry.container),
                 entry.level,
                 entry.message,
-            ].map((value) => String(value ?? '')).join('\t'));
+            ].map(escapeSpreadsheetCell).join('\t'));
             return [header.join('\t'), ...lines].join('\n');
         }
 

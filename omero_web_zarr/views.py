@@ -1,4 +1,5 @@
 import io
+import html
 import json
 import logging
 import os
@@ -27,6 +28,7 @@ from django.http import (
 from django.shortcuts import redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
+from django.utils.http import content_disposition_header
 
 from omero.model.enums import PixelsTypedouble
 from omero.model.enums import PixelsTypefloat
@@ -308,7 +310,10 @@ def _store_backed_chunk_response(image, version, level, chunk):
     if response is None:
         return None
     filename = chunk.replace("/", ".")
-    response["Content-Disposition"] = f"attachment; filename={filename}"
+    response["Content-Disposition"] = content_disposition_header(
+        True,
+        filename,
+    )
     return response
 
 
@@ -1130,10 +1135,10 @@ def _build_app_launch_url(app, source):
     )
 
 
-def _inject_launcher_head(html, base_url):
+def _inject_launcher_head(html_text, base_url):
     """Return the inject launcher head.
 
-    Inputs: `html`, `base_url` base URL. Output: inject launcher head result.
+    Inputs: `html_text`, `base_url` base URL. Output: inject launcher head result.
     """
     head_fragment = (
         f'<base href="{base_url}">'
@@ -1153,15 +1158,42 @@ def _inject_launcher_head(html, base_url):
         "})();"
         "</script>"
     )
-    if re.search(r"<base\b", html, flags=re.IGNORECASE):
+    if re.search(r"<base\b", html_text, flags=re.IGNORECASE):
         return re.sub(
-            r"<base\b[^>]*>", head_fragment, html, count=1, flags=re.IGNORECASE
+            r"<base\b[^>]*>", head_fragment, html_text, count=1, flags=re.IGNORECASE
         )
 
-    head_match = re.search(r"<head[^>]*>", html, flags=re.IGNORECASE)
+    head_match = re.search(r"<head[^>]*>", html_text, flags=re.IGNORECASE)
     if head_match:
-        return f"{html[: head_match.end()]}{head_fragment}{html[head_match.end() :]}"
-    return f"{head_fragment}{html}"
+        return f"{html_text[: head_match.end()]}{head_fragment}{html_text[head_match.end() :]}"
+    return f"{head_fragment}{html_text}"
+
+
+def _remote_app_launcher_html(app, base_url, source):
+    """Return a local launcher that isolates a remote app in a sandboxed iframe.
+
+    Inputs: app name, remote base URL, optional source URL. Output: HTML string.
+    """
+    source = str(source or "")
+    remote_url = base_url
+    if source:
+        remote_url = f"{base_url}?source={quote(source, safe='/:')}"
+    return (
+        "<!doctype html>"
+        "<html>"
+        "<head>"
+        '<meta charset="utf-8">'
+        '<meta name="referrer" content="same-origin">'
+        "<style>html,body,iframe{margin:0;width:100%;height:100%;border:0;}</style>"
+        "</head>"
+        "<body>"
+        f'<iframe src="{html.escape(remote_url, quote=True)}" '
+        f'title="{html.escape(app, quote=True)}" '
+        'sandbox="allow-scripts allow-forms allow-downloads allow-popups" '
+        'referrerpolicy="same-origin"></iframe>'
+        "</body>"
+        "</html>"
+    )
 
 
 @lru_cache(maxsize=16)
@@ -1223,13 +1255,15 @@ def apps(request, app, url):
     if asset_path:
         return HttpResponseRedirect(urljoin(base_url, asset_path))
 
-    cache_bucket = int(time.time() // _APP_SHELL_CACHE_SECONDS)
     try:
         if app in _LOCAL_APP_SHELLS:
+            cache_bucket = int(time.time() // _APP_SHELL_CACHE_SECONDS)
             html = _read_local_app_shell(_LOCAL_APP_SHELLS[app], cache_bucket)
+            html = _inject_launcher_head(html, base_url)
         else:
-            html = _fetch_remote_app_shell(base_url, cache_bucket)
-    except (OSError, requests.RequestException):
+            source = request.GET.get("source", "") if hasattr(request, "GET") else ""
+            html = _remote_app_launcher_html(app, base_url, source)
+    except OSError:
         LOGGER.warning(
             "Failed to load app shell for %s",
             sanitize_log_value(app),
@@ -1238,8 +1272,16 @@ def apps(request, app, url):
         return StreamingHttpResponse((), status=502)
 
     response = StreamingHttpResponse(
-        (_inject_launcher_head(html, base_url),),
+        (html,),
         content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = f"private, max-age={_APP_SHELL_CACHE_SECONDS}"
+    if app not in _LOCAL_APP_SHELLS:
+        response["Content-Security-Policy"] = (
+            "default-src 'none'; "
+            f"frame-src {base_url.rstrip('/')}; "
+            "style-src 'unsafe-inline'; "
+            "base-uri 'none'; "
+            "form-action 'none'"
+        )
     return response

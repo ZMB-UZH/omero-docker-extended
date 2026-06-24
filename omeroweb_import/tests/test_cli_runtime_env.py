@@ -124,13 +124,15 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     captured = {}
     sample_path = Path(tempfile.gettempdir()) / "sample.czi"
 
-    def fake_run(cmd, timeout=None):
+    def fake_run(cmd, timeout=None, stdin_text=None):
         """Simulate run so the surrounding test controls that dependency.
 
-        Inputs: `cmd`, `timeout` timeout seconds. Output: `CompletedProcess` result.
+        Inputs: `cmd`, `timeout` timeout seconds, `stdin_text` process input.
+        Output: `CompletedProcess` result.
         """
         captured["cmd"] = cmd
         captured["timeout"] = timeout
+        captured["stdin_text"] = stdin_text
         return subprocess.CompletedProcess(
             args=cmd, returncode=0, stdout="ok", stderr=""
         )
@@ -152,6 +154,8 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
         core_functions.OMERO_IMPORT_SCAN_DEPTH
     )
     assert captured["cmd"][-3:] == ["-d", "17", str(sample_path)]
+    assert "session-key" not in captured["cmd"]
+    assert captured["stdin_text"] == "session-key\n"
 
 
 def test_compatibility_check_adds_scan_depth_to_cli_command(

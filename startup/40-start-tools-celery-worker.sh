@@ -3,6 +3,22 @@
 
 set -euo pipefail
 
+runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"
+runtime_home="${OMERO_WEB_ROOT:-/opt/omero/web}"
+if [[ "$(id -u)" -eq 0 && "${runtime_user}" != "root" ]]; then
+    if ! id "${runtime_user}" >/dev/null 2>&1; then
+        echo "ERROR: OMERO.web runtime user '${runtime_user}' does not exist." >&2
+        exit 1
+    fi
+    exec env \
+        USER="${runtime_user}" \
+        LOGNAME="${runtime_user}" \
+        LNAME="${runtime_user}" \
+        USERNAME="${runtime_user}" \
+        HOME="${runtime_home}" \
+        runuser -p -m -u "${runtime_user}" -- "${BASH_SOURCE[0]}" "$@"
+fi
+
 use_celery_raw="${TOOLS_ENHANCED_SEARCH_USE_CELERY:-true}"
 use_celery="$(echo "${use_celery_raw}" | tr '[:upper:]' '[:lower:]')"
 if [[ "${use_celery}" != "true" ]]; then
@@ -35,6 +51,16 @@ resolve_web_venv_dir() {
     find "${web_root}" -maxdepth 1 -type d -name 'venv*' -print 2>/dev/null | sort -V | tail -n 1
 }
 
+# Redact broker URL credentials for logs. Inputs: broker URL. Output: sanitized URL.
+redact_broker_url_for_log() {
+    local value="${1:-}"
+    if [[ -z "${value}" ]]; then
+        printf 'not set\n'
+        return 0
+    fi
+    printf '%s\n' "${value}" | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)([^/@]+@)#\1[redacted]@#'
+}
+
 venv_dir="$(resolve_web_venv_dir)"
 
 if [[ ! -d "${venv_dir}" ]]; then
@@ -64,7 +90,7 @@ echo "  celery_bin: ${celery_bin}"
 echo "  queue: ${celery_queue}"
 echo "  loglevel: ${celery_loglevel}"
 echo "  concurrency: ${celery_concurrency}"
-echo "  broker: ${TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL:-not set}"
+echo "  broker: $(redact_broker_url_for_log "${TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL:-}")"
 echo "=========================================="
 
 echo "Testing task import..."

@@ -16,6 +16,10 @@ from omero.rtypes import rbool, rstring
 EXCLUDED_GROUP_NAMES = frozenset({"root", "system", "user"})
 
 
+class UnsafeExistingJobUserError(RuntimeError):
+    """Raised when the configured job-service username resolves to an unsafe account."""
+
+
 def _required_env(name: str) -> str:
     """Return the required environment.
 
@@ -95,6 +99,30 @@ def lookup_job_experimenter(query, job_user: str):
     return query.findByString("Experimenter", "omeName", job_user)
 
 
+def _is_ldap_experimenter(experimenter) -> bool:
+    """Return whether an experimenter is LDAP-backed.
+
+    Inputs: `experimenter`. Output: `bool`.
+    """
+    value = _value(getattr(experimenter, "ldap", False))
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _validate_existing_job_experimenter(experimenter, job_user: str):
+    """Validate an existing reserved job-service account before reuse.
+
+    Inputs: `experimenter`, `job_user` (str). Output: `experimenter`. Raises:
+    RuntimeError when a directory-backed account collides with the reserved service name.
+    """
+    if _is_ldap_experimenter(experimenter):
+        raise UnsafeExistingJobUserError(
+            f"refusing to reuse LDAP-backed Experimenter {job_user!r} as the job-service account"
+        )
+    return experimenter
+
+
 def ensure_job_user(admin, query, job_user: str, job_pass: str, retries: int):
     """Ensure the job user.
 
@@ -106,7 +134,7 @@ def ensure_job_user(admin, query, job_user: str, job_pass: str, retries: int):
         try:
             existing = lookup_job_experimenter(query, job_user)
             if existing is not None:
-                return existing
+                return _validate_existing_job_experimenter(existing, job_user)
             default_group = admin.lookupGroup("user")
             admin.createExperimenterWithPassword(
                 _new_job_experimenter(job_user),
@@ -125,9 +153,13 @@ def ensure_job_user(admin, query, job_user: str, job_pass: str, retries: int):
             try:
                 existing = lookup_job_experimenter(query, job_user)
                 if existing is not None:
-                    return existing
+                    return _validate_existing_job_experimenter(existing, job_user)
+            except UnsafeExistingJobUserError:
+                raise
             except Exception as lookup_exc:
                 last_error = lookup_exc
+        except UnsafeExistingJobUserError:
+            raise
         except Exception as exc:
             last_error = exc
         if attempt >= retries:

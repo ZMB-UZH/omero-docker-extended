@@ -14,6 +14,27 @@ is_valid_release_version() {
         >/dev/null 2>&1
 }
 
+# Validate a sha256 Docker content digest. Inputs: shell arguments. Output: command status.
+is_valid_carrier_digest() {
+    local value="${1:-}"
+    local hex_digest=""
+
+    case "${value}" in
+        sha256:*)
+            hex_digest="${value#sha256:}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    [ "${#hex_digest}" -eq 64 ] || return 1
+    case "${hex_digest}" in
+        *[!0-9a-f]*)
+            return 1
+            ;;
+    esac
+}
+
 # Verify the installation root contains the strict-prebuilt installer support.
 # Inputs: environment. Output: command status and a precise diagnostic.
 require_easy_installation_support() {
@@ -108,11 +129,49 @@ prompt_release_version() {
     done
 }
 
+# Prompt for the expected prebuilt carrier image digest. Inputs: shell arguments and environment. Output: exported digest or failure.
+prompt_carrier_digest() {
+    local reply=""
+
+    if [ -n "${PREBUILT_IMAGE_DIGEST:-}" ]; then
+        if ! is_valid_carrier_digest "${PREBUILT_IMAGE_DIGEST}"; then
+            echo "ERROR: PREBUILT_IMAGE_DIGEST must use sha256:<64 lowercase hex characters>." >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    if [ "${INSTALLATION_AUTOMATION_MODE:-0}" = "1" ] || ! has_controlling_tty; then
+        echo "ERROR: PREBUILT_IMAGE_DIGEST is required when /dev/tty is unavailable or INSTALLATION_AUTOMATION_MODE=1." >&2
+        return 1
+    fi
+
+    while true; do
+        printf '%s\n' "What is the sha256 digest for that prebuilt carrier image?" >/dev/tty
+        printf '%s\n' "Use the PREBUILT_IMAGE_DIGEST value from the release asset prebuilt-carrier-digest.txt." >/dev/tty
+        printf '%s' '> ' >/dev/tty
+        if ! IFS= read -r reply </dev/tty; then
+            echo "ERROR: Could not read prebuilt carrier image digest." >&2
+            return 1
+        fi
+        if is_valid_carrier_digest "${reply}"; then
+            PREBUILT_IMAGE_DIGEST="${reply}"
+            export PREBUILT_IMAGE_DIGEST
+            return 0
+        fi
+        printf '%s\n' "Invalid digest. Use sha256:<64 lowercase hex characters>." >/dev/tty
+    done
+}
+
 if ! require_easy_installation_support; then
     exit 1
 fi
 
 if ! prompt_release_version; then
+    exit 1
+fi
+
+if ! prompt_carrier_digest; then
     exit 1
 fi
 

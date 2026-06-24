@@ -11,16 +11,15 @@ Use this skill when reviewing or changing security-sensitive code outside a scan
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/security-review/SKILL.md` for the generic security checklist.
-
 ## Repo overlay
 
-- Follow the mandatory security read order in `AGENTS.md`.
+- Start from `third_party/ecc-v1.10.0/skills/security-review/SKILL.md` and follow the mandatory security read order in `AGENTS.md`.
 - Focus on helper and boundary correctness: uploads, filesystem paths, SQL, responses, subprocesses, Docker/workflows, outbound HTTP, logs, and secrets.
 - Prefer root-cause fixes over suppressions or call-site patches.
 - Treat env parsing and shell interpolation as security boundaries, not convenience helpers.
 - Name the regression tests and validation steps before editing code.
 - If the change touches workflows, refresh action pins from official sources first.
+- Codex Security multi-worker scans are on-demand only: spawn the minimum required scanner workers only when explicitly requested and required; keep remediation, validation, reconciliation, commits, pushes, and releases in the parent session.
 
 ## 2026-06 remediation reminders
 

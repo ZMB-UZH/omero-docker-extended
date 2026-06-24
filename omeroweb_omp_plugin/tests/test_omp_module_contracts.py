@@ -122,6 +122,27 @@ def test_omp_module_contracts_cover_ready_hook_and_named_routes(monkeypatch):
     assert "omeroweb_omp_plugin_help" in route_names
 
 
+def test_preview_save_job_uses_non_destructive_mode() -> None:
+    """Verify preview save job uses non-destructive mode.
+
+    Inputs: OMP preview template. Output: asserts save requests non-destructive mode.
+    """
+    preview_template = (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "omeroweb_omp_plugin"
+        / "preview.html"
+    ).read_text(encoding="utf-8")
+    start_save_body = preview_template.split("function startSaveJob()", 1)[1].split(
+        'fetch(BASE_URL + "/start_job/"',
+        1,
+    )[0]
+
+    assert 'delete_mode: "keep"' in start_save_body
+    assert 'delete_mode: "all"' not in start_save_body
+    assert "password:" not in start_save_body
+
+
 def test_omp_job_storage_edge_paths_cover_missing_files_and_tmp_cleanup(
     tmp_path,
     monkeypatch,

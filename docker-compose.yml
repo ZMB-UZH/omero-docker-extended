@@ -196,7 +196,7 @@ services:
     volumes:
       - ./monitoring/cadvisor/entrypoint.sh:/entrypoint.sh:ro
       - /:/rootfs:ro
-      - /var/run:/var/run:rw
+      - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
     tmpfs:
@@ -365,6 +365,7 @@ services:
       args:
         OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"
         BIOFORMATS_VERSION: "${BIOFORMATS_VERSION:?Set BIOFORMATS_VERSION in env/omeroserver.env}"
+        BIOFORMATS_SHA256: "${BIOFORMATS_SHA256:?Set BIOFORMATS_SHA256 in env/omeroserver.env}"
         TIFFFILE_VERSION: "${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}"
     restart: unless-stopped
     # Startup reconciles bind-mounted runtime paths, then drops to omero-server.

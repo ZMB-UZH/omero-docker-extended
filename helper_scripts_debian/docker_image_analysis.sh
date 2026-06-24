@@ -433,7 +433,20 @@ run_probe_with_shell() {
   local timeout_seconds="$5"
 
   local -a run_cmd
-  run_cmd=(docker run --rm --entrypoint "$shell_path" "$image" -c "$probe_script")
+  run_cmd=(
+    docker run
+    --rm
+    --network none
+    --cap-drop ALL
+    --security-opt no-new-privileges
+    --read-only
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m
+    --pids-limit 128
+    --memory 256m
+    --entrypoint "$shell_path"
+    "$image"
+    -c "$probe_script"
+  )
 
   if command -v timeout >/dev/null 2>&1; then
     run_cmd=(timeout --signal=KILL "${timeout_seconds}s" "${run_cmd[@]}")

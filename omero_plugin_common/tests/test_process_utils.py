@@ -39,6 +39,25 @@ def test_run_captures_output_env_and_cwd(tmp_path: Path) -> None:
     assert result.stderr == ""
 
 
+def test_run_passes_stdin_text_without_argv_exposure() -> None:
+    """Verify run can pass sensitive input through stdin.
+
+    Inputs: helper process. Output: fails on stdin plumbing regressions.
+    """
+    result = process_utils.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.stdin.read().strip())",
+        ],
+        stdin_text="session-key\n",
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ["session-key"]
+    assert "session-key" not in result.args
+
+
 def test_run_raises_called_process_error_with_captured_output() -> None:
     """Confirm run raises called process error with captured output exposes the expected failure.
 
@@ -123,6 +142,109 @@ def test_run_streaming_collects_output_and_invokes_tick_callback() -> None:
     assert result.stderr == "warn\n"
     assert ticks
     assert all(pid > 0 for pid, _elapsed in ticks)
+
+
+def test_run_streaming_passes_stdin_text() -> None:
+    """Verify streaming runner writes stdin before polling progress.
+
+    Inputs: helper process. Output: fails on streaming stdin regressions.
+    """
+    ticks: list[tuple[int, float]] = []
+
+    result = process_utils.run_streaming(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.stdin.read().strip())",
+        ],
+        stdin_text=b"stream-secret\n",
+        tick_interval=0.05,
+        on_tick=lambda pid, elapsed: ticks.append((pid, elapsed)),
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ["stream-secret"]
+    assert "stream-secret" not in result.args
+    assert ticks
+
+
+def test_stdin_payload_rejects_nul_before_spawning(monkeypatch) -> None:
+    """Verify stdin payload validation fails before spawning a subprocess.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts NUL stdin is rejected.
+    """
+
+    def fail_popen(*_args, **_kwargs):
+        """Fail if invalid stdin reaches process spawning.
+
+        Inputs: ignored arguments. Output: raises AssertionError.
+        """
+        raise AssertionError("invalid stdin must not spawn a process")
+
+    monkeypatch.setattr(process_utils, "_popen", fail_popen)
+
+    with pytest.raises(ValueError, match="Standard input payload"):
+        process_utils.run([sys.executable, "-c", "pass"], stdin_text="bad\0input")
+    with pytest.raises(ValueError, match="Standard input payload"):
+        process_utils.run_streaming(
+            [sys.executable, "-c", "pass"], stdin_text=b"bad\0input"
+        )
+
+
+def test_run_streaming_ignores_broken_stdin_pipe(monkeypatch) -> None:
+    """Verify streaming stdin handles an early child-process exit gracefully.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts broken stdin pipe is ignored.
+    """
+
+    class BrokenPipeStdin:
+        """stdin fake that raises BrokenPipeError on write."""
+
+        @staticmethod
+        def write(_payload):
+            """Raise while writing stdin.
+
+            Inputs: ignored payload. Output: raises BrokenPipeError.
+            """
+            raise BrokenPipeError
+
+        @staticmethod
+        def close():
+            """Close the fake stdin stream.
+
+            Inputs: none. Output: None.
+            """
+            return None
+
+    class FinishedProcess:
+        """Process fake that has already exited."""
+
+        pid = 1234
+        returncode = 0
+        stdin = BrokenPipeStdin()
+
+        @staticmethod
+        def communicate(timeout=None):
+            """Return completed process output.
+
+            Inputs: optional timeout. Output: stdout and stderr bytes.
+            """
+            return b"done\n", b""
+
+    monkeypatch.setattr(
+        process_utils,
+        "_popen",
+        lambda *_args, **_kwargs: FinishedProcess(),
+    )
+
+    result = process_utils.run_streaming(
+        [sys.executable, "-c", "print('done')"],
+        stdin_text="unused\n",
+        tick_interval=0.01,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "done\n"
 
 
 def test_run_streaming_rejects_non_positive_tick_interval() -> None:
@@ -453,7 +575,9 @@ def test_run_streaming_collects_process_finished_at_timeout_boundary(
     monkeypatch.setattr(
         process_utils,
         "_popen",
-        lambda _command, *, env, cwd, start_new_session=False: FinishedProcess(),
+        lambda _command, *, env, cwd, stdin_pipe=False, start_new_session=False: (
+            FinishedProcess()
+        ),
     )
 
     def monotonic() -> float:

@@ -63,6 +63,32 @@ class _FakeNode:
         self.metadata = metadata
 
 
+class _TrackingArray:
+    """Array double that records and constrains region read selectors."""
+
+    def __init__(self, shape):
+        """Create `_TrackingArray`.
+
+        Inputs: array shape. Output: None.
+        """
+        self.shape = shape
+        self.selectors = None
+
+    def __getitem__(self, selectors):
+        """Return only the requested y/x slice.
+
+        Inputs: selectors. Output: NumPy array. Raises: AssertionError if the
+        region path attempts a full y/x plane read.
+        """
+        self.selectors = selectors
+        _z_selector, y_selector, x_selector = selectors
+        if y_selector == slice(None) or x_selector == slice(None):
+            raise AssertionError("region rendering must not read full y/x planes")
+        height = int(y_selector.stop - y_selector.start)
+        width = int(x_selector.stop - x_selector.start)
+        return np.arange(height * width, dtype=np.uint8).reshape(height, width)
+
+
 class _FakeValue:
     """Test double for fake value."""
 
@@ -528,6 +554,16 @@ def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
     assert resolve_local_zarr_store(str(tmp_path)) is None
 
 
+def test_resolve_local_zarr_store_rejects_remote_file_uri_and_relative_paths(tmp_path):
+    """Verify local store resolution rejects non-local URI and relative path inputs.
+
+    Inputs: pytest tmp_path fixture. Output: asserts unsafe path inputs return None.
+    """
+    assert resolve_local_zarr_store("file://remote-host/path/to/store.zarr") is None
+    assert resolve_local_zarr_store("relative/store.zarr") is None
+    assert resolve_local_zarr_store("file:relative/store.zarr") is None
+
+
 def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(
     tmp_path, monkeypatch
 ):
@@ -750,6 +786,10 @@ def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
         sanitize_download_basename("dir/name, with spaces.zarr")
         == "name._with_spaces.zarr"
     )
+    assert (
+        sanitize_download_basename('dir/name";evil=1\\payload.zarr') == "payload.zarr"
+    )
+    assert sanitize_download_basename('semi;quote".zarr') == "semi_quote_.zarr"
 
 
 def test_select_store_backed_level_prefers_smallest_sufficient_level():
@@ -787,6 +827,29 @@ def test_read_store_backed_plane_maps_full_resolution_z_to_subresolution():
 
     assert axes == ["y", "x"]
     assert plane.tolist() == [[20, 21, 22]]
+
+
+def test_read_store_backed_plane_applies_region_to_array_selectors():
+    """Verify store-backed region reads do not materialize full y/x planes.
+
+    Inputs: fake lazy array. Output: asserts region selectors use bounded slices.
+    """
+    array = _TrackingArray((1, 10, 20))
+    node = _FakeNode([array], {"axes": ["z", "y", "x"]})
+
+    plane, axes = read_store_backed_plane(
+        node,
+        level=0,
+        z=0,
+        x=3,
+        y=2,
+        width=4,
+        height=3,
+    )
+
+    assert axes == ["y", "x"]
+    assert plane.shape == (3, 4)
+    assert array.selectors == (0, slice(2, 5), slice(3, 7))
 
 
 def test_render_store_backed_plane_composites_visible_channels():
@@ -937,7 +1000,7 @@ def test_render_store_backed_region_pil_image_crops_requested_level(monkeypatch)
     )
 
     assert np.array(coarse).tolist() == [[255, 255], [255, 255]]
-    assert np.array(full).tolist() == [[170, 187], [238, 255]]
+    assert np.array(full).tolist() == [[0, 51], [204, 255]]
 
 
 def test_encode_store_backed_pil_image_supports_png_and_tiff():

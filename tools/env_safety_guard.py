@@ -90,6 +90,7 @@ DOT_ENV_REQUIRED_KEYS = (
     "BIOFORMATS2RAW_VERSION",
     "TIFFFILE_VERSION",
     "BIOFORMATS_VERSION",
+    "BIOFORMATS_SHA256",
     "REDIS_SAVE_POLICY",
     "REDIS_APPENDONLY",
     "REDIS_MAXMEMORY",
@@ -599,6 +600,11 @@ def validate_assignment_value(
     if key.endswith(POSITIVE_INTEGER_SUFFIXES):
         if not is_positive_integer_text(value):
             errors.append(f"{key} must be a positive integer")
+        return errors
+
+    if key.endswith("_SHA256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", value):
+            errors.append(f"{key} must be a 64-character lowercase SHA-256 digest")
         return errors
 
     if key.endswith("_VERSION"):

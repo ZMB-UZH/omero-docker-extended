@@ -1,68 +1,29 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
-from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitized_exc_info,
-    summarize_process_output,
 )
 import logging
 from ..services.core import (
     collect_images_in_project,
-    find_annotation_link_ids,
+    delete_existing_annotations,
     find_plugin_annotation_ids,
     get_id,
 )
-from ..constants import OMERO_CLI
 from ..services.rate_limit import (
     build_rate_limit_message,
     check_major_action_rate_limit,
 )
 from ..views.utils import (
-    build_omero_cli_base_command,
     load_json_body,
     require_non_root_user,
     validate_user_password,
 )
+from .project_access import require_destructive_project_access
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
-subprocess = process_utils
-
-OMERO = OMERO_CLI
-_DELETE_TARGET_KINDS = frozenset({"Annotation", "ImageAnnotationLink"})
-
-
-def _validated_delete_object_id(value, label: str) -> int:
-    """Return the validated delete object ID.
-
-    Inputs: `value` input value, `label` (str). Output: `int`. Raises: ValueError when
-    validation or the called operation fails.
-    """
-    object_id = int(value)
-    if object_id <= 0:
-        raise ValueError(f"Invalid {label}.")
-    return object_id
-
-
-def _run_omero_delete(cli_base_cmd, object_kind: str, object_id: int):
-    """Run the OMERO delete.
-
-    Inputs: `cli_base_cmd`, `object_kind` (str), `object_id` (int). Output: `run`
-    Raises: ValueError when validation or the called operation fails.
-    """
-    if object_kind not in _DELETE_TARGET_KINDS:
-        raise ValueError("Unsupported OMERO delete target.")
-    validated_id = _validated_delete_object_id(object_id, f"{object_kind} id")
-    cmd = [
-        *cli_base_cmd,
-        "delete",
-        f"{object_kind}:{validated_id}",
-        "--force",
-    ]
-    return process_utils.run(
-        cmd,
-    )
 
 
 @login_required()
@@ -111,7 +72,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
                 }
             )
 
-        cli_base_cmd = build_omero_cli_base_command(conn)
+        access_ok, access_error = require_destructive_project_access(conn, project_id)
+        if not access_ok:
+            return JsonResponse({"error": access_error}, status=403)
 
         images = collect_images_in_project(conn, project_id)
         if not images:
@@ -135,119 +98,56 @@ def delete_plugin_keyvaluepairs(request, conn=None, _url=None, **kwargs):
         deleted_images = 0
         deletion_errors = []
 
+        update = conn.getUpdateService()
         for img in images:
             try:
                 iid = get_id(img)
-                plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
+                targeted_annotations = find_plugin_annotation_ids(conn, iid)
             except Exception as e:
                 logger.warning(
                     "Cannot resolve annotations for image %s: %s",
                     sanitize_log_value(get_id(img)),
-                    sanitize_log_value(e),
+                    sanitize_log_value(type(e).__name__),
                 )
                 deletion_errors.append(
                     {"image": get_id(img), "error": error_messages.unexpected_error()}
                 )
                 continue
 
-            if not plugin_ann_ids:
+            if not targeted_annotations:
                 continue
 
-            removed_for_image = False
+            try:
+                deleted_sets, _deleted_pairs, _targeted_sets = (
+                    delete_existing_annotations(conn, update, img, [], "plugin")
+                )
+            except Exception as e:
+                logger.warning(
+                    "Error deleting plugin annotations on image %s: %s",
+                    sanitize_log_value(iid),
+                    sanitize_log_value(type(e).__name__),
+                )
+                deletion_errors.append(
+                    {
+                        "image": iid,
+                        "error": error_messages.unexpected_error(),
+                    }
+                )
+                continue
 
-            for aid in plugin_ann_ids:
-                try:
-                    aid = _validated_delete_object_id(aid, "annotation id")
-                    link_ids = find_annotation_link_ids(conn, aid, image_id=iid)
-                    for lid in link_ids:
-                        lid = _validated_delete_object_id(lid, "annotation link id")
-                        link_result = _run_omero_delete(
-                            cli_base_cmd,
-                            "ImageAnnotationLink",
-                            lid,
-                        )
-                        if link_result.returncode != 0:
-                            logger.warning(
-                                "Failed to delete annotation link %s for image %s "
-                                "annotation %s: rc=%s %s",
-                                lid,
-                                iid,
-                                aid,
-                                link_result.returncode,
-                                summarize_process_output(
-                                    link_result.stdout, link_result.stderr
-                                ),
-                            )
-                            deletion_errors.append(
-                                {
-                                    "image": iid,
-                                    "annotation": aid,
-                                    "link": lid,
-                                    "error": error_messages.unable_delete_plugin_annotations(),
-                                }
-                            )
+            remaining = find_plugin_annotation_ids(conn, iid)
+            if remaining:
+                deletion_errors.append(
+                    {
+                        "image": iid,
+                        "annotations_remaining": remaining,
+                        "error": error_messages.annotation_still_exists(),
+                    }
+                )
+                continue
 
-                    remaining_links = find_annotation_link_ids(conn, aid, image_id=iid)
-                    if remaining_links:
-                        deletion_errors.append(
-                            {
-                                "image": iid,
-                                "annotation": aid,
-                                "links_remaining": remaining_links,
-                                "error": error_messages.annotation_links_still_exist(),
-                            }
-                        )
-                        continue
-
-                    result = _run_omero_delete(cli_base_cmd, "Annotation", aid)
-
-                    if result.returncode != 0:
-                        logger.warning(
-                            "Failed to delete plugin annotation %s for image %s: rc=%s %s",
-                            aid,
-                            iid,
-                            result.returncode,
-                            summarize_process_output(result.stdout, result.stderr),
-                        )
-                        deletion_errors.append(
-                            {
-                                "image": iid,
-                                "annotation": aid,
-                                "error": error_messages.unable_delete_plugin_annotations(),
-                            }
-                        )
-                        continue
-
-                    ann_obj = conn.getObject("MapAnnotation", int(aid))
-                    if ann_obj is not None:
-                        deletion_errors.append(
-                            {
-                                "image": iid,
-                                "annotation": aid,
-                                "error": error_messages.annotation_still_exists(),
-                            }
-                        )
-                        continue
-
-                    deleted_annotations += 1
-                    removed_for_image = True
-                except Exception as e:
-                    logger.warning(
-                        "Error deleting plugin annotation %s on image %s: %s",
-                        sanitize_log_value(aid),
-                        sanitize_log_value(iid),
-                        sanitize_log_value(e),
-                    )
-                    deletion_errors.append(
-                        {
-                            "image": iid,
-                            "annotation": aid,
-                            "error": error_messages.unexpected_error(),
-                        }
-                    )
-                    continue
-
-            if removed_for_image:
+            deleted_annotations += deleted_sets
+            if targeted_annotations:
                 deleted_images += 1
 
         return JsonResponse(

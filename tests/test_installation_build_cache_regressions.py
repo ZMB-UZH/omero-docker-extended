@@ -95,6 +95,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     BIOFORMATS2RAW_VERSION=0.11.0
                     TIFFFILE_VERSION=2026.3.3
                     BIOFORMATS_VERSION=8.5.0
+                    BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2
                     COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
@@ -188,6 +189,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     BIOFORMATS2RAW_VERSION=0.11.0
                     TIFFFILE_VERSION=2026.3.3
                     BIOFORMATS_VERSION=8.5.0
+                    BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2
                     COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"

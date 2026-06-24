@@ -2246,6 +2246,23 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             public_pull_script,
         )
 
+    def test_docker_image_analysis_probe_uses_hardened_container_runtime(self) -> None:
+        """Verify Docker image analysis probes use hardened Docker runtime flags.
+
+        Inputs: repository fixtures. Output: fails on regressions in helper probe isolation.
+        """
+        script_text = (
+            self.repo_root / "helper_scripts_debian" / "docker_image_analysis.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("--network none", script_text)
+        self.assertIn("--cap-drop ALL", script_text)
+        self.assertIn("--security-opt no-new-privileges", script_text)
+        self.assertIn("--read-only", script_text)
+        self.assertIn("--tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m", script_text)
+        self.assertIn("--pids-limit 128", script_text)
+        self.assertIn("--memory 256m", script_text)
+
     def test_server_bootstrap_avoids_bash_operator_portability_findings(self) -> None:
         """Verify server bootstrap avoids bash operator portability findings.
 

@@ -1,31 +1,30 @@
 from django.http import JsonResponse
 from omeroweb.decorators import login_required
-from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitized_exc_info,
-    summarize_process_output,
 )
 import logging
 
-from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
-from ..constants import OMERO_CLI
+from ..services.core import (
+    collect_images_in_project,
+    delete_existing_annotations,
+    find_map_annotation_ids,
+    get_id,
+)
 from ..services.rate_limit import (
     build_rate_limit_message,
     check_major_action_rate_limit,
 )
 from ..views.utils import (
-    build_omero_cli_base_command,
     load_json_body,
     require_non_root_user,
     validate_user_password,
 )
+from .project_access import require_destructive_project_access
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
-subprocess = process_utils
-
-OMERO = OMERO_CLI
 
 
 @login_required()
@@ -74,12 +73,13 @@ def delete_all_keyvaluepairs(request, conn=None, _url=None, **kwargs):
                 }
             )
 
-        cli_base_cmd = build_omero_cli_base_command(conn)
+        access_ok, access_error = require_destructive_project_access(conn, project_id)
+        if not access_ok:
+            return JsonResponse({"error": access_error}, status=403)
 
         images = collect_images_in_project(conn, project_id)
-        image_ids = [str(get_id(img)) for img in images]
 
-        if not image_ids:
+        if not images:
             return JsonResponse(
                 {
                     "ok": True,
@@ -99,52 +99,36 @@ def delete_all_keyvaluepairs(request, conn=None, _url=None, **kwargs):
         deleted_count = 0
         deletion_errors = []
 
-        CHUNK = 100
-        for i in range(0, len(image_ids), CHUNK):
-            chunk_ids = [str(int(x)) for x in image_ids[i : i + CHUNK]]
-            target = "Image/Annotation:" + ",".join(chunk_ids)
-            cmd = [
-                *cli_base_cmd,
-                "delete",
-                target,
-                "--include",
-                "MapAnnotation",
-                "--include",
-                "ImageAnnotationLink",
-                "--force",
-            ]
-
-            result = process_utils.run(
-                cmd,
-            )
-
-            if result.returncode != 0:
+        update = conn.getUpdateService()
+        for img in images:
+            image_id = get_id(img)
+            try:
+                delete_existing_annotations(conn, update, img, [], "all")
+            except Exception as exc:
                 logger.warning(
-                    "Failed to delete map annotations for image chunk %s: rc=%s %s",
-                    chunk_ids,
-                    result.returncode,
-                    summarize_process_output(result.stdout, result.stderr),
+                    "Failed to delete map annotations for image %s: %s",
+                    sanitize_log_value(image_id),
+                    sanitize_log_value(type(exc).__name__),
                 )
                 deletion_errors.append(
                     {
-                        "ids": chunk_ids,
+                        "ids": [image_id],
                         "error": error_messages.unable_delete_annotations(),
                     }
                 )
                 continue
 
-            for image_id in chunk_ids:
-                remaining = find_map_annotation_ids(conn, image_id)
-                if remaining:
-                    deletion_errors.append(
-                        {
-                            "ids": [image_id],
-                            "error": error_messages.map_annotations_still_present(),
-                            "remaining": remaining,
-                        }
-                    )
-                    continue
-                deleted_count += 1
+            remaining = find_map_annotation_ids(conn, image_id)
+            if remaining:
+                deletion_errors.append(
+                    {
+                        "ids": [image_id],
+                        "error": error_messages.map_annotations_still_present(),
+                        "remaining": remaining,
+                    }
+                )
+                continue
+            deleted_count += 1
 
         return JsonResponse(
             {

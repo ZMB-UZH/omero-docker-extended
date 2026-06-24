@@ -184,9 +184,13 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "BIOFORMATS2RAW_VERSION",
             "TIFFFILE_VERSION",
             "BIOFORMATS_VERSION",
+            "BIOFORMATS_SHA256",
             "IMARISCONVERT_REPO_URL",
             "IMARISCONVERT_GIT_REF",
             "IMARISCONVERT_GIT_COMMIT",
+            "IMARISWRITER_REPO_URL",
+            "IMARISWRITER_GIT_REF",
+            "IMARISWRITER_GIT_COMMIT",
             "OMERO_IMS_EXPORT_DIR",
         }
     ),

@@ -35,10 +35,10 @@ Answer four architecture questions before any implementation work:
 
 ### Python footprint
 
-- Production Python files: `154`
-- Production Python lines: `81,551`
-- Test Python files: `181`
-- Test Python lines: `130,833`
+- Production Python files: `157`
+- Production Python lines: `82,533`
+- Test Python files: `183`
+- Test Python lines: `133,527`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
@@ -46,25 +46,25 @@ strategy would mostly compile tests unless the build is carefully filtered.
 ### Largest production modules inspected
 
 - `omero_imaris_connector/XTOmeroConnector.py`: `15,358` lines
-- `omeroweb_import/views/core_functions.py`: `10,367` lines
-- `omeroweb_admin_tools/views/index_view.py`: `3,525` lines
+- `omeroweb_import/views/core_functions.py`: `10,552` lines
+- `omeroweb_admin_tools/views/index_view.py`: `3,592` lines
 - `tools/cocoindex_agent_search.py`: `3,114` lines
 - `omeroweb_import/views/index_view.py`: `1,888` lines
-- `omero_web_zarr/integration.py`: `1,801` lines
+- `omero_web_zarr/integration.py`: `1,804` lines
 - `omeroweb_tools/services/enhanced_search_service.py`: `1,687` lines
 - `omeroweb_import/services/ome_zarr_support.py`: `1,669` lines
-- `omero_web_zarr/utils.py`: `1,488` lines
+- `omero_web_zarr/utils.py`: `1,556` lines
 - `omeroweb_tools/services/acquisition_metadata.py`: `1,468` lines
 - `tools/regression_guard.py`: `1,453` lines
 - `omeroweb_tools/services/enhanced_search_store.py`: `1,422` lines
 - `omeroweb_admin_tools/services/log_query.py`: `1,375` lines
 - `omero_imaris_connector/imaris_service.py`: `1,353` lines
-- `omero_imaris_connector/views.py`: `1,310` lines
+- `omero_imaris_connector/views.py`: `1,319` lines
 - `tools/env_safety_guard.py`: `1,248` lines
 - `omeroweb_import/services/omero/sem_edx_parser.py`: `1,245` lines
 - `omero_web_zarr/views.py`: `1,245` lines
 - `omeroweb_omp_plugin/views/index_view.py`: `1,216` lines
-- `omero_imaris_connector/omero_scripts/IMS_Export.py`: `1,162` lines
+- `omero_imaris_connector/omero_scripts/IMS_Export.py`: `1,168` lines
 
 ### Dominant runtime patterns
 

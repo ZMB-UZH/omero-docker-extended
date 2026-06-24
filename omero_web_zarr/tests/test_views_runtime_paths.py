@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import django
 import numpy as np
 import pytest
-import requests
 from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
@@ -1136,7 +1135,7 @@ def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
     monkeypatch.setattr(
         views,
         "_fetch_remote_app_shell",
-        lambda *_args: (_ for _ in ()).throw(requests.RequestException("boom")),
+        lambda *_args: pytest.fail("remote validator shell should not be fetched"),
     )
 
     response = views.apps(RequestFactory().get("/zarr/validator/"), "validator", "")
@@ -1146,7 +1145,8 @@ def test_app_helpers_reject_invalid_asset_paths_and_surface_fetch_failures(
         "assets/app.js",
     )
 
-    assert response.status_code == 502
+    assert response.status_code == 200
+    assert "Content-Security-Policy" in response
     assert isinstance(redirect, HttpResponseRedirect)
     assert (
         redirect["Location"] == "https://ome.github.io/ome-ngff-validator/assets/app.js"

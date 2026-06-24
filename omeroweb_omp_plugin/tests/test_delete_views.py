@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import inspect
 import json
-import subprocess
 from types import SimpleNamespace
 
-import pytest
 from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import delete_all_view, delete_plugin_view
@@ -39,6 +37,7 @@ class _Conn:
         Inputs: constructor receives no public arguments. Output: initializes fake state.
         """
         self.getObject = lambda kind, object_id: None
+        self.update_service = object()
 
     @staticmethod
     def getUser():
@@ -47,6 +46,13 @@ class _Conn:
         Inputs: none. Output: `SimpleNamespace` result.
         """
         return SimpleNamespace(getName=lambda: "alice")
+
+    def getUpdateService(self):
+        """Return the fake update service.
+
+        Inputs: none. Output: `self.update_service`.
+        """
+        return self.update_service
 
 
 def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
@@ -129,8 +135,8 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     )
     monkeypatch.setattr(
         delete_all_view,
-        "build_omero_cli_base_command",
-        lambda current_conn: ["omero", "-u", "alice"],
+        "require_destructive_project_access",
+        lambda current_conn, project_id: (True, None),
     )
     monkeypatch.setattr(
         delete_all_view,
@@ -172,29 +178,11 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
         lambda request, current_conn: (True, 0),
     )
 
-    cli_results = {
-        "Image/Annotation:1,2,3": subprocess.CompletedProcess(
-            args=[],
-            returncode=1,
-            stdout="",
-            stderr="delete failed",
-        ),
-        "Image/Annotation:1,2": subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="deleted",
-            stderr="",
-        ),
-    }
-
-    def _run(cmd, **kwargs):
-        """Return the fake subprocess result for cmd and kwargs.
-
-        Inputs: `cmd`, `**kwargs`. Output: `cli_results[cmd[4]]`.
-        """
-        return cli_results[cmd[4]]
-
-    monkeypatch.setattr(delete_all_view.subprocess, "run", _run)
+    monkeypatch.setattr(
+        delete_all_view,
+        "delete_existing_annotations",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("delete failed")),
+    )
     failed_chunk = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
         factory.post("/omp/delete-all/"),
         conn=conn,
@@ -204,9 +192,17 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
         "deleted_count": 0,
         "errors": [
             {
-                "ids": ["1", "2", "3"],
+                "ids": [1],
                 "error": delete_all_view.error_messages.unable_delete_annotations(),
-            }
+            },
+            {
+                "ids": [2],
+                "error": delete_all_view.error_messages.unable_delete_annotations(),
+            },
+            {
+                "ids": [3],
+                "error": delete_all_view.error_messages.unable_delete_annotations(),
+            },
         ],
     }
 
@@ -217,8 +213,13 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     )
     monkeypatch.setattr(
         delete_all_view,
+        "delete_existing_annotations",
+        lambda *_args: (1, 2, 1),
+    )
+    monkeypatch.setattr(
+        delete_all_view,
         "find_map_annotation_ids",
-        lambda current_conn, image_id: [99] if str(image_id) == "1" else [],
+        lambda current_conn, image_id: [99] if int(image_id) == 1 else [],
     )
     partial = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
         factory.post("/omp/delete-all/"),
@@ -229,7 +230,7 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
         "deleted_count": 1,
         "errors": [
             {
-                "ids": ["1"],
+                "ids": [1],
                 "error": delete_all_view.error_messages.map_annotations_still_present(),
                 "remaining": [99],
             }
@@ -238,8 +239,10 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
 
     monkeypatch.setattr(
         delete_all_view,
-        "build_omero_cli_base_command",
-        lambda current_conn: (_ for _ in ()).throw(RuntimeError("cli unavailable")),
+        "collect_images_in_project",
+        lambda current_conn, project_id: (_ for _ in ()).throw(
+            RuntimeError("project unavailable")
+        ),
     )
     top_level_error = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
         factory.post("/omp/delete-all/"),
@@ -252,15 +255,56 @@ def test_delete_all_view_covers_validation_chunk_failures_and_top_level_errors(
     )
 
 
+def test_delete_all_rejects_project_without_write_access(monkeypatch):
+    """Verify delete-all rejects projects without destructive write access.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on authorization regressions.
+    """
+    conn = _Conn()
+    factory = RequestFactory()
+    monkeypatch.setattr(
+        delete_all_view,
+        "load_json_body",
+        lambda request: (_delete_request_payload("5", AUTH_VALUE), None),
+    )
+    monkeypatch.setattr(
+        delete_all_view,
+        "validate_user_password",
+        lambda current_conn, password: (True, None),
+    )
+    monkeypatch.setattr(
+        delete_all_view,
+        "require_destructive_project_access",
+        lambda current_conn, project_id: (
+            False,
+            delete_all_view.error_messages.project_write_access_required(),
+        ),
+    )
+    monkeypatch.setattr(
+        delete_all_view,
+        "collect_images_in_project",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("images must not be collected without write access")
+        ),
+    )
+
+    response = inspect.unwrap(delete_all_view.delete_all_keyvaluepairs)(
+        factory.post("/omp/delete-all/"),
+        conn=conn,
+    )
+
+    assert response.status_code == 403
+    assert _payload(response) == {
+        "error": delete_all_view.error_messages.project_write_access_required()
+    }
+
+
 def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatch):
     """Check delete plugin view covers validation and empty project paths cleanup behavior.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete plugin view covers validation and empty project paths.
     """
-    with pytest.raises(ValueError, match="Invalid annotation id"):
-        delete_plugin_view._validated_delete_object_id(0, "annotation id")
-    with pytest.raises(ValueError, match="Unsupported OMERO delete target"):
-        delete_plugin_view._run_omero_delete(["omero"], "Dataset", 1)
+    assert not hasattr(delete_plugin_view, "_run_omero_delete")
 
     conn = _Conn()
     factory = RequestFactory()
@@ -337,8 +381,32 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     )
     monkeypatch.setattr(
         delete_plugin_view,
-        "build_omero_cli_base_command",
-        lambda current_conn: ["omero", "-u", "alice"],
+        "require_destructive_project_access",
+        lambda current_conn, project_id: (
+            False,
+            delete_plugin_view.error_messages.project_write_access_required(),
+        ),
+    )
+    monkeypatch.setattr(
+        delete_plugin_view,
+        "collect_images_in_project",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("images must not be collected without write access")
+        ),
+    )
+    forbidden = inspect.unwrap(delete_plugin_view.delete_plugin_keyvaluepairs)(
+        factory.post("/omp/delete-plugin/"),
+        conn=conn,
+    )
+    assert forbidden.status_code == 403
+    assert _payload(forbidden) == {
+        "error": delete_plugin_view.error_messages.project_write_access_required()
+    }
+
+    monkeypatch.setattr(
+        delete_plugin_view,
+        "require_destructive_project_access",
+        lambda current_conn, project_id: (True, None),
     )
     monkeypatch.setattr(
         delete_plugin_view,
@@ -380,8 +448,10 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     )
     monkeypatch.setattr(
         delete_plugin_view,
-        "build_omero_cli_base_command",
-        lambda current_conn: (_ for _ in ()).throw(RuntimeError("cli unavailable")),
+        "collect_images_in_project",
+        lambda current_conn, project_id: (_ for _ in ()).throw(
+            RuntimeError("project unavailable")
+        ),
     )
     top_level_error = inspect.unwrap(delete_plugin_view.delete_plugin_keyvaluepairs)(
         factory.post("/omp/delete-plugin/"),
@@ -394,10 +464,10 @@ def test_delete_plugin_view_covers_validation_and_empty_project_paths(monkeypatc
     )
 
 
-def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeypatch):
-    """Verify the delete plugin view covers CLI failures link residue and success execution contract.
+def test_delete_plugin_view_covers_gateway_failures_residue_and_success(monkeypatch):
+    """Verify delete plugin view covers gateway failures residue and success.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in delete plugin view covers CLI failures link residue and success.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in gateway deletion handling.
     Raises: RuntimeError when validation or the called operation fails.
     """
     conn = _Conn()
@@ -415,22 +485,24 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     )
     monkeypatch.setattr(
         delete_plugin_view,
-        "build_omero_cli_base_command",
-        lambda current_conn: ["omero", "-u", "alice"],
-    )
-    monkeypatch.setattr(
-        delete_plugin_view,
         "check_major_action_rate_limit",
         lambda request, current_conn: (True, 0),
     )
+    monkeypatch.setattr(
+        delete_plugin_view,
+        "require_destructive_project_access",
+        lambda current_conn, project_id: (True, None),
+    )
     monkeypatch.setattr(delete_plugin_view, "get_id", lambda obj: obj.id)
 
-    images = [SimpleNamespace(id=value) for value in range(1, 8)]
+    images = [SimpleNamespace(id=value) for value in range(1, 6)]
     monkeypatch.setattr(
         delete_plugin_view,
         "collect_images_in_project",
         lambda current_conn, project_id: images,
     )
+
+    plugin_lookup_counts = {}
 
     def _plugin_annotation_ids(_conn, image_id):
         """Return fake OMP plugin annotation IDs for delete-view tests.
@@ -440,78 +512,32 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
         """
         if image_id == 1:
             raise RuntimeError("lookup failed")
+        plugin_lookup_counts[image_id] = plugin_lookup_counts.get(image_id, 0) + 1
+        if image_id == 4 and plugin_lookup_counts[image_id] > 1:
+            return [104]
+        if image_id == 5 and plugin_lookup_counts[image_id] > 1:
+            return []
         return {
             2: [],
             3: [103],
             4: [104],
             5: [105],
-            6: [106],
-            7: [107],
         }[image_id]
 
-    link_lookup = {
-        103: [[1103], [1103]],
-        104: [[], []],
-        105: [[], []],
-        106: [[], []],
-        107: "boom",
-    }
+    def _delete_existing_annotations(_conn, _update, img, _var_names, mode):
+        """Delete fake plugin annotations using OMERO gateway helpers.
 
-    def _find_link_ids(_conn, annotation_id, image_id=None):
-        """Find the link IDs.
-
-        Inputs: `_conn`, `annotation_id` OMERO annotation ID, optional `image_id`.
-        Output: `list`. Raises: RuntimeError when validation or the called operation
-        fails.
+        Inputs: fake gateway arguments. Output: deletion helper tuple.
+        Raises: RuntimeError when validation or the called operation fails.
         """
-        assert image_id in {3, 4, 5, 6, 7}
-        state = link_lookup[annotation_id]
-        if state == "boom":
-            raise RuntimeError("link lookup failed")
-        values = state.pop(0)
-        return list(values)
-
-    delete_results = {
-        "ImageAnnotationLink:1103": subprocess.CompletedProcess(
-            args=[],
-            returncode=1,
-            stdout="",
-            stderr="link delete failed",
-        ),
-        "Annotation:104": subprocess.CompletedProcess(
-            args=[],
-            returncode=1,
-            stdout="",
-            stderr="annotation delete failed",
-        ),
-        "Annotation:105": subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="deleted annotation",
-            stderr="",
-        ),
-        "Annotation:106": subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="deleted annotation",
-            stderr="",
-        ),
-    }
-
-    def _run(cmd, **kwargs):
-        """Return the fake subprocess result for cmd and kwargs.
-
-        Inputs: `cmd`, `**kwargs`. Output: `delete_results[cmd[4]]`.
-        """
-        return delete_results[cmd[4]]
-
-    annotation_lookup = {
-        105: object(),
-        106: None,
-    }
-    conn.getObject = lambda kind, object_id: (
-        annotation_lookup.get(object_id) if kind == "MapAnnotation" else None
-    )
+        assert mode == "plugin"
+        if img.id == 3:
+            raise RuntimeError("gateway delete failed")
+        if img.id == 4:
+            return 0, 0, 1
+        if img.id == 5:
+            return 1, 2, 1
+        return 0, 0, 0
 
     monkeypatch.setattr(
         delete_plugin_view,
@@ -520,10 +546,9 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
     )
     monkeypatch.setattr(
         delete_plugin_view,
-        "find_annotation_link_ids",
-        _find_link_ids,
+        "delete_existing_annotations",
+        _delete_existing_annotations,
     )
-    monkeypatch.setattr(delete_plugin_view.subprocess, "run", _run)
 
     response = inspect.unwrap(delete_plugin_view.delete_plugin_keyvaluepairs)(
         factory.post("/omp/delete-plugin/"),
@@ -541,30 +566,12 @@ def test_delete_plugin_view_covers_cli_failures_link_residue_and_success(monkeyp
             },
             {
                 "image": 3,
-                "annotation": 103,
-                "link": 1103,
-                "error": delete_plugin_view.error_messages.unable_delete_plugin_annotations(),
-            },
-            {
-                "image": 3,
-                "annotation": 103,
-                "links_remaining": [1103],
-                "error": delete_plugin_view.error_messages.annotation_links_still_exist(),
+                "error": delete_plugin_view.error_messages.unexpected_error(),
             },
             {
                 "image": 4,
-                "annotation": 104,
-                "error": delete_plugin_view.error_messages.unable_delete_plugin_annotations(),
-            },
-            {
-                "image": 5,
-                "annotation": 105,
+                "annotations_remaining": [104],
                 "error": delete_plugin_view.error_messages.annotation_still_exists(),
-            },
-            {
-                "image": 7,
-                "annotation": 107,
-                "error": delete_plugin_view.error_messages.unexpected_error(),
             },
         ],
     }

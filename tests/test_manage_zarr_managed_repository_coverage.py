@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import runpy
 import shutil
+import stat
 import sys
 import types
 from datetime import datetime
@@ -183,6 +184,328 @@ def _register_repo_path(repo_proxy, managed_root: Path, target: Path) -> None:
     for part in target.resolve(strict=False).relative_to(managed_root).parts:
         current = (current / part).resolve(strict=False)
         repo_proxy.registered_paths.add(current)
+
+
+def test_manage_script_authorizes_template_identity_against_session_context():
+    """Verify managed Zarr template identity is bound to the OMERO session.
+
+    Inputs: none. Output: asserts session-bound template identity.
+    """
+    module = _load_manage_script_module()
+
+    assert module._unwrap_rtype_text(types.SimpleNamespace(val=" alice ")) == "alice"
+    assert module._unwrap_rtype_text(types.SimpleNamespace(_val=" group ")) == "group"
+
+    user_conn = types.SimpleNamespace(
+        getEventContext=lambda: types.SimpleNamespace(
+            userName="alice", groupName="users_private"
+        )
+    )
+    assert module._authorized_template_identity(
+        user_conn, "users_private", "alice"
+    ) == ("users_private", "alice")
+
+    with pytest.raises(RuntimeError, match="authenticated user"):
+        module._authorized_template_identity(user_conn, "users_private", "bob")
+    with pytest.raises(RuntimeError, match="active OMERO group"):
+        module._authorized_template_identity(user_conn, "other_group", "alice")
+
+    root_conn = types.SimpleNamespace(
+        getEventContext=lambda: types.SimpleNamespace(
+            userName="root", groupName="system"
+        )
+    )
+    assert module._authorized_template_identity(
+        root_conn, "users_private", "alice"
+    ) == ("users_private", "alice")
+
+    fallback_root_conn = types.SimpleNamespace(
+        getEventContext=lambda: (_ for _ in ()).throw(RuntimeError("no context")),
+        getUser=lambda: types.SimpleNamespace(
+            getName=lambda: types.SimpleNamespace(val="root")
+        ),
+    )
+    assert module._authorized_template_identity(
+        fallback_root_conn, "users_private", "alice"
+    ) == ("users_private", "alice")
+
+    missing_identity_conn = types.SimpleNamespace(
+        getEventContext=lambda: None,
+        getUser=lambda: (_ for _ in ()).throw(RuntimeError("no user")),
+    )
+    with pytest.raises(RuntimeError, match="authenticated user"):
+        module._authorized_template_identity(
+            missing_identity_conn, "users_private", "alice"
+        )
+
+
+def test_manage_script_copytree_without_following_symlinks(tmp_path: Path):
+    """Verify managed Zarr staging copy refuses symlinks during copy.
+
+    Inputs: pytest tmp_path fixture. Output: asserts symlink-safe copy behavior.
+    """
+    module = _load_manage_script_module()
+
+    source = tmp_path / "source.zarr"
+    (source / "0").mkdir(parents=True)
+    (source / "0" / "0").write_text("pixels", encoding="utf-8")
+    destination = tmp_path / "destination.zarr"
+
+    module._copytree_without_following_symlinks(source, destination)
+
+    assert (destination / "0" / "0").read_text(encoding="utf-8") == "pixels"
+
+    existing_destination = tmp_path / "existing.zarr"
+    (existing_destination / "0").mkdir(parents=True)
+    (existing_destination / "0" / "0").write_text("old", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="destination already exists"):
+        module._copytree_without_following_symlinks(source, existing_destination)
+
+    linked_source = tmp_path / "linked.zarr"
+    linked_source.mkdir()
+    link_target = tmp_path / "target.txt"
+    link_target.write_text("secret", encoding="utf-8")
+    try:
+        (linked_source / "link").symlink_to(link_target)
+    except OSError as exc:
+        pytest.skip(f"filesystem does not allow symlinks: {exc}")
+    with pytest.raises(RuntimeError, match="Symlinks are not allowed"):
+        module._copytree_without_following_symlinks(
+            linked_source, tmp_path / "linked-destination.zarr"
+        )
+
+
+def test_manage_script_low_level_copy_guards_cover_defensive_edges(
+    monkeypatch,
+    tmp_path: Path,
+):
+    """Verify low-level managed-copy guards reject unsafe filesystem edges.
+
+    Inputs: pytest fixtures. Output: asserts defensive copy helpers fail closed.
+    """
+    module = _load_manage_script_module()
+
+    assert module._call_text(None, "getName") == ""
+    assert (
+        module._call_text(types.SimpleNamespace(getName="not callable"), "getName")
+        == ""
+    )
+
+    class _BrokenPath:
+        """Path replacement that forces the string fallback comparison."""
+
+        def __init__(self, _value):
+            """Create the broken path wrapper.
+
+            Inputs: ignored path value. Output: initialized wrapper.
+            """
+            return None
+
+        @staticmethod
+        def resolve(*_args, **_kwargs):
+            """Raise from path resolution.
+
+            Inputs: ignored arguments. Output: raises RuntimeError.
+            """
+            raise RuntimeError("resolve failed")
+
+    monkeypatch.setattr(module, "Path", _BrokenPath)
+    assert module._same_filesystem_path("/managed/root/", "/managed/root\\") is True
+
+    source_file = tmp_path / "source.bin"
+    source_file.write_bytes(b"pixels")
+    source_fd = module.os.open(source_file, module.os.O_RDONLY)
+    try:
+        monkeypatch.setattr(
+            module.os,
+            "fdopen",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("fdopen failed")),
+        )
+        with pytest.raises(OSError, match="fdopen failed"):
+            module._copy_file_descriptor_to_path(source_fd, tmp_path / "dest.bin")
+    finally:
+        module.os.close(source_fd)
+
+
+def test_manage_script_posix_copytree_rejects_racy_and_special_entries(
+    monkeypatch,
+    tmp_path: Path,
+):
+    """Verify POSIX no-follow copy rejects open/stat races and special files.
+
+    Inputs: pytest fixtures. Output: asserts racy and special entries are rejected.
+    """
+    module = _load_manage_script_module()
+    if module.os.name != "posix" or not hasattr(module.os, "O_NOFOLLOW"):
+        pytest.skip("POSIX no-follow copy path is not available")
+
+    fake_not_dir_source = tmp_path / "fake-not-dir.zarr"
+    fake_not_dir_source.mkdir()
+    real_fstat_initial = module.os.fstat
+
+    def fake_source_fstat(fd):
+        """Return regular-file mode for the opened source directory.
+
+        Inputs: file descriptor. Output: fake stat result.
+        """
+        return types.SimpleNamespace(st_mode=stat.S_IFREG)
+
+    monkeypatch.setattr(module.os, "fstat", fake_source_fstat)
+    with pytest.raises(RuntimeError, match="Staged Zarr source is not a directory"):
+        module._copytree_without_following_symlinks_posix(
+            fake_not_dir_source,
+            tmp_path / "dest-fake-not-dir.zarr",
+        )
+    monkeypatch.setattr(module.os, "fstat", real_fstat_initial)
+
+    with pytest.raises(RuntimeError, match="Failed to open staged Zarr directory"):
+        module._copytree_without_following_symlinks_posix(
+            tmp_path / "missing.zarr",
+            tmp_path / "dest-missing.zarr",
+        )
+
+    stat_source = tmp_path / "stat-source.zarr"
+    stat_source.mkdir()
+    (stat_source / "0").write_text("pixels", encoding="utf-8")
+    monkeypatch.setattr(
+        module.os,
+        "stat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("stat failed")),
+    )
+    with pytest.raises(RuntimeError, match="Failed to inspect staged Zarr entry"):
+        module._copytree_without_following_symlinks_posix(
+            stat_source,
+            tmp_path / "dest-stat.zarr",
+        )
+    monkeypatch.undo()
+    module = _load_manage_script_module()
+
+    open_source = tmp_path / "open-source.zarr"
+    open_source.mkdir()
+    (open_source / "0").write_text("pixels", encoding="utf-8")
+    real_open = module.os.open
+
+    def fail_child_open(path, flags, mode=0o777, *, dir_fd=None):
+        """Raise only when opening a child entry by directory fd.
+
+        Inputs: open path, flags, mode, optional dir fd. Output: fd or OSError.
+        """
+        if dir_fd is not None:
+            raise OSError("child open failed")
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(module.os, "open", fail_child_open)
+    with pytest.raises(RuntimeError, match="Failed to open staged Zarr file safely"):
+        module._copytree_without_following_symlinks_posix(
+            open_source,
+            tmp_path / "dest-open.zarr",
+        )
+    monkeypatch.undo()
+    module = _load_manage_script_module()
+
+    changed_source = tmp_path / "changed-source.zarr"
+    changed_source.mkdir()
+    (changed_source / "0").write_text("pixels", encoding="utf-8")
+    real_fstat = module.os.fstat
+    fstat_calls = {"count": 0}
+
+    def fake_fstat(fd):
+        """Return directory mode for the child fd to simulate a race.
+
+        Inputs: file descriptor. Output: fake or real stat result.
+        """
+        fstat_calls["count"] += 1
+        if fstat_calls["count"] == 2:
+            return types.SimpleNamespace(st_mode=stat.S_IFDIR)
+        return real_fstat(fd)
+
+    monkeypatch.setattr(module.os, "fstat", fake_fstat)
+    with pytest.raises(RuntimeError, match="changed during copy"):
+        module._copytree_without_following_symlinks_posix(
+            changed_source,
+            tmp_path / "dest-changed.zarr",
+        )
+    monkeypatch.undo()
+    module = _load_manage_script_module()
+
+    if not hasattr(module.os, "mkfifo"):
+        pytest.skip("FIFO creation is not available")
+    special_source = tmp_path / "special-source.zarr"
+    special_source.mkdir()
+    module.os.mkfifo(special_source / "pipe")
+    with pytest.raises(RuntimeError, match="Special files are not allowed"):
+        module._copytree_without_following_symlinks_posix(
+            special_source,
+            tmp_path / "dest-special.zarr",
+        )
+
+
+def test_manage_script_portable_copytree_path(monkeypatch, tmp_path: Path):
+    """Verify the portable Zarr copy path rejects unsafe entries.
+
+    Inputs: pytest fixtures. Output: asserts portable copy and rejection paths.
+    """
+    module = _load_manage_script_module()
+
+    source = tmp_path / "portable-source.zarr"
+    nested = source / "0"
+    nested.mkdir(parents=True)
+    (nested / "0").write_text("pixels", encoding="utf-8")
+    destination = tmp_path / "portable-dest.zarr"
+
+    module._copytree_without_following_symlinks_portable(source, destination)
+    assert (destination / "0" / "0").read_text(encoding="utf-8") == "pixels"
+
+    existing_destination = tmp_path / "portable-existing.zarr"
+    existing_destination.mkdir()
+    (existing_destination / "0").mkdir()
+    (existing_destination / "0" / "0").write_text("old", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="destination already exists"):
+        module._copytree_without_following_symlinks_portable(
+            source,
+            existing_destination,
+        )
+
+    linked = tmp_path / "portable-linked.zarr"
+    linked.mkdir()
+    target = tmp_path / "portable-target"
+    target.write_text("secret", encoding="utf-8")
+    try:
+        (linked / "link").symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"filesystem does not allow symlinks: {exc}")
+    with pytest.raises(RuntimeError, match="Symlinks are not allowed"):
+        module._copytree_without_following_symlinks_portable(
+            linked,
+            tmp_path / "portable-linked-dest.zarr",
+        )
+
+    if hasattr(module.os, "mkfifo"):
+        special_source = tmp_path / "portable-special-source.zarr"
+        special_source.mkdir()
+        module.os.mkfifo(special_source / "pipe")
+        with pytest.raises(RuntimeError, match="Special files are not allowed"):
+            module._copytree_without_following_symlinks_portable(
+                special_source,
+                tmp_path / "portable-special-dest.zarr",
+            )
+
+    wrapper_destination = tmp_path / "wrapper-portable-dest.zarr"
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    module._copytree_without_following_symlinks(source, wrapper_destination)
+    assert (wrapper_destination / "0" / "0").read_text(encoding="utf-8") == "pixels"
+
+    failing_destination = tmp_path / "portable-fdopen-fails.zarr"
+    monkeypatch.setattr(
+        module.os,
+        "fdopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("fdopen failed")),
+    )
+    with pytest.raises(OSError, match="fdopen failed"):
+        module._copytree_without_following_symlinks_portable(
+            source,
+            failing_destination,
+        )
 
 
 def test_manage_script_config_and_runtime_helpers_cover_remaining_guards(

@@ -960,18 +960,24 @@ class ImportPluginRegressionTests(TestCase):
 
         self.assertEqual(
             [
-                core_functions.OMERO_CLI,
-                "-k",
-                "session-key",
-                "-s",
+                core_functions.sys.executable,
+                "-m",
+                "omero_plugin_common.omero_cli_session_runner",
+                "--host",
                 "omeroserver",
-                "-p",
+                "--port",
                 "4064",
+                "--",
                 "import",
                 "--depth",
                 "15",
             ],
             command,
+        )
+        self.assertNotIn("session-key", command)
+        self.assertEqual(
+            "session-key\n",
+            core_functions._omero_cli_session_stdin(command, "session-key"),
         )
 
     def test_extract_imported_object_ids_supports_created_image_output(self):
@@ -3854,6 +3860,11 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 ),
             ),
             mock.patch.object(
+                manage_script,
+                "_authorized_template_identity",
+                side_effect=lambda _conn, group_name, username: (group_name, username),
+            ),
+            mock.patch.object(
                 manage_script, "rstring", side_effect=lambda value: value
             ),
             mock.patch("builtins.print") as print_mock,
@@ -3863,7 +3874,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
 
         self.assertEqual(
             "/OMERO/ManagedRepository/users_private/test/sample.zarr",
-            stage_client.outputs["Managed_Path"],
+            Path(stage_client.outputs["Managed_Path"]).as_posix(),
         )
         self.assertIn(
             "Staged Zarr into managed repository", stage_client.outputs["Message"]

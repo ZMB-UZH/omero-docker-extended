@@ -24,7 +24,7 @@ from omeroweb_import.views import core_functions, help_view, utils as view_utils
 from omero_plugin_common import omero_helpers as common_omero_helpers
 
 
-REPO_ROOT = PurePosixPath(__file__).parents[2]
+REPO_ROOT = PurePosixPath(Path(__file__).as_posix()).parents[2]
 TEST_JOBS_ROOT = str(Path(tempfile.gettempdir()) / "import-jobs")
 TEST_OMERO_CLI = "omero-cli"
 
@@ -514,13 +514,14 @@ def test_dataset_service_wrapper_uses_canonical_core_functions(
         "omeroserver",
         4064,
     ) == [
-        TEST_OMERO_CLI,
-        "-k",
-        "session-key",
-        "-s",
+        sys.executable,
+        "-m",
+        "omero_plugin_common.omero_cli_session_runner",
+        "--host",
         "omeroserver",
-        "-p",
+        "--port",
         "4064",
+        "--",
         "import",
         "file.tif",
     ]

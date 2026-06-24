@@ -9,7 +9,7 @@ import traceback
 import uuid
 from csv import Error as CsvError
 from html import escape
-from http.cookies import SimpleCookie
+from http.cookies import CookieError, SimpleCookie
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from urllib.parse import quote
 from urllib.parse import urlparse
@@ -64,6 +64,10 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 _PROXY_SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 _PROXY_PATH_SEGMENT_SAFE_CHARS = "-._~!$&'()*+,;=:@"
 _GRAFANA_PROXY_METHODS = ("GET", "HEAD", "OPTIONS", "POST")
+_GRAFANA_FORWARDED_COOKIE_NAMES = frozenset(
+    {"grafana_session", "grafana_session_expiry", "grafana_csrf_token", "redirect_to"}
+)
+_GRAFANA_FORWARDED_COOKIE_PREFIXES = ("grafana_",)
 _INTERNAL_LOG_SERVICES = frozenset({"omeroserver_internal", "omeroweb_internal"})
 _VALID_LOG_LEVELS = frozenset({"debug", "info", "warn", "error", "fatal"})
 _INLINE_TEMPLATE_BACKEND = DjangoTemplates(
@@ -132,6 +136,14 @@ def _validated_http_url(url: str, *, allow_query: bool = False) -> str:
             "",
         )
     )
+
+
+def _env_truthy(name: str) -> bool:
+    """Return whether an environment flag is enabled.
+
+    Inputs: `name` environment variable name. Output: `bool`.
+    """
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _internal_service_base_url(
@@ -335,19 +347,21 @@ def _build_proxy_request_target(target_url: str) -> str:
 def _collect_proxy_headers(
     django_request,
     extra_forwarded_headers: tuple,
+    *,
+    allowed_cookie_names: frozenset[str] | tuple[str, ...] = (),
+    allowed_cookie_prefixes: tuple[str, ...] = (),
+    forward_authorization: bool = False,
 ) -> dict[str, str]:
     """Collect the proxy headers.
 
-    Inputs: `django_request`, `extra_forwarded_headers` (tuple). Output: `dict[str,
-    str]`.
+    Inputs: `django_request`, `extra_forwarded_headers` (tuple), cookie allowlist,
+    authorization forwarding flag. Output: `dict[str, str]`.
     """
     forwarded_headers: dict[str, str] = {}
     for header_name in (
         "Accept",
         "Content-Type",
         "User-Agent",
-        "Authorization",
-        "Cookie",
         "Origin",
         "Referer",
         *extra_forwarded_headers,
@@ -355,7 +369,46 @@ def _collect_proxy_headers(
         value = django_request.headers.get(header_name)
         if value:
             forwarded_headers[header_name] = value
+    if forward_authorization:
+        authorization = django_request.headers.get("Authorization")
+        if authorization:
+            forwarded_headers["Authorization"] = authorization
+    cookie_header = _filtered_proxy_cookie_header(
+        django_request.headers.get("Cookie", ""),
+        allowed_cookie_names=allowed_cookie_names,
+        allowed_cookie_prefixes=allowed_cookie_prefixes,
+    )
+    if cookie_header:
+        forwarded_headers["Cookie"] = cookie_header
     return forwarded_headers
+
+
+def _filtered_proxy_cookie_header(
+    cookie_header: str,
+    *,
+    allowed_cookie_names: frozenset[str] | tuple[str, ...] = (),
+    allowed_cookie_prefixes: tuple[str, ...] = (),
+) -> str:
+    """Return only backend-owned cookies that are safe to forward.
+
+    Inputs: raw `Cookie` header and allowed cookie names/prefixes. Output: filtered
+    Cookie header string.
+    """
+    if not cookie_header:
+        return ""
+    cookies = SimpleCookie()
+    try:
+        cookies.load(cookie_header)
+    except CookieError:
+        return ""
+    allowed_names = set(allowed_cookie_names)
+    forwarded: list[str] = []
+    for name, morsel in cookies.items():
+        if name in allowed_names or any(
+            name.startswith(prefix) for prefix in allowed_cookie_prefixes
+        ):
+            forwarded.append(f"{name}={morsel.value}")
+    return "; ".join(forwarded)
 
 
 def _rewrite_origin_headers(headers: dict[str, str], base_url: str) -> None:
@@ -502,12 +555,16 @@ def _proxy_http_request(
     rewrite_origin_headers: bool = False,
     extra_forwarded_headers: tuple = (),
     forced_backend_headers: dict[str, str] | None = None,
+    allowed_cookie_names: frozenset[str] | tuple[str, ...] = (),
+    allowed_cookie_prefixes: tuple[str, ...] = (),
+    forward_authorization: bool = False,
 ) -> HttpResponse:
     """Proxy an HTTP request to a backend URL and return the response body.
 
     Inputs: `django_request`, `base_url`, `path`, `query`, `proxy_prefix`,
-    `rewrite_origin_headers`, `extra_forwarded_headers`, `forced_backend_headers`.
-    Output: `HttpResponse`.
+    `rewrite_origin_headers`, `extra_forwarded_headers`, `forced_backend_headers`,
+    cookie forwarding allowlist, and authorization forwarding flag. Output:
+    `HttpResponse`.
     """
     try:
         normalized_path, target_url = _build_proxy_target_url(base_url, path, query)
@@ -515,7 +572,13 @@ def _proxy_http_request(
     except ValueError:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
-    forwarded_headers = _collect_proxy_headers(django_request, extra_forwarded_headers)
+    forwarded_headers = _collect_proxy_headers(
+        django_request,
+        extra_forwarded_headers,
+        allowed_cookie_names=allowed_cookie_names,
+        allowed_cookie_prefixes=allowed_cookie_prefixes,
+        forward_authorization=forward_authorization,
+    )
     if forced_backend_headers:
         forwarded_headers.update(forced_backend_headers)
     if rewrite_origin_headers:
@@ -2071,9 +2134,11 @@ def _diagnose_docker_health() -> Dict[str, object]:
     cases where container health status is not being reported correctly.
     """
     docker_socket = os.environ.get("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
+    socket_required = _env_truthy("ADMIN_TOOLS_DOCKER_SOCKET_REQUIRED")
     current_gids: List[int] = []
     diag: Dict[str, object] = {
         "socket_path": docker_socket,
+        "socket_required": socket_required,
         "socket_exists": os.path.exists(docker_socket),
         "socket_readable": os.access(docker_socket, os.R_OK),
         "socket_writable": os.access(docker_socket, os.W_OK),
@@ -2863,6 +2928,8 @@ def grafana_proxy(request, subpath: str, conn=None, _url=None, **kwargs):
             rewrite_origin_headers=True,
             extra_forwarded_headers=("X-Grafana-Csrf-Token",),
             forced_backend_headers=_grafana_backend_auth_headers(),
+            allowed_cookie_names=_GRAFANA_FORWARDED_COOKIE_NAMES,
+            allowed_cookie_prefixes=_GRAFANA_FORWARDED_COOKIE_PREFIXES,
         )
         last_response = response
         if getattr(response, "status_code", 502) != 502:

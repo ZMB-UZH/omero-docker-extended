@@ -1,11 +1,13 @@
 import json
 import logging
 import os
+import re
 import warnings
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 import numpy as np
 from django.http import Http404
@@ -24,6 +26,7 @@ DEFAULT_CHANNEL_COLORS = (
     (0, 255, 255),
     (255, 0, 255),
 )
+_UNSAFE_DOWNLOAD_BASENAME_CHARS = re.compile(r'["\\;=\r\n\t\x00-\x1f\x7f]')
 
 
 def marshal_pixel_sizes(image):
@@ -262,11 +265,11 @@ def resolve_local_zarr_store(location):
         candidate_text = location_text
     else:
         parsed = urlparse(location_text)
-        if parsed.scheme not in ("", "file"):
+        if parsed.scheme != "file":
             return None
-        candidate_text = unquote(
-            parsed.path if parsed.scheme == "file" else location_text
-        )
+        if parsed.netloc not in ("", "localhost"):
+            return None
+        candidate_text = url2pathname(unquote(parsed.path))
     if not candidate_text:
         return None
 
@@ -438,10 +441,13 @@ def sanitize_download_basename(name, default="ome-zarr"):
 
     Inputs: `name` name, `default`. Output: `replace` result.
     """
-    candidate = Path((name or "").strip()).name
+    raw = str(name or "").strip().replace("\\", "/")
+    candidate = PurePosixPath(raw).name
     if not candidate:
         candidate = default
-    return candidate.replace(",", ".").replace(" ", "_")
+    candidate = candidate.replace(",", ".").replace(" ", "_")
+    candidate = _UNSAFE_DOWNLOAD_BASENAME_CHARS.sub("_", candidate)
+    return candidate.strip("._") or default
 
 
 def collect_store_metadata_documents(image):
@@ -460,7 +466,7 @@ def collect_store_metadata_documents(image):
         relative_path = path.relative_to(store_root)
         metadata_path = _resolve_store_metadata_file(store_root, relative_path)
         with metadata_path.open("r", encoding="utf-8") as handle:
-            documents[str(relative_path)] = json.load(handle)
+            documents[relative_path.as_posix()] = json.load(handle)
 
     return documents
 
@@ -1116,11 +1122,34 @@ def _select_axis_index(axis_name, requested, full_size, level_size):
     return 0
 
 
-def read_store_backed_plane(node, *, level=0, z=None, t=None):
+def _bounded_region(x, y, width, height, plane_width, plane_height):
+    """Return a bounded region inside a plane.
+
+    Inputs: requested `x`, `y`, `width`, `height`, plane dimensions. Output:
+    `(x, y, width, height)`.
+    """
+    x = _clamp_index(x, plane_width)
+    y = _clamp_index(y, plane_height)
+    width = max(1, min(int(width), plane_width - x))
+    height = max(1, min(int(height), plane_height - y))
+    return x, y, width, height
+
+
+def read_store_backed_plane(
+    node,
+    *,
+    level=0,
+    z=None,
+    t=None,
+    x=None,
+    y=None,
+    width=None,
+    height=None,
+):
     """Read the store backed plane.
 
-    Inputs: `node`, `level`, `z`, `t`. Output: `tuple`. Raises: ValueError when validation or
-    the called operation fails.
+    Inputs: `node`, `level`, `z`, `t`, optional x/y region. Output: `tuple`.
+    Raises: ValueError when validation or the called operation fails.
     """
     if not getattr(node, "data", None):
         raise ValueError("store-backed node has no image data")
@@ -1132,9 +1161,24 @@ def read_store_backed_plane(node, *, level=0, z=None, t=None):
 
     selectors = []
     remaining_axes = []
+    region_requested = None not in (x, y, width, height)
+    if region_requested:
+        region_x, region_y, region_width, region_height = _bounded_region(
+            x,
+            y,
+            width,
+            height,
+            level_shape_by_axis.get("x", 1),
+            level_shape_by_axis.get("y", 1),
+        )
     for axis_name in axis_names:
         if axis_name in {"y", "x"}:
-            selectors.append(slice(None))
+            if region_requested and axis_name == "x":
+                selectors.append(slice(region_x, region_x + region_width))
+            elif region_requested and axis_name == "y":
+                selectors.append(slice(region_y, region_y + region_height))
+            else:
+                selectors.append(slice(None))
             remaining_axes.append(axis_name)
         elif axis_name == "c":
             selectors.append(slice(None))
@@ -1218,12 +1262,32 @@ def _normalize_to_uint8(data, limits=None):
     return np.round(scaled * 255.0).astype(np.uint8)
 
 
-def render_store_backed_plane(node, *, level=0, z=None, t=None):
+def render_store_backed_plane(
+    node,
+    *,
+    level=0,
+    z=None,
+    t=None,
+    x=None,
+    y=None,
+    width=None,
+    height=None,
+):
     """Render the store backed plane.
 
-    Inputs: `node`, `level`, `z`, `t`. Output: `astype` result.
+    Inputs: `node`, `level`, `z`, `t`, optional x/y region. Output: `astype`
+    result.
     """
-    plane, remaining_axes = read_store_backed_plane(node, level=level, z=z, t=t)
+    plane, remaining_axes = read_store_backed_plane(
+        node,
+        level=level,
+        z=z,
+        t=t,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+    )
     metadata = getattr(node, "metadata", {}) or {}
 
     if plane.ndim == 2 or "c" not in remaining_axes:
@@ -1337,17 +1401,21 @@ def render_store_backed_region_pil_image(
     if node is None:
         raise Http404("store-backed image data not found")
 
-    rendered = render_store_backed_plane(node, level=level, z=z, t=t)
-    plane_height, plane_width = rendered.shape[:2]
-    x = _clamp_index(x, plane_width)
-    y = _clamp_index(y, plane_height)
-    width = max(1, min(int(width), plane_width - x))
-    height = max(1, min(int(height), plane_height - y))
-
-    if rendered.ndim == 2:
-        cropped = rendered[y : y + height, x : x + width]
-    else:
-        cropped = rendered[y : y + height, x : x + width, :]
+    axis_names = get_store_backed_axis_names(node, level=level)
+    plane_height, plane_width = _yx_shape(node.data[level].shape, axis_names)
+    x, y, width, height = _bounded_region(
+        x, y, width, height, plane_width, plane_height
+    )
+    cropped = render_store_backed_plane(
+        node,
+        level=level,
+        z=z,
+        t=t,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+    )
 
     from PIL import Image
 

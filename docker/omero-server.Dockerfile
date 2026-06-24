@@ -502,12 +502,17 @@ RUN set -euo pipefail; \
 # Pre-configure library path for ImarisConvertBioformats
 # ------------------------------------------------------
 ARG BIOFORMATS_VERSION
+ARG BIOFORMATS_SHA256
 RUN set -euo pipefail; \
     if [[ -z "${BIOFORMATS_VERSION:-}" ]]; then \
         echo "ERROR: BIOFORMATS_VERSION must be provided from env/omeroserver.env" >&2; \
         exit 1; \
     fi; \
-    BIOFORMATS_VERSION="${BIOFORMATS_VERSION}" /startup/51-install-imarisconvert.sh --install-build-time; \
+    if [[ -z "${BIOFORMATS_SHA256:-}" ]]; then \
+        echo "ERROR: BIOFORMATS_SHA256 must be provided from env/omeroserver.env" >&2; \
+        exit 1; \
+    fi; \
+    BIOFORMATS_VERSION="${BIOFORMATS_VERSION}" BIOFORMATS_SHA256="${BIOFORMATS_SHA256}" /startup/51-install-imarisconvert.sh --install-build-time; \
     chown -R omero-server:omero-server /opt/omero/imarisconvert
 
 RUN set -euo pipefail; \

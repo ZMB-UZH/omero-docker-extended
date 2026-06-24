@@ -553,6 +553,20 @@ class AgentSkillContractTests(unittest.TestCase):
                         f"{skill_name} still contains upstream-only generic harness text: {phrase}",
                     )
 
+    def test_tdd_workflow_disables_implicit_checkpoint_commits(self) -> None:
+        """Verify TDD workflow disables upstream checkpoint commits by default.
+
+        Inputs: repository fixtures. Output: fails on regressions in the TDD Git boundary.
+        """
+        skill_text = self.skill_texts["tdd-workflow"]
+        adapter_text = self.adapter_texts["tdd-workflow"]
+
+        self.assertIn("checkpoint-commit guidance is disabled", skill_text)
+        self.assertIn("unless", skill_text)
+        self.assertIn("explicitly asks for Git staging", skill_text)
+        self.assertIn("TDD checkpoints should be recorded in notes", skill_text)
+        self.assertIn("allow_implicit_invocation: true", adapter_text)
+
     def test_agent_surfaces_use_only_valid_repo_references(self) -> None:
         """Verify agent surfaces use only valid repo references.
 

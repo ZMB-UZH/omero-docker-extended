@@ -409,16 +409,24 @@ instead of a runnable healthcheck command.
 
 This path does not switch to the build workflow if the carrier cannot be pulled, verified, streamed, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
 
-Run the easy installer from an updated installation root. The first prompt asks
-which prebuilt docker image tag to install:
+Run the easy installer from an updated installation root. The first prompts ask
+which prebuilt docker image tag to install and which immutable carrier digest
+from the GitHub release asset `prebuilt-carrier-digest.txt` must be verified:
 
 ```bash
 cd /opt/omero
 sudo bash ./installation/easy_installation_script.sh
 ```
 
-Enter the docker hub carrier image tag. Do not use `latest`. For unattended
-runs, set `PREBUILT_IMAGE_RELEASE` explicitly instead of relying on a prompt.
+Enter the docker hub carrier image tag and `PREBUILT_IMAGE_DIGEST` value. Do
+not use `latest`. For unattended runs, set both values explicitly instead of
+relying on prompts:
+
+```bash
+PREBUILT_IMAGE_RELEASE=1.0.0-main.1 \
+PREBUILT_IMAGE_DIGEST=sha256:<64 lowercase hex characters> \
+sudo bash ./installation/easy_installation_script.sh
+```
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
 Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
@@ -427,8 +435,9 @@ built-in `GITHUB_TOKEN` with job-scoped `contents: write` permission to create
 the GitHub release; no separate GitHub PAT secret is required when repository
 Actions settings allow workflow write permissions. The release targets the
 default branch ref, creates a draft GitHub release with source artifacts,
-pushes and verifies the carrier image, runs Docker Scout `quickview`, `cves`,
-and `sbom` against the pushed Docker Hub tag, then publishes the release. The
+pushes and verifies the carrier image, uploads `prebuilt-carrier-digest.txt`,
+runs Docker Scout `quickview`, `cves`, and `sbom` against the pushed Docker Hub
+tag, then publishes the release. The
 carrier push includes BuildKit SBOM and provenance attestations so Docker Hub
 and Docker Scout have metadata for automatic image analysis. Docker Hub still
 requires image security insights to be enabled for the repository; otherwise

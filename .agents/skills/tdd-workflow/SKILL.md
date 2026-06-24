@@ -19,3 +19,7 @@ Start from `third_party/ecc-v1.10.0/skills/tdd-workflow/SKILL.md` for the generi
 - Choose the relevant split pytest lane instead of broad test runs.
 - For docs- or config-surface regressions, update the relevant docs and docs validation in the same change.
 - Do not treat a change as done until verification is explicit and the correct docs are updated.
+- The upstream checkpoint-commit guidance is disabled in this repository unless
+  the user explicitly asks for Git staging, commits, amends, rebases, squashes,
+  or other history changes; TDD checkpoints should be recorded in notes,
+  tests, and final verification summaries instead.

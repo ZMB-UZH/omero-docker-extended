@@ -75,11 +75,13 @@ From an installation root that already has reviewed runtime env files:
 bash installation/easy_installation_script.sh
 ```
 
-The first easy-installer prompt asks which prebuilt docker image tag to install.
-Enter the docker hub carrier image tag, for example `1.0.0-main.1`.
-`installation/easy_installation_script.sh` then delegates to the canonical
-installer with `PREBUILT_IMAGE_MODE=require`. It removes the local build-only
-questions from the interactive flow:
+The first easy-installer prompts ask which prebuilt docker image tag to install
+and which immutable carrier digest from the GitHub release asset
+`prebuilt-carrier-digest.txt` must be verified. Enter the docker hub carrier
+image tag, for example `1.0.0-main.1`, and the matching
+`PREBUILT_IMAGE_DIGEST` value. `installation/easy_installation_script.sh` then
+delegates to the canonical installer with `PREBUILT_IMAGE_MODE=require`. It
+removes the local build-only questions from the interactive flow:
 
 - `Enable Buildx compressed build workflow?`
 - `Use build cache?`
@@ -88,16 +90,18 @@ questions from the interactive flow:
 
 The three release-build settings are enforced by the manual release workflow
 before publishing the carrier; the build-cache setting has no local build to
-control in strict prebuilt mode. The easy installer asks ten questions total,
-including the first docker-image-tag prompt, and still uses the same host
+control in strict prebuilt mode. The easy installer asks eleven questions
+total, including the docker-image-tag and digest prompts, and still uses the same host
 paths, runtime env files, UID/GID discovery, permission checks, data-path
 snapshots, container startup, and post-start validation flow as the standard
 installer. If the carrier cannot be pulled, verified, extracted, or loaded, the
 easy installation exits with an error and does not run `docker compose build`.
 
 The carrier stores a manifest and a compressed docker image archive. The loader
-verifies the manifest schema, release value, runtime-image references, archive
-size, uncompressed docker-save size, and archive SHA-256 before `docker load`.
+requires a digest-pinned carrier image reference, verifies Docker pulled the
+expected `sha256:` carrier digest, then verifies the manifest schema, release
+value, runtime-image references, archive size, uncompressed docker-save size,
+and archive SHA-256 before `docker load`.
 It streams the verified archive from the carrier image into docker instead of
 writing an extra full archive copy under `OMERO_TMP_PATH`, checks free space
 under docker's root directory, then verifies each required image tag exists in
@@ -109,10 +113,13 @@ data image with one payload layer for the manifest, required-image list, and
 archive; it has no Alpine, BusyBox, package manager, or shell layer and uses
 `HEALTHCHECK NONE` metadata instead of a runnable healthcheck command.
 
-For unattended runs, set `PREBUILT_IMAGE_RELEASE` explicitly:
+For unattended runs, set both `PREBUILT_IMAGE_RELEASE` and
+`PREBUILT_IMAGE_DIGEST` explicitly:
 
 ```bash
-PREBUILT_IMAGE_RELEASE=1.0.0-main.1 bash installation/easy_installation_script.sh
+PREBUILT_IMAGE_RELEASE=1.0.0-main.1 \
+PREBUILT_IMAGE_DIGEST=sha256:<64 lowercase hex characters> \
+bash installation/easy_installation_script.sh
 ```
 
 Carrier releases are created from the GitHub Actions panel with the manual
@@ -122,15 +129,15 @@ workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
 permission to create the GitHub release; no separate GitHub PAT secret is
 required when repository Actions settings allow workflow write permissions. The
 release targets the default branch ref, creates a draft GitHub release with
-source artifacts, pushes and verifies the carrier image, runs Docker Scout
-`quickview`, `cves`, and `sbom` against the pushed Docker Hub tag, then
-publishes the release. The carrier push includes BuildKit SBOM and provenance
-attestations so Docker Hub and Docker Scout have metadata for automatic image
-analysis. Docker Hub still requires image security insights to be enabled for
-the repository; otherwise the Hub UI can continue to show `Security unknown`
-even when CI has run Scout. If the carrier publish or Scout analysis fails
-after the draft was created, the workflow deletes that draft release and its
-tag. The release job deliberately does not use a GitHub Actions environment,
+source artifacts, enables and verifies Docker Scout repository analysis for the
+Docker Hub repository, pushes and verifies the carrier image, uploads
+`prebuilt-carrier-digest.txt`, runs Docker Scout `quickview`, `cves`, and
+`sbom` against the pushed Docker Hub tag, then publishes the release. The
+carrier push includes BuildKit SBOM and provenance attestations so Docker Hub
+and Docker Scout have metadata for automatic image analysis. If Docker Scout
+repository enablement, the carrier publish, or Scout analysis fails after the
+draft was created, the workflow deletes that draft release and its tag. The
+release job deliberately does not use a GitHub Actions environment,
 because job environments create deployment records. Keep the Docker Hub
 credentials as repository secrets with the documented names. To rebuild an
 existing release without changing its version, dispatch the workflow with an

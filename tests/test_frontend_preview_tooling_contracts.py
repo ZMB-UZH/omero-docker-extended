@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -224,7 +226,8 @@ def test_frontend_preview_safe_extract_does_not_call_extractall(monkeypatch):
 
         extracted = destination / "node" / "bin" / "tool"
         assert extracted.read_bytes() == payload
-        assert extracted.stat().st_mode & 0o111
+        if os.name != "nt":
+            assert extracted.stat().st_mode & 0o111
         assert (destination / "node" / "bin" / "tool-link").is_symlink()
 
 
@@ -303,3 +306,83 @@ def test_frontend_preview_vite_config_allows_explicit_temp_spec_paths():
     assert "PREVIEW_EXTRA_FS_ALLOW" in config_text
     assert "VITEST_INCLUDE" in config_text
     assert "EXTRA_FS_ALLOW" in config_text
+
+
+def test_frontend_preview_static_asset_resolver_rejects_traversal(tmp_path):
+    """Verify frontend preview static resolver rejects traversal outside static roots.
+
+    Inputs: `tmp_path` temporary path fixture. Output: fails on regressions in
+    frontend preview static asset containment.
+    """
+    node_bin = shutil.which("node")
+    if node_bin is None:
+        pytest.skip("node is required to execute the Vite preview config contract")
+
+    repo_root = tmp_path / "repo"
+    plugin_static = repo_root / "omeroweb_import" / "static" / "omeroweb_import"
+    omero_static = repo_root / "omero-static"
+    plugin_static.mkdir(parents=True)
+    omero_static.joinpath("3rdparty").mkdir(parents=True)
+    plugin_asset = plugin_static / "app.css"
+    omero_asset = omero_static / "3rdparty" / "app.js"
+    plugin_asset.write_text("body{}", encoding="utf-8")
+    omero_asset.write_text("console.log(1);", encoding="utf-8")
+    repo_root.joinpath("AGENTS.md").write_text("secret", encoding="utf-8")
+
+    tool_dir = tmp_path / "tooling"
+    vite_stub = tool_dir / "node_modules" / "vite"
+    vite_stub.mkdir(parents=True)
+    tool_dir.joinpath("package.json").write_text(
+        '{"name":"preview-test","type":"module"}\n', encoding="utf-8"
+    )
+    vite_stub.joinpath("index.js").write_text(
+        "module.exports = { defineConfig: (config) => config };\n",
+        encoding="utf-8",
+    )
+
+    config_path = (
+        Path(__file__).resolve().parents[1]
+        / ".agents"
+        / "skills"
+        / "frontend-preview"
+        / "agents"
+        / "vite_django_preview.config.mjs"
+    )
+    script = f"""
+import {{ pathToFileURL }} from 'node:url';
+const config = await import(pathToFileURL({json.dumps(str(config_path))}).href);
+const payload = {{
+  pluginValid: config.resolveStaticAssetPath('omeroweb_import/app.css'),
+  pluginTraversal: config.resolveStaticAssetPath('omeroweb_import/../../../AGENTS.md'),
+  pluginEncodedTraversal: config.resolveStaticAssetPath('omeroweb_import/%2e%2e/%2e%2e/AGENTS.md'),
+  pluginEncodedSlash: config.resolveStaticAssetPath('omeroweb_import%2f..%2fAGENTS.md'),
+  omeroValid: config.resolveStaticAssetPath('3rdparty/app.js'),
+  omeroTraversal: config.resolveStaticAssetPath('3rdparty/../AGENTS.md'),
+}};
+console.log(JSON.stringify(payload));
+"""
+    env = os.environ.copy()
+    env.update(
+        {
+            "REPO_ROOT": str(repo_root),
+            "PLUGIN_ROOT": str(repo_root / "omeroweb_import"),
+            "OMERO_STATIC_ROOT": str(omero_static),
+        }
+    )
+    completed = subprocess.run(
+        [node_bin, "--input-type=module", "-e", script],
+        cwd=tool_dir,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert Path(payload["pluginValid"]).resolve() == plugin_asset.resolve()
+    assert Path(payload["omeroValid"]).resolve() == omero_asset.resolve()
+    assert payload["pluginTraversal"] is None
+    assert payload["pluginEncodedTraversal"] is None
+    assert payload["pluginEncodedSlash"] is None
+    assert payload["omeroTraversal"] is None

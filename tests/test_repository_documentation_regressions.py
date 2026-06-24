@@ -143,6 +143,74 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("security/advisories/new", issue_config)
         self.assertIn("## Verification", pr_template)
 
+    def test_admin_download_templates_neutralize_spreadsheet_formulas(self) -> None:
+        """Verify admin downloads neutralize spreadsheet formula cells.
+
+        Inputs: repository templates. Output: asserts formula-neutralizing helpers.
+        """
+        logs_template = self.read_text(
+            "omeroweb_admin_tools/templates/omeroweb_admin_tools/logs.html"
+        )
+        storage_template = self.read_text(
+            "omeroweb_admin_tools/templates/omeroweb_admin_tools/storage.html"
+        )
+
+        self.assertIn("escapeSpreadsheetCell", logs_template)
+        self.assertIn("replace(/[\\t\\r\\n]+/g, ' ')", logs_template)
+        self.assertIn("/^[=+\\-@\\t\\r\\n]/.test(text)", logs_template)
+        self.assertIn("].map(escapeSpreadsheetCell).join('\\t')", logs_template)
+
+        self.assertIn("function csvCell(value)", storage_template)
+        self.assertIn("escapeSpreadsheetCell(value).replace", storage_template)
+        self.assertIn("/^[=+\\-@]/.test(text)", storage_template)
+        self.assertNotIn("JSON.stringify(row.primary)", storage_template)
+        self.assertIn(".map(csvCell).join(',')", storage_template)
+
+    def test_resource_monitoring_service_health_avoids_label_innerhtml(self) -> None:
+        """Verify resource monitoring service names are inserted as text.
+
+        Inputs: resource monitoring template. Output: asserts text-only rendering.
+        """
+        template = self.read_text(
+            "omeroweb_admin_tools/templates/omeroweb_admin_tools/resource_monitoring.html"
+        )
+        function_match = re.search(
+            r"function renderServiceHealth\(services\) \{(?P<body>.*?)\n}\n\n",
+            template,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(function_match)
+        body = function_match.group("body")
+        self.assertIn("document.createElement('span')", body)
+        self.assertIn("pill.textContent", body)
+        self.assertIn("appendChild(pill)", body)
+        self.assertNotIn(".innerHTML", body)
+
+    def test_omp_dataset_table_renders_omero_names_as_text(self) -> None:
+        """Verify OMP dataset names are inserted as text, not markup.
+
+        Inputs: OMP index template. Output: asserts names are rendered as text.
+        """
+        template = self.read_text(
+            "omeroweb_omp_plugin/templates/omeroweb_omp_plugin/index.html"
+        )
+        function_match = re.search(
+            r"function renderDatasetRows\(datasets, options = \{\}\) \{"
+            r"(?P<body>.*?)\n    }\n\n    // Apply Dataset Sort",
+            template,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(function_match)
+        body = function_match.group("body")
+        self.assertIn("document.createElement('input')", body)
+        self.assertIn("datasetNameCell.textContent", body)
+        self.assertIn(
+            "row.append(checkCell, datasetNameCell, datasetIdCell, imageCountCell)",
+            body,
+        )
+        self.assertNotIn("row.innerHTML", body)
+        self.assertNotIn("${ds.name", body)
+
     def test_resource_monitoring_prefers_same_origin_dashboards(self) -> None:
         """Dashboard buttons stay behind the authenticated OMERO.web origin.
 

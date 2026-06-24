@@ -443,6 +443,11 @@ def test_start_job_rejects_invalid_regex_and_persists_expected_payload(monkeypat
     monkeypatch.setattr(
         job_view, "_validate_user_password", lambda *_args: (True, None)
     )
+    monkeypatch.setattr(
+        job_view,
+        "require_destructive_project_access",
+        lambda *_args: (True, None),
+    )
     monkeypatch.setattr(job_view.uuid, "uuid4", lambda: SimpleNamespace(hex="job123"))
     monkeypatch.setattr(job_view.time, "time", lambda: 50.0)
 
@@ -506,6 +511,11 @@ def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
     monkeypatch.setattr(
         job_view, "_validate_user_password", lambda *_args: (True, None)
     )
+    monkeypatch.setattr(
+        job_view,
+        "require_destructive_project_access",
+        lambda *_args: (True, None),
+    )
 
     acq = inspect.unwrap(job_view.start_acq_job)(
         _json_request({"project_id": 5, "chunk_size": 3}),
@@ -527,6 +537,127 @@ def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
     assert saved_jobs[0]["chunk_size"] == 3
     assert saved_jobs[1]["delete_mode"] == "all"
     assert saved_jobs[2]["delete_mode"] == "plugin"
+
+
+def test_start_delete_job_rejects_project_without_write_access(monkeypatch):
+    """Verify destructive jobs require owned or read-write project access.
+
+    Inputs: pytest provides `monkeypatch`. Output: fails on queued-delete
+    authorization regressions.
+    """
+    conn = _Conn()
+    monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [21, 22])
+    monkeypatch.setattr(
+        job_view, "_validate_user_password", lambda *_args: (True, None)
+    )
+    monkeypatch.setattr(
+        job_view,
+        "require_destructive_project_access",
+        lambda *_args: (
+            False,
+            job_view.error_messages.project_write_access_required(),
+        ),
+    )
+
+    response = inspect.unwrap(job_view.start_delete_plugin_job)(
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+    all_response = inspect.unwrap(job_view.start_delete_all_job)(
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+
+    assert response.status_code == 403
+    assert all_response.status_code == 403
+    assert _json_payload(response) == {
+        "error": job_view.error_messages.project_write_access_required()
+    }
+    assert _json_payload(all_response) == {
+        "error": job_view.error_messages.project_write_access_required()
+    }
+
+
+def test_start_job_delete_mode_rejects_project_without_write_access(monkeypatch):
+    """Verify the generic start_job path enforces destructive project access.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts forbidden delete-mode response.
+    """
+    conn = _Conn()
+    monkeypatch.setattr(
+        job_view, "_validate_user_password", lambda *_args: (True, None)
+    )
+    monkeypatch.setattr(
+        job_view,
+        "require_destructive_project_access",
+        lambda *_args: (
+            False,
+            job_view.error_messages.project_write_access_required(),
+        ),
+    )
+    monkeypatch.setattr(
+        job_view,
+        "_resolve_image_ids",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("images must not be resolved without write access")
+        ),
+    )
+
+    response = inspect.unwrap(job_view.start_job)(
+        _json_request(
+            {
+                "project_id": 5,
+                "delete_mode": "plugin",
+                "password": TEST_AUTH_INPUT,
+            }
+        ),
+        conn=conn,
+    )
+
+    assert response.status_code == 403
+    assert _json_payload(response) == {
+        "error": job_view.error_messages.project_write_access_required()
+    }
+
+
+def test_project_access_helper_handles_user_lookup_failure_and_success(monkeypatch):
+    """Verify destructive project access uses current user id when available.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts user-aware access checks.
+    """
+    from omeroweb_omp_plugin.views import project_access
+
+    calls = []
+    monkeypatch.setattr(project_access, "get_id", lambda user: user.id)
+    monkeypatch.setattr(
+        project_access,
+        "_get_accessible_project",
+        lambda conn, project_id, user_id: (
+            calls.append((project_id, user_id)) or (object(), "read_write")
+        ),
+    )
+
+    conn = type("Conn", (), {"getUser": lambda self: type("User", (), {"id": 7})()})()
+    assert project_access._current_user_id(conn) == 7
+    assert project_access.require_destructive_project_access(conn, 5) == (True, None)
+    assert calls == [(5, 7)]
+
+    monkeypatch.setattr(
+        project_access,
+        "_get_accessible_project",
+        lambda conn, project_id, user_id: (None, None),
+    )
+    assert project_access.require_destructive_project_access(conn, 6) == (
+        False,
+        project_access.error_messages.project_write_access_required(),
+    )
+
+    broken_conn = type(
+        "BrokenConn",
+        (),
+        {"getUser": lambda self: (_ for _ in ()).throw(RuntimeError("missing"))},
+    )()
+    assert project_access._current_user_id(broken_conn) is None
 
 
 def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
@@ -1362,6 +1493,11 @@ def test_job_view_start_helpers_cover_method_chunk_size_and_rate_limit_edges(
     )
     monkeypatch.setattr(
         job_view, "check_major_action_rate_limit", lambda *_args: (False, 12)
+    )
+    monkeypatch.setattr(
+        job_view,
+        "require_destructive_project_access",
+        lambda *_args: (True, None),
     )
     monkeypatch.setattr(
         job_view, "save_job", lambda payload: saved_jobs.append(dict(payload)) or True

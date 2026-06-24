@@ -97,14 +97,12 @@ def test_resolve_omero_host_port_prefers_connection_then_settings_then_env(monke
     )
 
 
-def test_validate_user_password_and_session_key_helpers(monkeypatch):
-    """Check that validate user password and session key helpers keeps sensitive data out of output.
+def test_validate_user_password_without_session_cli_helpers(monkeypatch):
+    """Check validate user password without exposing session CLI helpers.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in validate user password and session key helpers.
+    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in password validation.
     when validation or the called operation fails.
     """
-    assert utils.get_session_key(None) is None
-
     monkeypatch.setattr(utils, "current_username", lambda request, conn: "alice")
     monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
 
@@ -177,54 +175,11 @@ def test_validate_user_password_and_session_key_helpers(monkeypatch):
     assert invalid is False
     assert error == utils.errors.wrong_password()
 
-    assert (
-        utils.get_session_key(SimpleNamespace(getSessionId=lambda: "session-1"))
-        == "session-1"
-    )
-    assert (
-        utils.get_session_key(SimpleNamespace(_sessionUuid="session-2")) == "session-2"
-    )
-    assert (
-        utils.get_session_key(
-            SimpleNamespace(c=SimpleNamespace(getSessionId=lambda: "session-3"))
-        )
-        == "session-3"
-    )
-    assert (
-        utils.get_session_key(
-            SimpleNamespace(
-                getSessionId=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
-                c=SimpleNamespace(
-                    getSessionId=lambda: (_ for _ in ()).throw(RuntimeError("boom"))
-                ),
-            )
-        )
-        is None
-    )
 
+def test_view_utils_do_not_expose_session_key_cli_helpers():
+    """Verify view utilities do not expose session-key CLI helpers.
 
-def test_build_omero_cli_base_command_requires_connection_metadata(monkeypatch):
-    """Verify the build OMERO CLI base command requires connection metadata execution contract.
-
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in build OMERO CLI base command requires connection metadata integration.
-    AssertionError when validation or the called operation fails.
+    Inputs: OMP view utilities. Output: asserts session-key argv helpers are absent.
     """
-    monkeypatch.setattr(utils, "get_session_key", lambda conn: "session-1")
-    monkeypatch.setattr(utils, "resolve_omero_host_port", lambda conn: ("omero", 4064))
-    assert utils.build_omero_cli_base_command(SimpleNamespace()) == [
-        utils.OMERO_CLI,
-        "-k",
-        "session-1",
-        "-s",
-        "omero",
-        "-p",
-        "4064",
-    ]
-
-    monkeypatch.setattr(utils, "get_session_key", lambda conn: None)
-    try:
-        utils.build_omero_cli_base_command(SimpleNamespace())
-    except ValueError as exc:
-        assert "Missing OMERO session" in str(exc)
-    else:
-        raise AssertionError("expected ValueError for missing session metadata")
+    assert not hasattr(utils, "get_session_key")
+    assert not hasattr(utils, "build_omero_cli_base_command")

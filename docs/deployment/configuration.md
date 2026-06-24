@@ -518,8 +518,9 @@ ImarisConvertBioformats runtime baked into `omeroserver` are also environment
 driven. `OMERO_DROPBOX_VERSION`, `OMERO_CLI_ZARR_VERSION`,
 `OME_ZARR_PY_VERSION`, `BIOFORMATS2RAW_VERSION`, and `BIOFORMATS_VERSION` are
 defined in `env/omeroserver.env` and are required for manual or
-installer-driven image builds; there are no Compose or Dockerfile fallback
-defaults.
+installer-driven image builds; `BIOFORMATS_SHA256` pins the exact
+`bioformats_package.jar` artifact accepted for the configured
+`BIOFORMATS_VERSION`. There are no Compose or Dockerfile fallback defaults.
 `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` controls the gzip
 level used when the disposable managed-repository handoff copy must rewrite
 Blosc-backed image arrays for render-safe native import. Those normalizations

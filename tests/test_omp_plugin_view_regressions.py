@@ -541,47 +541,38 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertNotIn("stdout", response["payload"])
         self.assertNotIn("stderr", response["payload"])
 
-    def test_delete_plugin_view_uses_session_key_cli_without_passing_password(
+    def test_delete_plugin_view_uses_gateway_delete_without_subprocess(
         self,
     ) -> None:
-        """Check that delete plugin view uses session key CLI without passing password keeps sensitive data out of output.
+        """Check that delete plugin view uses gateway deletion without subprocess.
 
-        Inputs: repository fixtures. Output: fails on regressions in delete plugin view uses session key CLI without passing password.
+        Inputs: repository fixtures. Output: fails on regressions in gateway delete behavior.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_plugin_view"
         )
         conn = mock.Mock()
         conn.getUser.return_value.getName.return_value = "alice"
-        conn.getObject.return_value = None
+        conn.getUpdateService.return_value = object()
 
         image = types.SimpleNamespace(id=12)
-        recorded_commands = []
+        delete_calls = []
 
-        def _record_run(cmd, **kwargs):
-            """Record the run for `OmpPluginViewRegressionTests`.
+        def _delete_existing_annotations(
+            current_conn, update, current_image, var_names, mode
+        ):
+            """Record the gateway delete call for the regression test.
 
-            Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace`
+            Inputs: gateway delete arguments. Output: deletion helper tuple.
             """
-            recorded_commands.append(cmd)
-            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            delete_calls.append((current_conn, update, current_image, var_names, mode))
+            return 1, 2, 1
+
+        plugin_lookup = [[77], []]
 
         with (
             mock.patch.object(
                 view_module, "validate_user_password", return_value=(True, None)
-            ),
-            mock.patch.object(
-                view_module,
-                "build_omero_cli_base_command",
-                return_value=[
-                    TEST_OMERO_CLI,
-                    "-k",
-                    "session-123",
-                    "-s",
-                    "omeroserver",
-                    "-p",
-                    "4064",
-                ],
             ),
             mock.patch.object(
                 view_module,
@@ -591,17 +582,17 @@ class OmpPluginViewRegressionTests(TestCase):
             mock.patch.object(
                 view_module,
                 "find_plugin_annotation_ids",
-                return_value=[77],
+                side_effect=lambda *_args: plugin_lookup.pop(0),
             ),
             mock.patch.object(
                 view_module,
-                "find_annotation_link_ids",
-                return_value=[],
+                "require_destructive_project_access",
+                return_value=(True, None),
             ),
             mock.patch.object(
-                view_module.subprocess,
-                "run",
-                side_effect=_record_run,
+                view_module,
+                "delete_existing_annotations",
+                side_effect=_delete_existing_annotations,
             ),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
@@ -612,64 +603,44 @@ class OmpPluginViewRegressionTests(TestCase):
             )
 
         self.assertEqual(200, response["status"])
-        self.assertEqual(1, len(recorded_commands))
+        self.assertEqual(1, response["payload"]["deleted_images"])
+        self.assertEqual(1, response["payload"]["deleted_annotations"])
         self.assertEqual(
-            [
-                TEST_OMERO_CLI,
-                "-k",
-                "session-123",
-                "-s",
-                "omeroserver",
-                "-p",
-                "4064",
-                "delete",
-                "Annotation:77",
-                "--force",
-            ],
-            recorded_commands[0],
+            [(conn, conn.getUpdateService.return_value, image, [], "plugin")],
+            delete_calls,
         )
-        self.assertNotIn(TEST_AUTH_HMAC_FIXTURE, recorded_commands[0])
+        self.assertFalse(hasattr(view_module, "subprocess"))
 
-    def test_delete_all_view_uses_session_key_cli_without_passing_password(
+    def test_delete_all_view_uses_gateway_delete_without_subprocess(
         self,
     ) -> None:
-        """Check that delete all view uses session key CLI without passing password keeps sensitive data out of output.
+        """Check that delete all view uses gateway deletion without subprocess.
 
-        Inputs: repository fixtures. Output: fails on regressions in delete all view uses session key CLI without passing password.
+        Inputs: repository fixtures. Output: fails on regressions in gateway delete behavior.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_all_view"
         )
         conn = mock.Mock()
         conn.getUser.return_value.getName.return_value = "alice"
+        conn.getUpdateService.return_value = object()
 
         image = types.SimpleNamespace(id=12)
-        recorded_commands = []
+        delete_calls = []
 
-        def _record_run(cmd, **kwargs):
-            """Record the run for `OmpPluginViewRegressionTests`.
+        def _delete_existing_annotations(
+            current_conn, update, current_image, var_names, mode
+        ):
+            """Record the gateway delete call for the regression test.
 
-            Inputs: `cmd`, `**kwargs` keyword arguments. Output: `SimpleNamespace`
+            Inputs: gateway delete arguments. Output: deletion helper tuple.
             """
-            recorded_commands.append(cmd)
-            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            delete_calls.append((current_conn, update, current_image, var_names, mode))
+            return 1, 2, 1
 
         with (
             mock.patch.object(
                 view_module, "validate_user_password", return_value=(True, None)
-            ),
-            mock.patch.object(
-                view_module,
-                "build_omero_cli_base_command",
-                return_value=[
-                    TEST_OMERO_CLI,
-                    "-k",
-                    "session-123",
-                    "-s",
-                    "omeroserver",
-                    "-p",
-                    "4064",
-                ],
             ),
             mock.patch.object(
                 view_module,
@@ -682,9 +653,14 @@ class OmpPluginViewRegressionTests(TestCase):
                 return_value=[],
             ),
             mock.patch.object(
-                view_module.subprocess,
-                "run",
-                side_effect=_record_run,
+                view_module,
+                "require_destructive_project_access",
+                return_value=(True, None),
+            ),
+            mock.patch.object(
+                view_module,
+                "delete_existing_annotations",
+                side_effect=_delete_existing_annotations,
             ),
         ):
             response = view_module.delete_all_keyvaluepairs(
@@ -695,38 +671,23 @@ class OmpPluginViewRegressionTests(TestCase):
             )
 
         self.assertEqual(200, response["status"])
-        self.assertEqual(1, len(recorded_commands))
+        self.assertEqual(1, response["payload"]["deleted_count"])
         self.assertEqual(
-            [
-                TEST_OMERO_CLI,
-                "-k",
-                "session-123",
-                "-s",
-                "omeroserver",
-                "-p",
-                "4064",
-                "delete",
-                "Image/Annotation:12",
-                "--include",
-                "MapAnnotation",
-                "--include",
-                "ImageAnnotationLink",
-                "--force",
-            ],
-            recorded_commands[0],
+            [(conn, conn.getUpdateService.return_value, image, [], "all")], delete_calls
         )
-        self.assertNotIn(TEST_AUTH_HMAC_FIXTURE, recorded_commands[0])
+        self.assertFalse(hasattr(view_module, "subprocess"))
 
-    def test_delete_all_view_logs_only_output_summary_on_cli_failure(self) -> None:
-        """Verify the delete all view logs only output summary on CLI failure execution contract.
+    def test_delete_all_view_logs_sanitized_gateway_failure(self) -> None:
+        """Verify delete all view logs sanitized gateway failure.
 
-        Inputs: repository fixtures. Output: fails on regressions in delete all view logs only output summary on CLI failure.
+        Inputs: repository fixtures. Output: fails on regressions in gateway failure logging.
         """
         view_module = importlib.import_module(
             "omeroweb_omp_plugin.views.delete_all_view"
         )
         conn = mock.Mock()
         conn.getUser.return_value.getName.return_value = "alice"
+        conn.getUpdateService.return_value = object()
 
         with (
             mock.patch.object(
@@ -734,22 +695,18 @@ class OmpPluginViewRegressionTests(TestCase):
             ),
             mock.patch.object(
                 view_module,
-                "build_omero_cli_base_command",
-                return_value=[TEST_OMERO_CLI, "-k", "session-123"],
-            ),
-            mock.patch.object(
-                view_module,
                 "collect_images_in_project",
                 return_value=[types.SimpleNamespace(id=12)],
             ),
             mock.patch.object(
-                view_module.subprocess,
-                "run",
-                return_value=types.SimpleNamespace(
-                    returncode=1,
-                    stdout="secret-session\nline-two",
-                    stderr="secret-token\nline-four",
-                ),
+                view_module,
+                "require_destructive_project_access",
+                return_value=(True, None),
+            ),
+            mock.patch.object(
+                view_module,
+                "delete_existing_annotations",
+                side_effect=RuntimeError("secret-session secret-token"),
             ),
             mock.patch.object(view_module.logger, "warning") as warning_mock,
         ):
@@ -762,8 +719,6 @@ class OmpPluginViewRegressionTests(TestCase):
 
         self.assertEqual(200, response["status"])
         logged = repr(warning_mock.call_args_list)
-        self.assertIn("stdout_lines=2", logged)
-        self.assertIn("stderr_lines=2", logged)
         self.assertNotIn("secret-session", logged)
         self.assertNotIn("secret-token", logged)
 
@@ -883,23 +838,8 @@ class OmpPluginViewRegressionTests(TestCase):
                     ),
                     mock.patch.object(
                         view_module,
-                        "build_omero_cli_base_command",
-                        return_value=[
-                            TEST_OMERO_CLI,
-                            "-k",
-                            "session-123",
-                            "-s",
-                            "omeroserver",
-                            "-p",
-                            "4064",
-                        ],
-                    ),
-                    mock.patch.object(
-                        view_module.subprocess,
-                        "run",
-                        return_value=types.SimpleNamespace(
-                            returncode=0, stdout="", stderr=""
-                        ),
+                        "require_destructive_project_access",
+                        return_value=(True, None),
                     ),
                 ):
                     response = getattr(view_module, function_name)(

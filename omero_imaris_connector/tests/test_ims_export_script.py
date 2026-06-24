@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import os
 import pathlib
 import runpy
 import subprocess
@@ -729,12 +728,13 @@ def test_voxel_size_and_original_file_path_helpers_cover_safe_fallbacks(
     )
 
 
-def test_original_file_path_uses_declared_env_and_absolute_original_paths(
+def test_original_file_path_uses_declared_env_and_bounds_absolute_original_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Verify the original file path uses declared env and absolute original paths safety boundary.
+    """Verify OriginalFile paths use declared env and managed-root containment.
 
-    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions when original file path uses declared env and absolute original paths accepts unsafe input.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions
+    when absolute OriginalFile paths escape the configured managed repository.
     """
     module = _load_script_module()
     env_root = tmp_path / "managed-root"
@@ -761,8 +761,7 @@ def test_original_file_path_uses_declared_env_and_absolute_original_paths(
         env_root / "user" / "demo" / "sample.ome.tif"
     )
 
-    monkeypatch.delenv(module._CONFIG_MANAGED_DIR_ENV, raising=False)
-    absolute_dir = tmp_path / "absolute-source"
+    absolute_dir = env_root / "absolute-source"
     absolute_file = types.SimpleNamespace(
         getPath=lambda: str(absolute_dir),
         getName=lambda: "input.ome.tif",
@@ -774,6 +773,16 @@ def test_original_file_path_uses_declared_env_and_absolute_original_paths(
         absolute_dir / "input.ome.tif"
     )
 
+    outside_dir = tmp_path / "outside-source"
+    outside_file = types.SimpleNamespace(
+        getPath=lambda: str(outside_dir),
+        getName=lambda: "input.ome.tif",
+    )
+    outside_image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [outside_file])
+    )
+    assert module.get_original_file_path(object(), outside_image) is None
+
     unsafe_name_file = types.SimpleNamespace(
         getPath=lambda: str(absolute_dir),
         getName=lambda: "../escape.ome.tif",
@@ -782,6 +791,15 @@ def test_original_file_path_uses_declared_env_and_absolute_original_paths(
         getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [unsafe_name_file])
     )
     assert module.get_original_file_path(object(), unsafe_image) is None
+
+    dot_name_file = types.SimpleNamespace(
+        getPath=lambda: str(absolute_dir),
+        getName=lambda: ".",
+    )
+    dot_name_image = types.SimpleNamespace(
+        getFileset=lambda: types.SimpleNamespace(listFiles=lambda: [dot_name_file])
+    )
+    assert module.get_original_file_path(object(), dot_name_image) is None
 
 
 def test_original_file_path_helpers_reject_invalid_roots_and_paths(
@@ -808,6 +826,7 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     assert module._managed_repository_root_from_value("env", _BrokenStr()) is None
     assert module._managed_repository_root_from_value("env", "/bad\x00root") is None
 
+    real_os_name = module.os.name
     real_path = module.Path
 
     class _UnresolvablePath:
@@ -831,7 +850,7 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
     monkeypatch.setattr(module, "Path", _UnresolvablePath)
     monkeypatch.setattr(module.os, "name", "posix")
     assert module._managed_repository_root_from_value("env", "/managed") is None
-    monkeypatch.setattr(module.os, "name", os.name)
+    monkeypatch.setattr(module.os, "name", real_os_name)
     monkeypatch.setattr(module, "Path", real_path)
 
     managed_root = tmp_path / "ManagedRepository"
@@ -887,9 +906,24 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
         )
         is None
     )
-    assert module._absolute_original_file_path("/data\x00source", "image.tif") is None
+    managed_root = module.Path("/data")
     assert (
-        module._absolute_original_file_path("/data/source", "folder/image.tif") is None
+        module._absolute_original_file_path(
+            managed_root, "/data\x00source", "image.tif"
+        )
+        is None
+    )
+    assert (
+        module._absolute_original_file_path(
+            managed_root, "/data/source", "folder/image.tif"
+        )
+        is None
+    )
+    assert (
+        module._absolute_original_file_path(
+            managed_root, "/outside/source", "image.tif"
+        )
+        is None
     )
 
     class _BrokenAbsolutePath:
@@ -934,7 +968,12 @@ def test_original_file_path_helpers_reject_invalid_roots_and_paths(
             raise OSError("resolve failed")
 
     monkeypatch.setattr(module, "Path", _BrokenAbsolutePath)
-    assert module._absolute_original_file_path("/data/source", "image.tif") is None
+    assert (
+        module._absolute_original_file_path(
+            _BrokenAbsolutePath("/data"), "/data/source", "image.tif"
+        )
+        is None
+    )
 
 
 def test_original_file_path_helpers_accept_windows_server_paths() -> None:
@@ -956,9 +995,18 @@ def test_original_file_path_helpers_accept_windows_server_paths() -> None:
         is module.PureWindowsPath
     )
     assert (
-        module._absolute_original_file_path(r"C:\data\source", "image.tif")
-        == r"C:\data\source\image.tif"
+        module._absolute_original_file_path(
+            managed_root, r"C:\OMERO\ManagedRepository\source", "image.tif"
+        )
+        == r"C:\OMERO\ManagedRepository\source\image.tif"
     )
+    assert (
+        module._absolute_original_file_path(
+            managed_root, r"C:\data\source", "image.tif"
+        )
+        is None
+    )
+    assert module._safe_relative_path_parts(r"C:\escaped", allow_empty=False) is None
 
 
 def test_ome_tiff_source_materialization_covers_wrapper_and_exporter_paths(

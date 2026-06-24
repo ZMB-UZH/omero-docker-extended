@@ -333,7 +333,7 @@ def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
 
     assert response is not None
     assert response.content == b"chunk-bytes"
-    assert response["Content-Disposition"] == "attachment; filename=0.0.0.0"
+    assert response["Content-Disposition"] == 'attachment; filename="0.0.0.0"'
 
 
 def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
@@ -644,6 +644,23 @@ def test_download_store_metadata_returns_json_manifest(tmp_path):
     assert payload["documents"][".zattrs"]["multiscales"][0]["datasets"] == [
         {"path": "0"}
     ]
+
+
+def test_download_store_metadata_sanitizes_content_disposition_filename(tmp_path):
+    """Verify metadata downloads remove filename parameter metacharacters.
+
+    Inputs: pytest provides `tmp_path`. Output: fails on header injection regressions.
+    """
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=7, name='semi;quote".zarr')
+    request = RequestFactory().get("/zarr/download/image/7/metadata/")
+
+    response = views.download_store_metadata(request, 7, conn=_FakeConn(image))
+
+    assert (
+        response["Content-Disposition"]
+        == "attachment; filename=semi_quote_.zarr-metadata.json"
+    )
 
 
 def test_download_store_original_returns_zip_file(tmp_path):
@@ -1088,32 +1105,34 @@ def test_vizarr_vendor_commit_prefers_package_and_fails_when_missing(
         views._vizarr_vendor_commit()
 
 
-def test_apps_fetches_remote_validator_shell(monkeypatch):
-    """Verify apps fetches remote validator shell.
+def test_apps_serves_remote_validator_in_sandboxed_launcher(monkeypatch):
+    """Verify remote validator shell is isolated from the OMERO origin.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in apps fetches remote validator shell.
+    Inputs: pytest provides `monkeypatch`. Output: fails on remote-app isolation
+    regressions.
     """
+    monkeypatch.setattr(
+        views,
+        "_fetch_remote_app_shell",
+        lambda *_args: pytest.fail("remote validator HTML must not be proxied"),
+    )
 
-    class _FakeResponse:
-        """Test double for fake response."""
-
-        text = "<html><head></head><body>validator</body></html>"
-
-        @staticmethod
-        def raise_for_status():
-            """Raise the configured HTTP error for this fake response.
-
-            Inputs: caller provides no extra arguments. Output: None.
-            """
-            return None
-
-    views._fetch_remote_app_shell.cache_clear()
-    monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
-
-    response = views.apps(RequestFactory().get("/zarr/validator/"), "validator", "")
+    response = views.apps(
+        RequestFactory().get(
+            "/zarr/validator/",
+            {"source": "https://omero.example.org/zarr/v0.4/image/10.zarr"},
+        ),
+        "validator",
+        "",
+    )
     html = _response_text(response)
 
-    assert '<base href="https://ome.github.io/ome-ngff-validator/">' in html
+    assert response.status_code == 200
+    assert "Content-Security-Policy" in response
+    assert "https://ome.github.io/ome-ngff-validator/" in html
+    assert "<iframe" in html
+    assert "sandbox=" in html
+    assert "<body>validator</body>" not in html
 
 
 def test_inject_launcher_head_replaces_existing_base_tag():
@@ -1131,6 +1150,60 @@ def test_inject_launcher_head_replaces_existing_base_tag():
     assert '<base href="https://ome.github.io/ome-ngff-validator/">' in updated
     assert updated.count("<base ") == 1
     assert "window.location.origin" in updated
+
+
+def test_remote_app_launcher_escapes_source_and_sandboxes_frame():
+    """Verify remote app launcher escapes user-controlled source values.
+
+    Inputs: Zarr view helpers. Output: fails on launcher injection regressions.
+    """
+    html = views._remote_app_launcher_html(
+        "validator",
+        "https://ome.github.io/ome-ngff-validator/",
+        'https://omero.example.org/zarr/image.zarr" onload="alert(1)',
+    )
+
+    assert "<iframe" in html
+    assert "sandbox=" in html
+    assert "onload=" not in html
+    assert "%22" in html
+
+
+def test_remote_app_launcher_escapes_app_title_without_source():
+    """Verify remote launcher escapes app title and supports empty source.
+
+    Inputs: none. Output: asserts generated launcher HTML is escaped.
+    """
+    html = views._remote_app_launcher_html(
+        'validator" onload="alert(1)',
+        "https://ome.github.io/ome-ngff-validator/",
+        "",
+    )
+
+    assert "source=" not in html
+    assert '" onload="' not in html
+    assert 'title="validator&quot; onload=&quot;alert(1)"' in html
+
+
+def test_apps_returns_bad_gateway_when_local_shell_load_fails(monkeypatch):
+    """Verify app shell loading errors return an empty 502 response.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts 502 response status.
+    """
+    monkeypatch.setattr(views, "_LOCAL_APP_SHELLS", {"vizarr": "index.html"})
+
+    def fail_read(*_args, **_kwargs):
+        """Raise while reading a local app shell.
+
+        Inputs: ignored arguments. Output: raises OSError.
+        """
+        raise OSError("missing shell")
+
+    monkeypatch.setattr(views, "_read_local_app_shell", fail_read)
+
+    response = views.apps(RequestFactory().get("/zarr/vizarr/"), "vizarr", "")
+
+    assert response.status_code == 502
 
 
 def test_build_app_launch_url_preserves_vizarr_source_variants(monkeypatch):

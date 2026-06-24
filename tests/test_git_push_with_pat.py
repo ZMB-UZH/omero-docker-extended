@@ -18,6 +18,23 @@ sys.modules[SPEC.name] = git_push_with_pat
 SPEC.loader.exec_module(git_push_with_pat)
 
 TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
+TEST_GITHUB_REMOTE = "https://github.com/ZMB-UZH/omero-docker-extended.git"
+
+
+def _is_remote_lookup(command: list[str]) -> bool:
+    """Return whether the command is a git remote URL lookup.
+
+    Inputs: `command` (list[str]). Output: `bool`.
+    """
+    return command[:3] == ["/usr/bin/git", "remote", "get-url"]
+
+
+def _remote_lookup_result(command: list[str]) -> subprocess.CompletedProcess[str]:
+    """Return a successful fake remote lookup result.
+
+    Inputs: `command` (list[str]). Output: `CompletedProcess`.
+    """
+    return subprocess.CompletedProcess(command, 0, stdout=f"{TEST_GITHUB_REMOTE}\n")
 
 
 def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> None:
@@ -29,12 +46,14 @@ def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> No
     monkeypatch.setattr(git_push_with_pat.sys.stdin, "isatty", lambda: True)
     captured: dict[str, object] = {}
 
-    def fake_run(command, *, env, check):
+    def fake_run(command, *, env, check, **kwargs):
         """Simulate run so the surrounding test controls that dependency.
 
         Inputs: `command`, `env` environment mapping, `check`. Output:
         `CompletedProcess` result.
         """
+        if _is_remote_lookup(command):
+            return _remote_lookup_result(command)
         captured["command"] = command
         captured["env"] = env
         captured["check"] = check
@@ -78,6 +97,7 @@ def test_pat_push_uses_one_shot_askpass_without_leaking_token(monkeypatch) -> No
     ]
     push_env = captured["env"]
     assert push_env["GIT_ASKPASS"].endswith("askpass.py")
+    assert push_env["GIT_PAT_ALLOWED_HOST"] == "github.com"
     assert push_env["GIT_TERMINAL_PROMPT"] == "0"
     assert push_env["GIT_PAT_USERNAME"] == "x-access-token"
     assert TEST_GITHUB_CREDENTIAL not in " ".join(command)
@@ -105,12 +125,14 @@ def test_pat_push_accepts_env_token_without_prompt(monkeypatch) -> None:
         prompted = True
         return "wrong"
 
-    def fake_run(command, *, env, check):
+    def fake_run(command, *, env, check, **kwargs):
         """Simulate run so the surrounding test controls that dependency.
 
         Inputs: `command`, `env` environment mapping, `check`. Output:
         `CompletedProcess` result.
         """
+        if _is_remote_lookup(command):
+            return _remote_lookup_result(command)
         password = subprocess.check_output(
             [env["GIT_ASKPASS"], "Password for https://github.com:"],
             env=env,
@@ -140,12 +162,14 @@ def test_pat_push_accepts_explicit_force_with_lease(monkeypatch) -> None:
     captured: dict[str, object] = {}
     expected = "".join(format(value % 16, "x") for value in range(40))
 
-    def fake_run(command, *, env, check):
+    def fake_run(command, *, env, check, **kwargs):
         """Simulate run so the surrounding test controls that dependency.
 
         Inputs: `command`, `env` environment mapping, `check`. Output:
         `CompletedProcess` result.
         """
+        if _is_remote_lookup(command):
+            return _remote_lookup_result(command)
         captured["command"] = command
         return subprocess.CompletedProcess(command, 0)
 
@@ -185,12 +209,14 @@ def test_pat_push_does_not_write_credential_to_temp_tree(monkeypatch) -> None:
     monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
     observed_files: dict[str, str] = {}
 
-    def fake_run(command, *, env, check):
+    def fake_run(command, *, env, check, **kwargs):
         """Simulate run so the surrounding test controls that dependency.
 
         Inputs: `command`, `env` environment mapping, `check`. Output:
         `CompletedProcess` result.
         """
+        if _is_remote_lookup(command):
+            return _remote_lookup_result(command)
         temp_root = Path(env["GIT_ASKPASS"]).parent
         for path in temp_root.iterdir():
             if path.is_file() or path.is_socket():
@@ -268,3 +294,69 @@ def test_pat_push_rejects_invalid_force_with_lease(force_with_lease) -> None:
             args,
             env={"GITHUB_TOKEN": TEST_GITHUB_CREDENTIAL},
         )
+
+
+def test_pat_push_rejects_direct_non_github_https_remote_without_prompt(
+    monkeypatch,
+) -> None:
+    """Confirm literal HTTPS remotes outside GitHub fail before token handling.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts no prompt happens for
+    an arbitrary HTTPS remote.
+    """
+    monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
+    prompted = False
+
+    def token_reader(_prompt: str) -> str:
+        """Return a fake token while recording prompt usage.
+
+        Inputs: `_prompt`. Output: test credential string.
+        """
+        nonlocal prompted
+        prompted = True
+        return TEST_GITHUB_CREDENTIAL
+
+    args = git_push_with_pat.parse_args(["https://example.com/repo.git", "main"])
+    with pytest.raises(SystemExit, match="https://github.com"):
+        git_push_with_pat.run_push(
+            args,
+            env={"PATH": "/usr/bin"},
+            token_reader=token_reader,
+        )
+    assert prompted is False
+
+
+def test_pat_push_rejects_configured_non_github_remote_without_askpass(
+    monkeypatch,
+) -> None:
+    """Confirm named remotes outside GitHub fail before askpass setup.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts askpass is not built
+    for a remote name that resolves outside GitHub.
+    """
+    monkeypatch.setattr(git_push_with_pat.shutil, "which", lambda _name: "/usr/bin/git")
+    observed_commands: list[list[str]] = []
+
+    def fake_run(command, *, env, check, **kwargs):
+        """Return an attacker-controlled remote URL for remote lookup.
+
+        Inputs: `command`, `env`, `check`. Output: `CompletedProcess`.
+        """
+        observed_commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="https://example.com/repo.git\n",
+        )
+
+    args = git_push_with_pat.parse_args(["origin", "main"])
+    with pytest.raises(SystemExit, match="https://github.com"):
+        git_push_with_pat.run_push(
+            args,
+            env={"PATH": "/usr/bin", "GITHUB_TOKEN": TEST_GITHUB_CREDENTIAL},
+            runner=fake_run,
+        )
+
+    assert observed_commands == [
+        ["/usr/bin/git", "remote", "get-url", "--push", "origin"]
+    ]

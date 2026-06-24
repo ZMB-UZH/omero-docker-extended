@@ -228,10 +228,14 @@ function renderServiceHealth(services) {
         targetsServiceHealthEl.textContent = 'No service health data available.';
         return;
     }
-    targetsServiceHealthEl.innerHTML = services.map(({ service, health }) => {
+    targetsServiceHealthEl.textContent = '';
+    services.forEach(({ service, health }) => {
         const normalizedHealth = normalizeServiceHealth(health);
-        return `<span class="monitoring-pill ${serviceHealthClass(normalizedHealth)}">${service}: ${normalizedHealth}</span>`;
-    }).join('');
+        const pill = document.createElement('span');
+        pill.className = `monitoring-pill ${serviceHealthClass(normalizedHealth)}`;
+        pill.textContent = `${service}: ${normalizedHealth}`;
+        targetsServiceHealthEl.appendChild(pill);
+    });
 }
 
 
@@ -262,8 +266,9 @@ function renderDiagnostics(diag, services) {
     const hasServiceHealth = normalizedServiceHealth.length > 0;
     const allServicesOk = hasServiceHealth && normalizedServiceHealth.every(health => health === 'healthy' || health === 'up');
     const noHealthData = !diag.api_reachable || diag.containers_with_health === 0;
+    const optionalSocketMissing = !diag.socket_required && !diag.socket_exists;
 
-    if (!noHealthData || (allServicesOk && noHealthData)) {
+    if (!noHealthData || (allServicesOk && noHealthData) || (optionalSocketMissing && hasServiceHealth)) {
         diagnosticsCard.style.display = 'none';
         return;
     }

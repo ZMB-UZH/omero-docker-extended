@@ -473,6 +473,9 @@ def _managed_original_file_path(managed_root, file_path, file_name):
 
     Inputs: `managed_root`, `file_path` file path, `file_name`. Output: `str`.
     """
+    if _path_class_for_server_path(str(file_path or "").strip()) is not None:
+        print("Error getting original file path: absolute path escapes repository")
+        return None
     relative_dir_parts = _safe_relative_path_parts(file_path, allow_empty=True)
     relative_name_parts = _safe_relative_path_parts(file_name, allow_empty=False)
     if relative_dir_parts is None or relative_name_parts is None:
@@ -491,10 +494,10 @@ def _managed_original_file_path(managed_root, file_path, file_name):
     return str(candidate)
 
 
-def _absolute_original_file_path(file_path, file_name):
-    """Return an absolute OriginalFile path when OMERO stores one directly.
+def _absolute_original_file_path(managed_root, file_path, file_name):
+    """Return an absolute OriginalFile path inside the managed repository.
 
-    Inputs: `file_path`, `file_name`. Output: `str` result or None.
+    Inputs: `managed_root`, `file_path`, `file_name`. Output: `str` result or None.
     """
     path_text = str(file_path or "").strip()
     name_text = str(file_name or "").strip().strip("/\\")
@@ -517,11 +520,16 @@ def _absolute_original_file_path(file_path, file_name):
         candidate = candidate / name_parts[0]
     try:
         if isinstance(candidate, Path):
-            return str(candidate.resolve(strict=False))
-        return str(candidate)
+            candidate = candidate.resolve(strict=False)
     except OSError:
         print("Error getting original file path: absolute path could not be resolved")
         return None
+    try:
+        candidate.relative_to(managed_root)
+    except (TypeError, ValueError):
+        print("Error getting original file path: absolute path escapes repository")
+        return None
+    return str(candidate)
 
 
 def get_original_file_path(conn, image):
@@ -538,15 +546,16 @@ def get_original_file_path(conn, image):
         if not files:
             return None
         original_file = files[0]
+        managed_root = _get_managed_repository_root(conn)
+        if managed_root is None:
+            return None
         absolute_path = _absolute_original_file_path(
+            managed_root,
             original_file.getPath(),
             original_file.getName(),
         )
         if absolute_path:
             return absolute_path
-        managed_root = _get_managed_repository_root(conn)
-        if managed_root is None:
-            return None
         return _managed_original_file_path(
             managed_root,
             original_file.getPath(),
