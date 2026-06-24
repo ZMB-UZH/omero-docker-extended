@@ -208,6 +208,20 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+// Escape Spreadsheet Cell. Inputs: value. Output: return value.
+function escapeSpreadsheetCell(value) {
+    let text = String(value ?? '').replace(/[\r\n]+/g, ' ').replace(/\t/g, ' ');
+    if (/^[=+\-@]/.test(text)) {
+        text = `'${text}`;
+    }
+    return text;
+}
+
+// Csv Cell. Inputs: value. Output: return value.
+function csvCell(value) {
+    return `"${escapeSpreadsheetCell(value).replace(/"/g, '""')}"`;
+}
+
 // Format bytes. Inputs: v. Output: return value.
 function bytes(v) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -545,14 +559,14 @@ function exportCsv() {
     const headers = getHeadersForView();
     const body = rows.map((row) => {
         if (currentView === 'groups') {
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
+            return [row.primary, row.secondary, row.permissions || 'Private', row.bytes, row.percent.toFixed(PERCENT_DECIMALS)].map(csvCell).join(',');
         }
         if (currentView === 'quotas') {
             const quotaValue = row.quotaGb === null ? '' : row.quotaGb.toFixed(QUOTA_DECIMALS);
             const quotaPercent = row.quotaPercent === null ? '' : row.quotaPercent.toFixed(PERCENT_DECIMALS);
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${JSON.stringify(quotaPercent)},${JSON.stringify(quotaValue)}`;
+            return [row.primary, row.secondary, row.permissions || 'Private', quotaPercent, quotaValue].map(csvCell).join(',');
         }
-        return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
+        return [row.username, row.fullName, row.groups, row.bytes, row.percent.toFixed(PERCENT_DECIMALS)].map(csvCell).join(',');
     }).join('\n');
     const blob = new Blob([`${headers.join(',')}\n${body}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

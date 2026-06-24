@@ -1727,13 +1727,12 @@ function startSaveJob() {
         varNames.push(trimmed);
     }
 
-    // FIX: delete_mode *not* "keep", prevents double saves
     let payload = {
         project_id: projectId,
         separator: separator,
         separator_mode: separatorMode,
         var_names: varNames,
-        delete_mode: "all",
+        delete_mode: "keep",
         image_ids: selectedImageIds,
         chunk_size: CHUNK_SIZE_USER
     };

@@ -53,6 +53,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("BIOFORMATS2RAW_VERSION=", env_text)
         self.assertNotIn("TIFFFILE_VERSION=", env_text)
         self.assertNotIn("BIOFORMATS_VERSION=", env_text)
+        self.assertNotIn("BIOFORMATS_SHA256=", env_text)
 
     def test_omeroserver_example_defines_native_zarr_build_versions(self) -> None:
         """Verify omeroserver example defines native Zarr build versions.
@@ -71,6 +72,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
         self.assertIn("TIFFFILE_VERSION=2026.3.3", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
+        self.assertIn(
+            "BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2",
+            env_text,
+        )
 
     def test_compose_requires_build_versions_from_omeroserver_env(self) -> None:
         """Verify compose requires build versions from omeroserver env.
@@ -100,6 +105,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             'BIOFORMATS_VERSION: "${BIOFORMATS_VERSION:?Set BIOFORMATS_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
+        self.assertIn(
+            'BIOFORMATS_SHA256: "${BIOFORMATS_SHA256:?Set BIOFORMATS_SHA256 in env/omeroserver.env}"',
             compose_text,
         )
         self.assertIn(
@@ -306,14 +315,20 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/omero-server.Dockerfile")
         self.assertIn("ARG OMERO_DROPBOX_VERSION\n", dockerfile_text)
         self.assertIn("ARG TIFFFILE_VERSION\n", dockerfile_text)
+        self.assertIn("ARG BIOFORMATS_SHA256\n", dockerfile_text)
         self.assertNotIn("ARG OMERO_DROPBOX_VERSION=", dockerfile_text)
         self.assertNotIn("ARG TIFFFILE_VERSION=", dockerfile_text)
+        self.assertNotIn("ARG BIOFORMATS_SHA256=", dockerfile_text)
         self.assertIn(
             "OMERO_DROPBOX_VERSION must be provided from env/omeroserver.env",
             dockerfile_text,
         )
         self.assertIn(
             "TIFFFILE_VERSION must be provided from env/omeroserver.env",
+            dockerfile_text,
+        )
+        self.assertIn(
+            "BIOFORMATS_SHA256 must be provided from env/omeroserver.env",
             dockerfile_text,
         )
         self.assertIn('"omero-dropbox==${OMERO_DROPBOX_VERSION}"', dockerfile_text)
@@ -405,6 +420,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
         self.assertIn("TIFFFILE_VERSION=${TIFFFILE_VERSION}", script_text)
         self.assertIn("BIOFORMATS_VERSION=${BIOFORMATS_VERSION}", script_text)
+        self.assertIn("BIOFORMATS_SHA256=${BIOFORMATS_SHA256}", script_text)
         self.assertIn("OMERO_SERVER_HOST_PORT=${OMERO_SERVER_HOST_PORT}", script_text)
         self.assertIn("OMERO_CLI_HOST=${OMERO_CLI_HOST}", script_text)
         self.assertIn("OMERO_CLI_PORT=${OMERO_CLI_PORT}", script_text)
@@ -440,6 +456,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             "Missing required configuration variable BIOFORMATS_VERSION in ${server_env_source}",
+            script_text,
+        )
+        self.assertIn(
+            "Missing required configuration variable BIOFORMATS_SHA256 in ${server_env_source}",
             script_text,
         )
         self.assertIn(

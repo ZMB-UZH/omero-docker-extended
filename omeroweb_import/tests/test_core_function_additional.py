@@ -695,7 +695,7 @@ def test_import_file_covers_fast_path_timeout_and_progress_tracking_edges(
     monkeypatch.setattr(
         core_functions,
         "_run_omero_cli_streaming",
-        lambda cmd, *, env, timeout, on_tick=None: (
+        lambda cmd, *, env, timeout, on_tick=None, stdin_text=None: (
             (on_tick(999, 0.0) if on_tick is not None else None)
             or (on_tick(999, 10.0) if on_tick is not None else None)
             or process_utils.CompletedProcess(

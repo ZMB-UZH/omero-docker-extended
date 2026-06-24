@@ -14,6 +14,7 @@ import secrets
 import stat
 import string
 import shutil
+import sys
 import threading
 import time
 import tempfile
@@ -3596,15 +3597,39 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
 
     Inputs: `subcommand`, `session_key`, `host`, `port`. Output: `cmd`.
     """
-    cmd = [OMERO_CLI]
     if session_key:
-        cmd.extend(["-k", session_key])
+        cmd = [
+            sys.executable,
+            "-m",
+            "omero_plugin_common.omero_cli_session_runner",
+        ]
+        if host:
+            cmd.extend(["--host", host])
+        if port:
+            cmd.extend(["--port", str(port)])
+        cmd.append("--")
+        cmd.extend(subcommand)
+        return cmd
+
+    cmd = [OMERO_CLI]
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
     cmd.extend(subcommand)
     return cmd
+
+
+def _omero_cli_session_stdin(cmd, session_key: str) -> str | None:
+    """Return stdin payload for the session-key CLI wrapper, if applicable.
+
+    Inputs: command argv and session key. Output: stdin text or None.
+    """
+    if not session_key:
+        return None
+    if "omero_plugin_common.omero_cli_session_runner" not in cmd:
+        return None
+    return f"{session_key}\n"
 
 
 IMPORT_TIMEOUT_SECONDS_DEFAULT = (
@@ -4228,17 +4253,20 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
     return errors.import_failed()
 
 
-def _run_omero_cli(cmd, timeout=None):
+def _run_omero_cli(cmd, timeout=None, stdin_text=None):
     """Run the OMERO cli.
 
-    Inputs: `cmd`, `timeout` timeout seconds. Output: `run` result.
+    Inputs: `cmd`, `timeout` timeout seconds, optional `stdin_text`. Output: `run`
+    result.
     """
-    return process_utils.run(
-        cmd,
-        check=False,
-        timeout=timeout,
-        env=_build_cli_env(),
-    )
+    run_kwargs = {
+        "check": False,
+        "timeout": timeout,
+        "env": _build_cli_env(),
+    }
+    if stdin_text is not None:
+        run_kwargs["stdin_text"] = stdin_text
+    return process_utils.run(cmd, **run_kwargs)
 
 
 def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
@@ -4283,19 +4311,21 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
         shutil.rmtree(omerodir_path, ignore_errors=True)
 
 
-def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None):
+def _run_omero_cli_streaming(cmd, *, env, timeout, on_tick=None, stdin_text=None):
     """OMERO cli streaming.
 
-    Inputs: `cmd`, `env` environment mapping, `timeout` timeout seconds, `on_tick`.
-    Output: `run_streaming` result.
+    Inputs: `cmd`, `env` environment mapping, `timeout` timeout seconds, `on_tick`,
+    optional `stdin_text`. Output: `run_streaming` result.
     """
-    return process_utils.run_streaming(
-        cmd,
-        timeout=timeout,
-        env=env,
-        tick_interval=_IMPORT_PROGRESS_INTERVAL,
-        on_tick=on_tick,
-    )
+    run_kwargs = {
+        "timeout": timeout,
+        "env": env,
+        "tick_interval": _IMPORT_PROGRESS_INTERVAL,
+        "on_tick": on_tick,
+    }
+    if stdin_text is not None:
+        run_kwargs["stdin_text"] = stdin_text
+    return process_utils.run_streaming(cmd, **run_kwargs)
 
 
 def _parse_cli_id(output: str, expected_type: str):
@@ -4424,7 +4454,11 @@ def _import_file(
     # ------------------------------------------------------------------
     if progress_job is None:
         try:
-            result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
+            result = _run_omero_cli(
+                cmd,
+                timeout=_get_import_timeout_seconds(),
+                stdin_text=_omero_cli_session_stdin(cmd, session_key),
+            )
         except process_utils.TimeoutExpired:
             logger.error(
                 "Import CLI timed out after %ds for %s",
@@ -4498,6 +4532,7 @@ def _import_file(
             env=cli_env,
             timeout=timeout_seconds,
             on_tick=_update_progress,
+            stdin_text=_omero_cli_session_stdin(cmd, session_key),
         )
     except process_utils.TimeoutExpired as exc:
         logger.error("Import CLI timed out after %ds for %s", timeout_seconds, path)
@@ -7679,6 +7714,153 @@ def _normalize_shared_zarr_permissions(path: Path) -> None:
             current_path.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
 
 
+def _copy_file_descriptor(source_fd: int, destination: Path) -> None:
+    """Copy an already no-follow-opened regular file to destination.
+
+    Inputs: source file descriptor and destination path. Output: None.
+    """
+    destination_fd = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        ZARR_SHARED_TRANSFER_FILE_MODE,
+    )
+    try:
+        while True:
+            chunk = os.read(source_fd, 1024 * 1024)
+            if not chunk:
+                break
+            os.write(destination_fd, chunk)
+        os.fsync(destination_fd)
+    finally:
+        os.close(destination_fd)
+
+
+def _copy_zarr_tree_from_directory_fd(
+    source_fd: int, destination: Path, display_path: str
+) -> None:
+    """Copy a Zarr tree from an open directory fd without following symlinks.
+
+    Inputs: source directory fd, destination path, display path. Output: None.
+    """
+    for name in os.listdir(source_fd):
+        if name in {"", ".", ".."} or "/" in name or "\x00" in name:
+            raise RuntimeError(f"Invalid staged Zarr member name: {display_path}")
+
+        child_display = f"{display_path}/{name}" if display_path else name
+        try:
+            child_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise RuntimeError(
+                f"Failed to inspect staged Zarr member {child_display}: {exc}"
+            ) from exc
+
+        destination_child = destination / name
+        if stat.S_ISLNK(child_stat.st_mode):
+            raise RuntimeError(
+                f"Staged Zarr source contains a symlinked member: {child_display}"
+            )
+        if stat.S_ISDIR(child_stat.st_mode):
+            destination_child.mkdir(mode=ZARR_SHARED_TRANSFER_DIR_MODE, exist_ok=False)
+            child_fd = os.open(
+                name,
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=source_fd,
+            )
+            try:
+                child_fd_stat = os.fstat(child_fd)
+                if not stat.S_ISDIR(child_fd_stat.st_mode):
+                    raise RuntimeError(
+                        f"Staged Zarr member is not a directory: {child_display}"
+                    )
+                _copy_zarr_tree_from_directory_fd(
+                    child_fd, destination_child, child_display
+                )
+            finally:
+                os.close(child_fd)
+            continue
+        if stat.S_ISREG(child_stat.st_mode):
+            file_fd = os.open(
+                name,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=source_fd,
+            )
+            try:
+                file_fd_stat = os.fstat(file_fd)
+                if not stat.S_ISREG(file_fd_stat.st_mode):
+                    raise RuntimeError(
+                        f"Staged Zarr member is not a regular file: {child_display}"
+                    )
+                _copy_file_descriptor(file_fd, destination_child)
+            finally:
+                os.close(file_fd)
+            continue
+        raise RuntimeError(
+            f"Staged Zarr source contains an unsupported member: {child_display}"
+        )
+
+
+def _copy_zarr_tree_without_symlinks_posix(source: Path, destination: Path) -> None:
+    """Copy a Zarr tree on POSIX using no-follow directory and file opens.
+
+    Inputs: source directory path and destination path. Output: None.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        source_fd = os.open(source, flags)
+    except OSError as exc:
+        raise RuntimeError(f"Failed to open staged Zarr source safely: {exc}") from exc
+    try:
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISDIR(source_stat.st_mode):
+            raise RuntimeError("Staged Zarr source is not a directory.")
+        destination.mkdir(mode=ZARR_SHARED_TRANSFER_DIR_MODE, exist_ok=False)
+        _copy_zarr_tree_from_directory_fd(source_fd, destination, source.name)
+    finally:
+        os.close(source_fd)
+
+
+def _copy_zarr_tree_without_symlinks_portable(
+    source: Path, destination: Path
+) -> None:  # pragma: no cover - exercised on platforms without POSIX no-follow opens
+    """Copy a Zarr tree with per-entry symlink checks.
+
+    Inputs: source directory path and destination path. Output: None.
+    """
+    if source.is_symlink():
+        raise RuntimeError("Staged Zarr source is a symlink.")
+    if not source.is_dir():
+        raise RuntimeError("Staged Zarr source is not a directory.")
+    destination.mkdir(mode=ZARR_SHARED_TRANSFER_DIR_MODE, exist_ok=False)
+    for entry in source.iterdir():
+        destination_child = destination / entry.name
+        if entry.is_symlink():
+            raise RuntimeError(
+                f"Staged Zarr source contains a symlinked member: {entry.name}"
+            )
+        if entry.is_dir():
+            _copy_zarr_tree_without_symlinks_portable(entry, destination_child)
+        elif entry.is_file():
+            shutil.copyfile(entry, destination_child)
+            destination_child.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
+        else:
+            raise RuntimeError(
+                f"Staged Zarr source contains an unsupported member: {entry.name}"
+            )
+
+
+def _copy_zarr_tree_without_symlinks(source: Path, destination: Path) -> None:
+    """Copy a staged Zarr tree while rejecting symlinks and special files.
+
+    Inputs: source directory path and destination path. Output: None.
+    """
+    if os.name == "posix" and hasattr(os, "O_NOFOLLOW"):
+        _copy_zarr_tree_without_symlinks_posix(source, destination)
+        return
+    _copy_zarr_tree_without_symlinks_portable(source, destination)
+
+
 def _prepare_server_readable_zarr_source(
     file_path: Path,
 ) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
@@ -7701,7 +7883,7 @@ def _prepare_server_readable_zarr_source(
         transfer_parent.mkdir(mode=ZARR_SHARED_TRANSFER_TOKEN_MODE, exist_ok=False)
         transfer_parent.chmod(ZARR_SHARED_TRANSFER_TOKEN_MODE)
         shared_source = transfer_parent / source.name
-        shutil.copytree(source, shared_source, symlinks=True)
+        _copy_zarr_tree_without_symlinks(source, shared_source)
         prepare_error = _prepare_native_zarr_copy(shared_source)
         if prepare_error:
             raise RuntimeError(prepare_error)
@@ -8160,12 +8342,15 @@ def _import_zarr_via_cli(
 
     env = _build_cli_env()
     try:
-        result = process_utils.run(
-            cmd,
-            check=False,
-            timeout=_get_import_timeout_seconds(),
-            env=env,
-        )
+        run_kwargs = {
+            "check": False,
+            "timeout": _get_import_timeout_seconds(),
+            "env": env,
+        }
+        stdin_text = _omero_cli_session_stdin(cmd, session_key)
+        if stdin_text is not None:
+            run_kwargs["stdin_text"] = stdin_text
+        result = process_utils.run(cmd, **run_kwargs)
         stdout = result.stdout or ""
         stderr = result.stderr or ""
         success = result.returncode == 0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import stat
@@ -74,9 +75,17 @@ def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
 
     Inputs: `install_dir` (Path), `wrapper_path` (Path). Output: `dict[str, str]`.
     """
+    runtime_jar = install_dir / "bioformats" / "bioformats_package.jar"
+    if runtime_jar.is_file():
+        bioformats_sha256 = hashlib.sha256(runtime_jar.read_bytes()).hexdigest()
+    else:
+        bioformats_sha256 = (
+            "978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2"
+        )
     return {
         **os.environ,
         "BIOFORMATS_VERSION": "8.5.0",
+        "BIOFORMATS_SHA256": bioformats_sha256,
         "IMARISCONVERT_INSTALL_DIR": str(install_dir),
         "IMARISCONVERT_WRAPPER_PATH": str(wrapper_path),
     }
@@ -168,11 +177,11 @@ def test_imarisconvert_build_time_mode_repairs_wrapper_and_cache_without_network
     assert (cache_dir / "bioformats_package.jar.sha256").is_file()
 
 
-def test_imarisconvert_download_uses_versioned_ome_artifactory_with_checksum():
+def test_imarisconvert_download_uses_versioned_ome_artifactory_with_pinned_checksum():
     """Verify ImarisConvert build downloads Bio-Formats from OME Artifactory.
 
     Inputs: repository fixtures. Output: fails on regressions in Bio-Formats
-    artifact source or checksum validation.
+    artifact source or repository-pinned checksum validation.
     """
     script_text = SCRIPT_PATH.read_text(encoding="utf-8")
 
@@ -186,6 +195,54 @@ def test_imarisconvert_download_uses_versioned_ome_artifactory_with_checksum():
         'BIOFORMATS_ARTIFACT_NAME="bioformats_package-${BIOFORMATS_VERSION}.jar"'
         in script_text
     )
+    assert (
+        ': "${BIOFORMATS_SHA256:?BIOFORMATS_SHA256 must be set in env/omeroserver.env}"'
+        in script_text
+    )
+    assert "sha256_matches_pin" in script_text
     assert 'BIOFORMATS_SHA256_URL="${BIOFORMATS_URL}.sha256"' in script_text
     assert "curl -L --fail --retry 5 --retry-delay 3 --max-time 300" in script_text
+    assert "Published Bio-Formats checksum does not match repository pin" in script_text
     assert "Bio-Formats jar checksum mismatch" in script_text
+
+
+def test_imarisconvert_verify_rejects_unpinned_bioformats_digest(tmp_path):
+    """Confirm runtime verification enforces the repository Bio-Formats pin.
+
+    Inputs: pytest provides `tmp_path`. Output: asserts mismatched runtime jars
+    are rejected against the repository-controlled Bio-Formats checksum pin.
+    """
+    install_dir, wrapper_path = _prepare_valid_install(tmp_path)
+    env = _script_env(install_dir, wrapper_path)
+    env["BIOFORMATS_SHA256"] = "a" * 64
+
+    result = subprocess.run(
+        [BASH_BIN, str(SCRIPT_PATH)],
+        check=False,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "checksum does not match repository pin" in result.stderr
+
+
+def test_imariswriter_clone_is_pinned_and_commit_verified():
+    """Verify ImarisWriter supply-chain input is pinned and verified.
+
+    Inputs: repository fixtures. Output: fails on mutable dependency regressions.
+    """
+    script_text = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert (
+        "IMARISWRITER_GIT_COMMIT="
+        '"${IMARISWRITER_GIT_COMMIT:-b128e6e7d1a147261e9d5caf24ebc6b5c9c63779}"'
+        in script_text
+    )
+    assert (
+        'git clone --depth 1 --branch "${IMARISWRITER_GIT_REF}" '
+        '"${IMARISWRITER_REPO_URL}" ImarisWriter' in script_text
+    )
+    assert 'actual_commit="$(git rev-parse HEAD)"' in script_text
+    assert "ImarisWriter commit mismatch" in script_text

@@ -70,6 +70,83 @@ def _set_staged_file_mode(path: Path | str) -> None:
     os.chmod(path, _STAGED_FILE_MODE)
 
 
+def _unwrap_rtype_text(value) -> str:
+    """Return plain text from an OMERO rtype-like value.
+
+    Inputs: `value`. Output: `str`.
+    """
+    for attr in ("val", "_val"):
+        if hasattr(value, attr):
+            value = getattr(value, attr)
+            break
+    return str(value or "").strip()
+
+
+def _call_text(obj, method_name: str) -> str:
+    """Return text from a no-argument object method.
+
+    Inputs: `obj`, `method_name`. Output: `str`.
+    """
+    if obj is None:
+        return ""
+    method = getattr(obj, method_name, None)
+    if not callable(method):
+        return ""
+    return _unwrap_rtype_text(method())
+
+
+def _current_session_identity(conn: BlitzGateway) -> tuple[str, str]:
+    """Return the authenticated OMERO username and active group name.
+
+    Inputs: `conn` (BlitzGateway). Output: `(username, group_name)`.
+    """
+    username = ""
+    group_name = ""
+    event_context = None
+    try:
+        event_context = conn.getEventContext()
+    except Exception:
+        event_context = None
+
+    if event_context is not None:
+        username = _unwrap_rtype_text(getattr(event_context, "userName", ""))
+        group_name = _unwrap_rtype_text(getattr(event_context, "groupName", ""))
+
+    if not username:
+        try:
+            username = _call_text(conn.getUser(), "getName")
+        except Exception:
+            username = ""
+
+    return username, group_name
+
+
+def _authorized_template_identity(
+    conn: BlitzGateway, requested_group_name: str, requested_username: str
+) -> tuple[str, str]:
+    """Return authorized group/user values for managed-repository templates.
+
+    Inputs: `conn`, requested group and username. Output: `(group_name, username)`.
+    Raises: RuntimeError when a non-root caller requests another identity.
+    """
+    group_name = _validate_path_component(requested_group_name, "group name")
+    username = _validate_path_component(requested_username, "username")
+    session_username, session_group_name = _current_session_identity(conn)
+
+    if session_username == "root":
+        return group_name, username
+
+    if not session_username or username != session_username:
+        raise RuntimeError(
+            "Managed Zarr staging identity does not match the authenticated user."
+        )
+    if not session_group_name or group_name != session_group_name:
+        raise RuntimeError(
+            "Managed Zarr staging group does not match the active OMERO group."
+        )
+    return group_name, username
+
+
 def _require_config_value(config: dict[str, str], key: str) -> str:
     """Require the config value.
 
@@ -218,6 +295,17 @@ def _repo_description_root(description) -> str:
     if description_name:
         return f"/{description_name}"
     return description_path
+
+
+def _same_filesystem_path(left: str, right: str) -> bool:
+    """Return whether two repository path strings identify the same path.
+
+    Inputs: `left`, `right`. Output: `bool`.
+    """
+    try:
+        return Path(left).resolve(strict=False) == Path(right).resolve(strict=False)
+    except Exception:
+        return left.rstrip("/\\") == right.rstrip("/\\")
 
 
 def _repo_template_parts(config: dict[str, str]) -> list[str]:
@@ -470,7 +558,7 @@ def _managed_repository_proxy(conn: BlitzGateway, config: dict[str, str]):
     managed_root = str(_managed_repository_root(config)).rstrip("/")
 
     for index, description in enumerate(descriptions):
-        if _repo_description_root(description).rstrip("/") != managed_root:
+        if not _same_filesystem_path(_repo_description_root(description), managed_root):
             continue
         if isinstance(proxies, dict):
             for key in (
@@ -671,6 +759,136 @@ def _normalize_tree_permissions(root: Path) -> None:
             _set_staged_file_mode(os.path.join(dirpath, filename))
 
 
+def _copy_file_descriptor_to_path(source_fd: int, destination: Path) -> None:
+    """Copy an already-open regular source file to a new destination path.
+
+    Inputs: `source_fd`, `destination`. Output: None.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    destination_fd = os.open(destination, flags, _STAGED_FILE_MODE)
+    try:
+        with os.fdopen(os.dup(source_fd), "rb") as source_handle:
+            with os.fdopen(destination_fd, "wb") as destination_handle:
+                destination_fd = -1
+                shutil.copyfileobj(source_handle, destination_handle)
+    finally:
+        if destination_fd >= 0:
+            os.close(destination_fd)
+
+
+def _copytree_without_following_symlinks_posix(source: Path, destination: Path) -> None:
+    """Copy a directory tree using POSIX no-follow opens.
+
+    Inputs: `source`, `destination`. Output: None. Raises RuntimeError for symlinks or
+    special files.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        source_fd = os.open(source, flags)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Failed to open staged Zarr directory safely: {source}"
+        ) from exc
+    try:
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISDIR(source_stat.st_mode):
+            raise RuntimeError(f"Staged Zarr source is not a directory: {source}")
+
+        destination.mkdir(exist_ok=True)
+        for name in os.listdir(source_fd):
+            source_child = source / name
+            destination_child = destination / name
+            try:
+                entry_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Failed to inspect staged Zarr entry safely: {source_child}"
+                ) from exc
+
+            if stat.S_ISLNK(entry_stat.st_mode):
+                raise RuntimeError(
+                    f"Symlinks are not allowed in staged Zarrs: {source_child}"
+                )
+            if stat.S_ISDIR(entry_stat.st_mode):
+                _copytree_without_following_symlinks_posix(
+                    source_child, destination_child
+                )
+                continue
+            if not stat.S_ISREG(entry_stat.st_mode):
+                raise RuntimeError(
+                    f"Special files are not allowed in staged Zarrs: {source_child}"
+                )
+
+            file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                file_fd = os.open(name, file_flags, dir_fd=source_fd)
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Failed to open staged Zarr file safely: {source_child}"
+                ) from exc
+            try:
+                file_stat = os.fstat(file_fd)
+                if not stat.S_ISREG(file_stat.st_mode):
+                    raise RuntimeError(
+                        f"Staged Zarr entry changed during copy: {source_child}"
+                    )
+                if destination_child.exists():
+                    raise RuntimeError(
+                        f"Managed-repository destination already exists: {destination_child}"
+                    )
+                _copy_file_descriptor_to_path(file_fd, destination_child)
+            finally:
+                os.close(file_fd)
+    finally:
+        os.close(source_fd)
+
+
+def _copytree_without_following_symlinks_portable(
+    source: Path, destination: Path
+) -> None:
+    """Copy a directory tree with per-entry symlink checks for non-POSIX tests.
+
+    Inputs: `source`, `destination`. Output: None.
+    """
+    destination.mkdir(exist_ok=True)
+    for entry in source.iterdir():
+        destination_child = destination / entry.name
+        if entry.is_symlink():
+            raise RuntimeError(f"Symlinks are not allowed in staged Zarrs: {entry}")
+        if entry.is_dir():
+            _copytree_without_following_symlinks_portable(entry, destination_child)
+            continue
+        if not entry.is_file():
+            raise RuntimeError(
+                f"Special files are not allowed in staged Zarrs: {entry}"
+            )
+        if destination_child.exists():
+            raise RuntimeError(
+                f"Managed-repository destination already exists: {destination_child}"
+            )
+        with entry.open("rb") as source_handle:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            destination_fd = os.open(destination_child, flags, _STAGED_FILE_MODE)
+            try:
+                with os.fdopen(destination_fd, "wb") as destination_handle:
+                    destination_fd = -1
+                    shutil.copyfileobj(source_handle, destination_handle)
+            finally:
+                if destination_fd >= 0:
+                    os.close(destination_fd)
+
+
+def _copytree_without_following_symlinks(source: Path, destination: Path) -> None:
+    """Copy a staged Zarr tree without following source symlinks.
+
+    Inputs: `source`, `destination`. Output: None.
+    """
+    if os.name == "posix" and hasattr(os, "O_NOFOLLOW"):
+        _copytree_without_following_symlinks_posix(source, destination)
+        return
+    _copytree_without_following_symlinks_portable(source, destination)
+
+
 def _stage_zarr(
     conn: BlitzGateway,
     config: dict[str, str],
@@ -701,7 +919,7 @@ def _stage_zarr(
                 f"Managed-repository prefix path is not a directory: {directory}"
             )
         _set_prefix_directory_mode(directory)
-    shutil.copytree(source, destination, dirs_exist_ok=True)
+    _copytree_without_following_symlinks(source, destination)
     _normalize_tree_permissions(destination)
     return destination
 
@@ -817,6 +1035,7 @@ def run_script():
             raise RuntimeError(
                 "Action must be one of: " + ", ".join(sorted(_SUPPORTED_ACTIONS))
             )
+        group_name, username = _authorized_template_identity(conn, group_name, username)
 
         if action == _ACTION_STAGE:
             managed_path = _stage_zarr(

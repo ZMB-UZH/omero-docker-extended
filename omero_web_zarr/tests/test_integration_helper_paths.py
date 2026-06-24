@@ -690,7 +690,7 @@ def test_store_backed_render_helpers_cover_metadata_ranges_and_downloads(monkeyp
     download = integration._store_backed_render_response(image, request, download=True)
     assert download["Content-Type"] == "application/force-download"
     assert download["Content-Length"] == "7"
-    assert download["Content-Disposition"].endswith("demo.zarr.png")
+    assert download["Content-Disposition"] == 'attachment; filename="demo.zarr.png"'
 
     contrast_node = SimpleNamespace(
         metadata={"contrast_limits": [[2, 8], [1, 9]]},

@@ -6,6 +6,7 @@ set -euo pipefail
 PREBUILT_IMAGE_REPOSITORY="${PREBUILT_IMAGE_REPOSITORY:-strmt7/omero-docker-extended}"
 PREBUILT_IMAGE_RELEASE="${PREBUILT_IMAGE_RELEASE:-}"
 PREBUILT_IMAGE_REF="${PREBUILT_IMAGE_REF:-}"
+PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST:-}"
 OMERO_TMP_PATH="${OMERO_TMP_PATH:-}"
 MANIFEST_CONTAINER_PATH="/omero-prebuilt/prebuilt-manifest.json"
 BUNDLE_CONTAINER_PATH="/omero-prebuilt/runtime-images.tar.gz"
@@ -34,23 +35,70 @@ validate_image_component() {
     esac
 }
 
+# Validate and print a Docker content digest. Inputs: shell arguments. Output: digest on stdout or process termination.
+normalize_sha256_digest() {
+    local label="$1"
+    local value="$2"
+    local hex_digest=""
+
+    [ -n "${value}" ] || fail "${label} cannot be empty."
+    case "${value}" in
+        sha256:*)
+            hex_digest="${value#sha256:}"
+            ;;
+        *)
+            fail "${label} must use sha256:<64 lowercase hex characters>."
+            ;;
+    esac
+    [ "${#hex_digest}" -eq 64 ] || fail "${label} must contain exactly 64 lowercase hex characters."
+    case "${hex_digest}" in
+        *[!0-9a-f]*)
+            fail "${label} must contain only lowercase hexadecimal characters."
+            ;;
+    esac
+    printf '%s' "${value}"
+}
+
 # Resolve the carrier image reference. Inputs: shell arguments and environment. Output: stdout image reference or process termination.
 resolve_carrier_image_ref() {
+    local carrier_digest=""
+
     if [ -n "${PREBUILT_IMAGE_REF}" ]; then
         validate_image_component "PREBUILT_IMAGE_REF" "${PREBUILT_IMAGE_REF}"
-        printf '%s' "${PREBUILT_IMAGE_REF}"
+        case "${PREBUILT_IMAGE_REF}" in
+            *@sha256:*)
+                carrier_digest="${PREBUILT_IMAGE_REF##*@}"
+                normalize_sha256_digest "PREBUILT_IMAGE_REF digest" "${carrier_digest}" >/dev/null
+                printf '%s' "${PREBUILT_IMAGE_REF}"
+                ;;
+            *)
+                carrier_digest="$(normalize_sha256_digest "PREBUILT_IMAGE_DIGEST" "${PREBUILT_IMAGE_DIGEST}")"
+                printf '%s@%s' "${PREBUILT_IMAGE_REF}" "${carrier_digest}"
+                ;;
+        esac
         return 0
     fi
 
     validate_image_component "PREBUILT_IMAGE_REPOSITORY" "${PREBUILT_IMAGE_REPOSITORY}"
     validate_image_component "PREBUILT_IMAGE_RELEASE" "${PREBUILT_IMAGE_RELEASE}"
-    printf '%s:%s' "${PREBUILT_IMAGE_REPOSITORY}" "${PREBUILT_IMAGE_RELEASE}"
+    carrier_digest="$(normalize_sha256_digest "PREBUILT_IMAGE_DIGEST" "${PREBUILT_IMAGE_DIGEST}")"
+    printf '%s:%s@%s' "${PREBUILT_IMAGE_REPOSITORY}" "${PREBUILT_IMAGE_RELEASE}" "${carrier_digest}"
+}
+
+# Extract the digest from the resolved carrier ref. Inputs: shell arguments. Output: digest on stdout.
+carrier_ref_digest() {
+    local ref="$1"
+    local digest="${ref##*@}"
+
+    [ "${digest}" != "${ref}" ] || fail "Resolved carrier image reference is not digest-pinned."
+    normalize_sha256_digest "resolved carrier digest" "${digest}"
 }
 
 [ -n "${OMERO_TMP_PATH}" ] || fail "OMERO_TMP_PATH is required."
 [ -d "${OMERO_TMP_PATH}" ] || fail "OMERO_TMP_PATH does not exist: ${OMERO_TMP_PATH}"
 
 carrier_ref="$(resolve_carrier_image_ref)"
+expected_carrier_digest="$(carrier_ref_digest "${carrier_ref}")"
 work_dir="$(mktemp -d "${OMERO_TMP_PATH%/}/prebuilt-carrier.XXXXXX")"
 container_name="omero-prebuilt-carrier-$$-$(date -u +%s)"
 required_images_file="${work_dir}/required-images.txt"
@@ -73,6 +121,10 @@ stream_carrier_bundle() {
 
 echo "Pulling prebuilt carrier image: ${carrier_ref}"
 docker pull "${carrier_ref}"
+if ! docker image inspect "${carrier_ref}" --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+    | grep -F "@${expected_carrier_digest}" >/dev/null; then
+    fail "Pulled carrier image does not expose the expected digest: ${expected_carrier_digest}"
+fi
 
 docker create --name "${container_name}" "${carrier_ref}" >/dev/null
 docker cp "${container_name}:${MANIFEST_CONTAINER_PATH}" "${manifest_path}"

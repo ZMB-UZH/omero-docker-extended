@@ -501,6 +501,12 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "must be a positive integer",
             ),
             ("BIOFORMATS_VERSION", "@bad", "@bad", "must be a non-empty version"),
+            (
+                "BIOFORMATS_SHA256",
+                "ABC",
+                "ABC",
+                "must be a 64-character lowercase SHA-256 digest",
+            ),
         ]
 
         for key, raw_value, resolved_value, expected_error in invalid_cases:
@@ -527,6 +533,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
             ("ADMIN_TOOLS_LOG_CACHE_MAX_MB", "0", "0"),
             ("OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS", "1", "1"),
             ("BIOFORMATS_VERSION", "8.5.0", "8.5.0"),
+            ("BIOFORMATS_SHA256", "a" * 64, "a" * 64),
         ]
 
         for key, raw_value, resolved_value in valid_cases:
@@ -732,6 +739,8 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 return "0"
             if key.endswith(env_safety_guard.POSITIVE_INTEGER_SUFFIXES):
                 return "1"
+            if key.endswith("_SHA256"):
+                return "a" * 64
             if key.endswith("_VERSION"):
                 return "1.0.0"
             return "value"

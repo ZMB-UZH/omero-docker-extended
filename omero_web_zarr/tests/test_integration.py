@@ -840,6 +840,32 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
         "level": 1,
     }
 
+    captured.clear()
+    region_request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/",
+        {"region": "1,2,2048,2048"},
+    )
+    response = integration._store_backed_region_response(
+        image,
+        region_request,
+        z=3,
+        t=0,
+        conn=SimpleNamespace(
+            getConfigService=lambda: SimpleNamespace(getConfigValue=lambda key: "128")
+        ),
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "x": 1,
+        "y": 2,
+        "width": 128,
+        "height": 128,
+        "z": 3,
+        "t": 0,
+        "level": 0,
+    }
+
 
 class _FakeConfigService:
     """Test double for fake config service."""
@@ -1690,7 +1716,9 @@ def test_store_backed_render_response_and_pixel_helpers_cover_download_paths(
 
     assert response.status_code == 200
     assert response["Content-Length"] == "11"
-    assert response["Content-Disposition"] == "attachment; filename=demo_image.zarr.png"
+    assert (
+        response["Content-Disposition"] == 'attachment; filename="demo_image.zarr.png"'
+    )
 
     contrast_node = type(
         "Node",

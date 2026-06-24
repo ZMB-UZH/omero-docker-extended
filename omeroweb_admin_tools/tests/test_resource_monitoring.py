@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory
 
+import omeroweb_admin_tools.views.index_view as index_view
 from omeroweb_admin_tools.views.index_view import (
     logs_data,
     resource_monitoring_data,
@@ -15,6 +16,7 @@ from omeroweb_admin_tools.views.index_view import (
     _build_proxy_target_url,
     _build_public_service_url,
     _build_target_service_status,
+    _collect_proxy_headers,
     _is_internal_hostname,
     _is_behind_reverse_proxy,
     _load_compose_service_names,
@@ -26,6 +28,7 @@ from omeroweb_admin_tools.views.index_view import (
     _grafana_backend_auth_headers,
     _grafana_proxy_home_fallback_response,
     _inject_proxy_csrf_bridge,
+    _filtered_proxy_cookie_header,
     _rewrite_proxied_location,
     _send_proxy_backend_request,
 )
@@ -352,10 +355,13 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     }
 
 
-def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> None:
-    """Verify the proxy HTTP request forwards auth and cookie headers safety boundary.
+def test_proxy_http_request_strips_browser_auth_and_unlisted_cookies(
+    monkeypatch,
+) -> None:
+    """Verify proxy requests do not forward browser credentials to backends.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when proxy HTTP request forwards auth and cookie headers accepts unsafe input.
+    Inputs: pytest provides `monkeypatch`. Output: fails on credential-forwarding
+    regressions.
     """
     captured = {}
 
@@ -387,7 +393,7 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
         headers = {
             "Accept": "application/json",
             "Authorization": "Bearer test-token",
-            "Cookie": "grafana_session=existing",
+            "Cookie": "sessionid=omero-session; csrftoken=django-csrf",
             "Origin": "https://omero.example.org",
             "Referer": "https://omero.example.org/omeroweb_admin_tools/resource-monitoring/",
         }
@@ -401,12 +407,64 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
     assert response.status_code == 200
     assert "grafana_session" in response.cookies
     assert response.cookies["grafana_session"].value == "abc123"
-    assert captured["headers"]["Authorization"] == "Bearer test-token"
-    assert captured["headers"]["Cookie"] == "grafana_session=existing"
+    assert "Authorization" not in captured["headers"]
+    assert "Cookie" not in captured["headers"]
     assert captured["headers"]["Origin"] == "https://omero.example.org"
     assert (
         captured["headers"]["Referer"]
         == "https://omero.example.org/omeroweb_admin_tools/resource-monitoring/"
+    )
+
+
+def test_build_proxy_headers_can_forward_explicit_auth_and_filters_bad_cookie():
+    """Verify explicit auth forwarding remains opt-in and malformed cookies are dropped.
+
+    Inputs: none. Output: asserts filtered proxy headers.
+    """
+
+    class DummyDjangoRequest:
+        """Test double for proxy header extraction."""
+
+        headers = {
+            "Authorization": "Bearer backend-token",
+            "Cookie": "broken-cookie-without-equals",
+        }
+
+    headers = _collect_proxy_headers(
+        DummyDjangoRequest(),
+        extra_forwarded_headers=(),
+        forward_authorization=True,
+        allowed_cookie_names=frozenset({"grafana_session"}),
+    )
+
+    assert headers == {"Authorization": "Bearer backend-token"}
+
+
+def test_filtered_proxy_cookie_header_fails_closed_on_parse_error(monkeypatch) -> None:
+    """Verify Cookie parsing errors are not forwarded to Grafana.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts malformed cookies are dropped.
+    """
+
+    class _BadCookie:
+        """SimpleCookie replacement that raises the parser's documented error."""
+
+        @staticmethod
+        def load(_value):
+            """Raise a cookie parse error.
+
+            Inputs: ignored cookie value. Output: raises CookieError.
+            """
+            raise index_view.CookieError("bad cookie")
+
+    monkeypatch.setattr(index_view, "SimpleCookie", _BadCookie)
+
+    assert (
+        _filtered_proxy_cookie_header(
+            "grafana_session=value",
+            allowed_cookie_names=frozenset({"grafana_session"}),
+        )
+        == ""
     )
 
 
@@ -1228,6 +1286,9 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
         forced_backend_headers=None,
+        allowed_cookie_names=(),
+        allowed_cookie_prefixes=(),
+        forward_authorization=False,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
@@ -1299,6 +1360,9 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
         forced_backend_headers=None,
+        allowed_cookie_names=(),
+        allowed_cookie_prefixes=(),
+        forward_authorization=False,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
@@ -1367,6 +1431,9 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
         forced_backend_headers=None,
+        allowed_cookie_names=(),
+        allowed_cookie_prefixes=(),
+        forward_authorization=False,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
@@ -1506,6 +1573,9 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         rewrite_origin_headers=False,
         extra_forwarded_headers=(),
         forced_backend_headers=None,
+        allowed_cookie_names=(),
+        allowed_cookie_prefixes=(),
+        forward_authorization=False,
     ):
         """Simulate proxy HTTP request so the surrounding test controls that dependency.
 
@@ -2226,7 +2296,10 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Cookie": "grafana_csrf_token=tok123; grafana_session=sess456",
+            "Cookie": (
+                "sessionid=omero-session; grafana_csrf_token=tok123; "
+                "grafana_session=sess456"
+            ),
             "X-Grafana-Csrf-Token": "tok123",
         }
 
@@ -2235,6 +2308,7 @@ def test_proxy_http_request_forwards_extra_headers(monkeypatch) -> None:
         "https://grafana:3000",
         "login",
         extra_forwarded_headers=("X-Grafana-Csrf-Token",),
+        allowed_cookie_prefixes=("grafana_",),
     )
 
     assert response.status_code == 200

@@ -58,6 +58,11 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             "bootstrap_installation_checkout_if_missing() {",
             cls.script_text,
         )
+        cls.installation_paths_writer_block = cls._extract_script_block(
+            "quote_installation_env_value() {",
+            "# Validate path is preparable.",
+            cls.script_text,
+        )
 
     @classmethod
     def _extract_script_block(
@@ -217,6 +222,63 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Invalid environment variable name", result.stderr)
+
+    def test_installation_paths_writer_quotes_shell_sourced_paths(self) -> None:
+        """Verify generated installation paths cannot execute shell metacharacters.
+
+        Inputs: repository fixtures. Output: fails on generated env quoting
+        regressions.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            env_file = temp_path / "installation_paths.env"
+            marker_file = temp_path / "should-not-exist"
+            result = self._run_harness(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/bash
+                    set -euo pipefail
+                    {self.installation_paths_writer_block}
+                    OMERO_INSTALLATION_PATH="/tmp/omero; touch {marker_file}"
+                    OMERO_DATABASE_PATH="${{OMERO_INSTALLATION_PATH}}/postgresdb/omero_database"
+                    OMERO_PLUGIN_DATABASE_PATH="${{OMERO_INSTALLATION_PATH}}/postgresdb/plugin_database"
+                    OMERO_DATA_PATH="/tmp/omero data; touch {marker_file}"
+                    OMERO_TMP_PATH="/tmp/omero tmp; touch {marker_file}"
+                    OMERO_DATA_DIR="${{OMERO_DATA_PATH}}/OMERO"
+                    OMERO_USER_DATA_PATH="${{OMERO_DATA_PATH}}/omero_user_data"
+                    OMERO_IMPORT_PATH="${{OMERO_TMP_PATH}}/omeroweb-import"
+                    OMERO_SERVER_VAR_PATH="${{OMERO_DATA_PATH}}/omero_server_var"
+                    OMERO_WEB_VAR_PATH="${{OMERO_DATA_PATH}}/omero_web_var"
+                    OMERO_SERVER_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_server_logs"
+                    OMERO_WEB_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_web_logs"
+                    OMERO_WEB_SUPERVISOR_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_web_supervisor_logs"
+                    PROMETHEUS_DATA_PATH="${{OMERO_DATA_PATH}}/prometheus_data"
+                    GRAFANA_DATA_PATH="${{OMERO_DATA_PATH}}/grafana_data"
+                    PORTAINER_DATA_PATH="${{OMERO_DATA_PATH}}/portainer_data"
+                    LOKI_DATA_PATH="${{OMERO_DATA_PATH}}/loki_data"
+                    ALLOY_DATA_PATH="${{OMERO_DATA_PATH}}/alloy_data"
+                    PG_MAINTENANCE_DATA_PATH="${{OMERO_DATA_PATH}}/pg_maintenance_data"
+                    BUILDX_DATA_PATH="${{OMERO_DATA_PATH}}/buildx_cache"
+                    NODE_EXPORTER_TEXTFILE_PATH="${{OMERO_DATA_PATH}}/node_exporter_textfile"
+                    CROWDSEC_DB_PATH="${{OMERO_DATA_PATH}}/crowdsec_db"
+                    CROWDSEC_CONFIG_PATH="${{OMERO_DATA_PATH}}/crowdsec_config"
+                    write_installation_paths_env "{env_file}"
+                    verify_installation_paths_env_content "{env_file}"
+                    . "{env_file}"
+                    printf 'INSTALL=%s\\n' "${{OMERO_INSTALLATION_PATH}}"
+                    printf 'USER_DATA=%s\\n' "${{OMERO_USER_DATA_PATH}}"
+                    test ! -e "{marker_file}"
+                    """
+                )
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(marker_file.exists())
+            self.assertIn(f"INSTALL=/tmp/omero; touch {marker_file}", result.stdout)
+            self.assertIn(
+                f"USER_DATA=/tmp/omero data; touch {marker_file}/omero_user_data",
+                result.stdout,
+            )
 
     def test_env_assignment_resolver_expands_safe_references_without_eval(
         self,

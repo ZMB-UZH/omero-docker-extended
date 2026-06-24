@@ -459,31 +459,40 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "WORKER_CALLS_FILE": str(calls_file),
                 "OMERO_WEB_ROOT": str(web_root),
                 "OMERO_WEB_VENV": "venv-3.12",
-                "OMERO_WEB_RUNTIME_USER": "root"
-                if os.geteuid() == 0
-                else os.environ.get("USER", ""),
+                "OMERO_WEB_RUNTIME_USER": "root",
             }
 
-            subprocess.run(
+            imaris_result = subprocess.run(
                 [BASH_BIN, str(self.imaris_worker_script)],
                 check=True,
                 env={
                     **common_env,
+                    "OMERO_IMS_CELERY_BROKER_URL": "redis://:imaris-secret@redis:6379/2",
                     "OMERO_IMS_CELERY_QUEUE": "imaris",
                     "OMERO_IMS_CELERY_LOGLEVEL": "info",
                     "OMERO_IMS_CELERY_WORKER_CONCURRENCY": "1",
                 },
+                text=True,
+                capture_output=True,
             )
-            subprocess.run(
+            tools_result = subprocess.run(
                 [BASH_BIN, str(self.tools_worker_script)],
                 check=True,
                 env={
                     **common_env,
+                    "TOOLS_ENHANCED_SEARCH_CELERY_BROKER_URL": "redis://tools:tools-secret@redis:6379/3",
                     "TOOLS_ENHANCED_SEARCH_CELERY_QUEUE": "enhanced_search",
                     "TOOLS_ENHANCED_SEARCH_CELERY_LOGLEVEL": "info",
                     "TOOLS_ENHANCED_SEARCH_CELERY_WORKER_CONCURRENCY": "1",
                 },
+                text=True,
+                capture_output=True,
             )
+            combined_stdout = imaris_result.stdout + tools_result.stdout
+            self.assertIn("redis://[redacted]@redis:6379/2", combined_stdout)
+            self.assertIn("redis://[redacted]@redis:6379/3", combined_stdout)
+            self.assertNotIn("imaris-secret", combined_stdout)
+            self.assertNotIn("tools-secret", combined_stdout)
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertIn(
@@ -503,6 +512,22 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         Inputs: repository fixture. Output: fails on root-worker regressions.
         """
         script_text = self.imaris_worker_script.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"',
+            script_text,
+        )
+        self.assertIn(
+            'runuser -p -m -u "${runtime_user}" -- "${BASH_SOURCE[0]}" "$@"',
+            script_text,
+        )
+
+    def test_tools_worker_drops_root_before_starting_celery(self) -> None:
+        """Verify Tools Celery worker does not run enhanced-search tasks as root.
+
+        Inputs: repository fixture. Output: fails on root-worker regressions.
+        """
+        script_text = self.tools_worker_script.read_text(encoding="utf-8")
 
         self.assertIn(
             'runtime_user="${OMERO_WEB_RUNTIME_USER:-${OMERO_WEB_RUN_USER:-omero-web}}"',

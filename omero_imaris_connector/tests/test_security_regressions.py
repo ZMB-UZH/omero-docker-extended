@@ -387,12 +387,12 @@ def test_build_failure_meta_uses_generic_error_message(
     assert "password leaked" not in json.dumps(payload)
 
 
-def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_service_mode(
+def test_run_ims_export_task_prefers_user_session_connection_for_api_in_job_service_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify the run IMS export task prefers user session key for CLI even in job service mode execution contract.
+    """Verify IMS export prefers the requester connection in job-service mode.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run IMS export task prefers user session key for CLI even in job service mode.
+    Inputs: pytest provides `monkeypatch`. Output: fails on requester-session regressions.
     """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
@@ -433,7 +433,7 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 99)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **kwargs: (
             captured.update(kwargs)
             or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
@@ -451,17 +451,18 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
 
     assert result["state"] == "FINISHED"
     assert session_calls == [("user-session", configured_host, configured_port, True)]
-    assert captured["session_key"] == "user-session"
+    assert captured["conn"] is dummy_conn
+    assert "session_key" not in captured
     assert "username" not in captured
     assert "password" not in captured
 
 
-def test_run_ims_export_task_uses_cli_with_user_session_key(
+def test_run_ims_export_task_uses_api_with_user_session_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify the run IMS export task uses CLI with user session key execution contract.
+    """Verify IMS export runs ScriptService through the requester connection.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run IMS export task uses CLI with user session key.
+    Inputs: pytest provides `monkeypatch`. Output: fails on requester API regressions.
     """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
@@ -478,7 +479,7 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 101)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **kwargs: (
             captured.update(kwargs)
             or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
@@ -495,17 +496,18 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
     )
 
     assert result["state"] == "FINISHED"
-    assert captured["session_key"] == "user-session"
+    assert captured["conn"] is dummy_conn
+    assert "session_key" not in captured
     assert captured["script_id"] == 101
     assert captured["image_id"] == 6
 
 
-def test_run_ims_export_task_uses_job_service_session_key_when_user_session_missing(
+def test_run_ims_export_task_uses_job_service_connection_when_user_session_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify run IMS export task uses job service session key when user session missing.
+    """Verify IMS export uses the job-service connection when requester session is absent.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions in run IMS export task uses job service session key when user session missing.
+    Inputs: pytest provides `monkeypatch`. Output: fails on job-service API regressions.
     """
     tasks, _views = _import_modules(monkeypatch)
     captured = {}
@@ -525,7 +527,7 @@ def test_run_ims_export_task_uses_job_service_session_key_when_user_session_miss
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 202)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **kwargs: (
             captured.update(kwargs)
             or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
@@ -542,6 +544,7 @@ def test_run_ims_export_task_uses_job_service_session_key_when_user_session_miss
     )
 
     assert result["state"] == "FINISHED"
-    assert captured["session_key"] == "job-service-session"
+    assert captured["conn"] is dummy_conn
+    assert "session_key" not in captured
     assert captured["script_id"] == 202
     assert captured["image_id"] == 7

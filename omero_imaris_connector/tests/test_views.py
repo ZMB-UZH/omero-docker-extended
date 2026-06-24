@@ -643,7 +643,21 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
     """
     views = _import_views()
     dispatched = {}
+    stored_handoffs = []
+    deleted_handoffs = []
     monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
+    monkeypatch.setattr(
+        views,
+        "store_export_session_key",
+        lambda ref, session_key, ttl_seconds=None: (
+            stored_handoffs.append((ref, session_key, ttl_seconds)) or f"ref-{ref}"
+        ),
+    )
+    monkeypatch.setattr(
+        views,
+        "delete_export_session_key",
+        lambda ref: deleted_handoffs.append(ref),
+    )
     monkeypatch.setattr(
         views, "_resolve_omero_host_port", lambda conn: ("omeroserver", 4064)
     )
@@ -651,43 +665,59 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
     monkeypatch.setattr(
         views.run_ims_export_task,
         "apply_async",
-        lambda kwargs, queue: dispatched.setdefault(
+        lambda kwargs, queue, task_id: dispatched.setdefault(
             "ims",
-            SimpleNamespace(id="task-123", kwargs=kwargs, queue=queue),
+            SimpleNamespace(
+                id=task_id,
+                kwargs=kwargs,
+                queue=queue,
+                task_id=task_id,
+            ),
         ),
         raising=False,
     )
     monkeypatch.setattr(
         views.run_ome_tiff_export_task,
         "apply_async",
-        lambda kwargs, queue: dispatched.setdefault(
+        lambda kwargs, queue, task_id: dispatched.setdefault(
             "ome",
-            SimpleNamespace(id="task-456", kwargs=kwargs, queue=queue),
+            SimpleNamespace(
+                id=task_id,
+                kwargs=kwargs,
+                queue=queue,
+                task_id=task_id,
+            ),
         ),
         raising=False,
     )
 
-    assert views._start_celery_job(SimpleNamespace(), 17) == "celery-task-123"
+    ims_job_id = views._start_celery_job(SimpleNamespace(), 17)
+    ims_task_id = dispatched["ims"].task_id
+    assert ims_job_id == f"celery-{ims_task_id}"
     assert dispatched["ims"].kwargs == {
         "image_id": 17,
-        "session_key": "session-key",
         "host": "omeroserver",
         "port": 4064,
         "secure": True,
         "owner_token": views._hash_job_owner_token("session-key"),
+        "session_ref": f"ref-{ims_task_id}",
     }
+    assert "session_key" not in dispatched["ims"].kwargs
     assert (
         views._start_celery_job(
             SimpleNamespace(),
             18,
             export_format=views.EXPORT_FORMAT_OME_TIFF,
         )
-        == "celery-task-456"
+        == f"celery-{dispatched['ome'].task_id}"
     )
     assert dispatched["ome"].kwargs["image_id"] == 18
     assert dispatched["ome"].kwargs["owner_token"] == views._hash_job_owner_token(
         "session-key"
     )
+    assert "session_key" not in dispatched["ome"].kwargs
+    assert deleted_handoffs == []
+    assert len(stored_handoffs) == 2
 
     monkeypatch.setattr(views, "_get_session_key", lambda conn: None)
     with pytest.raises(RuntimeError, match="session key unavailable"):
@@ -699,6 +729,29 @@ def test_start_celery_job_validates_connection_metadata_and_dispatches(monkeypat
     )
     with pytest.raises(RuntimeError, match="out of range"):
         views._start_celery_job(SimpleNamespace(), 17)
+
+    failed_dispatch = {}
+
+    def fail_apply_async(kwargs, queue, task_id):
+        """Capture the dispatch ref and simulate a broker failure.
+
+        Inputs: task kwargs, queue name, and task id. Output: raises RuntimeError.
+        """
+        failed_dispatch.update({"kwargs": kwargs, "queue": queue, "task_id": task_id})
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(
+        views, "_resolve_omero_host_port", lambda conn: ("omeroserver", 4064)
+    )
+    monkeypatch.setattr(
+        views.run_ims_export_task,
+        "apply_async",
+        fail_apply_async,
+        raising=False,
+    )
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        views._start_celery_job(SimpleNamespace(), 19)
+    assert failed_dispatch["kwargs"]["session_ref"] == deleted_handoffs[-1]
 
 
 def test_export_job_owner_registry_rejects_other_sessions(monkeypatch):
@@ -932,6 +985,75 @@ def test_cancel_celery_job_revokes_cli_and_cleans_server_artifacts(
     assert not export_path.exists()
     assert not partial_path.exists()
     assert str(export_root) not in serialized
+
+
+def test_cancel_celery_job_keeps_script_service_worker_alive_for_cleanup(monkeypatch):
+    """Verify ScriptService exports are cancelled cooperatively by the worker.
+
+    Inputs: pytest provides `monkeypatch`. Output: asserts cancellation avoids worker SIGTERM.
+    """
+    views = _import_views()
+    revoked = []
+
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: (
+            "RUNNING",
+            None,
+            None,
+            {
+                "status": "running_script",
+                "script_backend": "script_service",
+                "owner_token": views._hash_job_owner_token("session-key"),
+            },
+        ),
+    )
+    monkeypatch.setattr(views, "_get_session_key", lambda conn: "session-key")
+    monkeypatch.setattr(
+        views.celery_app,
+        "AsyncResult",
+        lambda task_id: SimpleNamespace(
+            backend=SimpleNamespace(store_result=lambda *_args, **_kwargs: None),
+            forget=lambda: None,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        views.celery_app,
+        "control",
+        SimpleNamespace(
+            revoke=lambda task_id, terminate, signal: revoked.append(
+                (task_id, terminate, signal)
+            )
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        views, "mark_export_task_cancel_requested", lambda task_id: None
+    )
+    monkeypatch.setattr(
+        views,
+        "_remove_queued_redis_task",
+        lambda task_id: {"broker_queue_removal_attempted": False},
+    )
+    monkeypatch.setattr(
+        views,
+        "_terminate_export_cli_process",
+        lambda meta: {"local_cli_termination_attempted": False},
+    )
+    monkeypatch.setattr(
+        views,
+        "_cleanup_cancelled_export",
+        lambda conn, outputs, meta: {"export_file_removed": False},
+    )
+    monkeypatch.setattr(views, "_delete_export_job_owner", lambda job_id: None)
+
+    payload = views._cancel_celery_job("celery-task-123", SimpleNamespace())
+
+    assert payload["ok"] is True
+    assert payload["cancelled"] is True
+    assert revoked == [("task-123", False, "SIGTERM")]
 
 
 def test_terminate_export_cli_process_prefers_process_group(monkeypatch):
@@ -1860,7 +1982,7 @@ def test_terminate_export_cli_process_refuses_stale_or_unmatched_processes(
     assert sleep_calls == [views.IMS_EXPORT_CLI_TERMINATION_POLL_SECONDS]
     assert signals == [(345, views.signal.SIGTERM)]
 
-    time_values = iter([0.0, 0.2])
+    time_values = iter([0.0, 0.2, 0.2, 0.2])
     monkeypatch.setattr(views.time, "time", lambda: next(time_values))
     monkeypatch.setattr(
         views.os,

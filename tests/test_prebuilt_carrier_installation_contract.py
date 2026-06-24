@@ -8,6 +8,7 @@ import ast
 import gzip
 import io
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -22,6 +23,7 @@ from tools import write_prebuilt_runtime_archive
 
 
 VALID_RELEASE_VERSION = "1.0.0-main.1"
+VALID_CARRIER_DIGEST = "sha256:" + ("a" * 64)
 
 
 class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
@@ -46,6 +48,51 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         """
         return (self.repo_root / relative_path).read_text(encoding="utf-8")
 
+    def bash_path_arg(self, path: Path) -> str:
+        """Return a path argument that Git Bash can open on Windows.
+
+        Inputs: platform path. Output: POSIX path for Windows bash, else native path.
+        """
+        path_text = str(path)
+        if os.name != "nt":
+            return path_text
+        drive, rest = os.path.splitdrive(path_text)
+        if not drive:
+            return path_text.replace("\\", "/")
+        posix_rest = rest.replace("\\", "/")
+        if str(self.bash_path).lower().endswith("\\system32\\bash.exe"):
+            return f"/mnt/{drive[0].lower()}{posix_rest}"
+        return f"/{drive[0].lower()}{posix_rest}"
+
+    def run_bash_script(
+        self,
+        script_path: Path,
+        *,
+        env_vars: dict[str, str] | None = None,
+        stdin: object | None = None,
+        no_controlling_tty: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a bash script with env assignment visible to WSL bash.
+
+        Inputs: script path and optional variables. Output: completed process.
+        """
+        assignments = " ".join(
+            f"{name}={shlex.quote(value)}" for name, value in (env_vars or {}).items()
+        )
+        script_arg = shlex.quote(self.bash_path_arg(script_path))
+        command = f"{assignments} {script_arg}" if assignments else script_arg
+        if no_controlling_tty:
+            command = f"setsid --wait bash -lc {shlex.quote(command)}"
+        return subprocess.run(
+            [self.bash_path, "-lc", command],
+            cwd=self.repo_root,
+            stdin=stdin,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
     def write_synthetic_easy_root(
         self,
         root: Path,
@@ -68,6 +115,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         easy_script.write_text(
             self.read_text("installation/easy_installation_script.sh"),
             encoding="utf-8",
+            newline="\n",
         )
         (installation / "installation_script.sh").write_text(
             installer_text
@@ -78,13 +126,16 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 "run_prebuilt_image_load() { :; }\n"
                 "printf 'mode=%s\\n' \"${PREBUILT_IMAGE_MODE}\"\n"
                 "printf 'release=%s\\n' \"${PREBUILT_IMAGE_RELEASE}\"\n"
+                "printf 'digest=%s\\n' \"${PREBUILT_IMAGE_DIGEST}\"\n"
             ),
             encoding="utf-8",
+            newline="\n",
         )
         if loader:
             (installation / "load_prebuilt_carrier.sh").write_text(
                 "#!/usr/bin/env bash\nexit 0\n",
                 encoding="utf-8",
+                newline="\n",
             )
         (tools / "prebuilt_release_metadata.py").write_text(
             metadata_text
@@ -97,13 +148,16 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 "raise SystemExit(0 if ok else 1)\n"
             ),
             encoding="utf-8",
+            newline="\n",
         )
         if env_guard:
             (tools / "env_safety_guard.py").write_text(
-                "# synthetic\n", encoding="utf-8"
+                "# synthetic\n", encoding="utf-8", newline="\n"
             )
         if compose:
-            (root / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+            (root / "docker-compose.yml").write_text(
+                "services: {}\n", encoding="utf-8", newline="\n"
+            )
         for path in installation.iterdir():
             path.chmod(0o755)
         for path in tools.iterdir():
@@ -140,8 +194,13 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         script = self.read_text("installation/easy_installation_script.sh")
 
         self.assertIn("prompt_release_version()", script)
+        self.assertIn("prompt_carrier_digest()", script)
         self.assertIn("Which prebuilt docker image tag should be installed?", script)
+        self.assertIn(
+            "What is the sha256 digest for that prebuilt carrier image?", script
+        )
         self.assertIn("PREBUILT_IMAGE_RELEASE is required", script)
+        self.assertIn("PREBUILT_IMAGE_DIGEST is required", script)
         self.assertIn("RELEASE_METADATA_TOOL", script)
         self.assertIn("require_easy_installation_support()", script)
         self.assertIn("load_prebuilt_carrier.sh", script)
@@ -167,18 +226,13 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 installer_text="#!/usr/bin/env bash\necho old installer\n",
             )
 
-            result = subprocess.run(
-                [self.bash_path, str(easy_script)],
-                cwd=root,
-                env={
-                    **os.environ,
+            result = self.run_bash_script(
+                easy_script,
+                env_vars={
                     "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
+                    "PREBUILT_IMAGE_DIGEST": VALID_CARRIER_DIGEST,
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
             )
 
         self.assertEqual(result.returncode, 1)
@@ -195,36 +249,27 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             root = Path(tmp_dir)
             easy_script = self.write_synthetic_easy_root(root)
 
-            valid_result = subprocess.run(
-                [self.bash_path, str(easy_script)],
-                cwd=root,
-                env={
-                    **os.environ,
+            valid_result = self.run_bash_script(
+                easy_script,
+                env_vars={
                     "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
+                    "PREBUILT_IMAGE_DIGEST": VALID_CARRIER_DIGEST,
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
             )
-            invalid_result = subprocess.run(
-                [self.bash_path, str(easy_script)],
-                cwd=root,
-                env={
-                    **os.environ,
+            invalid_result = self.run_bash_script(
+                easy_script,
+                env_vars={
                     "PREBUILT_IMAGE_RELEASE": f"v{VALID_RELEASE_VERSION}",
+                    "PREBUILT_IMAGE_DIGEST": VALID_CARRIER_DIGEST,
                     "INSTALLATION_AUTOMATION_MODE": "1",
                 },
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
             )
 
         self.assertEqual(valid_result.returncode, 0, valid_result.stderr)
         self.assertIn("mode=require", valid_result.stdout)
         self.assertIn(f"release={VALID_RELEASE_VERSION}", valid_result.stdout)
+        self.assertIn(f"digest={VALID_CARRIER_DIGEST}", valid_result.stdout)
         self.assertEqual(invalid_result.returncode, 1)
         self.assertIn("PREBUILT_IMAGE_RELEASE must be", invalid_result.stderr)
 
@@ -248,18 +293,13 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     root = Path(tmp_dir)
                     easy_script = self.write_synthetic_easy_root(root, **kwargs)
-                    result = subprocess.run(
-                        [self.bash_path, str(easy_script)],
-                        cwd=root,
-                        env={
-                            **os.environ,
+                    result = self.run_bash_script(
+                        easy_script,
+                        env_vars={
                             "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
+                            "PREBUILT_IMAGE_DIGEST": VALID_CARRIER_DIGEST,
                             "INSTALLATION_AUTOMATION_MODE": "1",
                         },
-                        text=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        check=False,
                     )
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(expected_error, result.stderr)
@@ -273,24 +313,14 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             easy_script = self.write_synthetic_easy_root(root)
-            result = subprocess.run(
-                [self.bash_path, str(easy_script)],
-                cwd=root,
-                env={**os.environ, "INSTALLATION_AUTOMATION_MODE": "1"},
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
+            result = self.run_bash_script(
+                easy_script,
+                env_vars={"INSTALLATION_AUTOMATION_MODE": "1"},
             )
-            no_tty_result = subprocess.run(
-                [self.bash_path, str(easy_script)],
-                cwd=root,
-                env={key: value for key, value in os.environ.items() if key != "TERM"},
+            no_tty_result = self.run_bash_script(
+                easy_script,
                 stdin=subprocess.DEVNULL,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
+                no_controlling_tty=True,
             )
 
         self.assertEqual(result.returncode, 1)
@@ -304,6 +334,26 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertNotIn("mode=require", no_tty_result.stdout)
 
+    def test_easy_install_automation_requires_carrier_digest(self) -> None:
+        """Verify unattended easy installs fail closed without a carrier digest.
+
+        Inputs: synthetic root with automation mode. Output: digest-required error.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            easy_script = self.write_synthetic_easy_root(root)
+            result = self.run_bash_script(
+                easy_script,
+                env_vars={
+                    "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
+                    "INSTALLATION_AUTOMATION_MODE": "1",
+                },
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("PREBUILT_IMAGE_DIGEST is required", result.stderr)
+        self.assertNotIn("mode=require", result.stdout)
+
     def test_installer_strict_prebuilt_mode_skips_only_build_prompts(self) -> None:
         """Verify strict prebuilt mode skips only build-image prompts.
 
@@ -312,9 +362,11 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         script = self.read_text("installation/installation_script.sh")
 
         self.assertIn('PREBUILT_IMAGE_MODE="${PREBUILT_IMAGE_MODE:-disabled}"', script)
+        self.assertIn('PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST:-}"', script)
         self.assertIn('case "${PREBUILT_IMAGE_MODE}" in', script)
         self.assertIn('PREBUILT_IMAGE_MODE}" = "require"', script)
         self.assertIn("run_prebuilt_image_load()", script)
+        self.assertIn('PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST}"', script)
         self.assertIn("run_prebuilt_image_load\n        return $?", script)
         self.assertIn("USE_BUILDX_COMPRESSED_BUILD=0", script)
         self.assertIn("USE_CACHE_BUILD=1", script)
@@ -350,7 +402,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
 
     def test_easy_installation_prompt_count_matches_prebuilt_contract(self) -> None:
-        """Verify easy installation keeps exactly ten interactive prompts.
+        """Verify easy installation keeps exactly eleven interactive prompts.
 
         Inputs: installer fixtures. Output: confirms the prebuilt prompt list size.
         """
@@ -375,7 +427,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "Flatten final images into single-layer outputs?",
             "Enable docker image security hardening?",
         }
-        easy_prompts = ["Which prebuilt docker image tag should be installed?"] + [
+        easy_prompts = [
+            "Which prebuilt docker image tag should be installed?",
+            "What is the sha256 digest for that prebuilt carrier image?",
+        ] + [
             prompt for prompt in standard_prompts if prompt not in skipped_for_prebuilt
         ]
 
@@ -386,8 +441,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             with self.subTest(prompt=prompt):
                 self.assertIn(prompt, script)
         self.assertIn(easy_prompts[0], easy_script)
+        self.assertIn(easy_prompts[1], easy_script)
         self.assertEqual(13, len(standard_prompts))
-        self.assertEqual(10, len(easy_prompts))
+        self.assertEqual(11, len(easy_prompts))
         self.assertNotIn("Use build cache?", easy_prompts)
 
     def test_prebuilt_and_standard_installers_share_runtime_flow_after_image_step(
@@ -459,6 +515,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("runtime_images_archive", loader)
         self.assertIn("image_archive_sha256", loader)
         self.assertIn("runtime_images_uncompressed_bytes", loader)
+        self.assertIn('PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST:-}"', loader)
+        self.assertIn('normalize_sha256_digest "PREBUILT_IMAGE_DIGEST"', loader)
+        self.assertIn("printf '%s:%s@%s'", loader)
+        self.assertIn('grep -F "@${expected_carrier_digest}"', loader)
         self.assertIn("docker info -f '{{.DockerRootDir}}'", loader)
         self.assertIn("hashlib.sha256()", loader)
         self.assertIn("stream_carrier_bundle | docker load", loader)
@@ -467,6 +527,24 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertRegex(loader, r"latest\|\*:latest\|\*:latest@\*")
         self.assertNotIn("docker compose build", loader)
         self.assertNotIn("docker build", loader)
+
+    def test_prebuilt_loader_rejects_mutable_release_without_digest(self) -> None:
+        """Verify carrier loading fails before docker pull without a digest.
+
+        Inputs: loader script with a temporary work directory. Output: digest error.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = self.run_bash_script(
+                self.repo_root / "installation/load_prebuilt_carrier.sh",
+                env_vars={
+                    "OMERO_TMP_PATH": tmp_dir,
+                    "PREBUILT_IMAGE_RELEASE": VALID_RELEASE_VERSION,
+                },
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("PREBUILT_IMAGE_DIGEST cannot be empty", result.stderr)
+        self.assertNotIn("Pulling prebuilt carrier image", result.stdout)
 
     def test_release_workflow_is_manual_semver_and_single_carrier_image(self) -> None:
         """Verify release workflow dispatch and version contracts.
@@ -486,11 +564,8 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertNotIn("environment", release_job)
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("write", release_job["permissions"]["contents"])
-        self.assertEqual("${{ inputs.runner_label }}", release_job["runs-on"])
-        self.assertEqual(
-            "ubuntu-latest",
-            triggers["workflow_dispatch"]["inputs"]["runner_label"]["default"],
-        )
+        self.assertEqual("ubuntu-latest", release_job["runs-on"])
+        self.assertNotIn("runner_label", triggers["workflow_dispatch"]["inputs"])
         steps = release_job["steps"]
         hosted_storage_step = next_or_fail(
             step
@@ -550,6 +625,24 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("# zizmor: ignore[secrets-outside-env]", workflow_text)
         self.assertIn(
             "GitHub Actions environments create deployment records", workflow_text
+        )
+        scout_enable_step = next_or_fail(
+            step
+            for step in steps
+            if step["name"] == "Ensure Docker Scout repository analysis is enabled"
+        )
+        self.assertEqual("strmt7", scout_enable_step["env"]["DOCKER_SCOUT_ORG"])
+        self.assertIn("docker scout version", scout_enable_step["run"])
+        self.assertIn(
+            'docker scout repo enable "${DOCKER_REPOSITORY}" --org "${DOCKER_SCOUT_ORG}"',
+            scout_enable_step["run"],
+        )
+        self.assertIn("docker scout repo list", scout_enable_step["run"])
+        self.assertIn("--only-enabled", scout_enable_step["run"])
+        self.assertIn('grep -F "${DOCKER_REPOSITORY}"', scout_enable_step["run"])
+        self.assertLess(
+            workflow_text.index("Ensure Docker Scout repository analysis is enabled"),
+            workflow_text.index("Build hardened flattened runtime images"),
         )
         self.assertIn(
             "from tools.env_safety_guard import resolve_env_references",
@@ -670,6 +763,12 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn('--builder "${BUILDX_BUILDER:?}"', workflow_text)
         self.assertIn("-f docker/prebuilt-carrier.Dockerfile", workflow_text)
         self.assertIn('-t "${CARRIER_IMAGE}"', workflow_text)
+        self.assertIn("dist/prebuilt-carrier-digest.txt", workflow_text)
+        self.assertIn("PREBUILT_IMAGE_DIGEST=${carrier_digest}", workflow_text)
+        self.assertIn(
+            "PREBUILT_IMAGE_REF=${CARRIER_IMAGE}@${carrier_digest}", workflow_text
+        )
+        self.assertIn("Upload carrier digest release asset", workflow_text)
         self.assertIn('docker create "${CARRIER_IMAGE}"', workflow_text)
         self.assertIn(
             'docker cp "${cid}:/omero-prebuilt/prebuilt-manifest.json"',
@@ -686,6 +785,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertNotIn("docker run --rm", workflow_text)
         self.assertIn("gh release create", workflow_text)
+        self.assertIn("prebuilt-carrier-digest.txt", workflow_text)
         self.assertIn("RELEASE_REPLACE_EXISTING", workflow_text)
         self.assertIn(
             "Replacement mode: skipping draft release creation until carrier verification.",

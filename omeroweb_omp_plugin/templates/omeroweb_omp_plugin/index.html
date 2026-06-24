@@ -3973,15 +3973,35 @@ const previewForm = document.getElementById('preview_form');
         displayDatasets.forEach((ds) => {
             const isChecked = useDefaultSelection || selectedIds.has(String(ds.id));
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="col-check" style="padding:2px; text-align:center;">
-                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" ${isChecked ? 'checked' : ''}>
-                </td>
-                <td class="col-dataset" style="padding:2px;">${ds.name || ''}</td>
-                <td class="col-id" style="padding:2px;">${ds.id || ''}</td>
-                <td class="col-images" style="padding:2px;">${ds.image_count}</td>
-                <!-- <td class="col-formats" style="padding:2px;">${ds.formats || ''}</td> -->
-            `;
+
+            const checkCell = document.createElement('td');
+            checkCell.className = 'col-check';
+            checkCell.style.padding = '2px';
+            checkCell.style.textAlign = 'center';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.dataset.datasetId = String(ds.id ?? '');
+            checkbox.dataset.imageCount = String(ds.image_count ?? 0);
+            checkbox.checked = isChecked;
+            checkCell.appendChild(checkbox);
+
+            const datasetNameCell = document.createElement('td');
+            datasetNameCell.className = 'col-dataset';
+            datasetNameCell.style.padding = '2px';
+            datasetNameCell.textContent = ds.name || '';
+
+            const datasetIdCell = document.createElement('td');
+            datasetIdCell.className = 'col-id';
+            datasetIdCell.style.padding = '2px';
+            datasetIdCell.textContent = ds.id || '';
+
+            const imageCountCell = document.createElement('td');
+            imageCountCell.className = 'col-images';
+            imageCountCell.style.padding = '2px';
+            imageCountCell.textContent = ds.image_count ?? '';
+
+            row.append(checkCell, datasetNameCell, datasetIdCell, imageCountCell);
             datasetTableBody.appendChild(row);
         });
 

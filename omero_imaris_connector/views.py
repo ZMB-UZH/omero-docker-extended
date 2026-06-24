@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import signal
+import uuid
 from pathlib import Path
 import time
 from typing import cast
@@ -29,6 +30,7 @@ from .imaris_service import (
     _find_script_id,
     _normalize_job_state,
 )
+from .session_handoff import delete_export_session_key, store_export_session_key
 from .tasks import (
     mark_export_task_cancel_requested,
     run_ims_export_task,
@@ -770,8 +772,17 @@ def _cancel_celery_job(job_id, conn=None):
     mark_export_task_cancel_requested(task_id)
     queue_cleanup = _remove_queued_redis_task(task_id)
     process_cleanup = _terminate_export_cli_process(meta)
+    terminate_worker = not (
+        isinstance(meta, dict)
+        and meta.get("status") == "running_script"
+        and meta.get("script_backend") == "script_service"
+    )
     try:
-        celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+        celery_app.control.revoke(
+            task_id,
+            terminate=terminate_worker,
+            signal="SIGTERM",
+        )
     except Exception as exc:
         logger.warning(
             "Failed to revoke IMS export task %s: %s",
@@ -1194,17 +1205,29 @@ def _start_celery_job(
         CELERY_QUEUE,
     )
 
-    async_result = task.apply_async(
-        kwargs={
-            "image_id": int(image_id),
-            "session_key": session_key,
-            "host": host,
-            "port": port,
-            "secure": secure,
-            "owner_token": owner_token,
-        },
-        queue=CELERY_QUEUE,
-    )
+    task_id = uuid.uuid4().hex
+    session_ref = None
+    try:
+        session_ref = store_export_session_key(
+            task_id,
+            session_key,
+            ttl_seconds=_export_job_cache_timeout(),
+        )
+        async_result = task.apply_async(
+            kwargs={
+                "image_id": int(image_id),
+                "host": host,
+                "port": port,
+                "secure": secure,
+                "owner_token": owner_token,
+                "session_ref": session_ref,
+            },
+            queue=CELERY_QUEUE,
+            task_id=task_id,
+        )
+    except Exception:
+        delete_export_session_key(session_ref)
+        raise
     task_id = async_result.id
     celery_job_id = f"{CELERY_JOB_PREFIX}{task_id}"
     _record_export_job_owner(celery_job_id, owner_token)

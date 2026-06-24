@@ -11,7 +11,7 @@ Deep operational guidance for AI Agents. `AGENTS.md` should route here instead o
 - Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch. Resolve it dynamically; never create feature branches, PR branches, temporary remote branches, or draft PRs just to run workflows or scanner checks.
 - Before rebasing, refresh tracking refs explicitly with `git fetch origin <branch>:refs/remotes/origin/<branch> --force`.
 - GitHub HTTPS Git operations require a PAT or credential manager, never an account password. A `Password for 'https://github.com'` prompt is asking for a token-class credential.
-- For TTY pushes, resolve the default branch first, then use `python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"`; it prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
+- For TTY pushes, resolve the default branch first, then use `python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"`; it resolves the remote before reading the token, serves the token only for `https://github.com` prompts, prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
 - In non-TTY agent shells, provide the PAT only as a short-lived `GITHUB_TOKEN`
   environment variable for that helper invocation; never paste it into argv,
   remotes, logs, temp files, or long-lived Git config.
@@ -71,9 +71,9 @@ Examples:
   `up` and inspect `.dockerignore`; generated runtime roots such as
   `omero_data/`, `omero_temp/`, `postgresdb/`, `node_modules/`, and
   `.project-pull.*/` must stay excluded from build contexts.
-- Build ARGs such as `OMERO_DROPBOX_VERSION` and `BIOFORMATS2RAW_VERSION`
-  come from `env/omeroserver.env`. `docker-compose.yml` and
-  `docker/<service>.Dockerfile` fail closed when those values are absent
+- Build ARGs such as `OMERO_DROPBOX_VERSION`, `BIOFORMATS2RAW_VERSION`, and
+  `BIOFORMATS_SHA256` come from `env/omeroserver.env`. `docker-compose.yml`
+  and `docker/<service>.Dockerfile` fail closed when those values are absent
   instead of silently falling back to in-code defaults.
 
 ## Prebuilt carrier and easy installation
@@ -93,13 +93,14 @@ Examples:
 - The manual `release-prebuilt-carrier` workflow is the only manual release
   workflow. It builds hardened flattened runtime service images, writes the
   source archive and manifest, pushes one attested carrier image, verifies the
-  copied metadata from that image with `docker create`/`docker cp`, runs Docker
-  Scout `quickview`, `cves`, and `sbom` against the pushed Docker Hub tag, and
-  publishes a GitHub release with the same docker-compatible SemVer tag as the
-  carrier image. Same-version rebuilds must use an explicit `release_version`
-  with `replace_existing=true`; replacement mode verifies that the GitHub tag,
-  GitHub release, and Docker Hub tag already exist before overwriting the
-  carrier tag and release assets.
+  copied metadata from that image with `docker create`/`docker cp`, enables and
+  verifies Docker Scout repository analysis for the Docker Hub repository, runs
+  Docker Scout `quickview`, `cves`, and `sbom` against the pushed Docker Hub
+  tag, and publishes a GitHub release with the same docker-compatible SemVer tag
+  as the carrier image. Same-version rebuilds must use an explicit
+  `release_version` with `replace_existing=true`; replacement mode verifies
+  that the GitHub tag, GitHub release, and Docker Hub tag already exist before
+  overwriting the carrier tag and release assets.
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the
   required image set from the rendered Compose config and may prune only
   runner-local docker images outside that required set. Do not replace this

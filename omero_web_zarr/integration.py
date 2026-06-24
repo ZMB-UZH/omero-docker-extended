@@ -10,6 +10,7 @@ from django.conf import settings
 from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
+from django.utils.http import content_disposition_header
 from django.urls.resolvers import URLPattern, URLResolver
 import numpy as np
 import omero
@@ -199,7 +200,10 @@ def _store_backed_render_response(image, request, z=None, t=None, download=False
         image.getName(),
         default=f"Image-{image.id}",
     )
-    response["Content-Disposition"] = f"attachment; filename={filename}.{suffix}"
+    response["Content-Disposition"] = content_disposition_header(
+        True,
+        f"{filename}.{suffix}",
+    )
     return response
 
 
@@ -1164,6 +1168,9 @@ def _store_backed_region_response(image, request, z=None, t=None, conn=None):
     elif region:
         try:
             x, y, width, height = [int(value) for value in region.split(",")]
+            max_tile_length = _regular_max_tile_length(conn)
+            width = min(max(width, 1), max_tile_length)
+            height = min(max(height, 1), max_tile_length)
         except Exception:
             LOGGER.debug(
                 "Malformed region request for store-backed image", exc_info=True

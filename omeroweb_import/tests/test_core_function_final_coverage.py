@@ -405,7 +405,7 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     monkeypatch.setattr(
         core_functions,
         "_run_omero_cli",
-        lambda cmd, timeout=None: SimpleNamespace(
+        lambda cmd, timeout=None, stdin_text=None: SimpleNamespace(
             returncode=1, stdout="stdout", stderr="stderr"
         ),
     )
@@ -421,11 +421,11 @@ def test_import_file_find_image_and_connection_helpers_cover_remaining_paths(
     monkeypatch.setattr(core_functions, "_build_cli_env", lambda: {})
     monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 5)
 
-    def _run_streaming_zero(cmd, *, env, timeout, on_tick):
+    def _run_streaming_zero(cmd, *, env, timeout, on_tick, stdin_text=None):
         """Run the streaming zero.
 
-        Inputs: `cmd`, `env` environment mapping, `timeout` timeout seconds, `on_tick`.
-        Output: `SimpleNamespace` result.
+        Inputs: `cmd`, `env` mapping, `timeout`, `on_tick`, optional `stdin_text`.
+        Output: `SimpleNamespace`.
         """
         on_tick(123, 0.0)
         return SimpleNamespace(returncode=0, stdout="", stderr="")

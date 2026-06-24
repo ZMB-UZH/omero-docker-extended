@@ -962,9 +962,15 @@ def test_diagnose_docker_health_reports_api_none(monkeypatch) -> None:
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in diagnose docker health reports API none.
     """
+    monkeypatch.delenv("ADMIN_TOOLS_DOCKER_SOCKET_REQUIRED", raising=False)
     monkeypatch.setattr(index_view, "_docker_api_json", lambda *a, **kw: None)
     diag = index_view._diagnose_docker_health()
     assert diag["api_error"] == "API returned None (connection or permission error)"
+    assert diag["socket_required"] is False
+
+    monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET_REQUIRED", "true")
+    required_diag = index_view._diagnose_docker_health()
+    assert required_diag["socket_required"] is True
 
 
 def test_diagnose_docker_health_handles_unknown_uid(monkeypatch) -> None:

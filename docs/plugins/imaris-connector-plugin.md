@@ -10,11 +10,11 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 - Asynchronous job mode with status polling URL (`job_id` + `status_url`).
 - Synchronous wait mode with configurable timeout.
 - Export artifact download response.
-- OMERO CLI-based export launch from the `omeroweb` container.
-- Background exports prefer the requesting user's OMERO session key and fall
-  back to the job-service session only when no user session key is available.
+- OMERO ScriptService-based IMS export launch from the `omeroweb` container.
+- Background exports prefer the requesting user's OMERO session connection and
+  fall back to the job-service connection only when no user session is available.
 - Direct validation path with `omero script launch` for incident debugging.
-- Job-service account fallback for background execution when no user session key
+- Job-service account fallback for background execution when no user session
   is available.
 - Optional OMERO connection overrides (host, port, secure) for advanced routing.
 
@@ -33,25 +33,27 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 
 ```text
 Client request
-    │
-    ▼
+    |
+    v
 omero_imaris_connector/views.py   (HTTP endpoint)
-    │
-    ▼
+    |
+    v
 omero_imaris_connector/tasks.py   (Celery task: IMS or OME-TIFF export)
-    │
-    ├─► _open_session_connection()    (join user's OMERO session)
-    │   or _open_job_service_connection() (dedicated service account)
-    │
-    ├─► IMS path: _find_script_id() and _run_script_via_omero_cli()
-    │
-    └─► Imaris path: stage OME-TIFF under
+    |
+    +--> _open_session_connection()    (join user's OMERO session)
+    |    or _open_job_service_connection() (dedicated service account)
+    |
+    +--> IMS path: _find_script_id() and _run_script_via_omero_api()
+    |
+    +--> Imaris path: stage OME-TIFF under
         ${OMERO_TMP_PATH}/omero-imaris-connector/ome-tiff-source
 ```
 
 The Celery worker runs inside the `omeroweb` container, managed by supervisord alongside OMERO.web.
-It must run as the OMERO.web runtime user, not as root, because the OMERO CLI
-refuses root execution to avoid corrupting OMERO user-directory permissions.
+IMS exports run through OMERO ScriptService on the already-established gateway
+connection, so requester session keys are not passed through subprocess
+arguments. Manual OMERO CLI diagnostics must still run as the OMERO.web runtime
+user, not as root.
 Requester-session background tasks detach on cleanup so the OMERO.web browser
 session remains valid. Job-service tasks own their session and may hard-close it.
 
@@ -67,13 +69,15 @@ session remains valid. Job-service tasks own their session and may hard-close it
 - Bio-Formats JAR is downloaded and provisioned automatically at image build
   time by `startup/51-install-imarisconvert.sh` from OME Artifactory's
   versioned Maven artifact for `ome/bioformats_package`, verified against the
-  published `.sha256` checksum, and installed at
+  repository-pinned `BIOFORMATS_SHA256` and the published `.sha256` checksum,
+  and installed at
   `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`. The same script
   also maintains an internal local repair copy at
   `/opt/omero/imarisconvert/artifacts/bioformats/bioformats_package.jar`;
   `IMS_Export.py` can restore from that copy but refuses ad-hoc runtime network
   download for security. The Bio-Formats version is controlled exclusively by
-  `BIOFORMATS_VERSION` in `env/omeroserver.env`.
+  `BIOFORMATS_VERSION` in `env/omeroserver.env`, and the accepted artifact is
+  controlled by `BIOFORMATS_SHA256` in the same file.
 
 ## Environment variables
 
@@ -97,10 +101,11 @@ Defined in `env/omero-celery.env`:
 
 Defined in `env/omeroserver.env`:
 
-| Variable               | Purpose                                                  | Example                |
-| ---------------------- | -------------------------------------------------------- | ---------------------- |
-| `BIOFORMATS_VERSION`   | Bio-Formats release version for `bioformats_package.jar` | `8.5.0`                |
-| `OMERO_IMS_EXPORT_DIR` | IMS export output directory                              | `/OMERO/ImarisExports` |
+| Variable               | Purpose                                                  | Example                                                            |
+| ---------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `BIOFORMATS_VERSION`   | Bio-Formats release version for `bioformats_package.jar` | `8.5.0`                                                            |
+| `BIOFORMATS_SHA256`    | SHA-256 digest required for the Bio-Formats JAR          | `978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2` |
+| `OMERO_IMS_EXPORT_DIR` | IMS export output directory                              | `/OMERO/ImarisExports`                                             |
 
 `OMERO_IMS_EXPORT_DIR` is required at runtime. OMERO Processor launches script
 subprocesses from an explicit environment allowlist, so the server image patches
@@ -114,7 +119,8 @@ service-user writable, and writes that OMERO config key before the server
 starts. Missing or invalid configuration fails fast instead of silently writing
 IMS files to a hard-coded fallback directory.
 
-The OMERO.web Celery task resolves the `omero` CLI from explicit overrides
+The OMERO.web Celery task launches IMS exports through OMERO ScriptService.
+Manual diagnostics can still resolve the `omero` CLI from explicit overrides
 (`OMERO_WEB_OMERO_BIN`, then `OMERO_BIN`), then from the configured
 `OMERO_WEB_ROOT`/`OMERO_WEB_VENV` contract and the newest versioned virtualenv
 under `OMERO_WEB_ROOT`, and only then from `PATH`. This keeps updates across

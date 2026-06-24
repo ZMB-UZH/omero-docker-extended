@@ -255,11 +255,36 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
             object(), x=0, y=0, width=5, height=5
         )
 
-    monkeypatch.setattr(utils, "load_store_backed_image_node", lambda image: object())
+    rendered_regions = []
+
+    def fake_region_plane(*args, **kwargs):
+        """Return an image-sized array for the requested bounded region.
+
+        Inputs: ignored args and requested region kwargs. Output: RGB array.
+        """
+        rendered_regions.append(kwargs)
+        return np.zeros((kwargs["height"], kwargs["width"], 3), dtype=np.uint8)
+
+    region_node = SimpleNamespace(data=[SimpleNamespace(shape=(4, 5))])
+    monkeypatch.setattr(
+        utils,
+        "load_store_backed_image_node",
+        lambda image: region_node,
+    )
     monkeypatch.setattr(
         utils,
         "render_store_backed_plane",
-        lambda *args, **kwargs: np.zeros((4, 5, 3), dtype=np.uint8),
+        fake_region_plane,
+    )
+    monkeypatch.setattr(
+        utils,
+        "get_store_backed_axis_names",
+        lambda current_node, level=0: ["y", "x"],
+    )
+    monkeypatch.setattr(
+        utils,
+        "_yx_shape",
+        lambda shape, axis_names: (4, 5),
     )
     cropped = utils.render_store_backed_region_pil_image(
         object(),
@@ -268,6 +293,15 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
         width=2,
         height=2,
     )
+    assert rendered_regions[-1] == {
+        "level": 0,
+        "z": None,
+        "t": None,
+        "x": 1,
+        "y": 1,
+        "width": 2,
+        "height": 2,
+    }
     assert cropped.mode == "RGB"
     assert cropped.size == (2, 2)
 
@@ -308,7 +342,7 @@ def test_plane_render_and_encoding_helpers_cover_remaining_utils_paths(monkeypat
     monkeypatch.setattr(
         utils,
         "read_store_backed_plane",
-        lambda node, level=0, z=None, t=None: (
+        lambda node, level=0, z=None, t=None, **_kwargs: (
             np.ones((1, 2, 2), dtype=np.uint8),
             ["c", "y", "x"],
         ),

@@ -22,6 +22,7 @@ PREBUILT_CARRIER_LOADER_RELATIVE_PATH="${PREBUILT_CARRIER_LOADER_RELATIVE_PATH:-
 PREBUILT_IMAGE_REPOSITORY="${PREBUILT_IMAGE_REPOSITORY:-strmt7/omero-docker-extended}"
 PREBUILT_IMAGE_RELEASE="${PREBUILT_IMAGE_RELEASE:-}"
 PREBUILT_IMAGE_REF="${PREBUILT_IMAGE_REF:-}"
+PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST:-}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-2}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-30}"
@@ -657,11 +658,13 @@ run_prebuilt_image_load() {
     else
         echo "  Release    : ${PREBUILT_IMAGE_RELEASE}"
     fi
+    echo "  Digest     : ${PREBUILT_IMAGE_DIGEST:-from image ref}"
 
     if ! OMERO_TMP_PATH="${OMERO_TMP_PATH}" \
         PREBUILT_IMAGE_REPOSITORY="${PREBUILT_IMAGE_REPOSITORY}" \
         PREBUILT_IMAGE_RELEASE="${PREBUILT_IMAGE_RELEASE}" \
         PREBUILT_IMAGE_REF="${PREBUILT_IMAGE_REF}" \
+        PREBUILT_IMAGE_DIGEST="${PREBUILT_IMAGE_DIGEST}" \
         "${loader_path}"; then
         echo "ERROR: Loading the prebuilt OMERO carrier image failed." >&2
         return 1
@@ -716,6 +719,10 @@ run_image_build() {
 
     if [ -z "${BIOFORMATS_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable BIOFORMATS_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+    if [ -z "${BIOFORMATS_SHA256:-}" ]; then
+        echo "ERROR: Missing required configuration variable BIOFORMATS_SHA256 in ${server_env_source}" >&2
         return 1
     fi
 
@@ -931,6 +938,7 @@ export_compose_interpolation_env() {
         BIOFORMATS2RAW_VERSION
         TIFFFILE_VERSION
         BIOFORMATS_VERSION
+        BIOFORMATS_SHA256
     )
 
     for env_var_name in "${required_compose_env_vars[@]}"; do
@@ -2316,6 +2324,7 @@ OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}
 BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}
 TIFFFILE_VERSION=${TIFFFILE_VERSION}
 BIOFORMATS_VERSION=${BIOFORMATS_VERSION}
+BIOFORMATS_SHA256=${BIOFORMATS_SHA256}
 ${template_assignments}
 DOTENV
 
@@ -2437,9 +2446,52 @@ derive_compose_project_name() {
     printf '%s' "${normalized}"
 }
 
+# Quote a literal value for a shell-sourced environment file. Inputs: one value. Output: safely double-quoted shell assignment value.
+quote_installation_env_value() {
+    local LC_ALL=C
+    local value="${1-}"
+    local quoted=""
+    local char index
+
+    for ((index = 0; index < ${#value}; index++)); do
+        char="${value:index:1}"
+        case "${char}" in
+            $'\n' | $'\r')
+                echo "ERROR: installation path values must not contain newlines." >&2
+                return 1
+                ;;
+            \\)
+                quoted+="\\\\"
+                ;;
+            '"')
+                quoted+="\\\""
+                ;;
+            '$')
+                quoted+="\\$"
+                ;;
+            '`')
+                quoted+="\\\`"
+                ;;
+            *)
+                quoted+="${char}"
+                ;;
+        esac
+    done
+
+    printf '"%s"' "${quoted}"
+}
+
 # Write installation paths environment. Inputs: shell arguments and environment. Output: command status and side effects.
 write_installation_paths_env() {
     local env_file_path="${1:?BUG: write_installation_paths_env requires a path}"
+    local q_installation_path q_database_path q_plugin_database_path q_data_path q_tmp_path q_data_dir
+
+    q_installation_path="$(quote_installation_env_value "${OMERO_INSTALLATION_PATH}")" || return 1
+    q_database_path="$(quote_installation_env_value "${OMERO_DATABASE_PATH}")" || return 1
+    q_plugin_database_path="$(quote_installation_env_value "${OMERO_PLUGIN_DATABASE_PATH}")" || return 1
+    q_data_path="$(quote_installation_env_value "${OMERO_DATA_PATH}")" || return 1
+    q_tmp_path="$(quote_installation_env_value "${OMERO_TMP_PATH}")" || return 1
+    q_data_dir="$(quote_installation_env_value "${OMERO_DATA_DIR}")" || return 1
 
     mkdir -p "$(dirname "${env_file_path}")"
     cat > "${env_file_path}" <<ENVFILE
@@ -2475,30 +2527,30 @@ write_installation_paths_env() {
 #   CROWDSEC_DB_PATH
 #   CROWDSEC_CONFIG_PATH
 #
-OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
-OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
-OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
-OMERO_DATA_PATH=${OMERO_DATA_PATH}
-OMERO_TMP_PATH=${OMERO_TMP_PATH}
-OMERO_DATA_DIR=${OMERO_DATA_DIR}
+OMERO_INSTALLATION_PATH=${q_installation_path}
+OMERO_DATABASE_PATH=${q_database_path}
+OMERO_PLUGIN_DATABASE_PATH=${q_plugin_database_path}
+OMERO_DATA_PATH=${q_data_path}
+OMERO_TMP_PATH=${q_tmp_path}
+OMERO_DATA_DIR=${q_data_dir}
 #
-OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
-OMERO_IMPORT_PATH=\${OMERO_TMP_PATH}/omeroweb-import
-OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
-OMERO_WEB_VAR_PATH=\${OMERO_DATA_PATH}/omero_web_var
-OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
-OMERO_WEB_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_logs
-OMERO_WEB_SUPERVISOR_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_supervisor_logs
-PROMETHEUS_DATA_PATH=\${OMERO_DATA_PATH}/prometheus_data
-GRAFANA_DATA_PATH=\${OMERO_DATA_PATH}/grafana_data
-PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
-LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
-ALLOY_DATA_PATH=\${OMERO_DATA_PATH}/alloy_data
-PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
-BUILDX_DATA_PATH=\${OMERO_DATA_PATH}/buildx_cache
-NODE_EXPORTER_TEXTFILE_PATH=\${OMERO_DATA_PATH}/node_exporter_textfile
-CROWDSEC_DB_PATH=\${OMERO_DATA_PATH}/crowdsec_db
-CROWDSEC_CONFIG_PATH=\${OMERO_DATA_PATH}/crowdsec_config
+OMERO_USER_DATA_PATH="\${OMERO_DATA_PATH}/omero_user_data"
+OMERO_IMPORT_PATH="\${OMERO_TMP_PATH}/omeroweb-import"
+OMERO_SERVER_VAR_PATH="\${OMERO_DATA_PATH}/omero_server_var"
+OMERO_WEB_VAR_PATH="\${OMERO_DATA_PATH}/omero_web_var"
+OMERO_SERVER_LOGS_PATH="\${OMERO_DATA_PATH}/omero_server_logs"
+OMERO_WEB_LOGS_PATH="\${OMERO_DATA_PATH}/omero_web_logs"
+OMERO_WEB_SUPERVISOR_LOGS_PATH="\${OMERO_DATA_PATH}/omero_web_supervisor_logs"
+PROMETHEUS_DATA_PATH="\${OMERO_DATA_PATH}/prometheus_data"
+GRAFANA_DATA_PATH="\${OMERO_DATA_PATH}/grafana_data"
+PORTAINER_DATA_PATH="\${OMERO_DATA_PATH}/portainer_data"
+LOKI_DATA_PATH="\${OMERO_DATA_PATH}/loki_data"
+ALLOY_DATA_PATH="\${OMERO_DATA_PATH}/alloy_data"
+PG_MAINTENANCE_DATA_PATH="\${OMERO_DATA_PATH}/pg_maintenance_data"
+BUILDX_DATA_PATH="\${OMERO_DATA_PATH}/buildx_cache"
+NODE_EXPORTER_TEXTFILE_PATH="\${OMERO_DATA_PATH}/node_exporter_textfile"
+CROWDSEC_DB_PATH="\${OMERO_DATA_PATH}/crowdsec_db"
+CROWDSEC_CONFIG_PATH="\${OMERO_DATA_PATH}/crowdsec_config"
 #
 ENVFILE
 

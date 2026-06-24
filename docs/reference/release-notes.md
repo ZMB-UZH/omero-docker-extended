@@ -13,12 +13,15 @@
   two-factor-authenticated accounts, release write permissions are scoped to
   the release job, and the workflow uses the built-in `GITHUB_TOKEN` to create
   a branch-targeted draft release before publishing it after carrier-image
-  verification.
+  verification. The release also publishes `prebuilt-carrier-digest.txt` so
+  easy installs can pin the Docker Hub carrier image by immutable digest instead
+  of trusting a mutable tag alone.
 - Added `installation/easy_installation_script.sh` and
   `installation/load_prebuilt_carrier.sh`. Easy installation uses
   `PREBUILT_IMAGE_MODE=require`, asks first for the prebuilt docker image tag to
-  install, skips the Buildx, build-cache, final-image flattening, and
-  image-hardening prompts so the easy path has ten interactive questions,
+  install and then for the matching `PREBUILT_IMAGE_DIGEST`, skips the Buildx,
+  build-cache, final-image flattening, and image-hardening prompts so the easy
+  path has eleven interactive questions,
   verifies the carrier manifest and compressed archive checksum, streams the
   verified archive into `docker load` without writing a second full archive
   under `OMERO_TMP_PATH`, checks docker-root free space before loading, and

@@ -386,15 +386,36 @@ def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp
     monkeypatch.setenv(core_functions.SCRIPT_START_RETRY_SECONDS_ENV, "0")
     monkeypatch.setenv(core_functions.FAILED_IMPORT_RETENTION_SECONDS_ENV, "999999999")
 
-    assert core_functions._build_omero_cli_command(
+    command = core_functions._build_omero_cli_command(
         ["import", "sample.tif"],
         "session-key",
         "omeroserver",
         4064,
-    ) == [
+    )
+    assert command == [
+        core_functions.sys.executable,
+        "-m",
+        "omero_plugin_common.omero_cli_session_runner",
+        "--host",
+        "omeroserver",
+        "--port",
+        "4064",
+        "--",
+        "import",
+        "sample.tif",
+    ]
+    assert "session-key" not in command
+    assert core_functions._omero_cli_session_stdin(command, "session-key") == (
+        "session-key\n"
+    )
+    legacy_command = core_functions._build_omero_cli_command(
+        ["import", "sample.tif"],
+        "",
+        "omeroserver",
+        4064,
+    )
+    assert legacy_command == [
         core_functions.OMERO_CLI,
-        "-k",
-        "session-key",
         "-s",
         "omeroserver",
         "-p",
@@ -402,6 +423,44 @@ def test_cli_and_shared_zarr_helpers_cover_env_and_safe_cleanup(monkeypatch, tmp
         "import",
         "sample.tif",
     ]
+    assert core_functions._omero_cli_session_stdin(legacy_command, "") is None
+    assert (
+        core_functions._omero_cli_session_stdin(legacy_command, "session-key") is None
+    )
+
+    run_calls = []
+    run_streaming_calls = []
+    run_result = SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(
+        core_functions.process_utils,
+        "run",
+        lambda cmd, **kwargs: run_calls.append((cmd, kwargs)) or run_result,
+    )
+    monkeypatch.setattr(
+        core_functions.process_utils,
+        "run_streaming",
+        lambda cmd, **kwargs: run_streaming_calls.append((cmd, kwargs)) or run_result,
+    )
+    assert (
+        core_functions._run_omero_cli(
+            command,
+            timeout=3,
+            stdin_text="session-key\n",
+        )
+        is run_result
+    )
+    assert (
+        core_functions._run_omero_cli_streaming(
+            command,
+            env={"PATH": "/bin"},
+            timeout=4,
+            stdin_text="session-key\n",
+        )
+        is run_result
+    )
+    assert run_calls[-1][1]["stdin_text"] == "session-key\n"
+    assert run_streaming_calls[-1][1]["stdin_text"] == "session-key\n"
+
     assert core_functions._get_cli_keepalive_seconds() == 3600
     assert core_functions._get_local_import_scan_timeout_seconds() == 30
     assert core_functions._get_script_start_timeout_seconds() == 1

@@ -9,7 +9,6 @@ from django.http import JsonResponse
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 from omero_plugin_common.logging_utils import sanitize_log_value
 
-from ..constants import OMERO_CLI
 from ..strings import errors
 from omero_plugin_common.request_utils import (
     current_username as _current_username,
@@ -112,51 +111,6 @@ def validate_user_password(conn, password):
             logger.debug("Suppressed non-fatal exception in utils.py", exc_info=exc)
 
     return True, None
-
-
-def get_session_key(conn):
-    """Return the active OMERO session key for CLI reuse.
-
-    Inputs: `conn` OMERO gateway connection. Output: get session key result.
-    """
-    if conn is None:
-        return None
-
-    if callable(getattr(conn, "getSessionId", None)):
-        try:
-            session_id = conn.getSessionId()
-            if session_id:
-                return session_id
-        except Exception as exc:
-            logger.debug("getSessionId() failed in utils.py", exc_info=exc)
-
-    for attr in ("_sessionUuid", "_session", "session"):
-        value = getattr(conn, attr, None)
-        if value:
-            return value
-
-    try:
-        if hasattr(conn, "c") and conn.c and hasattr(conn.c, "getSessionId"):
-            session_id = conn.c.getSessionId()
-            if session_id:
-                return session_id
-    except Exception as exc:
-        logger.debug("conn.c.getSessionId() failed in utils.py", exc_info=exc)
-
-    return None
-
-
-def build_omero_cli_base_command(conn):
-    """A session-key-based OMERO CLI prefix for authenticated commands.
-
-    Inputs: `conn` OMERO gateway connection. Output: `list`. Raises: ValueError when validation
-    or the called operation fails.
-    """
-    session_key = get_session_key(conn)
-    host, port = resolve_omero_host_port(conn)
-    if not session_key or not host or not port:
-        raise ValueError("Missing OMERO session or connection metadata")
-    return [OMERO_CLI, "-k", str(session_key), "-s", str(host), "-p", str(port)]
 
 
 def require_non_root_user(view_func):

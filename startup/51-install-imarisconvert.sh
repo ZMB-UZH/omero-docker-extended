@@ -21,9 +21,13 @@ TARGET_VERSION="1.0.0"
 IMARISCONVERT_REPO_URL="${IMARISCONVERT_REPO_URL:-https://github.com/imaris/ImarisConvertBioformats.git}"
 IMARISCONVERT_GIT_REF="${IMARISCONVERT_GIT_REF:-master}"
 IMARISCONVERT_GIT_COMMIT="${IMARISCONVERT_GIT_COMMIT:-b363fe927914dfdcf1c7fdbf721e50e8cce67cc3}"
+IMARISWRITER_REPO_URL="${IMARISWRITER_REPO_URL:-https://github.com/imaris/ImarisWriter.git}"
+IMARISWRITER_GIT_REF="${IMARISWRITER_GIT_REF:-master}"
+IMARISWRITER_GIT_COMMIT="${IMARISWRITER_GIT_COMMIT:-b128e6e7d1a147261e9d5caf24ebc6b5c9c63779}"
 BIOFORMATS_SUBDIR="bioformats"
 BIOFORMATS_JAR_NAME="bioformats_package.jar"
 : "${BIOFORMATS_VERSION:?BIOFORMATS_VERSION must be set in env/omeroserver.env}"
+: "${BIOFORMATS_SHA256:?BIOFORMATS_SHA256 must be set in env/omeroserver.env}"
 BIOFORMATS_ARTIFACT_NAME="bioformats_package-${BIOFORMATS_VERSION}.jar"
 BIOFORMATS_URL="https://artifacts.openmicroscopy.org/artifactory/maven/ome/bioformats_package/${BIOFORMATS_VERSION}/${BIOFORMATS_ARTIFACT_NAME}"
 BIOFORMATS_SHA256_URL="${BIOFORMATS_URL}.sha256"
@@ -53,6 +57,22 @@ is_lowercase_sha256_hex() {
     esac
 }
 
+# Validate bioformats sha256 pin. Inputs: environment. Output: success or failure status.
+validate_bioformats_sha256_pin() {
+    if ! is_lowercase_sha256_hex "${BIOFORMATS_SHA256}"; then
+        fail "BIOFORMATS_SHA256 must be a 64-character lowercase SHA-256 digest"
+    fi
+}
+
+# Perform sha256 matches repository pin. Inputs: artifact path. Output: command status.
+sha256_matches_pin() {
+    local source_path="$1"
+    local actual_sha
+
+    actual_sha="$(sha256sum "${source_path}" | awk '{print $1}')"
+    [[ "${actual_sha}" = "${BIOFORMATS_SHA256}" ]]
+}
+
 # Perform sha256 matches manifest. Inputs: shell arguments and environment. Output: command status and side effects.
 sha256_matches_manifest() {
     local source_path="$1"
@@ -76,6 +96,7 @@ sha256_matches_manifest() {
 # Return whether valid bioformats cache. Inputs: shell arguments and environment. Output: success or failure status.
 is_valid_bioformats_cache() {
     is_valid_bioformats_jar "${BIOFORMATS_CACHE_JAR}" && \
+        sha256_matches_pin "${BIOFORMATS_CACHE_JAR}" && \
         sha256_matches_manifest "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
 }
 
@@ -117,6 +138,7 @@ download_bioformats_jar() {
     local sha256_path="${destination_path}.sha256.remote"
     local tmp_path="${destination_path}.download"
     local expected_sha
+    local remote_sha
     local actual_sha
 
     rm -f "${tmp_path}" "${sha256_path}"
@@ -136,12 +158,17 @@ download_bioformats_jar() {
         fail "Failed to download ${BIOFORMATS_ARTIFACT_NAME}.sha256"
     fi
 
-    expected_sha="$(awk '{print tolower($1)}' "${sha256_path}")"
-    if ! is_lowercase_sha256_hex "${expected_sha}"; then
+    remote_sha="$(awk '{print tolower($1)}' "${sha256_path}")"
+    if ! is_lowercase_sha256_hex "${remote_sha}"; then
         rm -f "${tmp_path}" "${sha256_path}"
         fail "Invalid SHA-256 manifest for ${BIOFORMATS_ARTIFACT_NAME}"
     fi
+    if [[ "${remote_sha}" != "${BIOFORMATS_SHA256}" ]]; then
+        rm -f "${tmp_path}" "${sha256_path}"
+        fail "Published Bio-Formats checksum does not match repository pin for ${BIOFORMATS_ARTIFACT_NAME}"
+    fi
 
+    expected_sha="${BIOFORMATS_SHA256}"
     actual_sha="$(sha256sum "${tmp_path}" | awk '{print $1}')"
     if [[ "${actual_sha}" != "${expected_sha}" ]]; then
         rm -f "${tmp_path}" "${sha256_path}"
@@ -171,6 +198,8 @@ SH
 verify_imarisconvert_installation() {
     local installed_version=""
 
+    validate_bioformats_sha256_pin
+
     if [[ -f "${VERSION_FILE}" ]]; then
         installed_version="$(cat "${VERSION_FILE}")"
     fi
@@ -181,6 +210,8 @@ verify_imarisconvert_installation() {
         || fail "ImarisConvertBioformats binary is missing or not executable: ${INSTALL_DIR}/ImarisConvertBioformats"
     is_valid_bioformats_jar "${BIOFORMATS_JAR}" \
         || fail "Bio-Formats runtime jar is missing or invalid: ${BIOFORMATS_JAR}"
+    sha256_matches_pin "${BIOFORMATS_JAR}" \
+        || fail "Bio-Formats runtime jar checksum does not match repository pin: ${BIOFORMATS_JAR}"
     is_valid_bioformats_cache \
         || fail "Bio-Formats local artifact cache is missing or invalid: ${BIOFORMATS_CACHE_JAR}"
     [[ -x "${WRAPPER_PATH}" ]] \
@@ -211,6 +242,8 @@ case "${INSTALL_MODE}" in
         ;;
 esac
 
+validate_bioformats_sha256_pin
+
 if [[ -f "${VERSION_FILE}" ]]; then
     INSTALLED_VERSION="$(cat "${VERSION_FILE}")"
 else
@@ -224,6 +257,8 @@ if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisC
     fi
 
     if is_valid_bioformats_jar "${BIOFORMATS_JAR}" && ! is_valid_bioformats_cache; then
+        sha256_matches_pin "${BIOFORMATS_JAR}" \
+            || fail "Bio-Formats runtime jar checksum does not match repository pin: ${BIOFORMATS_JAR}"
         echo "Seeding Bio-Formats cache from existing runtime jar..."
         seed_bioformats_cache_from_runtime
     fi
@@ -233,7 +268,7 @@ if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisC
         restore_runtime_jar_from_cache
     fi
 
-    if is_valid_bioformats_jar "${BIOFORMATS_JAR}" && is_valid_bioformats_cache; then
+    if is_valid_bioformats_jar "${BIOFORMATS_JAR}" && sha256_matches_pin "${BIOFORMATS_JAR}" && is_valid_bioformats_cache; then
         echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + runtime jar + local cache)."
         exit 0
     fi
@@ -274,11 +309,17 @@ if ! is_valid_bioformats_jar bioformats/bioformats_package.jar; then
     fail "Invalid bioformats_package.jar"
 fi
 
-# Clone ImarisWriter
+# Clone ImarisWriter and verify the exact expected commit.
 cd ..
-if ! git clone --depth 1 https://github.com/imaris/ImarisWriter.git; then
+if ! git clone --depth 1 --branch "${IMARISWRITER_GIT_REF}" "${IMARISWRITER_REPO_URL}" ImarisWriter; then
     fail "Failed to clone ImarisWriter repository"
 fi
+cd ImarisWriter
+actual_commit="$(git rev-parse HEAD)"
+if [[ "${actual_commit}" != "${IMARISWRITER_GIT_COMMIT}" ]]; then
+    fail "ImarisWriter commit mismatch: expected=${IMARISWRITER_GIT_COMMIT} actual=${actual_commit}"
+fi
+cd ..
 mv ImarisWriter ImarisConvertBioformats/
 
 # Build

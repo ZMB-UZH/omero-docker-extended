@@ -70,6 +70,14 @@ def no_images_found():
     return "No images found"
 
 
+def project_write_access_required():
+    """Return the project write access required message.
+
+    Inputs: none. Output: `str`.
+    """
+    return "Project write access is required for this destructive action."
+
+
 def map_annotations_still_present():
     """Map the annotations still present.
 

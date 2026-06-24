@@ -151,6 +151,7 @@ def _import_tasks(monkeypatch: pytest.MonkeyPatch):
         "omero_imaris_connector.config",
         "omero_imaris_connector.celery_app",
         "omero_imaris_connector.imaris_service",
+        "omero_imaris_connector.session_handoff",
         "omero_imaris_connector.tasks",
     ]:
         sys.modules.pop(module_name, None)
@@ -346,127 +347,366 @@ def test_resolve_executable_candidate_covers_command_and_rejection_paths(
     assert tasks._resolve_executable_candidate(str(cli_path)) is None
 
 
-def test_run_script_via_omero_cli_covers_success_and_failure_paths(
+def test_run_script_via_omero_api_covers_success_failure_and_cancel_paths(
     monkeypatch, tmp_path, caplog
 ):
-    """Verify the run script via OMERO CLI covers success and failure paths execution contract.
+    """Verify ScriptService export execution covers success, failure, and cancellation.
 
-    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on regressions in run script via OMERO CLI covers success and failure paths integration.
+    Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on regressions in ScriptService export handling.
     """
     tasks = _import_tasks(monkeypatch)
-    cli_path = tmp_path / "omero"
     export_path = tmp_path / f"{tmp_path.name}.ims"
-    cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
-    monkeypatch.setattr(tasks, "_resolve_omero_cli", lambda: str(cli_path))
 
     captured = {}
+    close_calls = []
 
-    def successful_run(
-        cmd,
+    class _FinishedProcess:
+        """ScriptProcess stand-in for successful and failed completions."""
+
+        def __init__(self, state="FINISHED", outputs=None):
+            """Create a process double with fixed poll results.
+
+            Inputs: optional state and outputs. Output: initialized double.
+            """
+            self.state = state
+            self.outputs = outputs or {
+                "Export_Path": str(export_path),
+                "Export_Name": "demo.ims",
+            }
+
+        def getJob(self):
+            """Return a stable job id.
+
+            Inputs: none. Output: fake job id.
+            """
+            return 444
+
+        def poll(self):
+            """Return the configured state.
+
+            Inputs: none. Output: configured process state.
+            """
+            return self.state
+
+        def getResults(self, *_args):
+            """Return configured script outputs.
+
+            Inputs: ignored arguments. Output: configured outputs mapping.
+            """
+            return self.outputs
+
+        def close(self, detach=True):
+            """Record close calls.
+
+            Inputs: detach flag. Output: None.
+            """
+            close_calls.append(detach)
+
+    def successful_run_script(
+        conn,
         *,
-        timeout,
-        check,
-        env,
-        on_tick,
-        start_new_session,
-        **_kwargs,
+        script_id,
+        image_id,
+        wait_secs,
+        status_callback,
     ):
-        """Return the successful run.
+        """Record ScriptService launch arguments and return a finished process.
 
-        Inputs: `cmd`, `timeout` timeout seconds, `check`, `env` environment mapping,
-        `**_kwargs`. Output: `SimpleNamespace` result.
+        Inputs: connection, script id, image id, wait seconds, callback. Output: process double.
         """
-        captured["cmd"] = cmd
-        captured["timeout"] = timeout
-        captured["start_new_session"] = start_new_session
-        captured["env"] = {
-            "HOME": env["HOME"],
-            "OMERO_USERDIR": env["OMERO_USERDIR"],
-            "OMERO_SESSIONDIR": env["OMERO_SESSIONDIR"],
-            "OMERO_TMPDIR": env["OMERO_TMPDIR"],
-        }
-        on_tick(12345, 0.0)
-        return types.SimpleNamespace(
-            returncode=0,
-            stdout=f"* Export_Path = {export_path}\n* Export_Name = demo.ims",
-            stderr="",
+        captured.update(
+            {
+                "conn": conn,
+                "script_id": script_id,
+                "image_id": image_id,
+                "wait_secs": wait_secs,
+            }
         )
+        status_callback("waiting_for_processor", {"attempt": 1})
+        return _FinishedProcess()
 
-    monkeypatch.setattr(tasks.subprocess, "run_streaming", successful_run)
+    monkeypatch.setattr(tasks, "_run_script", successful_run_script)
+    monkeypatch.setattr(tasks, "EXPORT_POLL_INTERVAL", 0)
     status_updates = []
-    outputs = tasks._run_script_via_omero_cli(
+    conn = object()
+    outputs = tasks._run_script_via_omero_api(
+        conn=conn,
         script_id=7,
         image_id=11,
-        host="omeroserver",
-        port=4064,
-        session_key="session-key",
         status_callback=lambda status, meta: status_updates.append((status, meta)),
     )
     assert outputs["Export_Path"] == str(export_path)
-    assert captured["cmd"][:5] == [str(cli_path), "-q", "script", "launch", "7"]
-    assert captured["timeout"] == tasks.EXPORT_TIMEOUT + 120
-    assert status_updates == [
-        (
-            "running_script",
-            {
-                "script_id": 7,
-                "cli_pid": 12345,
-                "cli_pgid": 12345,
-                "elapsed": 0.0,
-            },
-        )
-    ]
-    assert captured["start_new_session"] is True
-    assert captured["env"]["HOME"] == captured["env"]["OMERO_USERDIR"]
-    assert Path(captured["env"]["OMERO_USERDIR"]).is_relative_to(
-        TEST_RUNTIME_ROOT / "tmp"
-    )
+    assert captured == {
+        "conn": conn,
+        "script_id": 7,
+        "image_id": 11,
+        "wait_secs": 0,
+    }
+    assert all(meta["script_backend"] == "script_service" for _, meta in status_updates)
+    assert any(meta.get("script_job_id") == 444 for _, meta in status_updates)
+    assert "session_key" not in captured
+    assert close_calls == [True]
 
-    with pytest.raises(RuntimeError, match="live OMERO session key"):
-        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, session_key=None)
+    with pytest.raises(RuntimeError, match="OMERO connection is required"):
+        tasks._run_script_via_omero_api(None, 7, 11)
+
+    close_calls.clear()
+    monkeypatch.setattr(
+        tasks,
+        "_run_script",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("backend failed")),
+    )
+    with pytest.raises(tasks.IMSExportTaskError, match="ScriptService launch failed"):
+        tasks._run_script_via_omero_api(object(), 7, 11)
 
     monkeypatch.setattr(
-        tasks.subprocess,
-        "run_streaming",
-        lambda *args, **kwargs: types.SimpleNamespace(
-            returncode=1,
-            stdout="",
-            stderr="backend failed",
+        tasks,
+        "_run_script",
+        lambda *_args, **_kwargs: _FinishedProcess(
+            outputs={"Message": "Could not get original file path"}
         ),
     )
-    with (
-        caplog.at_level(logging.ERROR, logger=tasks.logger.name),
-        pytest.raises(RuntimeError, match="CLI launch failed"),
-    ):
-        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
-    assert "backend failed" not in caplog.text
-    assert "stderr_lines=1" in caplog.text
-
-    monkeypatch.setattr(
-        tasks.subprocess,
-        "run_streaming",
-        lambda *args, **kwargs: types.SimpleNamespace(
-            returncode=0,
-            stdout="* Message = Could not get original file path",
-            stderr="",
-        ),
-    )
-    with pytest.raises(tasks.IMSExportTaskError, match="no export path") as exc_info:
-        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    with pytest.raises(
+        tasks.IMSExportTaskError,
+        match="Could not get original file path",
+    ) as exc_info:
+        tasks._run_script_via_omero_api(object(), 7, 11)
     assert exc_info.value.public_message == "Could not get original file path"
 
     monkeypatch.setattr(
-        tasks.subprocess,
-        "run_streaming",
-        lambda *args, **kwargs: types.SimpleNamespace(
-            returncode=0,
-            stdout="* Message = done",
-            stderr="",
+        tasks,
+        "_run_script",
+        lambda *_args, **_kwargs: _FinishedProcess(
+            state="FAILED",
+            outputs={"Export_Path": str(export_path), "Message": "done"},
         ),
     )
-    with pytest.raises(tasks.IMSExportTaskError, match="no export path") as exc_info:
-        tasks._run_script_via_omero_cli(7, 11, "omeroserver", 4064, "session-key")
+    with pytest.raises(tasks.IMSExportTaskError, match="state FAILED") as exc_info:
+        tasks._run_script_via_omero_api(object(), 7, 11)
     assert exc_info.value.public_message is None
+
+    class _WaitingProcess:
+        """ScriptProcess stand-in for cooperative cancellation."""
+
+        @staticmethod
+        def poll():
+            """Return no terminal state.
+
+            Inputs: none. Output: None.
+            """
+            return None
+
+        @staticmethod
+        def getJob():
+            """Return a job id for cancellation metadata.
+
+            Inputs: none. Output: fake job id.
+            """
+            return 555
+
+        def close(self, detach):
+            """Record the cancellation close mode.
+
+            Inputs: detach flag. Output: None.
+            """
+            close_calls.append(detach)
+
+    close_calls.clear()
+    cancel_checks = {"count": 0}
+
+    def cancel_requested():
+        """Return true after the first polling pass.
+
+        Inputs: none. Output: cancellation decision.
+        """
+        cancel_checks["count"] += 1
+        return cancel_checks["count"] >= 2
+
+    with pytest.raises(RuntimeError, match="stopped by user"):
+        tasks._wait_for_script_service_process(
+            _WaitingProcess(),
+            script_id=7,
+            timeout=1,
+            cancel_requested=cancel_requested,
+        )
+    assert close_calls == [False]
+
+
+def test_script_service_process_helpers_cover_error_edges(monkeypatch):
+    """Verify ScriptProcess cleanup and wait helpers fail closed on edge errors.
+
+    Inputs: pytest monkeypatch fixture. Output: asserts cleanup and error handling.
+    """
+    tasks = _import_tasks(monkeypatch)
+
+    assert tasks._close_script_service_process(types.SimpleNamespace(), False) is False
+
+    fallback_close_calls = []
+
+    class _TypeErrorThenClose:
+        """Close double that requires the no-argument fallback."""
+
+        def close(self, *args):
+            """Raise for detach argument, then succeed without arguments.
+
+            Inputs: optional close arguments. Output: records fallback close.
+            """
+            if args:
+                raise TypeError("legacy close signature")
+            fallback_close_calls.append(args)
+
+    assert tasks._close_script_service_process(_TypeErrorThenClose(), True) is True
+    assert fallback_close_calls == [()]
+
+    class _BrokenClose:
+        """Close double that fails for both close signatures."""
+
+        @staticmethod
+        def close(*_args):
+            """Raise for all close attempts.
+
+            Inputs: ignored arguments. Output: raises RuntimeError.
+            """
+            raise RuntimeError("close failed")
+
+    assert tasks._close_script_service_process(_BrokenClose(), True) is False
+
+    class _TypeErrorThenBrokenClose:
+        """Close double whose legacy fallback also fails."""
+
+        @staticmethod
+        def close(*args):
+            """Raise TypeError for detach mode and RuntimeError for fallback mode.
+
+            Inputs: optional close arguments. Output: raises exception.
+            """
+            if args:
+                raise TypeError("legacy close signature")
+            raise RuntimeError("fallback close failed")
+
+    assert (
+        tasks._close_script_service_process(_TypeErrorThenBrokenClose(), True) is False
+    )
+
+    stop_calls = []
+
+    class _StopFallback:
+        """Stop double whose first stop method fails and second succeeds."""
+
+        @staticmethod
+        def cancel():
+            """Record cancellation failure.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            stop_calls.append("cancel")
+            raise RuntimeError("cancel failed")
+
+        @staticmethod
+        def shutdown():
+            """Record shutdown success.
+
+            Inputs: none. Output: None.
+            """
+            stop_calls.append("shutdown")
+
+    assert tasks._stop_script_service_process(_StopFallback()) is True
+    assert stop_calls == ["cancel", "shutdown"]
+
+    class _StopAttemptedButFailed:
+        """Stop double with one failing stop method."""
+
+        @staticmethod
+        def kill():
+            """Raise from the only available stop method.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("kill failed")
+
+    assert tasks._stop_script_service_process(_StopAttemptedButFailed()) is True
+    assert tasks._script_process_job_id(types.SimpleNamespace()) is None
+
+    class _BadJob:
+        """Job double that raises while reading the job id."""
+
+        @staticmethod
+        def getJob():
+            """Raise from job lookup.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("job unavailable")
+
+    assert tasks._script_process_job_id(_BadJob()) is None
+
+    class _BadPoll:
+        """Process double whose polling API raises."""
+
+        @staticmethod
+        def poll():
+            """Raise from poll.
+
+            Inputs: none. Output: raises RuntimeError.
+            """
+            raise RuntimeError("poll failed")
+
+    time_values = iter([0.0, 0.0, 0.0, 0.1, 2.0])
+    monkeypatch.setattr(tasks.time, "time", lambda: next(time_values, 2.0))
+    monkeypatch.setattr(tasks.time, "sleep", lambda _seconds: None)
+    state, outputs = tasks._wait_for_script_service_process(
+        _BadPoll(),
+        script_id=7,
+        timeout=1,
+    )
+    assert (state, outputs) == (None, None)
+
+    class _BadResults:
+        """Finished process double whose results API raises."""
+
+        @staticmethod
+        def poll():
+            """Return a terminal state.
+
+            Inputs: none. Output: terminal process state.
+            """
+            return "FINISHED"
+
+        @staticmethod
+        def getResults(*_args):
+            """Raise while fetching ScriptService outputs.
+
+            Inputs: ignored arguments. Output: raises RuntimeError.
+            """
+            raise RuntimeError("results unavailable")
+
+    monkeypatch.setattr(tasks.time, "time", lambda: 0.0)
+    with pytest.raises(tasks.IMSExportTaskError, match="results unavailable"):
+        tasks._wait_for_script_service_process(_BadResults(), script_id=7, timeout=1)
+
+    monkeypatch.setattr(
+        tasks,
+        "_run_script",
+        lambda *_args, **_kwargs: types.SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_wait_for_script_service_process",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            tasks.IMSExportTaskError("original failure")
+        ),
+    )
+    with pytest.raises(tasks.IMSExportTaskError, match="original failure"):
+        tasks._run_script_via_omero_api(object(), 7, 11)
+
+    monkeypatch.setattr(
+        tasks,
+        "_wait_for_script_service_process",
+        lambda *_args, **_kwargs: (None, None),
+    )
+    monkeypatch.setattr(tasks, "EXPORT_TIMEOUT", 0)
+    with pytest.raises(tasks.IMSExportTaskError, match="script timed out"):
+        tasks._run_script_via_omero_api(object(), 7, 11)
 
 
 def test_run_ome_tiff_export_task_materializes_outputs_and_closes_connection(
@@ -717,6 +957,42 @@ def test_open_export_connection_prefers_requesting_session_when_job_service_enab
     assert calls == [("session", None, configured_host, configured_port, True)]
 
 
+def test_resolve_export_session_key_uses_one_time_handoff_before_legacy_key(
+    monkeypatch,
+) -> None:
+    """Verify Celery workers resolve session refs without broker-visible raw keys.
+
+    Inputs: pytest provides `monkeypatch`. Output: validates session-key handoff
+    resolution and legacy fallback behavior.
+    """
+    tasks = _import_tasks(monkeypatch)
+    refs = []
+
+    monkeypatch.setattr(
+        tasks,
+        "pop_export_session_key",
+        lambda ref: refs.append(ref) or "resolved-session",
+    )
+
+    assert (
+        tasks._resolve_export_session_key(
+            session_key="legacy-session",
+            session_ref="task-ref",
+        )
+        == "resolved-session"
+    )
+    assert refs == ["task-ref"]
+
+    monkeypatch.setattr(tasks, "pop_export_session_key", lambda ref: None)
+    assert (
+        tasks._resolve_export_session_key(
+            session_key="legacy-session",
+            session_ref="missing-ref",
+        )
+        == "legacy-session"
+    )
+
+
 def test_close_export_connection_preserves_joined_requester_session(monkeypatch):
     """Verify requester-session task cleanup does not kill the OMERO.web session.
 
@@ -768,14 +1044,18 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
         tasks, "_open_job_service_connection", lambda *args, **kwargs: conn
     )
     monkeypatch.setattr(tasks, "_find_script_id", lambda current_conn: 99)
-    monkeypatch.setattr(tasks, "_get_connection_session_key", lambda current_conn: None)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_api",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("backend unavailable")),
+    )
 
     task_self = types.SimpleNamespace(
         request=types.SimpleNamespace(id="task-1"),
         update_state=lambda state, meta: updates.append((state, meta)),
     )
 
-    with pytest.raises(RuntimeError, match="session key unavailable"):
+    with pytest.raises(RuntimeError, match="backend unavailable"):
         tasks.run_ims_export_task(
             task_self,
             image_id=7,
@@ -913,7 +1193,7 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     monkeypatch.setattr(tasks, "_find_script_id", lambda current_conn: 88)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **kwargs: {
             "Export_Path": str(tmp_path / "demo.ims"),
             "Export_Name": "demo.ims",
@@ -956,7 +1236,7 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     closed.clear()
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **kwargs: (_ for _ in ()).throw(
             tasks.IMSExportTaskError(
                 "script did not return export path",
@@ -1220,59 +1500,82 @@ def test_export_cancel_markers_use_redis_as_best_effort_state(monkeypatch):
     assert not tasks.export_task_cancel_requested("task-1")
 
 
-def test_run_script_via_omero_cli_tick_reporting_is_best_effort(
+def test_run_script_via_omero_api_status_reporting_is_best_effort(
     monkeypatch,
     tmp_path,
     caplog,
 ):
-    """Verify CLI process telemetry cannot fail an otherwise valid export.
+    """Verify ScriptService telemetry cannot fail an otherwise valid export.
 
     Inputs: pytest provides `monkeypatch`, `tmp_path`, `caplog`. Output: fails on
     regressions that would abort a conversion because progress reporting failed.
     """
     tasks = _import_tasks(monkeypatch)
-    cli_path = tmp_path / "omero"
-    cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
     export_path = tmp_path / "telemetry.ims"
-    monkeypatch.setattr(tasks, "_resolve_omero_cli", lambda: str(cli_path))
 
-    def streaming_run(*_args, on_tick, **_kwargs):
-        """Simulate a streaming OMERO CLI process.
+    class _FinishedProcess:
+        """ScriptProcess stand-in for telemetry tests."""
 
-        Inputs: ignored process arguments plus tick callback. Output: completed process.
-        """
-        on_tick(4242, 1.5)
-        return types.SimpleNamespace(
-            returncode=0,
-            stdout=f"Export_Path = {export_path}\nExport_Name = telemetry.ims",
-            stderr="",
-        )
+        @staticmethod
+        def getJob():
+            """Return a stable job id.
 
-    monkeypatch.setattr(tasks.subprocess, "run_streaming", streaming_run)
+            Inputs: none. Output: fake job id.
+            """
+            return 8
 
-    assert tasks._run_script_via_omero_cli(
-        9,
-        12,
-        "omeroserver",
-        4064,
-        "session-key",
+        @staticmethod
+        def poll():
+            """Report completion immediately.
+
+            Inputs: none. Output: terminal process state.
+            """
+            return "FINISHED"
+
+        @staticmethod
+        def getResults(*_args):
+            """Return downloadable outputs.
+
+            Inputs: ignored arguments. Output: downloadable output mapping.
+            """
+            return {
+                "Export_Path": str(export_path),
+                "Export_Name": "telemetry.ims",
+            }
+
+        @staticmethod
+        def close(*_args):
+            """Close fake process.
+
+            Inputs: ignored arguments. Output: None.
+            """
+            return None
+
+    monkeypatch.setattr(
+        tasks,
+        "_run_script",
+        lambda *_args, **_kwargs: _FinishedProcess(),
+    )
+
+    assert tasks._run_script_via_omero_api(
+        conn=object(),
+        script_id=9,
+        image_id=12,
     ) == {
         "Export_Path": str(export_path),
         "Export_Name": "telemetry.ims",
     }
 
     with caplog.at_level(logging.ERROR, logger=tasks.logger.name):
-        assert tasks._run_script_via_omero_cli(
-            9,
-            12,
-            "omeroserver",
-            4064,
-            "session-key",
+        assert tasks._run_script_via_omero_api(
+            conn=object(),
+            script_id=9,
+            image_id=12,
             status_callback=lambda *_args: (_ for _ in ()).throw(
                 RuntimeError("callback failed")
             ),
         )["Export_Path"] == str(export_path)
-    assert "Failed to update IMS export CLI process metadata" in caplog.text
+    assert "Failed to update IMS export ScriptService metadata" in caplog.text
 
 
 def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
@@ -1307,7 +1610,7 @@ def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
     monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: False)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **_kwargs: {
             "Export_Path": str(tmp_path / "owner.ims"),
             "Export_Name": "owner.ims",
@@ -1328,7 +1631,7 @@ def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
     updates.clear()
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **_kwargs: (_ for _ in ()).throw(
             tasks.IMSExportTaskError(
                 "private detail", public_message="Image 12 not found"
@@ -1354,7 +1657,7 @@ def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
     monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda task_id: True)
     monkeypatch.setattr(
         tasks,
-        "_run_script_via_omero_cli",
+        "_run_script_via_omero_api",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("worker stopped")),
     )
     result = tasks.run_ims_export_task(

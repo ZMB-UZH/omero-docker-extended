@@ -68,6 +68,7 @@ class FakeAdmin:
         groups: list[FakeGroup],
         member_group_ids: list[int],
         existing_user: bool = True,
+        existing_ldap: bool = False,
         create_exception: Exception | None = None,
     ):
         """Create `FakeAdmin` with `groups`, `member_group_ids`, `existing_user`, and `create_exception`.
@@ -78,6 +79,7 @@ class FakeAdmin:
         self.groups = groups
         self.member_group_ids = member_group_ids
         self.existing_user = existing_user
+        self.existing_ldap = existing_ldap
         self.create_exception = create_exception
         self.created_users: list[tuple[str, str, object, list[object]]] = []
         self.added_groups: list[tuple[FakeExperimenterI, list[FakeGroup]]] = []
@@ -94,6 +96,7 @@ class FakeAdmin:
             raise FakeApiUsageException(name)
         experimenter = FakeExperimenterI(42, False)
         experimenter.omeName = FakeRValue(name)
+        experimenter.ldap = FakeRValue(self.existing_ldap)
         return experimenter
 
     @staticmethod
@@ -173,6 +176,7 @@ class FakeQuery:
             return None
         experimenter = FakeExperimenterI(42, False)
         experimenter.omeName = FakeRValue(value)
+        experimenter.ldap = FakeRValue(self.admin.existing_ldap)
         return experimenter
 
 
@@ -532,6 +536,30 @@ def test_ensure_job_user_uses_query_lookup_for_expected_missing_user(helper_modu
     assert experimenter.omeName.val == "job-service"
     assert admin.lookup_calls == 0
     assert query.find_calls == 2
+
+
+def test_ensure_job_user_rejects_ldap_backed_name_collision(helper_module):
+    """Confirm directory-backed reserved job account collisions fail closed.
+
+    Inputs: pytest provides `helper_module`. Output: asserts directory-backed
+    accounts cannot receive broad job-service memberships.
+    """
+    module = helper_module
+    admin = FakeAdmin(
+        groups=[],
+        member_group_ids=[],
+        existing_user=True,
+        existing_ldap=True,
+    )
+
+    with pytest.raises(RuntimeError, match="LDAP-backed Experimenter"):
+        module.ensure_job_user(
+            admin,
+            FakeQuery(admin),
+            "job-service",
+            "secret",
+            retries=1,
+        )
 
 
 def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):

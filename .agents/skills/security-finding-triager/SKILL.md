@@ -31,6 +31,7 @@ Use this skill for any security-relevant code change or scanner-driven remediati
 11. Re-run targeted tests, Ruff, and docs validation.
 12. After every push, confirm GitHub workflows are green.
 13. When DeepSource auth and repository access are available, compare grouped issues and issue occurrences for the pushed commit against the pre-push baseline; if either count increased, fetch grouped issue details and repeat the fix/test/push verification loop. If DeepSource is skipped or unavailable, keep the remaining workflow checks moving and report that DeepSource could not be compared.
+14. Use Codex Security scanner workers on demand only: spawn the minimum required workers when the user explicitly requests that scanner workflow and the loaded scanner instructions require worker execution; keep remediation, validation, reconciliation, commits, pushes, and releases in the parent session.
 
 ## Rules
 

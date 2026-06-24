@@ -34,6 +34,7 @@ from ..services.rate_limit import (
     check_major_action_rate_limit,
 )
 from ..views.utils import current_username, load_request_data, require_non_root_user
+from .project_access import require_destructive_project_access
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
@@ -302,14 +303,20 @@ def start_job(request, conn=None, _url=None, **kwargs):
                 {"error": error_messages.missing_project_id_lower()}, status=400
             )
 
-        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
-        if not image_ids:
-            return JsonResponse({"error": error_messages.no_images_found()}, status=400)
-
         if delete_mode in ("all", "plugin"):
             valid, error = _validate_user_password(conn, data.get("password"))
             if not valid:
                 return JsonResponse({"error": error}, status=403)
+            access_ok, access_error = require_destructive_project_access(
+                conn,
+                project_id,
+            )
+            if not access_ok:
+                return JsonResponse({"error": access_error}, status=403)
+
+        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+        if not image_ids:
+            return JsonResponse({"error": error_messages.no_images_found()}, status=400)
 
         allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:
@@ -459,6 +466,10 @@ def start_delete_all_job(request, conn=None, _url=None, **kwargs):
         if not valid:
             return JsonResponse({"error": error}, status=403)
 
+        access_ok, access_error = require_destructive_project_access(conn, project_id)
+        if not access_ok:
+            return JsonResponse({"error": access_error}, status=403)
+
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         allowed, remaining = check_major_action_rate_limit(request, conn)
@@ -536,6 +547,10 @@ def start_delete_plugin_job(request, conn=None, _url=None, **kwargs):
         valid, error = _validate_user_password(conn, password)
         if not valid:
             return JsonResponse({"error": error}, status=403)
+
+        access_ok, access_error = require_destructive_project_access(conn, project_id)
+        if not access_ok:
+            return JsonResponse({"error": access_error}, status=403)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 

@@ -162,6 +162,28 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             )
             self._run_bash(script)
 
+    def test_server_bootstrap_keeps_cli_tmp_namespace_private(self) -> None:
+        """Check server bootstrap preserves private CLI temp permissions.
+
+        Inputs: repository fixtures. Output: asserts server CLI runtime temp
+        permissions stay private across service boundaries.
+        """
+        function_text = TmpPermissionRegressionTests._slice_function(
+            self.server_bootstrap_script,
+            "ensure_tmpdir_permissions() {",
+            "validate_ldap_configuration() {",
+        )
+
+        expected_fragments = (
+            'chmod 0700 "${expected_tmp_dir}"',
+            'chmod 0700 "${candidate_dir}"',
+            'chmod 0700 "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}"',
+            'chmod 0700 "${omero_py_dir}" "${omero_py_user_dir}"',
+        )
+        for expected in expected_fragments:
+            self.assertIn(expected, function_text)
+        self.assertNotIn("chmod 0777", function_text)
+
     @staticmethod
     def _run_bash(script: str) -> None:
         """Run the bash for `TmpPermissionRegressionTests`.

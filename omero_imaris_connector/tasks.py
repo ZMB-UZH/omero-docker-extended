@@ -3,7 +3,6 @@ import os
 import re
 import shutil
 import stat
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -11,30 +10,33 @@ from typing import Any, Callable
 import omero
 from celery import states
 from omero.gateway import BlitzGateway
-from omero_plugin_common import process_utils
 from omero_plugin_common.logging_utils import (
     sanitize_log_value,
     sanitized_exc_info,
-    summarize_process_output,
 )
 
 from .celery_app import app
 from .config import (
     get_celery_broker_url,
     get_celery_result_expires,
-    get_connector_tmp_dir,
     get_ome_tiff_staging_root,
     get_job_service_credentials,
     use_job_service_session,
 )
 from .imaris_service import (
     EXPORT_TIMEOUT,
+    EXPORT_POLL_INTERVAL,
+    _detach_script_process,
+    _extract_job_id,
+    _extract_output_value,
     _find_script_id,
+    _normalize_job_state,
     _serialize_outputs,
+    _run_script,
 )
+from .session_handoff import pop_export_session_key
 
 logger = logging.getLogger(__name__)
-subprocess = process_utils
 
 _GENERIC_EXPORT_ERROR = "IMS export job failed."
 _GENERIC_OME_TIFF_EXPORT_ERROR = "OME-TIFF export job failed."
@@ -42,7 +44,6 @@ _EXPORT_CANCELLED_MESSAGE = "IMS export stopped by user."
 _EXPORT_CANCEL_MARKER_PREFIX = "omero_imaris_connector:export_cancel:"
 _EXPORT_CANCEL_MARKER_MIN_TTL_SECONDS = 300
 _DOWNLOADABLE_EXPORT_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
-_PRIVATE_EXPORT_DIR_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
 _PRESERVE_JOINED_SESSION_ATTR = "_omero_imaris_preserve_joined_session"
 _PUBLIC_SCRIPT_MESSAGES = {
     "Conversion to IMS failed",
@@ -376,128 +377,230 @@ def _get_connection_session_key(conn) -> str | None:
     return None
 
 
-def _run_script_via_omero_cli(
+def _report_script_service_status(
+    status_callback: Callable[[str, dict[str, Any]], None] | None,
+    status: str,
+    script_id: int,
+    extra_meta: dict[str, Any] | None = None,
+) -> None:
+    """Report live ScriptService metadata without letting telemetry fail export.
+
+    Inputs: status callback, status, script ID, extra metadata. Output: None.
+    """
+    if status_callback is None:
+        return
+    meta = {
+        "script_id": int(script_id),
+        "script_backend": "script_service",
+    }
+    if extra_meta:
+        meta.update(extra_meta)
+    try:
+        status_callback(status, meta)
+    except Exception:
+        logger.exception("Failed to update IMS export ScriptService metadata")
+
+
+def _close_script_service_process(proc, detach: bool) -> bool:
+    """Close a ScriptProcess with the requested OMERO detach behavior.
+
+    Inputs: ScriptProcess, detach flag. Output: whether a close method was called.
+    """
+    close = getattr(proc, "close", None)
+    if not callable(close):
+        return False
+    try:
+        close(bool(detach))
+        return True
+    except TypeError:
+        try:
+            close()
+            return True
+        except Exception:
+            logger.exception("Failed to close IMS export ScriptProcess")
+            return False
+    except Exception:
+        logger.exception("Failed to close IMS export ScriptProcess")
+        return False
+
+
+def _stop_script_service_process(proc) -> bool:
+    """Best-effort stop for a running ScriptService export.
+
+    Inputs: ScriptProcess. Output: whether any stop/close action was attempted.
+    """
+    if _close_script_service_process(proc, detach=False):
+        return True
+    attempted = False
+    for method_name in ("cancel", "shutdown", "kill"):
+        method = getattr(proc, method_name, None)
+        if not callable(method):
+            continue
+        attempted = True
+        try:
+            method()
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to stop IMS export ScriptProcess via %s", method_name
+            )
+    return attempted
+
+
+def _script_process_job_id(proc) -> int | None:
+    """Return the OMERO script job id from a ScriptProcess when available.
+
+    Inputs: ScriptProcess. Output: job id or None.
+    """
+    getter = getattr(proc, "getJob", None)
+    if not callable(getter):
+        return None
+    try:
+        return _extract_job_id(getter())
+    except Exception:
+        logger.debug("Unable to read IMS export ScriptProcess job id.")
+        return None
+
+
+def _script_outputs_include_download_target(outputs) -> bool:
+    """Return whether IMS script outputs contain a downloadable target.
+
+    Inputs: OMERO script outputs. Output: bool.
+    """
+    return bool(
+        _extract_output_value(outputs or {}, "Export_Path")
+        or _extract_output_value(outputs or {}, "File_Annotation_Id")
+    )
+
+
+def _wait_for_script_service_process(
+    proc,
+    script_id: int,
+    timeout: float,
+    status_callback: Callable[[str, dict[str, Any]], None] | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
+) -> tuple[str | None, dict | None]:
+    """Wait for an OMERO ScriptProcess with cancellation-marker awareness.
+
+    Inputs: ScriptProcess, script id, timeout, callbacks. Output: state and outputs.
+    """
+    deadline = time.time() + timeout
+    start_time = time.time()
+    last_state = None
+    stopped = False
+    job_id = _script_process_job_id(proc)
+    status_meta: dict[str, Any] = {}
+    if job_id is not None:
+        status_meta["script_job_id"] = int(job_id)
+    try:
+        while time.time() < deadline:
+            if cancel_requested and cancel_requested():
+                _report_script_service_status(
+                    status_callback,
+                    "cancelling_script",
+                    script_id,
+                    status_meta,
+                )
+                stopped = _stop_script_service_process(proc)
+                raise RuntimeError(_EXPORT_CANCELLED_MESSAGE)
+            try:
+                last_state = _normalize_job_state(proc.poll())
+            except Exception:
+                last_state = None
+            elapsed = time.time() - start_time
+            _report_script_service_status(
+                status_callback,
+                "running_script",
+                script_id,
+                {**status_meta, "elapsed": float(elapsed)},
+            )
+            if last_state:
+                break
+            time.sleep(EXPORT_POLL_INTERVAL)
+        outputs = None
+        if last_state:
+            try:
+                outputs = proc.getResults(0)
+            except Exception as exc:
+                raise IMSExportTaskError(
+                    "IMS export ScriptService results unavailable."
+                ) from exc
+        return last_state, outputs
+    finally:
+        if not stopped:
+            _detach_script_process(proc, reason="IMS export ScriptService wait ended")
+
+
+def _run_script_via_omero_api(
+    conn,
     script_id: int,
     image_id: int,
-    host: str,
-    port: int,
-    session_key: str | None = None,
     status_callback: Callable[[str, dict[str, Any]], None] | None = None,
-) -> dict[str, str]:
-    """Launch IMS export with OMERO CLI inside the OMERO.web container.
+    cancel_requested: Callable[[], bool] | None = None,
+) -> dict:
+    """Launch IMS export with OMERO ScriptService without exposing session argv.
 
-    Inputs: `script_id` (int), `image_id` (int) OMERO image ID, `host` (str), `port`
-    (int), `session_key` (str | None). Output: `dict[str, str]`. Raises:
-    IMSExportTaskError, RuntimeError when validation or the called operation fails.
+    Inputs: OMERO gateway connection, script id, image id, callbacks. Output: script
+    outputs. Raises: IMSExportTaskError, RuntimeError when validation or export fails.
     """
-    omero_cli = _resolve_omero_cli()
+    if conn is None:
+        raise RuntimeError("OMERO connection is required for ScriptService export.")
 
-    cmd = [
-        omero_cli,
-        "-q",
-        "script",
-        "launch",
-        str(int(script_id)),
-        f"Image_ID={int(image_id)}",
-        "-s",
-        str(host),
-        "-p",
-        str(int(port)),
-    ]
+    def _forward_status(status: str, meta: dict[str, Any] | None = None) -> None:
+        """Forward nested ScriptService status updates with stable metadata.
 
-    if not session_key:
-        raise RuntimeError("OMERO CLI launch requires a live OMERO session key.")
-    cmd.extend(["-k", str(session_key)])
+        Inputs: status label and optional metadata. Output: None.
+        """
+        _report_script_service_status(
+            status_callback,
+            status,
+            script_id,
+            meta,
+        )
 
     logger.info(
-        "Launching IMS export via OMERO CLI script_id=%s image_id=%s",
+        "Launching IMS export via OMERO ScriptService script_id=%s image_id=%s",
         script_id,
         image_id,
     )
-    env = os.environ.copy()
-    # Keep OMERO CLI session/cache files on the managed plugin tmp volume
-    # rather than a shared world-writable system temp directory.
-    omero_userdir_root = get_connector_tmp_dir("omero-cli", create=True)
-    omero_userdir = Path(
-        tempfile.mkdtemp(
-            prefix=f"ims-export-{int(image_id)}-",
-            dir=omero_userdir_root,
-        )
-    )
-    os.chmod(omero_userdir, _PRIVATE_EXPORT_DIR_MODE)
-    session_dir = omero_userdir / "sessions"
-    tmp_dir = omero_userdir / "tmp"
-    session_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    env["HOME"] = str(omero_userdir)
-    env["OMERO_USERDIR"] = str(omero_userdir)
-    env["OMERO_SESSIONDIR"] = str(session_dir)
-    env["OMERO_TMPDIR"] = str(tmp_dir)
-
-    def _report_cli_tick(pid: int, elapsed: float) -> None:
-        """Report live OMERO CLI metadata. Inputs: `pid`, `elapsed`. Output: None."""
-        if status_callback is None:
-            return
-        try:
-            status_callback(
-                "running_script",
-                {
-                    "script_id": int(script_id),
-                    "cli_pid": int(pid),
-                    "cli_pgid": int(pid),
-                    "elapsed": float(elapsed),
-                },
-            )
-        except Exception:
-            logger.exception("Failed to update IMS export CLI process metadata")
-
+    _forward_status("running_script", {"elapsed": 0.0})
     try:
-        result = process_utils.run_streaming(
-            cmd,
-            timeout=EXPORT_TIMEOUT + 120,
-            check=False,
-            env=env,
-            tick_interval=1.0,
-            on_tick=_report_cli_tick,
-            start_new_session=True,
+        proc = _run_script(
+            conn,
+            script_id=script_id,
+            image_id=image_id,
+            wait_secs=0,
+            status_callback=_forward_status,
         )
-    finally:
-        shutil.rmtree(omero_userdir, ignore_errors=True)
+        state, outputs = _wait_for_script_service_process(
+            proc,
+            script_id=script_id,
+            timeout=EXPORT_TIMEOUT,
+            status_callback=status_callback,
+            cancel_requested=cancel_requested,
+        )
+    except IMSExportTaskError:
+        raise
+    except Exception as exc:
+        raise IMSExportTaskError("IMS export ScriptService launch failed.") from exc
 
-    combined = (
-        (result.stdout or "")
-        + ("\n" if result.stdout and result.stderr else "")
-        + (result.stderr or "")
+    normalized_state = _normalize_job_state(state) or "TIMEOUT"
+    if normalized_state in {"FINISHED", "DONE", "COMPLETED"} and (
+        _script_outputs_include_download_target(outputs)
+    ):
+        return outputs or {}
+
+    public_message = _public_script_message(
+        _extract_output_value(outputs or {}, "Message")
     )
-    outputs = _extract_cli_outputs(combined)
-
-    if result.returncode != 0:
-        public_message = _public_script_message(outputs.get("Message"))
-        logger.error(
-            "OMERO CLI launch failed script_id=%s image_id=%s exit_code=%s %s",
-            script_id,
-            image_id,
-            result.returncode,
-            summarize_process_output(result.stdout, result.stderr),
-        )
-        raise IMSExportTaskError(
-            "IMS export CLI launch failed.",
-            public_message=public_message,
-        )
-
-    if outputs.get("Export_Path"):
-        return outputs
-
-    public_message = _public_script_message(outputs.get("Message"))
-    logger.error(
-        "OMERO CLI launch returned no export path script_id=%s image_id=%s %s",
-        script_id,
-        image_id,
-        summarize_process_output(result.stdout, result.stderr),
-    )
-    detail = public_message or "script returned no public failure message"
+    if normalized_state == "TIMEOUT":
+        detail = "script timed out"
+    elif not _script_outputs_include_download_target(outputs):
+        detail = public_message or "script returned no downloadable export"
+    else:
+        detail = public_message or f"script ended in state {normalized_state}"
     raise IMSExportTaskError(
-        f"IMS export CLI launch returned no export path: {detail}",
+        f"IMS export ScriptService launch failed: {detail}",
         public_message=public_message,
     )
 
@@ -616,6 +719,19 @@ def _open_export_connection(session_key, host, port, secure=None):
     if use_job_service_session():
         return _open_job_service_connection(host, port, secure=secure)
     return _open_session_connection(session_key, host, port, secure=secure)
+
+
+def _resolve_export_session_key(session_key=None, session_ref=None):
+    """Resolve a legacy inline session key or local one-time handoff reference.
+
+    Inputs: optional legacy `session_key`, optional `session_ref`. Output: session key
+    string or None.
+    """
+    if session_ref:
+        resolved = pop_export_session_key(session_ref)
+        if resolved:
+            return resolved
+    return session_key
 
 
 def _close_export_connection(conn) -> None:
@@ -740,16 +856,18 @@ def _run_ome_tiff_export(conn, image_id, status_callback=None):
 def run_ims_export_task(
     self,
     image_id,
-    session_key,
-    host,
-    port,
+    session_key=None,
+    host=None,
+    port=None,
     secure=None,
     owner_token=None,
+    session_ref=None,
 ):
     """An IMS export task.
 
-    Inputs: `image_id` OMERO image ID, `session_key`, `host`, `port`, `secure`. Output:
-    `dict`. Raises: RuntimeError when validation or the called operation fails.
+    Inputs: `image_id` OMERO image ID, optional `session_key`/`session_ref`, `host`,
+    `port`, `secure`. Output: `dict`. Raises: RuntimeError when validation or the
+    called operation fails.
     """
     conn = None
     script_id = None
@@ -785,7 +903,11 @@ def run_ims_export_task(
         # Update task state to show we're starting
         _update_task_state("connecting")
 
-        conn = _open_export_connection(session_key, host, port, secure=secure)
+        resolved_session_key = _resolve_export_session_key(
+            session_key=session_key,
+            session_ref=session_ref,
+        )
+        conn = _open_export_connection(resolved_session_key, host, port, secure=secure)
 
         # Find the export script
         _update_task_state("finding_script")
@@ -800,23 +922,18 @@ def run_ims_export_task(
             self.request.id,
         )
 
-        # Run the script through OMERO CLI. This path is the live-validated
-        # execution path in the OMERO.web container and avoids brittle
-        # ScriptService callback/process-handle behavior.
-        _update_task_state("running_script", {"script_id": script_id})
-        cli_session_key = session_key
-        if not cli_session_key and use_job_service_session():
-            cli_session_key = _get_connection_session_key(conn)
-            if not cli_session_key:
-                raise RuntimeError("IMS export job-service session key unavailable.")
-
-        outputs = _run_script_via_omero_cli(
+        # Run through ScriptService using the already-established gateway
+        # connection so bearer session keys are never exposed in process argv.
+        _update_task_state(
+            "running_script",
+            {"script_id": script_id, "script_backend": "script_service"},
+        )
+        outputs = _run_script_via_omero_api(
+            conn=conn,
             script_id=script_id,
             image_id=image_id,
-            host=host,
-            port=port,
-            session_key=cli_session_key,
             status_callback=_update_task_state,
+            cancel_requested=lambda: export_task_cancel_requested(self.request.id),
         )
         normalized_state = "FINISHED"
 
@@ -878,16 +995,17 @@ def run_ims_export_task(
 def run_ome_tiff_export_task(
     self,
     image_id,
-    session_key,
-    host,
-    port,
+    session_key=None,
+    host=None,
+    port=None,
     secure=None,
     owner_token=None,
+    session_ref=None,
 ):
     """An OME-TIFF export task for Imaris File Converter handoff.
 
-    Inputs: `image_id` OMERO image ID, `session_key`, `host`, `port`, `secure`. Output:
-    `dict`.
+    Inputs: `image_id` OMERO image ID, optional `session_key`/`session_ref`, `host`,
+    `port`, `secure`. Output: `dict`.
     """
     conn = None
     start_time = time.time()
@@ -918,7 +1036,11 @@ def run_ome_tiff_export_task(
             self.request.id,
         )
         _update_task_state("connecting")
-        conn = _open_export_connection(session_key, host, port, secure=secure)
+        resolved_session_key = _resolve_export_session_key(
+            session_key=session_key,
+            session_ref=session_ref,
+        )
+        conn = _open_export_connection(resolved_session_key, host, port, secure=secure)
         outputs = _run_ome_tiff_export(
             conn, image_id, status_callback=_update_task_state
         )

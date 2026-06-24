@@ -599,6 +599,70 @@ write_cli_keepalive_config() {
     printf '%s\n' "${config_path}"
 }
 
+# Write temporary OMERO config script. Inputs: config key and value. Output: script path on stdout.
+write_omero_config_script_value() {
+    local config_key="${1:?BUG: write_omero_config_script_value requires a config key}"
+    local config_value="${2-}"
+    local target_dir=""
+    local config_path=""
+    local escaped_value=""
+    local owner_uid=""
+    local owner_gid=""
+
+    case "${config_key}" in
+        "" | *[!A-Za-z0-9_.-]*)
+            echo "ERROR: Invalid OMERO config key for temporary script: ${config_key}" >&2
+            return 1
+            ;;
+    esac
+    case "${config_value}" in
+        *$'\n'* | *$'\r'*)
+            echo "ERROR: OMERO config value for ${config_key} must not contain newlines" >&2
+            return 1
+            ;;
+    esac
+
+    target_dir="$(resolve_omero_cli_tmpdir)" || return 1
+    mkdir -p "${target_dir}" || {
+        echo "ERROR: Could not prepare OMERO config script directory: ${target_dir}" >&2
+        return 1
+    }
+
+    config_path="$(mktemp "${target_dir%/}/omero-config.XXXXXX.omero")" || {
+        echo "ERROR: Could not create temporary OMERO config script under ${target_dir}" >&2
+        return 1
+    }
+    chmod 0600 "${config_path}" 2>/dev/null || true
+
+    escaped_value="$(printf '%s' "${config_value}" | sed "s/'/'\\\\''/g")"
+    printf "config set %s '%s'\n" "${config_key}" "${escaped_value}" > "${config_path}"
+
+    if [[ "$(id -u)" -eq 0 ]] && id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
+        owner_uid="$(id -u "${OMERO_CLI_USER}")"
+        owner_gid="$(id -g "${OMERO_CLI_USER}")"
+        chown "${owner_uid}:${owner_gid}" "${config_path}" || {
+            echo "ERROR: Could not hand temporary OMERO config script to ${OMERO_CLI_USER}: ${config_path}" >&2
+            rm -f "${config_path}" 2>/dev/null || true
+            return 1
+        }
+    fi
+
+    printf '%s\n' "${config_path}"
+}
+
+# Set sensitive OMERO config through a private load script. Inputs: key and value. Output: command status.
+run_omero_config_set_secret() {
+    local config_key="${1:?BUG: run_omero_config_set_secret requires a config key}"
+    local config_value="${2-}"
+    local config_path=""
+    local rc=0
+
+    config_path="$(write_omero_config_script_value "${config_key}" "${config_value}")" || return 1
+    run_omero load "${config_path}" || rc=$?
+    rm -f "${config_path}" 2>/dev/null || true
+    return "${rc}"
+}
+
 # Execute OMERO with keepalive. Inputs: shell arguments and environment. Output: command status and side effects.
 run_omero_with_keepalive() {
     local keepalive_seconds="${1:?BUG: run_omero_with_keepalive requires keepalive seconds}"
@@ -664,7 +728,7 @@ ensure_tmpdir_permissions() {
 
     if [[ "$(id -u)" -eq 0 ]]; then
         chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${expected_tmp_dir}"
-        chmod 0777 "${expected_tmp_dir}"
+        chmod 0700 "${expected_tmp_dir}"
     fi
 
     if [[ ! -d "${expected_tmp_dir}" ]]; then
@@ -688,7 +752,7 @@ ensure_tmpdir_permissions() {
 
         if [[ "$(id -u)" -eq 0 ]]; then
             chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_dir}" 2>/dev/null || true
-            chmod 0777 "${candidate_dir}" 2>/dev/null || true
+            chmod 0700 "${candidate_dir}" 2>/dev/null || true
         fi
 
         if [[ ! -w "${candidate_dir}" ]]; then
@@ -717,7 +781,7 @@ ensure_tmpdir_permissions() {
         mkdir -p "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" || return 1
         if [[ "$(id -u)" -eq 0 ]]; then
             chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
-            chmod 0777 "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
+            chmod 0700 "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
         fi
 
         return 0
@@ -782,7 +846,7 @@ ensure_tmpdir_permissions() {
         if [[ "$(id -u)" -eq 0 ]]; then
             find "${omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
             find "${omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
-            find "${omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
+            find "${omero_py_user_dir}" -type d -exec chmod 0700 {} \; 2>/dev/null || true
         fi
     fi
     if [[ -d "${legacy_omero_py_user_dir}" ]]; then
@@ -791,7 +855,7 @@ ensure_tmpdir_permissions() {
         if [[ "$(id -u)" -eq 0 ]]; then
             find "${legacy_omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
             find "${legacy_omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
-            find "${legacy_omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
+            find "${legacy_omero_py_user_dir}" -type d -exec chmod 0700 {} \; 2>/dev/null || true
         fi
     fi
 
@@ -799,7 +863,7 @@ ensure_tmpdir_permissions() {
     mkdir -p "${omero_py_dir}" "${omero_py_user_dir}"
     if [[ "$(id -u)" -eq 0 ]]; then
         chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${omero_py_dir}" "${omero_py_user_dir}"
-        chmod 0777 "${omero_py_dir}" "${omero_py_user_dir}"
+        chmod 0700 "${omero_py_dir}" "${omero_py_user_dir}"
     fi
 
     # Ensure legacy dir is clean / symlinked so the fallback logic in Python never triggers
@@ -836,6 +900,12 @@ validate_ldap_configuration() {
             echo "ERROR: LDAP is enabled but ${var_name} is not set in env/omero_secrets.env" >&2
             exit 1
         fi
+        case "${!var_name}" in
+            *$'\n'* | *$'\r'*)
+                echo "ERROR: LDAP is enabled but ${var_name} contains a newline, which cannot be loaded safely." >&2
+                exit 1
+                ;;
+        esac
     done
 
     if [[ -z "${CONFIG_omero_ldap_base+x}" ]]; then
@@ -1324,7 +1394,7 @@ apply_ldap_runtime_configuration() {
     run_omero config set omero.ldap.config true
     run_omero config set omero.ldap.urls "${ldap_urls}"
     run_omero config set omero.ldap.username "${ldap_username}"
-    run_omero config set omero.ldap.password "${ldap_bind_value}"
+    run_omero_config_set_secret omero.ldap.password "${ldap_bind_value}"
     run_omero config set omero.ldap.base "${ldap_base}"
     
     if [[ -n "${CONFIG_omero_ldap_user__filter+x}" ]]; then

@@ -12,11 +12,6 @@ on:
         required: false
         default: "strmt7/omero-docker-extended"
         type: string
-      runner_label:
-        description: "Runner label. Use a self-hosted runner with sufficient docker storage for large carrier builds when needed."
-        required: false
-        default: "ubuntu-latest"
-        type: string
       replace_existing:
         description: "Replace an existing GitHub release/tag and docker hub image tag for the requested version."
         required: false
@@ -34,7 +29,7 @@ jobs:
   release:
     name: Release prebuilt carrier
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ${{ inputs.runner_label }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
@@ -306,6 +301,22 @@ jobs:
           [ -n "${DOCKERHUB_TOKEN}" ] || { echo "DOCKERHUB_TOKEN secret is required." >&2; exit 1; }
           printf '%s' "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
 
+      - name: Ensure Docker Scout repository analysis is enabled
+        env:
+          DOCKER_SCOUT_ORG: strmt7
+        run: |
+          set -euo pipefail
+          docker scout version
+          docker scout repo enable "${DOCKER_REPOSITORY}" --org "${DOCKER_SCOUT_ORG}"
+          enabled_repositories="$(
+            docker scout repo list \
+              --org "${DOCKER_SCOUT_ORG}" \
+              --only-enabled \
+              --filter "${DOCKER_REPOSITORY}"
+          )"
+          printf '%s\n' "${enabled_repositories}"
+          printf '%s\n' "${enabled_repositories}" | grep -F "${DOCKER_REPOSITORY}"
+
       - name: Build hardened flattened runtime images
         run: |
           set -euo pipefail
@@ -516,6 +527,43 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${CARRIER_IMAGE}"
+          carrier_repo_digest="$(
+            docker image inspect "${CARRIER_IMAGE}" --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+              | awk '/@sha256:[0-9a-f]{64}$/ { print; exit }'
+          )"
+          [ -n "${carrier_repo_digest}" ] || {
+            echo "Carrier image is missing a sha256 repo digest after pull: ${CARRIER_IMAGE}" >&2
+            exit 1
+          }
+          carrier_digest="${carrier_repo_digest##*@}"
+          case "${carrier_digest}" in
+            sha256:????????????????????????????????????????????????????????????????)
+              ;;
+            *)
+              echo "Carrier image digest has an unexpected format: ${carrier_digest}" >&2
+              exit 1
+              ;;
+          esac
+          cat > dist/prebuilt-carrier-digest.txt <<EOF
+          PREBUILT_IMAGE_REPOSITORY=${DOCKER_REPOSITORY}
+          PREBUILT_IMAGE_RELEASE=${RELEASE_VERSION}
+          PREBUILT_IMAGE_DIGEST=${carrier_digest}
+          PREBUILT_IMAGE_REF=${CARRIER_IMAGE}@${carrier_digest}
+          CARRIER_IMAGE=${CARRIER_IMAGE}
+          GITHUB_SHA=${GITHUB_SHA}
+          EOF
+          cat > dist/release-notes.md <<EOF
+          Prebuilt carrier image:
+
+          ${CARRIER_IMAGE}
+
+          Expected carrier digest:
+
+          ${carrier_digest}
+
+          This release contains the source archive, the single docker carrier image manifest,
+          and prebuilt-carrier-digest.txt for digest-pinned easy installs.
+          EOF
           cid="$(docker create "${CARRIER_IMAGE}")"
           cleanup_verify_container() {
             docker rm -f "${cid}" >/dev/null 2>&1 || true
@@ -527,6 +575,16 @@ jobs:
           trap - EXIT
           cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
           cmp dist/prebuilt-required-images.txt dist/verified-prebuilt-required-images.txt
+
+      - name: Upload carrier digest release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s dist/prebuilt-carrier-digest.txt
+          gh release upload "${RELEASE_VERSION}" \
+            "dist/prebuilt-carrier-digest.txt" \
+            --clobber
 
       - name: Analyze Docker Hub carrier image with Docker Scout
         uses: docker/scout-action@cd72f264beff1cd72735de31148b9d3244a0234a # v1.21.0
@@ -614,6 +672,7 @@ jobs:
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
               "dist/prebuilt-manifest.json" \
+              "dist/prebuilt-carrier-digest.txt" \
               --clobber
             gh release edit "${RELEASE_VERSION}" \
               --target "${RELEASE_TARGET_REF}" \
@@ -624,7 +683,9 @@ jobs:
               --verify-tag
           else
             gh release edit "${RELEASE_VERSION}" \
-              --draft=false
+              --notes-file dist/release-notes.md \
+              --draft=false \
+              --latest=false
           fi
           created_tag_type="$(
             gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
@@ -662,6 +723,7 @@ jobs:
               f"omero-docker-extended-{os.environ['RELEASE_VERSION']}-source.tar.gz",
               f"omero-docker-extended-{os.environ['RELEASE_VERSION']}-source.tar.gz.sha256",
               "prebuilt-manifest.json",
+              "prebuilt-carrier-digest.txt",
           }
           actual_assets = {asset["name"] for asset in release.get("assets", [])}
           errors = []

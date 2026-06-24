@@ -1,6 +1,6 @@
 // skipcq: JS-0833
 import { promises as fs } from 'node:fs';
-import { basename, dirname, extname, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 const requireFromPreviewDir = createRequire(resolve(process.cwd(), 'package.json'));
@@ -51,40 +51,67 @@ const MIME_TYPES = new Map([
 ]);
 
 // Return whether a path stays inside its parent. Inputs: candidate, parent. Output: return value.
-const pathIsInside = (candidate, parent) => {
+export const pathIsInside = (candidate, parent) => {
   const resolvedCandidate = resolve(candidate);
   const resolvedParent = resolve(parent);
+  const relativePath = relative(resolvedParent, resolvedCandidate);
   return (
-    resolvedCandidate === resolvedParent || resolvedCandidate.startsWith(`${resolvedParent}/`)
+    relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath))
   );
 };
 
+// Return safe URL path segments for preview asset lookup. Inputs: request path. Output: array or null.
+export const safePreviewPathSegments = (requestPath) => {
+  const segments = requestPath.replace(/^\/+/, '').split('/');
+  if (!segments.length) {
+    return null;
+  }
+  const safeSegments = [];
+  for (const segment of segments) {
+    let decodedSegment;
+    try {
+      decodedSegment = decodeURIComponent(segment);
+    } catch {
+      return null;
+    }
+    if (
+      !decodedSegment ||
+      decodedSegment === '.' ||
+      decodedSegment === '..' ||
+      decodedSegment.includes('/') ||
+      decodedSegment.includes('\\') ||
+      decodedSegment.includes('\0')
+    ) {
+      return null;
+    }
+    safeSegments.push(decodedSegment);
+  }
+  return safeSegments;
+};
+
 // Resolve Template Path. Inputs: requestPath. Output: return value.
-const resolveTemplatePath = (requestPath) => {
+export const resolveTemplatePath = (requestPath) => {
   const relativePath = requestPath === '/' ? PREVIEW_TEMPLATE : requestPath.replace(/^\/+/, '');
   const candidate = resolve(TEMPLATE_ROOT, relativePath);
   return pathIsInside(candidate, TEMPLATE_ROOT) ? candidate : null;
 };
 
 // Resolve Static Asset Path. Inputs: assetPath. Output: return value.
-const resolveStaticAssetPath = (assetPath) => {
-  const relativePath = assetPath.replace(/^\/+/, '');
-  if (!relativePath) {
+export const resolveStaticAssetPath = (assetPath) => {
+  const safeSegments = safePreviewPathSegments(assetPath);
+  if (!safeSegments) {
     return null;
   }
-  if (relativePath.startsWith('3rdparty/')) {
+  if (safeSegments[0] === '3rdparty') {
     if (!OMERO_STATIC_ROOT) {
       return null;
     }
-    const candidate = resolve(OMERO_STATIC_ROOT, relativePath);
+    const candidate = resolve(OMERO_STATIC_ROOT, ...safeSegments);
     return pathIsInside(candidate, OMERO_STATIC_ROOT) ? candidate : null;
   }
-  const firstSegment = relativePath.split('/')[0];
-  if (!firstSegment) {
-    return null;
-  }
-  const candidate = resolve(REPO_ROOT, firstSegment, 'static', relativePath);
-  return pathIsInside(candidate, REPO_ROOT) ? candidate : null;
+  const staticRoot = resolve(REPO_ROOT, safeSegments[0], 'static');
+  const candidate = resolve(staticRoot, ...safeSegments);
+  return pathIsInside(candidate, staticRoot) ? candidate : null;
 };
 
 // Replace JSON Script. Inputs: _match, scriptId. Output: return value.

@@ -119,6 +119,22 @@ def _normalize_cwd(cwd: CommandArg | None) -> str | None:
     return normalized
 
 
+def _normalize_stdin_text(stdin_text: str | bytes | None) -> bytes | None:
+    """Normalize optional subprocess stdin payload.
+
+    Inputs: optional text or bytes. Output: bytes or None.
+    """
+    if stdin_text is None:
+        return None
+    if isinstance(stdin_text, bytes):
+        payload = stdin_text
+    else:
+        payload = str(stdin_text).encode("utf-8")
+    if b"\x00" in payload:
+        raise ValueError("Standard input payload must not contain NUL bytes.")
+    return payload
+
+
 def _finite_seconds(value: float | int, label: str) -> float:
     """Return the finite seconds.
 
@@ -203,6 +219,7 @@ def _popen(
     *,
     env: dict[str, str] | None,
     cwd: str | None,
+    stdin_pipe: bool = False,
     start_new_session: bool = False,
 ) -> subprocess.Popen[bytes]:
     """Return the popen.
@@ -212,7 +229,7 @@ def _popen(
     """
     process = subprocess.Popen(
         command,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE if stdin_pipe else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
@@ -269,6 +286,7 @@ def run(
     timeout: float | int | None = None,
     env: Mapping[str, str] | None = None,
     cwd: CommandArg | None = None,
+    stdin_text: str | bytes | None = None,
     start_new_session: bool = False,
 ) -> CompletedProcess:
     """A fixed argv command with captured text output and no shell.
@@ -281,14 +299,19 @@ def run(
     """
     command = _normalize_command(args)
     timeout_seconds = _normalize_timeout(timeout)
+    stdin_payload = _normalize_stdin_text(stdin_text)
     process = _popen(
         command,
         env=_normalize_env(env),
         cwd=_normalize_cwd(cwd),
+        stdin_pipe=stdin_payload is not None,
         start_new_session=start_new_session,
     )
     try:
-        stdout, stderr = process.communicate(timeout=timeout_seconds)
+        stdout, stderr = process.communicate(
+            input=stdin_payload,
+            timeout=timeout_seconds,
+        )
     except subprocess.TimeoutExpired as exc:
         partial_stdout, partial_stderr = _terminate(process)
         raise TimeoutExpired(
@@ -306,6 +329,7 @@ def run_streaming(
     timeout: float | int | None = None,
     env: Mapping[str, str] | None = None,
     cwd: CommandArg | None = None,
+    stdin_text: str | bytes | None = None,
     check: bool = False,
     tick_interval: float = 0.5,
     on_tick: TickCallback | None = None,
@@ -322,13 +346,22 @@ def run_streaming(
     command = _normalize_command(args)
     timeout_seconds = _normalize_timeout(timeout)
     tick_interval = _normalize_tick_interval(tick_interval)
+    stdin_payload = _normalize_stdin_text(stdin_text)
 
     process = _popen(
         command,
         env=_normalize_env(env),
         cwd=_normalize_cwd(cwd),
+        stdin_pipe=stdin_payload is not None,
         start_new_session=start_new_session,
     )
+    if stdin_payload is not None and process.stdin is not None:
+        try:
+            process.stdin.write(stdin_payload)
+            process.stdin.close()
+        except BrokenPipeError:
+            pass
+        process.stdin = None
     started_at = time.monotonic()
     _notify_tick(process, on_tick, 0.0)
 
