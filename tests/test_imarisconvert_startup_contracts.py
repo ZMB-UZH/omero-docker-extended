@@ -77,10 +77,15 @@ def _script_env(install_dir: Path, wrapper_path: Path) -> dict[str, str]:
     """
     runtime_jar = install_dir / "bioformats" / "bioformats_package.jar"
     if runtime_jar.is_file():
-        bioformats_sha256 = hashlib.sha256(runtime_jar.read_bytes()).hexdigest()
+        bioformats_sha256 = (
+            hashlib.sha256(  # DevSkim: ignore DS197836 -- test fixture file digest
+                runtime_jar.read_bytes()
+            ).hexdigest()
+        )
     else:
         bioformats_sha256 = (
-            "978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2"
+            "978093f2a4d0034f9581b19a5acd5a53"  # DevSkim: ignore DS173237 -- fixture digest
+            "c56d7b04b703865cd533aa953c92b1c2"  # DevSkim: ignore DS173237 -- fixture digest
         )
     return {
         **os.environ,

@@ -771,12 +771,14 @@ def _cancel_celery_job(job_id, conn=None):
     async_result = celery_app.AsyncResult(task_id)
     mark_export_task_cancel_requested(task_id)
     queue_cleanup = _remove_queued_redis_task(task_id)
-    process_cleanup = _terminate_export_cli_process(meta)
-    terminate_worker = not (
+    terminate_worker = True
+    if (
         isinstance(meta, dict)
         and meta.get("status") == "running_script"
         and meta.get("script_backend") == "script_service"
-    )
+    ):
+        terminate_worker = False
+    process_cleanup = _terminate_export_cli_process(meta)
     try:
         celery_app.control.revoke(
             task_id,

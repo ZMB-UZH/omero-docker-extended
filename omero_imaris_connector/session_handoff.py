@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import stat
@@ -16,6 +17,8 @@ _HANDOFF_FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _DEFAULT_TTL_SECONDS = 24 * 60 * 60
 _DIR_MODE = stat.S_IRWXU
 _FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_handoff_ref(ref: str) -> str:
@@ -39,8 +42,8 @@ def _handoff_dir() -> Path:
         raise RuntimeError("Invalid Imaris export session handoff directory.")
     try:
         os.chmod(path, _DIR_MODE)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug("Could not tighten Imaris handoff directory mode: %s", exc)
     try:
         mode = path.stat(follow_symlinks=False).st_mode
     except OSError as exc:
@@ -89,14 +92,14 @@ def store_export_session_key(
     except Exception:
         try:
             os.close(fd)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("Could not close failed Imaris handoff descriptor: %s", exc)
         delete_export_session_key(value)
         raise
     try:
         os.chmod(path, _FILE_MODE)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug("Could not tighten Imaris handoff file mode: %s", exc)
     return value
 
 
@@ -116,8 +119,8 @@ def pop_export_session_key(ref: str | None) -> str | None:
     finally:
         try:
             path.unlink()
-        except FileNotFoundError:
-            pass
+        except FileNotFoundError as exc:
+            logger.debug("Imaris handoff file was already removed: %s", exc)
     if not isinstance(payload, dict):
         return None
     try:
@@ -139,5 +142,5 @@ def delete_export_session_key(ref: str | None) -> None:
         return
     try:
         _handoff_path(ref).unlink()
-    except FileNotFoundError:
-        return
+    except FileNotFoundError as exc:
+        logger.debug("Imaris handoff file was already absent: %s", exc)

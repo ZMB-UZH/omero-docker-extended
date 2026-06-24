@@ -77,13 +77,13 @@ class _TrackingArray:
     def __getitem__(self, selectors):
         """Return only the requested y/x slice.
 
-        Inputs: selectors. Output: NumPy array. Raises: AssertionError if the
+        Inputs: selectors. Output: NumPy array. Raises: IndexError if the
         region path attempts a full y/x plane read.
         """
         self.selectors = selectors
         _z_selector, y_selector, x_selector = selectors
         if y_selector == slice(None) or x_selector == slice(None):
-            raise AssertionError("region rendering must not read full y/x planes")
+            raise IndexError("region rendering must not read full y/x planes")
         height = int(y_selector.stop - y_selector.start)
         width = int(x_selector.stop - x_selector.start)
         return np.arange(height * width, dtype=np.uint8).reshape(height, width)

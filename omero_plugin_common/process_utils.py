@@ -359,8 +359,8 @@ def run_streaming(
         try:
             process.stdin.write(stdin_payload)
             process.stdin.close()
-        except BrokenPipeError:
-            pass
+        except BrokenPipeError as exc:
+            logger.debug("Process exited before reading stdin: %s", exc)
         process.stdin = None
     started_at = time.monotonic()
     _notify_tick(process, on_tick, 0.0)
