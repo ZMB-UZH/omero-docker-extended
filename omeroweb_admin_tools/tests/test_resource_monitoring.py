@@ -8,10 +8,13 @@ from django.http import HttpResponse
 from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory
 
-import omeroweb_admin_tools.views.index_view as index_view
 from omeroweb_admin_tools.views.index_view import (
+    CookieError,
+    grafana_proxy,
     logs_data,
+    prometheus_proxy,
     resource_monitoring_data,
+    _GRAFANA_PROXY_METHODS,
     _build_proxy_request_target,
     _build_proxy_target_url,
     _build_public_service_url,
@@ -455,9 +458,12 @@ def test_filtered_proxy_cookie_header_fails_closed_on_parse_error(monkeypatch) -
 
             Inputs: ignored cookie value. Output: raises CookieError.
             """
-            raise index_view.CookieError("bad cookie")
+            raise CookieError("bad cookie")
 
-    monkeypatch.setattr(index_view, "SimpleCookie", _BadCookie)
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.SimpleCookie",
+        _BadCookie,
+    )
 
     assert (
         _filtered_proxy_cookie_header(
@@ -2361,11 +2367,9 @@ def test_grafana_proxy_post_requires_django_csrf_token() -> None:
 
     Inputs: admin-tool fixtures. Output: fails on regressions in grafana proxy csrf behavior.
     """
-    from omeroweb_admin_tools.views import index_view
-
-    view_func = index_view.grafana_proxy
+    view_func = grafana_proxy
     assert getattr(view_func, "csrf_exempt", False) is False
-    assert "POST" in index_view._GRAFANA_PROXY_METHODS
+    assert "POST" in _GRAFANA_PROXY_METHODS
 
     request = RequestFactory().post(
         "/admin_tools/resource-monitoring/grafana-proxy/api/login",
@@ -2385,9 +2389,7 @@ def test_prometheus_proxy_is_not_csrf_exempt() -> None:
 
     Inputs: admin-tool fixtures. Output: fails on regressions in prometheus proxy is not csrf exempt.
     """
-    from omeroweb_admin_tools.views import index_view
-
-    view_func = index_view.prometheus_proxy
+    view_func = prometheus_proxy
     assert getattr(view_func, "csrf_exempt", False) is False, (
         "prometheus_proxy must not be decorated with @csrf_exempt"
     )

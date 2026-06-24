@@ -7657,6 +7657,7 @@ ZARR_SHARED_TRANSFER_ROOT_MODE = 0o711
 ZARR_SHARED_TRANSFER_TOKEN_MODE = 0o711
 ZARR_SHARED_TRANSFER_DIR_MODE = 0o755
 ZARR_SHARED_TRANSFER_FILE_MODE = 0o644
+_ZARR_SHARED_TRANSFER_CREATE_FILE_MODE = 0o600
 
 
 _SCRIPT_OUTPUT_PATTERN = re.compile(r"^\s*\*?\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$")
@@ -7722,7 +7723,7 @@ def _copy_file_descriptor(source_fd: int, destination: Path) -> None:
     destination_fd = os.open(
         destination,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-        ZARR_SHARED_TRANSFER_FILE_MODE,
+        _ZARR_SHARED_TRANSFER_CREATE_FILE_MODE,
     )
     try:
         while True:
@@ -7733,6 +7734,7 @@ def _copy_file_descriptor(source_fd: int, destination: Path) -> None:
         os.fsync(destination_fd)
     finally:
         os.close(destination_fd)
+    destination.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
 
 
 def _copy_zarr_tree_from_directory_fd(

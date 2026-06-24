@@ -628,20 +628,20 @@ def test_open_service_connection_closes_on_outer_exception(monkeypatch) -> None:
             raise RuntimeError("close failed")
 
     class _BadGroupId:
-        """Value whose integer conversion fails unexpectedly."""
+        """Value whose integer conversion violates Python's int protocol."""
 
         @staticmethod
         def __int__():
-            """Raise while converting the group id.
+            """Return a non-int while converting the group id.
 
-            Inputs: none. Output: raises RuntimeError.
+            Inputs: none. Output: string, so `int()` raises TypeError.
             """
-            raise RuntimeError("bad group")
+            return "bad group"
 
     monkeypatch.setattr(
         core_functions, "BlitzGateway", lambda *args, **kwargs: _Gateway()
     )
-    with pytest.raises(RuntimeError, match="bad group"):
+    with pytest.raises(TypeError, match="__int__"):
         core_functions._open_service_connection(
             "omeroserver",
             4064,

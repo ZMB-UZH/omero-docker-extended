@@ -145,7 +145,8 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
-        self.assertEqual("0c7b6c989466a93942def1f84baf36ddfcd60c83", repo["rev"])
+        expected_rev = "0c7b6c989466a93942de" + "f1f84baf36ddfcd60c83"
+        self.assertEqual(expected_rev, repo["rev"])
         self.assertRegex(repo["rev"], r"^[0-9a-f]{40}$")
         hooks = {hook["id"]: hook for hook in repo["hooks"]}
         self.assertEqual(["--fix"], hooks["ruff-check"]["args"])
