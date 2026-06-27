@@ -59,10 +59,10 @@
   regression contracts.
 - Refreshed Python CI pins for the Python 3.14 workflow, including pytest,
   coverage, Django, cryptography, NumPy, matplotlib, zarr, and tifffile. Kept
-  the production OMERO build-time `OME_ZARR_PY_VERSION=0.16.0` and
-  `TIFFFILE_VERSION=2026.3.3` example pins as compatibility holds until the
-  OMERO base-image virtualenv and native Zarr behavior are verified against the
-  newer upstream constraints.
+  the production OMERO build-time `OME_ZARR_PY_VERSION=0.16.0` compatibility
+  hold after upstream release-note review: `ome-zarr==0.18.0` is compatible
+  with the OMERO.web 5.32.0 Python 3.12 runtime, but Python 3.14 CI currently
+  resolves it through the prerelease `ome-zarr-models==1.8.0rc0` dependency.
 - Updated the repo-local CocoIndex Code wrapper to `0.2.37` after upstream
   release review. Codex MCP installation now writes a host-stable launcher
   under `AGENT_COCOINDEX_HOME` and pins the checkout through
