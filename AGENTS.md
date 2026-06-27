@@ -43,7 +43,8 @@ verification, or required workflow checks.
 ## Single-session rule
 
 - AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
-- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Use minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
+- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use.
+- Continue only after explicit user approval or the Codex Security UI Start Scan handoff. Use minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
 ## Default-branch development rule
 

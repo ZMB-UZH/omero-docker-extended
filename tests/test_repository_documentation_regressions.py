@@ -721,6 +721,32 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn("proven bad instructions/tools", adapter_text)
                 self.assertIn("correct workflow", adapter_text)
 
+    def test_codex_security_scan_requires_explicit_user_authorization(
+        self,
+    ) -> None:
+        """Verify Codex Security scan instructions require explicit user authorization.
+
+        Inputs: repository fixtures. Output: fails on regressions in Codex Security scan permission boundaries.
+        """
+        expected_phrases = (
+            "multi-worker vulnerability scanning is on-demand only",
+            "pause and clearly ask the user",
+            "exact scan target, mode, and worker/subagent use",
+            "explicit user approval or the Codex Security UI Start Scan handoff",
+            "all edits, commits, pushes, releases, and reconciliation stay in the parent session",
+        )
+        for relative_path in (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            text = " ".join(self.read_text(relative_path).split())
+            with self.subTest(relative_path=relative_path):
+                for phrase in expected_phrases:
+                    self.assertIn(phrase, text)
+
     def test_agent_instructions_require_fresh_code_live_runtime_verification(
         self,
     ) -> None:
