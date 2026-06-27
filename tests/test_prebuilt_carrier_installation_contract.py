@@ -626,6 +626,33 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn(
             "GitHub Actions environments create deployment records", workflow_text
         )
+        scout_install_step = next_or_fail(
+            step for step in steps if step["name"] == "Install Docker Scout CLI"
+        )
+        self.assertEqual(
+            "1.22.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
+        )
+        expected_scout_sha256 = "".join(
+            (
+                "a3c6c38741153a84",
+                "77be61eccc9d4849",
+                "0745496bddbd0c5e",
+                "0fc301c334fdd734",
+            )
+        )
+        self.assertEqual(
+            expected_scout_sha256,
+            scout_install_step["env"]["DOCKER_SCOUT_CLI_SHA256"],
+        )
+        self.assertIn(
+            "github.com/docker/scout-cli/releases/download",
+            scout_install_step["run"],
+        )
+        self.assertIn("sha256sum -c -", scout_install_step["run"])
+        self.assertIn(
+            "${HOME}/.docker/cli-plugins/docker-scout", scout_install_step["run"]
+        )
+        self.assertIn("docker scout version", scout_install_step["run"])
         scout_enable_step = next_or_fail(
             step
             for step in steps
@@ -633,6 +660,11 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         )
         self.assertEqual("strmt7", scout_enable_step["env"]["DOCKER_SCOUT_ORG"])
         self.assertIn("docker scout version", scout_enable_step["run"])
+        self.assertIn("list_enabled_repositories()", scout_enable_step["run"])
+        self.assertIn(
+            "Docker Scout repository analysis is already enabled",
+            scout_enable_step["run"],
+        )
         self.assertIn(
             'docker scout repo enable "${DOCKER_REPOSITORY}" --org "${DOCKER_SCOUT_ORG}"',
             scout_enable_step["run"],
@@ -640,6 +672,19 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("docker scout repo list", scout_enable_step["run"])
         self.assertIn("--only-enabled", scout_enable_step["run"])
         self.assertIn('grep -F "${DOCKER_REPOSITORY}"', scout_enable_step["run"])
+        self.assertLess(
+            scout_enable_step["run"].index("list_enabled_repositories"),
+            scout_enable_step["run"].index("docker scout repo enable"),
+        )
+        self.assertIn(
+            "reached the repository limit for your plan", scout_enable_step["run"]
+        )
+        self.assertIn("upgrade the Docker Hub plan", scout_enable_step["run"])
+        self.assertIn('exit "${enable_status}"', scout_enable_step["run"])
+        self.assertLess(
+            workflow_text.index("Install Docker Scout CLI"),
+            workflow_text.index("Ensure Docker Scout repository analysis is enabled"),
+        )
         self.assertLess(
             workflow_text.index("Ensure Docker Scout repository analysis is enabled"),
             workflow_text.index("Build hardened flattened runtime images"),
