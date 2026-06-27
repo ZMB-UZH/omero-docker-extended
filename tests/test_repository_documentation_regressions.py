@@ -433,10 +433,13 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
         self.assertIn(
-            "GitHub reported **4 open alerts on the default branch",
+            "GitHub reported **3 open alerts on the default branch",
             runbook_text,
         )
-        self.assertIn("Last live API refresh: **2026-04-27**", runbook_text)
+        self.assertIn(
+            "Last live GitHub code-scanning refresh: **2026-06-27**",
+            runbook_text,
+        )
         self.assertIn("**3 grouped issues**", runbook_text)
         self.assertIn("**109 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)
@@ -458,7 +461,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("CodeQL file-level findings in", runbook_text)
         self.assertIn("transient Semgrep", runbook_text)
         self.assertIn(
-            "4 remaining GitHub alerts were repository-level",
+            "3 remaining GitHub alerts were repository-level",
+            normalized_runbook_text,
+        )
+        self.assertIn(
+            "`MaintainedID` Scorecard alert was no longer open",
             normalized_runbook_text,
         )
         self.assertIn("`SH-3015` shell portability finding", normalized_runbook_text)

@@ -197,6 +197,7 @@ These files have historically generated the most scanning alerts. Extra review a
 | 2026-04-22 | 12 | 8 | Code fixes | Made the OMERO.server and OMERO.web images default to their application users while keeping the root-only Compose startup handoff for bind-mounted runtime-path reconciliation |
 | 2026-04-24 | 8 | 4 | Code fixes | Cleared the remaining `omero_imaris_connector/XTOmeroConnector.py` CodeQL file-level findings (`py/empty-except`, `py/exit-from-finally`, `py/multiple-definition`) and kept the prompt-based scanner helper out of Semgrep transport findings by sending curl headers through stdin config rather than argv or dynamic urllib calls |
 | 2026-04-26 | 4 | — | Snapshot | Live GitHub code scanning showed only repository-level Scorecard findings (`MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, `BranchProtectionID`) and no open file-level alerts. |
+| 2026-06-27 | 3 | — | Snapshot | Live GitHub security-delta gate showed only repository-level Scorecard findings (`CodeReviewID`, `CIIBestPracticesID`, `BranchProtectionID`) and no open file-level alerts; the previous `MaintainedID` alert was no longer open. |
 
 ---
 

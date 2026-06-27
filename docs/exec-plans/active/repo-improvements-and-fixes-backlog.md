@@ -16,11 +16,11 @@ This backlog is grounded in the current repository state and documentation:
   metrics, and secret rotation.
 - `docs/exec-plans/tech-debt-tracker.md` tracks the same remaining operational
   quality gaps without treating OMP/Import as untested packages.
-- `docs/operations/code-scanning.md` records the historical 2026-04-27 live
-  snapshot: 4 open GitHub code-scanning alerts, all repository-level Scorecard
-  findings with no file location, and DeepSource at 3 grouped issues / 109
-  occurrences. Refresh scanner counts before using this backlog for remediation
-  decisions.
+- `docs/operations/code-scanning.md` records the 2026-06-27 live GitHub
+  snapshot: 3 open GitHub code-scanning alerts, all repository-level Scorecard
+  findings with no file location. The last recorded external DeepSource
+  snapshot remains 3 grouped issues / 109 occurrences from 2026-04-27.
+  Refresh scanner counts before using this backlog for remediation decisions.
 - `README.md`, `ARCHITECTURE.md`, and plugin guides show a large,
   multi-container deployment with five plugin packages and a shared library.
 - The codebase contains very large modules, especially
@@ -48,7 +48,7 @@ This backlog is grounded in the current repository state and documentation:
 | Add targeted deployment and infrastructure validation lanes | `tests.yml` enforces split pytest suites, but no workflow yet builds changed Dockerfiles, smoke-tests startup wrappers, or validates deployment wiring. | App correctness is gated, but rollout regressions can still bypass CI. |
 | Maintain SHA-pinned GitHub Actions and add workflow-policy linting | Workflows are pinned by full commit SHA, but there is still no dedicated `actionlint` or workflow-policy lane to keep them that way. | Supply-chain hardening lasts only if the repo detects drift back to weaker workflow hygiene. |
 | Keep root `SECURITY.md` and `docs/SECURITY.md` synchronized | The root `SECURITY.md` forwards GitHub-native surfaces to `docs/SECURITY.md`. | Security-policy drift would break GitHub-native discoverability and create conflicting guidance. |
-| Preserve the zero-added-alert gate and close remaining Scorecard governance findings | The live 2026-04-26 snapshot has no open file-level GitHub findings; remaining alerts are `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. | The current baseline is strong enough that new findings should be treated as regressions. |
+| Preserve the zero-added-alert gate and close remaining Scorecard governance findings | The live 2026-06-27 snapshot has no open file-level GitHub findings; remaining alerts are `CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. | The current baseline is strong enough that new findings should be treated as regressions. |
 | Add docs-drift guardrails for compose env-file usage | Manual compose examples are aligned on `installation_paths.env`, `env/omero_secrets.env`, and `env/omeroserver.env`, but the repo still lacks a dedicated drift-checking lane for that contract. | Operators rely on those commands directly, so future drift would become an operational outage. |
 | Add docs-drift guardrails for service-count and supervisord topology facts | `README.md`, `ARCHITECTURE.md`, `AGENTS.md`, and `docs/references/docker-compose-llms.txt` track Compose counts; `supervisord.conf` now runs four managed programs. | Topology drift would mislead operators and future automation. |
 | Finish Import plugin canonicalization | `omeroweb_import/views/index_view.py` still uses `from .core_functions import *` while a newer `services/` layout also exists. | The import path is the biggest workflow and still has split ownership. |
