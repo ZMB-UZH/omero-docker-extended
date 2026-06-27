@@ -5,7 +5,8 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 
 ## Single-session rule
 
-- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule is absolute and must not be bypassed, even if a later prompt requests multi-agent work.
+- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
+- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use. Continue only after explicit user approval or the Codex Security UI Start Scan handoff; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
 ## Fast load order
 
@@ -19,8 +20,7 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 
 - Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI Agent <>`; never use profile-mapped AI/tool emails; AI co-author trailers use `Co-authored-by: AI Agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
-- Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders.
-- Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
+- Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders. Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Keep context small: load one task class, one code root, one nearest test module, and one matching skill, and follow the routing doc's numeric caps before broadening scope.
 - Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - CocoIndex: broad navigation has a mandatory `cocoindex-code` MCP check and uses `.agents/skills/cocoindex-code-search/` for semantic routing before exact `rg`; use direct `rg` first only for precise string, symbol, scanner-count, or already-small searches.
