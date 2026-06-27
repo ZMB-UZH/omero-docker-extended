@@ -36,7 +36,7 @@ jobs:
       DEFAULT_DOCKER_REPOSITORY: strmt7/omero-docker-extended
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -587,7 +587,7 @@ jobs:
             --clobber
 
       - name: Analyze Docker Hub carrier image with Docker Scout
-        uses: docker/scout-action@cd72f264beff1cd72735de31148b9d3244a0234a # v1.21.0
+        uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
         with:
           command: quickview,cves
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}
@@ -602,7 +602,7 @@ jobs:
           exit-code: false
 
       - name: Export Docker Scout carrier SBOM
-        uses: docker/scout-action@cd72f264beff1cd72735de31148b9d3244a0234a # v1.21.0
+        uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
         with:
           command: sbom
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}

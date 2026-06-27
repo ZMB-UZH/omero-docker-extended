@@ -75,11 +75,11 @@ class VultureIntegrationContractTests(TestCase):
         run_values = [step.get("run") for step in steps if "run" in step]
 
         self.assertIn(
-            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
             uses_values,
         )
         self.assertIn(
-            "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+            "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
             uses_values,
         )
         setup_step = next_or_fail(

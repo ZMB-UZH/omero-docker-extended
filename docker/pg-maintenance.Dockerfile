@@ -2,7 +2,7 @@
 
 # Pull image (needs to match the tag in docker-compose.yml)
 # ---------------------------------------------------------
-FROM postgres:16.12@sha256:23af655ba1ddf74eaa002e3deaf5fce022ab8791672336a7c1fb0ef2d57efb7f
+FROM postgres:16.14@sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54
 
 # Use bash with pipefail for safer RUN commands
 # ---------------------------------------------

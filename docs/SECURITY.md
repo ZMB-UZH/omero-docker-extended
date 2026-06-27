@@ -88,7 +88,7 @@ and only the bundled runtime service images carry OS package surfaces.
 ## Image pinning
 
 - All docker images in `docker-compose.yml` use explicit version tags (e.g.,
-  `postgres:16.12`, `redis:8.6.3-alpine`). Untagged images and floating aliases
+  `postgres:16.14`, `redis:8.6.4-alpine`). Untagged images and floating aliases
   such as `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
   `current` are prohibited.
 - Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.1`, `celery==5.6.3`).

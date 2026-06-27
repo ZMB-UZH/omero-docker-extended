@@ -621,7 +621,7 @@ def run_super_linter(context: GateContext) -> None:
         {
             "DEFAULT_BRANCH": default_branch,
             "DEFAULT_WORKSPACE": str(context.repo_root),
-            "FILTER_REGEX_EXCLUDE": r"(^|/)third_party/(ecc-v1\.10\.0|caveman-v1\.6\.0)/",
+            "FILTER_REGEX_EXCLUDE": r"(^|/)third_party/(ecc-v1\.10\.0|caveman-v1\.7\.0)/",
             "LINTER_RULES_PATH": ".",
             "MARKDOWN_CONFIG_FILE": ".markdownlint.yaml",
             "RUN_LOCAL": "true",

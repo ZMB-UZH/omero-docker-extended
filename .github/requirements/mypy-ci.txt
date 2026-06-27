@@ -43,15 +43,16 @@ ast-serialize==0.5.0 \
     --hash=sha256:f66173891548c9f2726bf27957b41cabce12fa679dc6da505ddbde4d4b3b31cf \
     --hash=sha256:f8015cd071ac1339924ee2b8098c93e00e155f30a16f40ec9816fcf84f4753f6
     # via mypy
-django==6.0.5 \
-    --hash=sha256:9d58a7cb49244e74c8e161d5e403a46d6209f1009ba40f5a66d6aa0d0786a8f0 \
-    --hash=sha256:bc6d6872e98a2864c836e42edd644b362db311147dd5aa8d5b82ba7a032f5269
+django==6.0.6 \
+    --hash=sha256:25148b1194c47c2e685e5f5e9c5d59c78b075dfd282cb9618861ba6c1708f4d2 \
+    --hash=sha256:ad03916ba59523d781ae5c3f631960c23d69a9d9c43cecda52fc23b47e953713
     # via
+    #   -r .github/requirements/mypy-ci.in
     #   django-stubs
     #   django-stubs-ext
-django-stubs==6.0.3 \
-    --hash=sha256:5fee22bcbbad59a78c727a820b6f4e68ff442ca76a922b7002e57c25dd7cb390 \
-    --hash=sha256:ee895f403c373608eeb50822f0733f9d9ec5ab12731d4ab58956053bb95fdd9e
+django-stubs==6.0.6 \
+    --hash=sha256:c488fea05a9eac40ddbdc69887f63a5c0922cb13df285291ee99c9bbc89bc4f1 \
+    --hash=sha256:dfc01e052e33c7f8f0c30c3ff8eda0903ee29ac710d1e46d9effd773744a69b0
     # via -r .github/requirements/mypy-ci.in
 django-stubs-ext==6.0.3 \
     --hash=sha256:3307d42132bc295d5744de6276bc5fdf6896efc70f891e21c0ae8bdf529d2762 \
@@ -207,21 +208,21 @@ sqlparse==0.5.5 \
     --hash=sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba \
     --hash=sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e
     # via django
-types-atheris==3.0.0.20260408 \
-    --hash=sha256:7bb41a13a03d02936db08273eb0ba219af81116e3b86a5fcec176b8bac20f97a \
-    --hash=sha256:907a8763bd28bba6e9373887c3548be20b6089c58eef990c2eba43abda615ad6
+types-atheris==3.0.0.20260518 \
+    --hash=sha256:19cdd86e9522064add84b49ff1c9824a88ac4f465a47cb06d830f6bdbcc79d3e \
+    --hash=sha256:777482e2fc8bd8cd492254ffcd060d58c8a63eb9e1a4f8edb4f089d78ab80589
     # via -r .github/requirements/mypy-ci.in
-types-psycopg2==2.9.21.20260408 \
-    --hash=sha256:49b086bfc9e0ce901c6537403ead1c19c75275571040b037af0248a8e48c322f \
-    --hash=sha256:bb65cd12f53b6633077fd782607a33065e1f3bf585219c9f786b61ad2b72211c
+types-psycopg2==2.9.21.20260518 \
+    --hash=sha256:2fd728a4fa3860db0a4a9813e5f49c30ed329b3d2e60e73530d9db01b2b98420 \
+    --hash=sha256:8b1f80d90d6799a4fcdac12198b382a8feee9ed4340d5f69b56fc5ffa0644143
     # via -r .github/requirements/mypy-ci.in
 types-pyyaml==6.0.12.20260408 \
     --hash=sha256:92a73f2b8d7f39ef392a38131f76b970f8c66e4c42b3125ae872b7c93b556307 \
     --hash=sha256:fbc42037d12159d9c801ebfcc79ebd28335a7c13b08a4cfbc6916df78fee9384
     # via django-stubs
-types-requests==2.33.0.20260408 \
-    --hash=sha256:81f31d5ea4acb39f03be7bc8bed569ba6d5a9c5d97e89f45ac43d819b68ca50f \
-    --hash=sha256:95b9a86376807a216b2fb412b47617b202091c3ea7c078f47cc358d5528ccb7b
+types-requests==2.33.0.20260518 \
+    --hash=sha256:626d697d1adaaff76e2044dc8c5c051d8f21abc157bdfe204a75558076fe0bf0 \
+    --hash=sha256:df7bd3bfe0ca8402dfb841e7d9be714bb5578203283d66d7dc4ef69343449a5e
     # via -r .github/requirements/mypy-ci.in
 typing-extensions==4.15.0 \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \

@@ -21,7 +21,7 @@ def test_package_pin_and_hashes_are_exact() -> None:
     Inputs: repository fixtures. Output: fails on regressions in package pin and hashes are exact.
     """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
-        "cocoindex-code[full]==0.2.33"
+        "cocoindex-code[full]==0.2.37"
     )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
 
@@ -2197,7 +2197,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":'
             '{"tools":[{"name":"search"},{"name":"status"}]}}\n'
         ),
@@ -2215,7 +2215,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         include_search=False,
     ) == {
         "server_name": "cocoindex-code",
-        "server_version": "0.2.33",
+        "server_version": "0.2.37",
         "tools": ["search", "status"],
     }
     assert mocked_run.call_args.args[0] == [
@@ -2251,7 +2251,7 @@ def test_mcp_stdio_smoke_include_search_fails_on_tool_error(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"missing index"}],"isError":true}}\n'
@@ -2286,7 +2286,7 @@ def test_mcp_stdio_smoke_include_search_records_success(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.33"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"File: AGENTS.md:1"}],"isError":false}}\n'

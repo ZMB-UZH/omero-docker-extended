@@ -205,22 +205,22 @@ The table below lists the long-running services available in the full profile se
 | --- | --- | --- | --- |
 | `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
-| `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
-| `redis` | redis:8.6.3-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.24.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
-| `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.40.0-alpine | docker container management UI (management profile) | 127.0.0.1:9443 |
-| `prometheus` | prom/prometheus:v3.11.3 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.0.1 | Dashboards and visualization | 127.0.0.1:3000 |
-| `loki` | grafana/loki:3.7.1 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.16.1 | Log collection pipeline (file-based) | 12345 (internal) |
+| `database` | postgres:16.14 | Primary OMERO PostgreSQL database | 5432 (internal) |
+| `database_plugin` | postgres:16.14 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
+| `redis` | redis:8.6.4-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `ollama` | ollama/ollama:0.30.11 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
+| `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI (management profile) | 127.0.0.1:9443 |
+| `prometheus` | prom/prometheus:v3.12.0 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `grafana` | grafana/grafana:13.1.0 | Dashboards and visualization | 127.0.0.1:3000 |
+| `loki` | grafana/loki:3.7.3 | Log aggregation backend | 127.0.0.1:3100 |
+| `alloy` | grafana/alloy:v1.17.0 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.11.1 | Host-level metrics | 9100 (internal) |
-| `cadvisor` | ghcr.io/google/cadvisor:0.56.2 | Container resource metrics | 8080 (internal) |
+| `cadvisor` | ghcr.io/google/cadvisor:0.60.3 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.19.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.19.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.83.0-alpine | Redis metrics | 9121 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.86.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
@@ -608,7 +608,7 @@ handshake, raw protocol probes, and tool listing with
 `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
 only against an existing active index. If it cold-indexes, agents tell the user
 once that the first search can take several minutes; later searches reuse the
-external cache. The mirror asks CocoIndex Code 0.2.33 to include every
+external cache. The mirror asks CocoIndex Code 0.2.37 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

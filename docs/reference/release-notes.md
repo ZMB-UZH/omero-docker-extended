@@ -54,10 +54,16 @@
 - Made the release workflow create and verify the release tag explicitly before
   creating the draft GitHub release, because GitHub draft releases can otherwise
   be represented by an untagged draft URL until publication.
-- Updated Ruff to `0.15.14` and Mypy to `2.1.0`, including workflow pins,
+- Updated Ruff to `0.15.20` and Mypy to `2.1.0`, including workflow pins,
   pre-commit configuration, hash-locked Mypy requirements, documentation, and
   regression contracts.
-- Updated the repo-local CocoIndex Code wrapper to `0.2.33` after upstream
+- Refreshed Python CI pins for the Python 3.14 workflow, including pytest,
+  coverage, Django, cryptography, NumPy, matplotlib, zarr, and tifffile. Kept
+  the production OMERO build-time `OME_ZARR_PY_VERSION=0.16.0` and
+  `TIFFFILE_VERSION=2026.3.3` example pins as compatibility holds until the
+  OMERO base-image virtualenv and native Zarr behavior are verified against the
+  newer upstream constraints.
+- Updated the repo-local CocoIndex Code wrapper to `0.2.37` after upstream
   release review. Codex MCP installation now writes a host-stable launcher
   under `AGENT_COCOINDEX_HOME` and pins the checkout through
   `AGENT_COCOINDEX_REPO`, so stale temporary-clone paths are repaired by
@@ -66,9 +72,9 @@
 ## 2026-05-12 Import and Imaris Connector Hardening
 
 - Refreshed pinned infrastructure images after upstream release-note review:
-  CrowdSec `v1.7.8`, Alloy `v1.16.1`, Redis `8.6.3-alpine`,
-  Redis exporter `v1.83.0-alpine`, Prometheus `v3.11.3`, and Ollama
-  `0.24.0`.
+  CrowdSec `v1.7.8`, Alloy `v1.17.0`, Redis `8.6.4-alpine`,
+  Redis exporter `v1.86.0-alpine`, Prometheus `v3.12.0`, and Ollama
+  `0.30.11`.
 - Strengthened image-pin regression coverage so Compose, dockerfile, and
   workflow container images cannot use untagged or floating aliases such as
   `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or

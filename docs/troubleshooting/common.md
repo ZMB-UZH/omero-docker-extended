@@ -204,7 +204,9 @@ Symptom:
 
 Root cause:
 
-- cAdvisor v0.56.2 in this stack does not accept `--rootfs=/rootfs` as a startup flag.
+- This stack does not pass `--rootfs=/rootfs` to cAdvisor; keep the default
+  command unless the exact pinned cAdvisor image has been verified with that
+  flag.
 - Passing an unsupported flag makes cAdvisor exit after printing usage/help.
 
 Fix in this distribution:

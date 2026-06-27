@@ -1438,7 +1438,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in all workflow checkout steps use verified v6 pin integration.
         """
-        expected_checkout = "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+        expected_checkout = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
         workflow_dir = self.repo_root / ".github" / "workflows"
         for workflow_path in workflow_dir.glob("*.yml"):
             workflow_text = workflow_path.read_text(encoding="utf-8")
@@ -1630,7 +1630,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 for job in workflow["jobs"].values()
                 for step in job.get("steps", [])
                 if step.get("uses")
-                == "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405"
+                == "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
             ]
             with self.subTest(relative_path=relative_path):
                 self.assertEqual(expected, actual)
@@ -1766,7 +1766,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             step for step in steps if step.get("name") == "Checkout"
         )
         self.assertEqual(
-            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
             checkout_step["uses"],
         )
         self.assertEqual(0, checkout_step["with"]["fetch-depth"])
@@ -1778,7 +1778,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("uses", lint_step)
         self.assertRegex(
             lint_step["run"],
-            r"ghcr\.io/super-linter/super-linter:v8\.6\.0@sha256:[0-9a-f]{64}\b",
+            r"ghcr\.io/super-linter/super-linter:v8\.7\.0@sha256:[0-9a-f]{64}\b",
         )
         self.assertNotIn("GITHUB_TOKEN", lint_step["env"])
         self.assertNotIn("MULTI_STATUS", lint_step["env"])
@@ -1855,7 +1855,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f",
+            "codecov/codecov-action@e53489f4d376d79066609109e7a95a29eb3740b1",
             upload_step["uses"],
         )
         self.assertEqual(
@@ -1885,7 +1885,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.163.0@sha256:bc8b15e245d7bd392bcadce7ef4db36601b375fab35bfd8070ed8ae3d7824c74",
+            "semgrep/semgrep:1.168.0@sha256:525beaba156b9bd3f9847d6ec0eb8f308e11f407e0c0b2da641e7c8dd99c97d6",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -1894,7 +1894,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if step.get("name") == "Run Trivy vulnerability scan"
         )
         self.assertEqual(
-            "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+            "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8",
             trivy_step["uses"],
         )
 

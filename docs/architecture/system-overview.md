@@ -40,7 +40,7 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 
 ### PostgreSQL databases
 
-Two isolated PostgreSQL 16.12 instances:
+Two isolated PostgreSQL 16.14 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
 - **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, special method configurations, and the Tools enhanced-search index/saved queries for OMERO.web plugins.
@@ -51,7 +51,7 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.6.3-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
+- Version 8.6.4-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
@@ -60,22 +60,22 @@ Cache backend and Celery message broker:
 
 Internal-only Ollama service for OMP's `Local` AI provider:
 
-- Version 0.24.0, pinned as `ollama/ollama:0.24.0`.
+- Version 0.30.11, pinned as `ollama/ollama:0.30.11`.
 - Stores model data under `OLLAMA_DATA_PATH` when set, otherwise `/disks/omero_temp/ollama`.
 - Exposes port 11434 only on the Docker network.
 - Health check: `ollama list`.
 
 ### Monitoring stack
 
-- **Prometheus** (v3.11.3): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
-- **Grafana** (13.0.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
-- **Loki** (3.7.1): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.16.1): collects OMERO server/web internal log files and pushes them to Loki.
+- **Prometheus** (v3.12.0): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
+- **Grafana** (13.1.0): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Loki** (3.7.3): log aggregation backend with TSDB storage and 5000 max entries per query.
+- **Alloy** (v1.17.0): collects OMERO server/web internal log files and pushes them to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
 - **Node exporter** (v1.11.1): host-level metrics.
-- **cAdvisor** (v0.56.2): container resource metrics.
+- **cAdvisor** (v0.60.3): container resource metrics.
 - **Postgres exporters** (v0.19.1, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.83.0): Redis metrics.
+- **Redis exporter** (v1.86.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
 - **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing mounted host
   syslog and SSH auth logs. The firewall bouncer auto-detects
@@ -94,7 +94,7 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 
 ### Maintenance sidecar (`pg-maintenance`)
 
-Custom image based on postgres:16.12 with cron:
+Custom image based on postgres:16.14 with cron:
 
 - VACUUM ANALYZE: weekly (Sunday 03:00).
 - REINDEX CONCURRENTLY: monthly (first Sunday 04:00).
@@ -103,7 +103,7 @@ Custom image based on postgres:16.12 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.40.0) is profile-gated behind the `management` Compose profile.
+Portainer CE (2.43.0) is profile-gated behind the `management` Compose profile.
 When enabled, it exposes HTTPS only on `127.0.0.1:9443`.
 
 ## Plugin architecture
