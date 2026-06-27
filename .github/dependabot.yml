@@ -24,8 +24,9 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     ignore:
-      # Held until the OMERO/native Zarr compatibility branch can validate a newer
-      # ome-zarr release against the production image runtime.
+      # Held until upstream provides a stable ome-zarr-models release compatible
+      # with the Python 3.14 CI resolver. ome-zarr 0.18.0 currently resolves to
+      # ome-zarr-models 1.8.0rc0 under Python 3.14.
       - dependency-name: "ome-zarr"
     commit-message:
       prefix: "deps(ci-pip)"
