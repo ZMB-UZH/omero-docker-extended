@@ -139,17 +139,26 @@ Grafana proxy authentication depends on passing session and auth headers
 through OMERO.web. The proxy forwards `Authorization`, `Cookie`, and
 `X-Grafana-Csrf-Token` request headers, rewrites `Origin` and `Referer` to
 match the Grafana backend origin, and preserves `Set-Cookie` responses.
-The Grafana proxy is the only documented Admin Tools `@csrf_exempt` route:
-OMERO.web still requires an authenticated root user before proxying, while
-Grafana validates its own login CSRF token and cookie. This exception prevents
-Django's CSRF middleware from blocking Grafana login POST requests made through
-the OMERO.web domain. Prometheus proxy requests are not covered by this
-exception. Cookie `Path` attributes are rewritten to
+The Grafana proxy is not `@csrf_exempt`: OMERO.web requires an authenticated
+root user before proxying, and Django CSRF validation still protects
+state-changing proxy requests. Grafana can then validate its own login CSRF
+token and cookie after the proxy rewrites origin/referrer headers and forwards
+the Grafana CSRF header. Prometheus proxy requests use standard Django CSRF
+handling as well. Cookie `Path` attributes are rewritten to
 `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login
 sessions continue to work when Grafana is accessed through the plugin proxy
 route.
-The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
-Prometheus requests are proxied as standard request/response traffic only; the proxy root redirects to the Prometheus targets page. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
+The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the
+proxy prefix, preventing top-right **Sign in** redirects from escaping to an
+unmapped root route. Grafana root requests (`/`) through the proxy now redirect
+users directly to the configured default OMERO dashboard route under the proxy
+prefix (for example when users click **Home** or complete **Sign in**).
+Prometheus requests are proxied as standard request/response traffic only; the
+proxy root redirects to the Prometheus targets page. If a proxied backend
+exposes `/api/v1/notifications/live` as `text/event-stream`, the proxy
+intentionally short-circuits that response with `204 No Content` because the
+Django proxy does not stream chunked event responses; slow upstream reads return
+`504 Gateway Timeout` instead of surfacing a Django `500`.
 
 ## Typical admin workflow
 
