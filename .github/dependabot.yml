@@ -23,6 +23,10 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    ignore:
+      # Held until the OMERO/native Zarr compatibility branch can validate a newer
+      # ome-zarr release against the production image runtime.
+      - dependency-name: "ome-zarr"
     commit-message:
       prefix: "deps(ci-pip)"
 
@@ -38,21 +42,6 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(pip)"
-
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "05:15"
-      timezone: "UTC"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "postgres"
-    commit-message:
-      prefix: "deps(docker)"
 
   - package-ecosystem: "docker"
     directory: "/docker"
