@@ -226,11 +226,12 @@ runbook or tool concisely with regression coverage.
 
 ## Alert inventory
 
-Last live API refresh: **2026-04-27**.
+Last live GitHub code-scanning refresh: **2026-06-27**.
 
-GitHub reported **4 open alerts on the default branch (`main` at refresh time)** at the time of the live snapshot used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
+GitHub reported **3 open alerts on the default branch (`main` at refresh time)** at the time of the live snapshot used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
-DeepSource reported **3 grouped issues**, **109 issue occurrences**, and
+The last recorded DeepSource external API snapshot was **2026-04-27**. It
+reported **3 grouped issues**, **109 issue occurrences**, and
 **0 dependency vulnerability occurrences** for the default branch during the
 same refresh. The API `latest_commit_oid` was
 `00c9e9c7390f918130cde53ee2923c5679de6718`, the pushed default-branch
@@ -272,8 +273,8 @@ To prevent documentation drift:
 
 | Scanner   | Open alerts |
 | --------- | ----------: |
-| Scorecard | 4           |
-| **Total** | **4**       |
+| Scorecard | 3           |
+| **Total** | **3**       |
 
 2026-04-22 Docker `USER` remediation note: GitHub closed the Trivy `DS002`,
 Semgrep `last-user-is-root`, and Hadolint `DL3002` alerts on
@@ -284,10 +285,11 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-At the 2026-04-27 refresh after the successful default-branch security
-workflow, the 4 remaining GitHub alerts were repository-level Scorecard findings with
-no file location: `MaintainedID`, `CodeReviewID`, `CIIBestPracticesID`, and
-`BranchProtectionID`. The previous CodeQL file-level findings in
+At the 2026-06-27 refresh after the successful default-branch security
+workflow, the 3 remaining GitHub alerts were repository-level Scorecard findings with
+no file location: `CodeReviewID`, `CIIBestPracticesID`, and
+`BranchProtectionID`. The earlier `MaintainedID` Scorecard alert was no longer
+open. The previous CodeQL file-level findings in
 `omero_imaris_connector/XTOmeroConnector.py` and the transient Semgrep transport findings from the
 first remediation push were no longer open.
 
