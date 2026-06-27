@@ -5,7 +5,7 @@
 services:
 
   portainer:
-    image: "portainer/portainer-ce:2.40.0-alpine"
+    image: "portainer/portainer-ce:2.43.0-alpine"
     container_name: portainer
     profiles:
       - management
@@ -28,7 +28,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.7.1"
+    image: "grafana/loki:3.7.3"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -50,7 +50,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.16.1"
+    image: "grafana/alloy:v1.17.0"
     restart: unless-stopped
     command:
       - "run"
@@ -80,7 +80,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.11.3"
+    image: "prom/prometheus:v3.12.0"
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -183,7 +183,7 @@ services:
       - no-new-privileges:true
 
   cadvisor:
-    image: "ghcr.io/google/cadvisor:0.56.2"
+    image: "ghcr.io/google/cadvisor:0.60.3"
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
@@ -269,7 +269,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.83.0-alpine"
+    image: "oliver006/redis_exporter:v1.86.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -290,7 +290,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.0.1"
+    image: "grafana/grafana:13.1.0"
     restart: unless-stopped
     networks:
       omero:
@@ -323,7 +323,7 @@ services:
       - no-new-privileges:true
 
   database:
-    image: "postgres:16.12"
+    image: "postgres:16.14"
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
@@ -438,7 +438,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.6.3-alpine"
+    image: "redis:8.6.4-alpine"
     restart: unless-stopped
     command:
       - redis-server
@@ -524,7 +524,7 @@ services:
       - no-new-privileges:true
 
   database_plugin:
-    image: "postgres:16.12"
+    image: "postgres:16.14"
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
@@ -638,7 +638,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.24.0"
+    image: "ollama/ollama:0.30.11"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

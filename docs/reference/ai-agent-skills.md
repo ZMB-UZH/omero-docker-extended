@@ -62,7 +62,11 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 
 - Start with `AGENTS.md` and `docs/reference/ai-agent-context-routing.md` to find the right domain docs.
 - Use the nearest skill before falling back to a generic workflow.
-- Keep every skill workflow in one session only; skills must not introduce background agents, subagents, spawned agents, delegated agents, or any separate agent session.
+- Keep every skill workflow in one session only; skills must not introduce
+  background agents, subagents, spawned agents, delegated agents, or any
+  separate agent session except for on-demand Codex Security vulnerability
+  scanning when the user explicitly asks for it and the loaded security skill
+  requires it.
 - When a skill references live or version-sensitive behavior, verify with official upstream docs or releases.
 - Use `cocoindex-code-search` as the mandatory broad repo navigation gate:
   check for an existing MCP server or tool named `cocoindex-code` first, use one
@@ -79,7 +83,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
   worktrees unless the caller uses the matching explicit dirty flag. If it
   cold-indexes, tell the user once that the first search can take several
   minutes and then uses the external cache. Its mirror asks CocoIndex Code
-  0.2.33 to include every Git-visible mirrored file pattern; CocoIndex indexes
+  0.2.37 to include every Git-visible mirrored file pattern; CocoIndex indexes
   text-decodable content and skips undecodable binary files, so do not add
   repo-specific language rewrites or file-type exclusions without a tested,
   documented configuration contract. Use direct `rg` first only for precise

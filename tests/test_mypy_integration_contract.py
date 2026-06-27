@@ -71,12 +71,14 @@ class MypyIntegrationContractTests(TestCase):
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
         self.assertIn("mypy==2.1.0", source)
+        self.assertIn("django==6.0.6", source)
         self.assertIn("pip-compile", compiled)
         self.assertIn("mypy==2.1.0", compiled)
-        self.assertIn("django-stubs==6.0.3", compiled)
-        self.assertIn("types-requests==2.33.0.20260408", compiled)
-        self.assertIn("types-atheris==3.0.0.20260408", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20260408", compiled)
+        self.assertIn("django==6.0.6", compiled)
+        self.assertIn("django-stubs==6.0.6", compiled)
+        self.assertIn("types-requests==2.33.0.20260518", compiled)
+        self.assertIn("types-atheris==3.0.0.20260518", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20260518", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 
@@ -120,11 +122,11 @@ class MypyIntegrationContractTests(TestCase):
         run_values = [step.get("run") for step in steps if "run" in step]
 
         self.assertIn(
-            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
             uses_values,
         )
         self.assertIn(
-            "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+            "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
             uses_values,
         )
         setup_step = next_or_fail(

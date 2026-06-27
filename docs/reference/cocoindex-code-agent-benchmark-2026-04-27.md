@@ -19,20 +19,21 @@ search.
 
 ## Package Evidence
 
-- Package: `cocoindex-code[full]==0.2.33`
-- PyPI latest observed on 2026-05-26: `0.2.33`
-- Wheel: `cocoindex_code-0.2.33-py3-none-any.whl`
-- Wheel upload: `2026-05-08T16:52:52.384703Z`
+- Package: `cocoindex-code[full]==0.2.37`
+- PyPI latest observed on 2026-06-27: `0.2.37`
+- Wheel: `cocoindex_code-0.2.37-py3-none-any.whl`
+- Wheel upload: `2026-06-23T05:19:05.661342Z`
 - Wheel SHA256:
-  `b1105ea6152bd489545551a40fb075de4dea62bf3af264105657a12de0e1a8f9`
-- Source upload: `2026-05-08T16:52:53.910099Z`
+  `9510e2810fcec5cfe9c9fb42e42acb9910155d5b5de0d7514bfa42daeb21b9ba`
+- Source upload: `2026-06-23T05:19:07.247704Z`
 - Source SHA256:
-  `ad871a0cb44e327f3fec4945d18530ffbde921056c56d9ccc2d4f1f68b0511d9`
+  `089888f455f71bfcdef6426150ce7bbbb3ff067b4448a6aef943152e38b4b214`
 - Installed dependency freeze: `110` packages, SHA256
   `460ab6b92d3f0ab2c8920eb03268bcb78e282598e4562bd9b5be3f554e85d9bf`
-- Upstream `v0.2.32...v0.2.33` changes observed on 2026-05-26: lazy-loaded
-  server, pathspec, and protocol imports to reduce cold CLI startup. Local
-  `ccc --help` through the pinned 0.2.33 venv completed in `0.178s`.
+- Upstream `v0.2.36...v0.2.37` changes observed on 2026-06-27: added
+  `ccc grep` structural code search. Local wrapper behavior remains pinned and
+  routing-only; exact edits still require `rg`/file-read validation in the live
+  checkout.
 - Open upstream MCP-related issues observed on 2026-05-05 include non-JSON stdio
   output and sqlite-vec extension-loading failures; this repo's raw `mcp-smoke`
   checks fail on non-JSON stdout, JSON-RPC error payloads, stale registration,
@@ -41,9 +42,9 @@ search.
   processes can otherwise remain after index/search commands. The wrapper now
   reuses pre-existing daemons, records ownership of daemons it starts, and stops
   only those owned daemons after CLI and MCP operations.
-- Sources: [PyPI 0.2.33](https://pypi.org/project/cocoindex-code/0.2.33/),
-  [GitHub release 0.2.33](https://github.com/cocoindex-io/cocoindex-code/releases/tag/v0.2.33),
-  [GitHub compare](https://github.com/cocoindex-io/cocoindex-code/compare/v0.2.32...v0.2.33),
+- Sources: [PyPI 0.2.37](https://pypi.org/project/cocoindex-code/0.2.37/),
+  [GitHub release 0.2.37](https://github.com/cocoindex-io/cocoindex-code/releases/tag/v0.2.37),
+  [GitHub compare](https://github.com/cocoindex-io/cocoindex-code/compare/v0.2.36...v0.2.37),
   [GitHub issues](https://github.com/cocoindex-io/cocoindex-code/issues)
 
 ## Commands
@@ -66,7 +67,7 @@ and the `rg` baseline:
 
 - Shared host root: `${XDG_DATA_HOME:-~/.local/share}/agent-cocoindex-code`
 - Shared venv:
-  `agent-cocoindex-code/venv/cocoindex-code-0.2.33`
+  `agent-cocoindex-code/venv/cocoindex-code-0.2.37`
 - Codex launcher:
   `agent-cocoindex-code/bin/cocoindex-code-mcp`
 - Per-repository mirror:
@@ -88,6 +89,8 @@ refreshing an index.
 
 ## Final Benchmark Result
 
+- Benchmark result below predates the `0.2.37` wrapper refresh and remains a
+  historical routing benchmark, not a fresh benchmark of `0.2.37`.
 - Benchmarked implementation base head:
   `b38099078a721ef97009d037aa3fca4a62f0006e`
 - Mirror digest: `53755ced03293b2951a3a67e08026f5b`

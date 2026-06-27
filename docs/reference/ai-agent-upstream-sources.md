@@ -14,6 +14,11 @@ This document records the pinned upstream AI Agent material vendored into this r
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
+- Latest upstream observed on 2026-06-27: `v2.0.0`. The repo keeps the
+  selected `v1.10.0` snapshot until a dedicated vendor update can preserve the
+  repo's single-session, host-agnostic, Linux-only workflow contracts. Do not
+  import the broader cross-harness control-pane, orchestration, or connector
+  policy surfaces as a drive-by update.
 
 ## Selected upstream skills
 
@@ -43,7 +48,7 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 - Upstream native installation command:
   `pipx install 'cocoindex-code[full]'`
 - Verified upstream release tag:
-  `v0.2.33` at `d429632c5eb9e2cfe8b0e02487fe5fa966082057`
+  `v0.2.37` at `2e96b45636e6538dd4a374fd8a7283be110998b4`
 - Local path: `.agents/skills/cocoindex-code-search/`
 - Integration rule: keep one repository-local CocoIndex workflow and generate
   MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a
@@ -76,6 +81,10 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 - Reviewed open issues on 2026-05-04: Gemini install/frontmatter failures (`#325`, `#328`, `#330`), update-command confusion (`#321`), Opencode edit refusal (`#304`), and mid-session prose drift (`#303`)
 - caveman release tag: `v1.7.0`
 - caveman release commit: `ef6050c5e1848b6880ff47c32ade1a608a64f85e`
+- Latest upstream observed on 2026-06-27: `v1.9.0`. The repo keeps the
+  selected `v1.7.0` snapshot until a dedicated vendor update can preserve the
+  disabled installer, hook, natural-language activation, compression-tool, MCP,
+  and cavecrew surfaces.
 - caveman vendor path: `third_party/caveman-v1.7.0/`
 - License: MIT (`third_party/caveman-v1.7.0/LICENSE`)
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.

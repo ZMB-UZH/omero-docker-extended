@@ -12,7 +12,7 @@
           },
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.md ]] && [[ -f \"$f\" ]]; then npx --yes markdownlint-cli2@0.17.2 \"$f\" 2>&1; fi; } 2>/dev/null || true",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.md ]] && [[ -f \"$f\" ]]; then npx --yes markdownlint-cli2@0.22.1 \"$f\" 2>&1; fi; } 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Checking Markdown lint..."
           }

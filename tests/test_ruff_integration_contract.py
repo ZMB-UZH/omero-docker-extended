@@ -72,7 +72,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.15.14", doc_text)
+        self.assertIn("0.15.20", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -131,7 +131,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.15.14", config["required-version"])
+        self.assertEqual("==0.15.20", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["F", "E7", "E9"], config["lint"]["select"])
         self.assertEqual({}, config["lint"].get("per-file-ignores", {}))
@@ -145,7 +145,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
-        expected_rev = "0c7b6c989466a93942de" + "f1f84baf36ddfcd60c83"
+        expected_rev = "c59bba8fb259db0fec2bb" + "b77ad8ba51ea7341b56"
         self.assertEqual(expected_rev, repo["rev"])
         self.assertRegex(repo["rev"], r"^[0-9a-f]{40}$")
         hooks = {hook["id"]: hook for hook in repo["hooks"]}
@@ -177,7 +177,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         run_values = [step.get("run") for step in steps if "run" in step]
 
         self.assertIn(
-            "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
             uses_values,
         )
         self.assertIn(
@@ -190,7 +190,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.15.14", install_step["with"]["version"])
+        self.assertEqual("0.15.20", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

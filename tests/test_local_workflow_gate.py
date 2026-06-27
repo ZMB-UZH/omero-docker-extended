@@ -213,7 +213,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         image_matches = re.findall(
-            r"ghcr\.io/super-linter/super-linter:v8\.6\.0@sha256:[0-9a-f]{64}",
+            r"ghcr\.io/super-linter/super-linter:v8\.7\.0@sha256:[0-9a-f]{64}",
             workflow_text,
         )
         self.assertEqual(1, len(set(image_matches)))
@@ -226,7 +226,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.15.14", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.15.20", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -67,7 +67,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/init@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -76,7 +76,7 @@ jobs:
           queries: security-extended,security-and-quality
 
       - name: Analyze
-        uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/analyze@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           category: /language:${{ matrix.language }}
 
@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -113,7 +113,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
           format: sarif
@@ -124,7 +124,7 @@ jobs:
           skip-dirs: third_party
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -138,11 +138,11 @@ jobs:
       contents: read
       security-events: write # Required to upload Semgrep results to code scanning.
     container:
-      image: semgrep/semgrep:1.163.0@sha256:bc8b15e245d7bd392bcadce7ef4db36601b375fab35bfd8070ed8ae3d7824c74
+      image: semgrep/semgrep:1.168.0@sha256:525beaba156b9bd3f9847d6ec0eb8f308e11f407e0c0b2da641e7c8dd99c97d6
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -169,7 +169,7 @@ jobs:
         run: semgrep scan --sarif --config auto --exclude third_party . > semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -186,12 +186,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.14.4'
           cache: 'pip'
@@ -339,21 +339,21 @@ jobs:
           PY
 
       - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
         if: always() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
         if: always() && steps.discover.outputs.test_dirs != ''
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
@@ -368,7 +368,7 @@ jobs:
       dockerfiles: ${{ steps.find.outputs.dockerfiles }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
           sparse-checkout: docker
@@ -397,7 +397,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -419,7 +419,7 @@ jobs:
           no-fail: true
 
       - name: Upload Hadolint results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -436,7 +436,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -469,7 +469,7 @@ jobs:
           exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: devskim-results.sarif
           category: devskim
@@ -481,7 +481,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -524,7 +524,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -538,7 +538,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run OSSF Scorecard
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2 # v2.4.3
         continue-on-error: true
         with:
           results_file: scorecard-results.sarif
@@ -546,7 +546,7 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
@@ -574,12 +574,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.14.4'
 

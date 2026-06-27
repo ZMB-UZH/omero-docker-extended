@@ -5,7 +5,8 @@
 #     --output-file .github/requirements/mypy-ci.txt \
 #     .github/requirements/mypy-ci.in
 mypy==2.1.0
-django-stubs==6.0.3
-types-requests==2.33.0.20260408
-types-atheris==3.0.0.20260408
-types-psycopg2==2.9.21.20260408
+django==6.0.6
+django-stubs==6.0.6
+types-requests==2.33.0.20260518
+types-atheris==3.0.0.20260518
+types-psycopg2==2.9.21.20260518
