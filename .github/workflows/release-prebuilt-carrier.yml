@@ -136,7 +136,7 @@ jobs:
           else
             release_tag_exists=0
           fi
-          if gh release view "${RELEASE_VERSION}" >/dev/null 2>&1; then
+          if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             github_release_exists=1
           else
             github_release_exists=0
@@ -519,16 +519,36 @@ jobs:
 
           This release contains the source archive and the single docker carrier image manifest.
           EOF
-          gh release create "${RELEASE_VERSION}" \
-            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
-            "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
-            "dist/prebuilt-manifest.json" \
-            --target "${RELEASE_TARGET_REF}" \
-            --title "${RELEASE_VERSION}" \
-            --notes-file dist/release-notes.md \
-            --draft \
-            --verify-tag \
-            --latest=false
+          create_draft_release() {
+            gh release create "${RELEASE_VERSION}" \
+              "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
+              "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
+              "dist/prebuilt-manifest.json" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${RELEASE_TARGET_REF}" \
+              --title "${RELEASE_VERSION}" \
+              --notes-file dist/release-notes.md \
+              --draft \
+              --verify-tag \
+              --latest=false
+          }
+          release_created=0
+          for attempt in 1 2 3 4 5; do
+            if create_draft_release; then
+              release_created=1
+              break
+            fi
+            create_status="$?"
+            if [ "${attempt}" = "5" ]; then
+              exit "${create_status}"
+            fi
+            echo "GitHub draft release creation failed on attempt ${attempt}; retrying after a short consistency delay." >&2
+            sleep "$((attempt * 5))"
+          done
+          [ "${release_created}" = "1" ] || {
+            echo "GitHub draft release creation did not complete." >&2
+            exit 1
+          }
           echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
 
       - name: Set up carrier Buildx builder
@@ -619,6 +639,7 @@ jobs:
           test -s dist/prebuilt-carrier-digest.txt
           gh release upload "${RELEASE_VERSION}" \
             "dist/prebuilt-carrier-digest.txt" \
+            --repo "${GITHUB_REPOSITORY}" \
             --clobber
 
       - name: Analyze Docker Hub carrier image with Docker Scout
@@ -708,8 +729,10 @@ jobs:
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
               "dist/prebuilt-manifest.json" \
               "dist/prebuilt-carrier-digest.txt" \
+              --repo "${GITHUB_REPOSITORY}" \
               --clobber
             gh release edit "${RELEASE_VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" \
               --target "${RELEASE_TARGET_REF}" \
               --title "${RELEASE_VERSION}" \
               --notes-file dist/release-notes.md \
@@ -718,6 +741,7 @@ jobs:
               --verify-tag
           else
             gh release edit "${RELEASE_VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" \
               --notes-file dist/release-notes.md \
               --draft=false \
               --latest=false
@@ -744,6 +768,7 @@ jobs:
             exit 1
           }
           gh release view "${RELEASE_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --json tagName,targetCommitish,isDraft,isPrerelease,assets,url \
             > dist/github-release-verified.json
           python3 - <<'PY'
@@ -787,14 +812,15 @@ jobs:
           if [ -z "${RELEASE_VERSION:-}" ]; then
             exit 0
           fi
-          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" = "1" ]; then
+          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" = "1" ] || [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
             release_is_draft="$(
               gh release view "${RELEASE_VERSION}" \
+                --repo "${GITHUB_REPOSITORY}" \
                 --json isDraft \
                 --jq '.isDraft' 2>/dev/null || true
             )"
             if [ "${release_is_draft}" = "true" ]; then
-              gh release delete "${RELEASE_VERSION}" --yes --cleanup-tag
+              gh release delete "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
             fi
           fi
           if [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
