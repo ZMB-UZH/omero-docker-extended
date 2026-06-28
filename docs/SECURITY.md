@@ -125,6 +125,10 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
   on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, and does not expose the legacy
   HTTP port. Set `PORTAINER_HOST_BIND=127.0.0.1` when it should be reachable
   only through local access or an authenticated reverse proxy.
+- Portainer runs with Docker's init shim and a non-TLS container-local TCP
+  healthcheck. Prometheus blackbox performs the full HTTPS status probe, keeping
+  Docker health reporting reliable without weakening the HTTPS-only management
+  surface.
 - When the `crowdsec` profile is enabled, CrowdSec uses host networking and exposes its LAPI on host port 8080.
 - All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` docker network.
 - Keep monitoring interfaces on loopback or place them behind a TLS reverse

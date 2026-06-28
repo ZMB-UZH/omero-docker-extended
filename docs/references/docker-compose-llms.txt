@@ -23,7 +23,7 @@ Supporting services:
 
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
-- portainer (${PORTAINER_HOST_BIND:-0.0.0.0}:9443): HTTPS-only container management UI, portainer/portainer-ce:2.43.0-alpine.
+- portainer (${PORTAINER_HOST_BIND:-0.0.0.0}:9443): HTTPS-only container management UI, portainer/portainer-ce:2.43.0-alpine. Docker Compose uses the init shim plus a container-local TCP healthcheck for readiness; Prometheus blackbox performs the full HTTPS `/api/system/status` probe.
 
 Monitoring services:
 

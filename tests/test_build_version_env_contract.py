@@ -169,10 +169,16 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("--csp", portainer_service)
         self.assertIn("/var/run/docker.sock:/var/run/docker.sock:ro", portainer_service)
         self.assertIn("read_only: true", portainer_service)
+        self.assertIn("init: true", portainer_service)
         self.assertIn("- /tmp:size=64m,mode=1777", portainer_service)
         self.assertIn("cap_drop:", portainer_service)
         self.assertIn("- ALL", portainer_service)
         self.assertIn("no-new-privileges:true", portainer_service)
+        self.assertIn(
+            '["CMD", "/bin/busybox", "nc", "-z", "-w", "2", "127.0.0.1", "9443"]',
+            portainer_service,
+        )
+        self.assertNotIn("https://localhost:9443", portainer_service)
         self.assertIn("PORTAINER_HOST_BIND=0.0.0.0", dot_env_text)
         self.assertIn(
             "https://portainer:9443/api/system/status",

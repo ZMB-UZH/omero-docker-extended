@@ -106,7 +106,9 @@ Custom image based on postgres:16.14 with cron:
 Portainer CE (2.43.0) runs by default for container management. It exposes
 HTTPS only on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, disables the legacy HTTP
 listener, uses a read-only root filesystem, drops Linux capabilities, and keeps
-the internal tunnel listener bound to container loopback.
+the internal tunnel listener bound to container loopback. The Compose service
+uses Docker's init shim and a non-TLS local TCP readiness healthcheck; Prometheus
+blackbox performs the full HTTPS `/api/system/status` availability probe.
 
 ## Plugin architecture
 

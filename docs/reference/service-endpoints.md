@@ -158,7 +158,7 @@ Base: `/omero_imaris_connector/`
 
 | Service | Health check method |
 | --- | --- |
-| `portainer` | `wget --no-check-certificate https://localhost:9443/api/system/status` |
+| `portainer` | container-local TCP readiness probe to `127.0.0.1:9443`; Prometheus blackbox performs the HTTPS `/api/system/status` probe |
 | `loki` | `loki -version` |
 | `alloy` | `alloy --help` |
 | `prometheus` | `wget http://localhost:9090/-/ready` |
