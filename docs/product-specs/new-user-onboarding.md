@@ -88,7 +88,7 @@ Then confirm:
 
 - Grafana: `http://localhost:3000` -- confirm dashboards load with data.
 - Prometheus: `http://localhost:9090/targets` -- confirm all targets are UP.
-- Portainer: `https://localhost:9443` -- confirm container visibility.
+- Portainer: `https://<host>:9443` -- confirm container visibility.
 
 ### 6. First operational checks
 

@@ -143,6 +143,43 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("grafana/grafana:12.4.1", compose_text)
         self.assertNotIn("ollama/ollama:0.21.0", compose_text)
 
+    def test_portainer_management_surface_is_https_only_and_hardened(self) -> None:
+        """Verify Portainer is default-on, HTTPS-only, and container-hardened.
+
+        Inputs: repository fixtures. Output: fails on regressions in Portainer
+        exposure, Docker socket access, or hardened runtime options.
+        """
+
+        compose_text = self.read_text("docker-compose.yml")
+        portainer_service = compose_text.split("\n  portainer:\n", 1)[1].split(
+            "\n  loki:\n", 1
+        )[0]
+        prometheus_text = self.read_text("monitoring/prometheus/prometheus.yml")
+        dot_env_text = self.read_text(".env_example")
+
+        self.assertNotIn("profiles:", portainer_service)
+        self.assertIn(
+            '- "${PORTAINER_HOST_BIND:-0.0.0.0}:9443:9443"',
+            portainer_service,
+        )
+        self.assertNotIn(":9000", portainer_service)
+        self.assertIn("--http-disabled", portainer_service)
+        self.assertIn("--bind-https=:9443", portainer_service)
+        self.assertIn("--tunnel-addr=127.0.0.1", portainer_service)
+        self.assertIn("--csp", portainer_service)
+        self.assertIn("/var/run/docker.sock:/var/run/docker.sock:ro", portainer_service)
+        self.assertIn("read_only: true", portainer_service)
+        self.assertIn("- /tmp:size=64m,mode=1777", portainer_service)
+        self.assertIn("cap_drop:", portainer_service)
+        self.assertIn("- ALL", portainer_service)
+        self.assertIn("no-new-privileges:true", portainer_service)
+        self.assertIn("PORTAINER_HOST_BIND=0.0.0.0", dot_env_text)
+        self.assertIn(
+            "https://portainer:9443/api/system/status",
+            prometheus_text,
+        )
+        self.assertNotIn("http://portainer:9000/api/system/status", prometheus_text)
+
     def test_alloy_persists_runtime_positions(self) -> None:
         """Verify alloy persists runtime positions.
 
@@ -191,6 +228,34 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             'chown_tree_or_die "${ALLOY_DATA_PATH}" "Alloy data directory" "${ALLOY_UID}" "${ALLOY_GID}"',
+            script_text,
+        )
+
+    def test_installation_script_manages_portainer_data_path_contract(self) -> None:
+        """Verify installer prepares Portainer data with image runtime ownership.
+
+        Inputs: repository fixtures. Output: fails on regressions in Portainer
+        UID/GID discovery or data-directory ownership preparation.
+        """
+
+        script_text = self.read_text("installation/installation_script.sh")
+        self.assertIn('PORTAINER_UID="${PORTAINER_UID:-}"', script_text)
+        self.assertIn('PORTAINER_GID="${PORTAINER_GID:-}"', script_text)
+        self.assertIn('PORTAINER_IMAGE="${PORTAINER_IMAGE:-}"', script_text)
+        self.assertIn(
+            'PORTAINER_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "portainer")',
+            script_text,
+        )
+        self.assertIn(
+            'PORTAINER_UID="$(discover_container_default_id_or_die "${PORTAINER_IMAGE}" "-u")',
+            script_text,
+        )
+        self.assertIn(
+            'PORTAINER_GID="$(discover_container_default_id_or_die "${PORTAINER_IMAGE}" "-g")',
+            script_text,
+        )
+        self.assertIn(
+            'chown_tree_or_die "${PORTAINER_DATA_PATH}" "Portainer data directory" "${PORTAINER_UID}" "${PORTAINER_GID}"',
             script_text,
         )
 

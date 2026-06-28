@@ -10,7 +10,7 @@ running containers or `docker compose config`; do not assume these host ports.
 | --- | --- | --- |
 | OMERO.server | `${OMERO_CLI_HOST}:${OMERO_CLI_PORT}` inside the stack; `${OMERO_SERVER_HOST_PORT}` on the host | OMERO API (Ice protocol) |
 | OMERO.web | `http://localhost:4090` | Web frontend and plugin UIs |
-| Portainer | `https://localhost:9443` on `127.0.0.1` when the `management` profile is enabled | Container management |
+| Portainer | `https://<host>:9443` on `${PORTAINER_HOST_BIND:-0.0.0.0}` | Container management |
 | Prometheus | `http://localhost:9090` on `127.0.0.1` | Metrics and targets |
 | Grafana | `http://localhost:3000` on `127.0.0.1` | Dashboards |
 | Loki | `http://localhost:3100` on `127.0.0.1` | Log query API |

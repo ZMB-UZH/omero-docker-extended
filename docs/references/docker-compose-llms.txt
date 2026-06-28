@@ -4,7 +4,7 @@ Reference notes for AI Agent workflows.
 
 Service topology (docker-compose.yml):
 
-- 21 Compose services total on a single "omero" bridge network: 19 long-running runtime containers by default, 20 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
+- 21 Compose services total on a single "omero" bridge network: 20 long-running runtime containers by default, 21 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
 - All services have explicit healthcheck: blocks. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
@@ -23,7 +23,7 @@ Supporting services:
 
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
-- portainer (management profile, 127.0.0.1:9443): optional container management UI, portainer/portainer-ce:2.43.0-alpine.
+- portainer (${PORTAINER_HOST_BIND:-0.0.0.0}:9443): HTTPS-only container management UI, portainer/portainer-ce:2.43.0-alpine.
 
 Monitoring services:
 
@@ -54,7 +54,7 @@ Volume mount patterns:
 - PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
 - Redis uses tmpfs for /data (512MB).
 - OMERO_TMP_PATH bind-mounted into omeroweb at /opt/omero/omero_temp for all plugin temporary data.
-- Docker socket is not mounted by default; mount it read-only only for explicit admin diagnostics.
+- Docker socket is mounted only into Portainer for container-management operations.
 - Monitoring configs mounted read-only from ./monitoring/ directories.
 
 Compose commands (explicit manual form: include installation paths, secrets,
@@ -67,4 +67,4 @@ and OMERO.server env files when not relying on repo-root `.env`):
 - docker compose --env-file .env --env-file installation_paths.env --env-file env/omero_secrets.env --env-file env/omeroserver.env --env-file env/omeroweb.env --env-file env/omero-celery.env --env-file env/grafana.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
-Default host exposure: omeroserver (`OMERO_SERVER_HOST_PORT`, default 4064) and omeroweb (`OMERO_WEB_HOST_PORT`, default 4090) bind publicly; loki, prometheus, and grafana bind to loopback; portainer is profile-gated on loopback HTTPS; crowdsec uses host networking only when its profile is enabled.
+Default host exposure: omeroserver (`OMERO_SERVER_HOST_PORT`, default 4064), omeroweb (`OMERO_WEB_HOST_PORT`, default 4090), and portainer (`PORTAINER_HOST_BIND`, default 0.0.0.0, port 9443) bind publicly; loki, prometheus, and grafana bind to loopback; crowdsec uses host networking only when its profile is enabled.

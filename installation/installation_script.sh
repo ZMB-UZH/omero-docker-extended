@@ -42,6 +42,8 @@ OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
 OMERO_WEB_GID="${OMERO_WEB_GID:-}"
+PORTAINER_UID="${PORTAINER_UID:-}"
+PORTAINER_GID="${PORTAINER_GID:-}"
 PROMETHEUS_UID="${PROMETHEUS_UID:-}"
 PROMETHEUS_GID="${PROMETHEUS_GID:-}"
 GRAFANA_UID="${GRAFANA_UID:-}"
@@ -69,6 +71,7 @@ OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
 REDIS_SYSCTL_INIT_IMAGE="${REDIS_SYSCTL_INIT_IMAGE:-redis-sysctl-init:custom}"
 PG_MAINTENANCE_IMAGE="${PG_MAINTENANCE_IMAGE:-pg-maintenance:custom}"
 PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
+PORTAINER_IMAGE="${PORTAINER_IMAGE:-}"
 GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
 ALLOY_IMAGE="${ALLOY_IMAGE:-}"
@@ -3361,6 +3364,12 @@ fi
 if [ -n "${OMERO_WEB_GID}" ]; then
     if ! validate_numeric_id "OMERO_WEB_GID" "${OMERO_WEB_GID}"; then exit 1; fi
 fi
+if [ -n "${PORTAINER_UID}" ]; then
+    if ! validate_numeric_id "PORTAINER_UID" "${PORTAINER_UID}"; then exit 1; fi
+fi
+if [ -n "${PORTAINER_GID}" ]; then
+    if ! validate_numeric_id "PORTAINER_GID" "${PORTAINER_GID}"; then exit 1; fi
+fi
 if [ -n "${PROMETHEUS_UID}" ]; then
     if ! validate_numeric_id "PROMETHEUS_UID" "${PROMETHEUS_UID}"; then exit 1; fi
 fi
@@ -4394,6 +4403,7 @@ if [ -z "${OMERO_WEB_UID}" ]; then OMERO_WEB_UID="$(discover_uid_gid_or_die "${O
 if [ -z "${OMERO_WEB_GID}" ]; then OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"; fi
 
 if [ -z "${PROMETHEUS_IMAGE}" ]; then PROMETHEUS_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "prometheus")"; fi
+if [ -z "${PORTAINER_IMAGE}" ]; then PORTAINER_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "portainer")"; fi
 if [ -z "${GRAFANA_IMAGE}" ]; then GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"; fi
 if [ -z "${LOKI_IMAGE}" ]; then LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"; fi
 if [ -z "${ALLOY_IMAGE}" ]; then ALLOY_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "alloy")"; fi
@@ -4402,6 +4412,8 @@ if [ -z "${DATABASE_PLUGIN_IMAGE}" ]; then DATABASE_PLUGIN_IMAGE="$(resolve_serv
 
 if [ -z "${PROMETHEUS_UID}" ]; then PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"; fi
 if [ -z "${PROMETHEUS_GID}" ]; then PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"; fi
+if [ -z "${PORTAINER_UID}" ]; then PORTAINER_UID="$(discover_container_default_id_or_die "${PORTAINER_IMAGE}" "-u")"; fi
+if [ -z "${PORTAINER_GID}" ]; then PORTAINER_GID="$(discover_container_default_id_or_die "${PORTAINER_IMAGE}" "-g")"; fi
 if [ -z "${GRAFANA_UID}" ]; then GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"; fi
 if [ -z "${GRAFANA_GID}" ]; then GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"; fi
 if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u" "loki")"; fi
@@ -4427,6 +4439,7 @@ echo ""
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
 echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
+echo "Portainer    UID:GID = ${PORTAINER_UID}:${PORTAINER_GID} (image=${PORTAINER_IMAGE})"
 echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAGE})"
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Alloy        UID:GID = ${ALLOY_UID}:${ALLOY_GID} (image=${ALLOY_IMAGE})"
@@ -4543,6 +4556,7 @@ if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor
 if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}" "${WEB_USER:-omero-web}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${PORTAINER_DATA_PATH}" "Portainer data directory" "${PORTAINER_UID}" "${PORTAINER_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi

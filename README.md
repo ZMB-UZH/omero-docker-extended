@@ -193,8 +193,8 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <summary><h2>Service topology</h2></summary>
 
 `docker-compose.yml` declares **21 Compose services total** on a single docker
-bridge network (`omero`): **19 long-running runtime containers by default**,
-**20 when the profile-gated `crowdsec` service is enabled**. The one-shot
+bridge network (`omero`): **20 long-running runtime containers by default**,
+**21 when the profile-gated `crowdsec` service is enabled**. The one-shot
 `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists `vm.overcommit_memory=1` on the host so it is not
 needed during normal `docker compose up` cycles.
@@ -210,7 +210,7 @@ The table below lists the long-running services available in the full profile se
 | `redis` | redis:8.6.4-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `ollama` | ollama/ollama:0.30.11 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI (management profile) | 127.0.0.1:9443 |
+| `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.12.0 | Metrics scraping and storage | 127.0.0.1:9090 |
 | `grafana` | grafana/grafana:13.1.0 | Dashboards and visualization | 127.0.0.1:3000 |
 | `loki` | grafana/loki:3.7.3 | Log aggregation backend | 127.0.0.1:3100 |
@@ -455,8 +455,10 @@ the carrier repository; do not store a docker hub account password there.
 
 **5.** After a successful installation, run:
 
-- Portainer: <https://localhost:9443> when launched with the `management`
-  profile (set admin password on first login)
+- Portainer: `https://<host>:9443` by default
+  (`PORTAINER_HOST_BIND=0.0.0.0`); set `PORTAINER_HOST_BIND=127.0.0.1`
+  to restrict it to local or reverse-proxy access (set admin password on first
+  login)
 - OMERO.web: <http://localhost:4090>
 
 Log in to OMERO.web using the root credential configured in `env/omero_secrets.env`.
