@@ -103,8 +103,10 @@ Custom image based on postgres:16.14 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.43.0) is profile-gated behind the `management` Compose profile.
-When enabled, it exposes HTTPS only on `127.0.0.1:9443`.
+Portainer CE (2.43.0) runs by default for container management. It exposes
+HTTPS only on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, disables the legacy HTTP
+listener, uses a read-only root filesystem, drops Linux capabilities, and keeps
+the internal tunnel listener bound to container loopback.
 
 ## Plugin architecture
 
@@ -203,11 +205,10 @@ variable name for fast debugging.
 
 - All containers: `security_opt: no-new-privileges:true`.
 - Secrets in `env/*.env` (gitignored). Rotate all defaults before deployment.
-- Only OMERO.server and OMERO.web expose public host ports by default. Monitoring
-  interfaces bind to loopback, and Portainer is disabled unless the
-  `management` profile is enabled.
+- OMERO.server, OMERO.web, and Portainer expose host ports by default.
+  Monitoring interfaces bind to loopback.
 - OMERO.web should run behind a TLS-terminating reverse proxy.
-- Docker socket access is not mounted by default; enable it only for explicit
-  diagnostics and keep it read-only.
+- Docker socket access is mounted only into Portainer for local
+  container-management operations.
 - Validate health checks and logs after each deployment change.
 - See `docs/SECURITY.md` for full security documentation.

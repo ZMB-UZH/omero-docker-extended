@@ -23,6 +23,7 @@ Design goals:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
 import shutil
@@ -75,6 +76,7 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMERO_SERVER_HEALTHCHECK_TIMEOUT_SECONDS",
     "OMERO_SERVER_HEALTHCHECK_RETRIES",
     "OMERO_SERVER_HEALTHCHECK_START_PERIOD_SECONDS",
+    "PORTAINER_HOST_BIND",
     "PORTAINER_DATA_PATH",
     "PROMETHEUS_DATA_PATH",
     "GRAFANA_DATA_PATH",
@@ -580,6 +582,20 @@ def validate_assignment_value(
     if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
         if not is_size_text(value):
             errors.append(f"{key} must be a memory size such as 512mb")
+        return errors
+
+    if key == "PORTAINER_HOST_BIND":
+        try:
+            bind_address = ipaddress.ip_address(value)
+        except ValueError:
+            errors.append(
+                f"{key} must be an IPv4 bind address such as 0.0.0.0 or 127.0.0.1"
+            )
+            return errors
+        if bind_address.version != 4:
+            errors.append(
+                f"{key} must be an IPv4 bind address such as 0.0.0.0 or 127.0.0.1"
+            )
         return errors
 
     if key in ABSOLUTE_PATH_KEYS:

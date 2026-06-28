@@ -309,6 +309,7 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         self.assertIn("REDIS_MAXMEMORY=512mb\n", self.dot_env_example)
         self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", self.dot_env_example)
         self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", self.dot_env_example)
+        self.assertIn("PORTAINER_HOST_BIND=0.0.0.0\n", self.dot_env_example)
         self.assertIn(
             'dot_env_template_path="${REPO_ROOT_DIR}/.env_example"',
             self.installation_script,

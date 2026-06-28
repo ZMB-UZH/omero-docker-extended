@@ -121,16 +121,20 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
   `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090) are exposed on all host
   interfaces. Loki (`127.0.0.1:3100`), Prometheus (`127.0.0.1:9090`), and
   Grafana (`127.0.0.1:3000`) bind to loopback.
-- Portainer is disabled by default and is available only with the `management`
-  Compose profile on `127.0.0.1:9443`.
+- Portainer is enabled by default for container management, exposes HTTPS only
+  on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, and does not expose the legacy
+  HTTP port. Set `PORTAINER_HOST_BIND=127.0.0.1` when it should be reachable
+  only through local access or an authenticated reverse proxy.
 - When the `crowdsec` profile is enabled, CrowdSec uses host networking and exposes its LAPI on host port 8080.
 - All other services (databases, Redis, Ollama, exporters, alloy, blackbox, cadvisor, node-exporter) are internal to the `omero` docker network.
 - Keep monitoring interfaces on loopback or place them behind a TLS reverse
   proxy with authentication before exposing them.
 - OMERO.web should be behind a TLS-terminating reverse proxy for production use.
-- Docker socket access is not mounted by default. If an operator explicitly
-  enables Docker-backed diagnostics, mount the socket read-only and restrict it
-  to trusted administrators.
+- Docker socket access is mounted only into Portainer for its intended
+  container-management role. Treat Portainer as Docker-administrator access:
+  keep strong authentication, restrict network reachability with host firewall
+  rules or a trusted authenticated reverse proxy when possible, and do not
+  store Portainer credentials in the repository.
 
 ## CSRF protection
 

@@ -94,7 +94,7 @@ Quick operator check after any change:
 
 - Loki, Prometheus, Grafana, cAdvisor
 - All exporters (node, postgres x2, redis, blackbox)
-- Portainer (`/api/system/status`)
+- Portainer (`https://portainer:9443/api/system/status`)
 - CrowdSec (`/health`) — managed by the installation script (see below)
 - OMERO.web (port 4090)
 - Alloy (`/metrics`)

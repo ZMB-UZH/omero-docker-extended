@@ -32,7 +32,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 **Files:** `docker-compose.yml`, `docker/`, `env/`, `installation_paths.env`
 
-Defines the complete topology: 21 Compose services on a single `omero` bridge network. In steady state, the stack runs 19 long-running runtime containers by default or 20 when the profile-gated `crowdsec` service is enabled. The
+Defines the complete topology: 21 Compose services on a single `omero` bridge network. In steady state, the stack runs 20 long-running runtime containers by default or 21 when the profile-gated `crowdsec` service is enabled. The
 one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists the required sysctl on the host. Every service has
 explicit health checks, pinned image versions, `no-new-privileges` security,
@@ -53,7 +53,7 @@ Key design decisions:
 Bootstrap scripts run at container start to configure services that cannot be fully set up at build time:
 
 - `10-server-bootstrap.sh`: configures `omero.scripts.python`, generates TLS certificates with SANs, creates job-service user, clones OMERO.Figure scripts, registers official scripts.
-- `10-web-bootstrap.sh`: validates log directory write access, auto-discovers and configures Docker socket GID for the omeroweb container.
+- `10-web-bootstrap.sh`: validates log directory write access and keeps Docker socket handling optional for explicit operator diagnostics.
 - `40-start-imaris-celery-worker.sh`: dynamically discovers the venv path, tests task import, starts celery worker.
 - `40-start-tools-celery-worker.sh`: dynamically discovers the venv path, tests enhanced-search task import, starts the Tools celery worker when enabled.
 - `50-install-omero-downloader.sh`: downloads OMERO.downloader from GitHub releases (version-gated).
@@ -97,7 +97,7 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
   sync reads OMERO metadata through a root gateway session but writes only to
   the OMERO plugin database (`database_plugin`) for indexed rows, scope
   membership, sync state, and saved queries.
-- **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
+- **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, and Prometheus metrics. Optional Docker socket diagnostics are used only when operators explicitly mount the socket. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 
 **`omero_imaris_connector/XTOmeroConnector.py`** is a standalone Tkinter GUI application bundled with the Imaris connector package. It runs as an ImarisXT extension for bidirectional Imaris-to-OMERO image transfer.
@@ -162,7 +162,8 @@ Startup scripts read environment variables at runtime. Plugin `config.py` module
 - Plugin input is validated at boundaries; OMERO permissions checked for data access.
 - OMP plugin uses HMAC-based hashing (with optional secret) for annotation ownership.
 - Rate limiting on major plugin actions (6 actions / 60 seconds per user).
-- Docker socket access in omeroweb is read-only for container stats.
+- Docker socket access is mounted only into Portainer by default for
+  container-management operations.
 - Monitoring interfaces should not be exposed publicly without authentication.
 
 ## Quality gates

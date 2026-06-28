@@ -36,9 +36,9 @@ Answer four architecture questions before any implementation work:
 ### Python footprint
 
 - Production Python files: `157`
-- Production Python lines: `82,540`
+- Production Python lines: `82,556`
 - Test Python files: `183`
-- Test Python lines: `133,615`
+- Test Python lines: `133,697`
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
@@ -60,7 +60,7 @@ strategy would mostly compile tests unless the build is carefully filtered.
 - `omeroweb_admin_tools/services/log_query.py`: `1,375` lines
 - `omero_imaris_connector/imaris_service.py`: `1,353` lines
 - `omero_imaris_connector/views.py`: `1,335` lines
-- `tools/env_safety_guard.py`: `1,248` lines
+- `tools/env_safety_guard.py`: `1,270` lines
 - `omeroweb_import/services/omero/sem_edx_parser.py`: `1,245` lines
 - `omero_web_zarr/views.py`: `1,245` lines
 - `omeroweb_omp_plugin/views/index_view.py`: `1,216` lines

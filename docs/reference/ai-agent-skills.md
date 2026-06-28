@@ -16,7 +16,11 @@ Apply guidance in this order:
 4. the relevant skill in `.agents/skills/`
 5. harness-specific files such as `CLAUDE.md`
 
-The skill surface is additive. It must not override the repo's absolute single-session rule, current-remote-default-branch development rule, security read order, split-pytest policy, or environment-driven configuration model.
+The skill surface is additive. It must not override the repo's single-session
+rule, current-remote-default-branch development rule, security read order,
+split-pytest policy, or environment-driven configuration model. The only
+single-session exception is explicitly authorized, on-demand Codex Security
+vulnerability scanning when the loaded security skill requires it.
 
 Opt-in compression skills are advisory only. They never override risk handling, safety warnings, exact dates, or clarity-first explanations.
 

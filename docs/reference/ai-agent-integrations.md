@@ -17,7 +17,13 @@ Apply guidance in this order:
 7. `docs/reference/ai-agent-skills.md` and `.agents/skills/`
 8. harness-specific adapter files
 
-Harness-specific files are additive. They must not override the repo's security read order, absolute single-session rule, current-remote-default-branch development rule, environment-driven configuration model, or split-pytest policy. The single-session rule prohibits background agents, subagents, spawned agents, delegated agents, and any separate agent session.
+Harness-specific files are additive. They must not override the repo's security
+read order, single-session rule, current-remote-default-branch development rule,
+environment-driven configuration model, or split-pytest policy. The
+single-session rule prohibits background agents, subagents, spawned agents,
+delegated agents, and any separate agent session except for on-demand Codex
+Security vulnerability scanning that the user explicitly authorizes and the
+loaded security skill requires.
 
 ## Karpathy baseline
 
@@ -118,7 +124,9 @@ The adapter set is designed to improve accuracy first, then reduce wasted contex
 - prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep skills in `.agents/skills/` as the all-agent source of truth; adapter files may point to the catalog but should not duplicate full skill bodies
-- keep all workflows single-session; skills and adapters must not introduce delegated or spawned agent work
+- keep all workflows single-session; skills and adapters must not introduce
+  delegated or spawned agent work except for explicitly authorized, on-demand
+  Codex Security scanning when the loaded security skill requires it
 - keep `AGENTS.md`, Claude, Gemini, Copilot, and Cursor core rules concise so they do not bloat always-on context
 
 ## CocoIndex Code routing

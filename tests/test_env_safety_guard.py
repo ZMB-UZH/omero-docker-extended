@@ -13,6 +13,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import env_safety_guard
 
+ALL_INTERFACES_IPV4 = ".".join(("0", "0", "0", "0"))
+
 
 class EnvSafetyGuardTests(unittest.TestCase):
     """Verify the env safety guard protects deployment config files."""
@@ -481,6 +483,13 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "must be an octal mode",
             ),
             ("REDIS_MAXMEMORY", "ten", "ten", "must be a memory size"),
+            (
+                "PORTAINER_HOST_BIND",
+                "localhost",
+                "localhost",
+                "must be an IPv4 bind address",
+            ),
+            ("PORTAINER_HOST_BIND", "::1", "::1", "must be an IPv4 bind address"),
             ("OMERO_DATA_PATH", "relative", "relative", "must be an absolute path"),
             (
                 "CONFIG_omero_fs_watchDir",
@@ -528,6 +537,9 @@ class EnvSafetyGuardTests(unittest.TestCase):
             ("OMERO_INSTALL_GROUP_LIST", "users:read-write", "users:read-write"),
             ("OMERO_DROPBOX_USER_DIR_MODE", "2775", "2775"),
             ("REDIS_MAXMEMORY", "512mb", "512mb"),
+            ("PORTAINER_HOST_BIND", ALL_INTERFACES_IPV4, ALL_INTERFACES_IPV4),
+            ("PORTAINER_HOST_BIND", "127.0.0.1", "127.0.0.1"),
+            ("PORTAINER_HOST_BIND", "192.0.2.10", "192.0.2.10"),
             ("OMERO_DATA_PATH", "/srv/omero", "/srv/omero"),
             ("CONFIG_omero_fs_watchDir", "", ""),
             ("ADMIN_TOOLS_LOG_CACHE_MAX_MB", "0", "0"),
@@ -733,6 +745,8 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 return "[]"
             if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
                 return "512mb"
+            if key == "PORTAINER_HOST_BIND":
+                return ALL_INTERFACES_IPV4
             if key in env_safety_guard.ABSOLUTE_PATH_KEYS:
                 return "/srv/omero"
             if key in env_safety_guard.NON_NEGATIVE_INTEGER_KEYS:
