@@ -178,7 +178,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "https://portainer:9443/api/system/status",
             prometheus_text,
         )
-        self.assertNotIn("http://portainer:9000/api/system/status", prometheus_text)
+        self.assertNotIn("portainer:9000/api/system/status", prometheus_text)
 
     def test_alloy_persists_runtime_positions(self) -> None:
         """Verify alloy persists runtime positions.
