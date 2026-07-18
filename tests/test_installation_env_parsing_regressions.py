@@ -280,16 +280,23 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                 result.stdout,
             )
 
-            def assignment_keys(path: Path) -> list[str]:
-                return [
-                    line.split("=", 1)[0]
-                    for line in path.read_text(encoding="utf-8").splitlines()
-                    if line and not line.startswith("#") and "=" in line
-                ]
-
+            template_lines = (
+                (self.repo_root / "installation_paths_example.env")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            )
+            generated_lines = env_file.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
-                assignment_keys(self.repo_root / "installation_paths_example.env"),
-                assignment_keys(env_file),
+                [
+                    line.split("=", 1)[0]
+                    for line in template_lines
+                    if line and not line.startswith("#") and "=" in line
+                ],
+                [
+                    line.split("=", 1)[0]
+                    for line in generated_lines
+                    if line and not line.startswith("#") and "=" in line
+                ],
             )
 
     def test_env_assignment_resolver_expands_safe_references_without_eval(
