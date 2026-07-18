@@ -22,11 +22,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # ----------------------------------------------------------
 ARG APPLY_SECURITY_HARDENING=0
 
-# Keep direct Python tooling and hardening dependencies reproducible. Retain
-# setuptools 80.9.0 because OMERO's Python stack still imports pkg_resources.
+# Keep direct Python tooling and hardening dependencies reproducible. Retain the
+# newest Setuptools release below 81 because OMERO's Python stack still imports
+# pkg_resources, whose own deprecation warning requires that compatibility pin.
 # --------------------------------------------------------------------------
 ARG PIP_VERSION=26.1.2
-ARG SETUPTOOLS_VERSION=80.9.0
+ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.47.0
 ARG CRYPTOGRAPHY_VERSION=49.0.0
 ARG URLLIB3_VERSION=2.7.0
