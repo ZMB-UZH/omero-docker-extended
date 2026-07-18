@@ -165,25 +165,21 @@ jobs:
           PY
           )"
           if [ "${RELEASE_REPLACE_EXISTING:-0}" = "1" ]; then
-            [ "${release_tag_exists}" = "1" ] || {
-              echo "Replacement requested but release tag does not exist: ${RELEASE_VERSION}" >&2
-              exit 1
-            }
-            [ "${github_release_exists}" = "1" ] || {
-              echo "Replacement requested but GitHub release does not exist: ${RELEASE_VERSION}" >&2
-              exit 1
-            }
             case "${status}" in
-              200) ;;
-              404)
-                echo "Replacement requested but docker hub image tag does not exist: ${CARRIER_IMAGE}" >&2
-                exit 1
-                ;;
+              200|404) ;;
               *)
                 echo "Could not verify docker hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
                 exit 1
                 ;;
             esac
+            if [ "${release_tag_exists}" = "0" ] \
+              && [ "${github_release_exists}" = "0" ] \
+              && [ "${status}" = "404" ]; then
+              echo "Replacement requested but no existing release artifact was found for ${RELEASE_VERSION}." >&2
+              exit 1
+            fi
+            printf 'Replacement state: github_tag=%s github_release=%s docker_tag_http=%s\n' \
+              "${release_tag_exists}" "${github_release_exists}" "${status}"
             exit 0
           fi
           if [ "${release_tag_exists}" = "1" ]; then
@@ -466,13 +462,102 @@ jobs:
 
       - name: Create GitHub draft release
         env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_TARGET_REF: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           if [ "${RELEASE_REPLACE_EXISTING:-0}" = "1" ]; then
-            echo "Replacement mode: skipping draft release creation until carrier verification."
-            exit 0
+            if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              gh release delete "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" --yes
+            fi
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+              gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" \
+                >/dev/null
+            fi
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ["DOCKER_REPOSITORY"]
+          tag = urllib.parse.quote(os.environ["RELEASE_VERSION"], safe="")
+          tag_url = f"https://hub.docker.com/v2/repositories/{repository}/tags/{tag}/"
+
+          def request_status(request: urllib.request.Request) -> int:
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return response.status
+              except urllib.error.HTTPError as exc:
+                  return exc.code
+
+          current_status = request_status(
+              urllib.request.Request(tag_url, headers={"Accept": "application/json"})
+          )
+          if current_status == 200:
+              login_data = json.dumps(
+                  {
+                      "identifier": os.environ["DOCKERHUB_USERNAME"],
+                      "secret": os.environ["DOCKERHUB_TOKEN"],
+                  }
+              ).encode("utf-8")
+              login_request = urllib.request.Request(
+                  "https://hub.docker.com/v2/users/login",
+                  data=login_data,
+                  headers={"Accept": "application/json", "Content-Type": "application/json"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(login_request, timeout=30) as response:
+                  login_response = json.load(response)
+              access_token = login_response.get("access_token") or login_response.get("token")
+              if not access_token:
+                  raise SystemExit("Docker Hub login did not return an access token.")
+              delete_status = request_status(
+                  urllib.request.Request(
+                      tag_url,
+                      headers={"Authorization": f"Bearer {access_token}"},
+                      method="DELETE",
+                  )
+              )
+              if delete_status not in {202, 204}:
+                  raise SystemExit(
+                      f"Docker Hub tag deletion returned HTTP {delete_status}, expected 202 or 204."
+                  )
+          elif current_status != 404:
+              raise SystemExit(
+                  f"Docker Hub tag lookup returned HTTP {current_status}, expected 200 or 404."
+              )
+
+          for attempt in range(1, 11):
+              status = request_status(
+                  urllib.request.Request(tag_url, headers={"Accept": "application/json"})
+              )
+              if status == 404:
+                  break
+              if status != 200:
+                  raise SystemExit(
+                      f"Docker Hub tag verification returned HTTP {status}, expected 200 or 404."
+                  )
+              if attempt == 10:
+                  raise SystemExit("Docker Hub tag remained visible after deletion.")
+              time.sleep(attempt)
+          print("Existing GitHub and Docker Hub release artifacts are absent.")
+          PY
+            if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "GitHub release remained visible after deletion: ${RELEASE_VERSION}" >&2
+              exit 1
+            fi
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+              echo "GitHub tag remained visible after deletion: ${RELEASE_VERSION}" >&2
+              exit 1
+            fi
           fi
           target_ref_type="$(
             gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${RELEASE_TARGET_REF}" \

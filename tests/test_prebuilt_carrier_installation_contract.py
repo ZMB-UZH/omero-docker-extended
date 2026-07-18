@@ -859,19 +859,25 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertIn("prebuilt-carrier-digest.txt", workflow_text)
         self.assertIn("RELEASE_REPLACE_EXISTING", workflow_text)
         self.assertIn(
-            "Replacement mode: skipping draft release creation until carrier verification.",
+            "Replacement requested but no existing release artifact was found",
             workflow_text,
         )
         self.assertIn(
-            "Replacement requested but release tag does not exist",
+            'gh release delete "${RELEASE_VERSION}"',
             workflow_text,
         )
         self.assertIn(
-            "Replacement requested but GitHub release does not exist",
+            '"repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}"',
             workflow_text,
         )
         self.assertIn(
-            "Replacement requested but docker hub image tag does not exist",
+            '"https://hub.docker.com/v2/users/login"',
+            workflow_text,
+        )
+        self.assertIn('method="DELETE"', workflow_text)
+        self.assertIn("Docker Hub tag remained visible after deletion", workflow_text)
+        self.assertIn(
+            "Existing GitHub and Docker Hub release artifacts are absent.",
             workflow_text,
         )
         self.assertIn("Create GitHub draft release", workflow_text)
