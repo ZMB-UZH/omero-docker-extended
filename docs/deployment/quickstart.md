@@ -142,9 +142,11 @@ because job environments create deployment records. Keep the Docker Hub
 credentials as repository secrets with the documented names. To rebuild an
 existing release without changing its version, dispatch the workflow with an
 explicit `release_version` and `replace_existing=true`; replacement mode first
-verifies that the GitHub tag, GitHub release, and Docker Hub image tag already
-exist, then overwrites the same carrier image tag and release assets after
-carrier verification and Scout analysis. Before
+verifies that at least one release artifact exists, builds the replacement,
+then deletes and verifies the absence of the prior GitHub release/tag and Docker
+Hub image tag before creating new artifacts with the requested version. A
+partially deleted prior release can therefore be recovered by rerunning the same
+replacement dispatch. Before
 saving the runtime archive, the workflow derives the required image references
 from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner
