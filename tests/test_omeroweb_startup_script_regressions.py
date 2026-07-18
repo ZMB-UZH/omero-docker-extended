@@ -135,7 +135,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             "set -euo pipefail\n"
             'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n'
             'if [[ "$*" == "config get omero.web.wsgi_args" ]]; then\n'
-            '    printf \'%s\' "${OMERO_CURRENT_WSGI_ARGS:-}"\n'
+            "    printf '%s' \"${OMERO_CURRENT_WSGI_ARGS:-}\"\n"
             "fi\n",
             encoding="utf-8",
         )
@@ -182,9 +182,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         configured_args = calls[1]
         self.assertEqual(calls[0], "config get omero.web.wsgi_args")
         self.assertIn("--chdir /legacy/runtime --timeout 7200", configured_args)
-        self.assertIn(
-            f"--control-socket={runtime_dir}/gunicorn.ctl", configured_args
-        )
+        self.assertIn(f"--control-socket={runtime_dir}/gunicorn.ctl", configured_args)
         self.assertEqual(configured_args.count("--control-socket"), 1)
         self.assertEqual(calls[-1], "web start --foreground")
 

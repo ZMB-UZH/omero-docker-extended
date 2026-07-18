@@ -923,9 +923,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
             encoding="utf-8"
         )
-        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-web.Dockerfile"
+        ).read_text(encoding="utf-8")
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
@@ -2164,10 +2164,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertIn("cooldown", update)
             self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
 
-    def test_dependabot_covers_compose_and_dockerfiles(self) -> None:
-        """Verify Docker dependency updates cover both manifest locations.
+    def test_dependabot_covers_supported_dockerfile_location(self) -> None:
+        """Verify Docker dependency updates cover the supported manifest location.
 
-        Inputs: Dependabot YAML. Output: asserts root and Dockerfile coverage.
+        Inputs: Dependabot YAML. Output: asserts Dockerfile coverage without an invalid Compose job.
         """
         import yaml  # noqa: F811 -- available in CI
 
@@ -2179,7 +2179,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             if update["package-ecosystem"] == "docker"
         }
 
-        self.assertEqual({"/", "/docker"}, docker_directories)
+        self.assertEqual({"/docker"}, docker_directories)
+        self.assertIn(
+            "Docker updater scans Dockerfiles, not Compose manifests",
+            dependabot_path.read_text(encoding="utf-8"),
+        )
 
         dockerfile_update = next_or_fail(
             update
