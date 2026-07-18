@@ -111,7 +111,10 @@ Flattening in the release workflow applies to the bundled runtime service
 images inside `runtime-images.tar.gz`. The docker hub carrier is a scratch-based
 data image with one payload layer for the manifest, required-image list, and
 archive; it has no Alpine, BusyBox, package manager, or shell layer and uses
-`HEALTHCHECK NONE` metadata instead of a runnable healthcheck command.
+`HEALTHCHECK NONE` metadata instead of a runnable healthcheck command. The same
+human-readable notes published on GitHub are available inside the image at
+`/omero-prebuilt/release-notes.md`, alongside OCI version, revision, source, and
+documentation metadata.
 
 For unattended runs, set both `PREBUILT_IMAGE_RELEASE` and
 `PREBUILT_IMAGE_DIGEST` explicitly:
@@ -125,6 +128,12 @@ bash installation/easy_installation_script.sh
 Carrier releases are created from the GitHub Actions panel with the manual
 `release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` as repository secrets before dispatching that workflow. The
+workflow requires the exact operator-confirmed release/Docker tag and a matching
+human-readable section in `CHANGELOG.md`; it does not infer or auto-increment a
+version. Set `confirm_public_release_notes=true` only after a human has reviewed
+the complete public notes. The workflow also rejects credentials, personal or
+host-specific information, private infrastructure, and exploit-enabling detail
+before creating release objects and after appending artifact metadata. The
 Docker Hub personal access token needs read/write access for normal publication
 and `Delete` permission when `replace_existing=true` recreates an image tag. The
 workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
@@ -138,17 +147,19 @@ Docker Hub repository, pushes and verifies the carrier image, uploads
 carrier push includes BuildKit SBOM and provenance attestations so Docker Hub
 and Docker Scout have metadata for automatic image analysis. If Docker Scout
 repository enablement, the carrier publish, or Scout analysis fails after the
-draft was created, the workflow deletes that draft release and its tag. The
+draft was created, the workflow retains the draft and tag and reports that
+state. Deleting either object requires a fresh approval naming that exact
+object. The
 release job deliberately does not use a GitHub Actions environment,
 because job environments create deployment records. Keep the Docker Hub
 credentials as repository secrets with the documented names. To rebuild an
 existing release without changing its version, dispatch the workflow with an
-explicit `release_version` and `replace_existing=true`; replacement mode first
-verifies that at least one release artifact exists, builds the replacement,
-then deletes and verifies the absence of the prior GitHub release/tag and Docker
-Hub image tag before creating new artifacts with the requested version. A
-partially deleted prior release can therefore be recovered by rerunning the same
-replacement dispatch. Before
+explicit `release_version` and `replace_existing=true`. That flag is not
+deletion authorization: the existing GitHub release, Git tag, and Docker Hub tag
+each require their own fresh confirmation input for that one workflow run.
+Earlier, blanket, and same-version approvals do not carry forward. Replacement
+mode verifies each authorized deletion before creating new artifacts with the
+requested version. Before
 saving the runtime archive, the workflow derives the required image references
 from Compose and prunes only
 runner-local docker images outside that required set, reducing hosted-runner

@@ -23,4 +23,13 @@ Start from `third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` for gene
   interchangeable: the easy path must use `PREBUILT_IMAGE_MODE=require`, load
   verified release-built images, preserve the same env/data/path handling, and
   fail instead of switching to a local build when the carrier cannot be used.
+- Before every release, pause for the user's exact GitHub release tag and Docker
+  repository/tag; never infer or auto-increment a version. Require matching
+  human-readable `CHANGELOG.md` notes in both release channels. Require
+  automated disclosure validation and human public-safety review; release notes
+  must not expose credentials, identities, host details, private infrastructure,
+  findings, vulnerability mechanics, or exploit-enabling detail.
+- Before deleting any pre-existing deployment or release artifact, obtain fresh
+  per-object approval. GitHub releases, Git tags, and Docker tags are three
+  separate deletions; earlier or same-version approval never carries forward.
 - Update deployment docs whenever runtime assumptions change.

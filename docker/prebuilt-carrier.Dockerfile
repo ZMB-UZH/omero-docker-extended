@@ -3,6 +3,7 @@ FROM scratch
 COPY --chmod=0444 \
     prebuilt-manifest.json \
     prebuilt-required-images.txt \
+    release-notes.md \
     runtime-images.tar.gz \
     /omero-prebuilt/
 

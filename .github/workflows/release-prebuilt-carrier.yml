@@ -4,16 +4,36 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "SemVer release and docker image tag. Leave empty to bump the main-channel tag from existing tags or start 1.0.0-main.1."
-        required: false
+        description: "Exact user-confirmed SemVer release and Docker image tag. Automatic version selection is forbidden."
+        required: true
         type: string
       docker_repository:
-        description: "docker hub repository for the single carrier image."
+        description: "Docker Hub repository for the single carrier image."
         required: false
         default: "strmt7/omero-docker-extended"
         type: string
+      confirm_public_release_notes:
+        description: "Confirm a human reviewed the changelog for sensitive, private, or exploit-enabling content."
+        required: false
+        default: false
+        type: boolean
       replace_existing:
-        description: "Replace an existing GitHub release/tag and docker hub image tag for the requested version."
+        description: "Enable replacement checks. This is not deletion authorization."
+        required: false
+        default: false
+        type: boolean
+      authorize_delete_github_release:
+        description: "Fresh approval to delete only the existing GitHub release for release_version."
+        required: false
+        default: false
+        type: boolean
+      authorize_delete_git_tag:
+        description: "Fresh approval to delete only the existing Git tag for release_version."
+        required: false
+        default: false
+        type: boolean
+      authorize_delete_docker_tag:
+        description: "Fresh approval to delete only the existing Docker Hub tag for release_version."
         required: false
         default: false
         type: boolean
@@ -44,22 +64,22 @@ jobs:
       - name: Resolve release metadata
         id: release-metadata
         env:
-          GH_TOKEN: ${{ github.token }}
           REQUESTED_RELEASE_VERSION: ${{ inputs.release_version }}
           REQUESTED_DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
+          REQUESTED_PUBLIC_NOTES_CONFIRMATION: ${{ inputs.confirm_public_release_notes }}
           REQUESTED_REPLACE_EXISTING: ${{ inputs.replace_existing }}
+          REQUESTED_DELETE_GITHUB_RELEASE: ${{ inputs.authorize_delete_github_release }}
+          REQUESTED_DELETE_GIT_TAG: ${{ inputs.authorize_delete_git_tag }}
+          REQUESTED_DELETE_DOCKER_TAG: ${{ inputs.authorize_delete_docker_tag }}
         run: |
           set -euo pipefail
           mkdir -p dist
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/tags" \
-            --jq '.[].name' \
-            | sort -u > dist/existing-release-tags.txt
           python3 tools/prebuilt_release_metadata.py \
             --requested-version "${REQUESTED_RELEASE_VERSION}" \
             --requested-docker-repository "${REQUESTED_DOCKER_REPOSITORY}" \
             --default-docker-repository "${DEFAULT_DOCKER_REPOSITORY}" \
-            --existing-tags-file dist/existing-release-tags.txt \
-            --repo-root "${GITHUB_WORKSPACE}"
+            --changelog CHANGELOG.md \
+            --release-notes-output dist/release-notes.md
           metadata_value() {
             grep -E "^${1}=" "${GITHUB_ENV}" | tail -n 1 | cut -d= -f2-
           }
@@ -68,22 +88,50 @@ jobs:
             printf 'docker_repository=%s\n' "$(metadata_value DOCKER_REPOSITORY)"
             printf 'carrier_image=%s\n' "$(metadata_value CARRIER_IMAGE)"
           } >> "${GITHUB_OUTPUT}"
-          case "${REQUESTED_REPLACE_EXISTING}" in
-            true|True|1)
-              [ -n "${REQUESTED_RELEASE_VERSION}" ] || {
-                echo "replace_existing requires an explicit release_version." >&2
-                exit 1
-              }
-              echo "RELEASE_REPLACE_EXISTING=1" >> "${GITHUB_ENV}"
-              ;;
-            false|False|0|"")
-              echo "RELEASE_REPLACE_EXISTING=0" >> "${GITHUB_ENV}"
-              ;;
-            *)
-              echo "Invalid replace_existing value: ${REQUESTED_REPLACE_EXISTING}" >&2
-              exit 1
-              ;;
-          esac
+          normalize_boolean() {
+            case "${1}" in
+              true|True|1) printf '1\n' ;;
+              false|False|0|"") printf '0\n' ;;
+              *) echo "Invalid boolean workflow input: ${1}" >&2; return 1 ;;
+            esac
+          }
+          replace_existing="$(normalize_boolean "${REQUESTED_REPLACE_EXISTING}")"
+          public_notes_confirmed="$(normalize_boolean "${REQUESTED_PUBLIC_NOTES_CONFIRMATION}")"
+          delete_github_release="$(normalize_boolean "${REQUESTED_DELETE_GITHUB_RELEASE}")"
+          delete_git_tag="$(normalize_boolean "${REQUESTED_DELETE_GIT_TAG}")"
+          delete_docker_tag="$(normalize_boolean "${REQUESTED_DELETE_DOCKER_TAG}")"
+          if [ "${public_notes_confirmed}" != "1" ]; then
+            echo "Release notes require explicit human public-disclosure review." >&2
+            exit 1
+          fi
+          if [ "${replace_existing}" = "0" ] \
+            && { [ "${delete_github_release}" = "1" ] \
+              || [ "${delete_git_tag}" = "1" ] \
+              || [ "${delete_docker_tag}" = "1" ]; }; then
+            echo "Deletion confirmations require replace_existing=true." >&2
+            exit 1
+          fi
+          {
+            printf 'RELEASE_REPLACE_EXISTING=%s\n' "${replace_existing}"
+            printf 'AUTHORIZE_DELETE_GITHUB_RELEASE=%s\n' "${delete_github_release}"
+            printf 'AUTHORIZE_DELETE_GIT_TAG=%s\n' "${delete_git_tag}"
+            printf 'AUTHORIZE_DELETE_DOCKER_TAG=%s\n' "${delete_docker_tag}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Finalize human-readable release notes
+        run: |
+          set -euo pipefail
+          test -s dist/release-notes.md
+          cat >> dist/release-notes.md <<EOF
+
+          ### Release Artifacts
+
+          - Docker carrier: \`${CARRIER_IMAGE}\`
+          - Source, checksum, manifest, digest, and these release notes are attached to the GitHub release.
+          - The Docker carrier stores these same notes at \`/omero-prebuilt/release-notes.md\`.
+          EOF
+          python3 tools/prebuilt_release_metadata.py \
+            --validate-public-release-notes dist/release-notes.md
 
       - name: Report runner storage before build
         run: |
@@ -131,47 +179,85 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
-            release_tag_exists=1
-          else
-            release_tag_exists=0
-          fi
-          if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            github_release_exists=1
-          else
-            github_release_exists=0
-          fi
-          status="$(
+          release_state="$(
             python3 - <<'PY'
           from __future__ import annotations
 
           import os
-          import sys
           import urllib.error
           import urllib.parse
           import urllib.request
 
+          def lookup_status(url: str, headers: dict[str, str], label: str) -> int:
+              request = urllib.request.Request(url, headers=headers)
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      status = response.status
+              except urllib.error.HTTPError as exc:
+                  status = exc.code
+              except (TimeoutError, urllib.error.URLError) as exc:
+                  raise SystemExit(f"{label} lookup transport failed.") from exc
+              if status not in {200, 404}:
+                  raise SystemExit(
+                      f"{label} lookup returned HTTP {status}, expected 200 or 404."
+                  )
+              return status
+
+          release = urllib.parse.quote(os.environ["RELEASE_VERSION"], safe="")
+          github_base = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+          github_headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "User-Agent": "omero-docker-extended-release",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          tag_status = lookup_status(
+              f"{github_base}/git/ref/tags/{release}",
+              github_headers,
+              "GitHub tag",
+          )
+          github_release_status = lookup_status(
+              f"{github_base}/releases/tags/{release}",
+              github_headers,
+              "GitHub release",
+          )
+
           repository = os.environ["DOCKER_REPOSITORY"]
-          tag = urllib.parse.quote(os.environ["RELEASE_VERSION"], safe="")
-          url = f"https://hub.docker.com/v2/repositories/{repository}/tags/{tag}/"
-          request = urllib.request.Request(url, headers={"Accept": "application/json"})
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  print(response.status)
-          except urllib.error.HTTPError as exc:
-              print(exc.code)
-          except urllib.error.URLError as exc:
-              print(f"ERROR:{exc.reason}")
+          docker_status = lookup_status(
+              f"https://hub.docker.com/v2/repositories/{repository}/tags/{release}/",
+              {"Accept": "application/json"},
+              "Docker Hub tag",
+          )
+          print(tag_status, github_release_status, docker_status)
           PY
           )"
+          read -r tag_status github_release_status status <<< "${release_state}"
+          if [ "${tag_status}" = "200" ]; then
+            release_tag_exists=1
+          else
+            release_tag_exists=0
+          fi
+          if [ "${github_release_status}" = "200" ]; then
+            github_release_exists=1
+          else
+            github_release_exists=0
+          fi
           if [ "${RELEASE_REPLACE_EXISTING:-0}" = "1" ]; then
-            case "${status}" in
-              200|404) ;;
-              *)
-                echo "Could not verify docker hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
-                exit 1
-                ;;
-            esac
+            if [ "${github_release_exists}" = "1" ] \
+              && [ "${AUTHORIZE_DELETE_GITHUB_RELEASE:-0}" != "1" ]; then
+              echo "The existing GitHub release requires fresh, separate deletion approval." >&2
+              exit 1
+            fi
+            if [ "${release_tag_exists}" = "1" ] \
+              && [ "${AUTHORIZE_DELETE_GIT_TAG:-0}" != "1" ]; then
+              echo "The existing Git tag requires fresh, separate deletion approval." >&2
+              exit 1
+            fi
+            if [ "${status}" = "200" ] \
+              && [ "${AUTHORIZE_DELETE_DOCKER_TAG:-0}" != "1" ]; then
+              echo "The existing Docker Hub tag requires fresh, separate deletion approval." >&2
+              exit 1
+            fi
             if [ "${release_tag_exists}" = "0" ] \
               && [ "${github_release_exists}" = "0" ] \
               && [ "${status}" = "404" ]; then
@@ -180,6 +266,15 @@ jobs:
             fi
             printf 'Replacement state: github_tag=%s github_release=%s docker_tag_http=%s\n' \
               "${release_tag_exists}" "${github_release_exists}" "${status}"
+            {
+              printf 'EXISTING_GITHUB_RELEASE=%s\n' "${github_release_exists}"
+              printf 'EXISTING_GIT_TAG=%s\n' "${release_tag_exists}"
+              if [ "${status}" = "200" ]; then
+                printf 'EXISTING_DOCKER_TAG=1\n'
+              else
+                printf 'EXISTING_DOCKER_TAG=0\n'
+              fi
+            } >> "${GITHUB_ENV}"
             exit 0
           fi
           if [ "${release_tag_exists}" = "1" ]; then
@@ -190,17 +285,10 @@ jobs:
             echo "GitHub release already exists: ${RELEASE_VERSION}" >&2
             exit 1
           fi
-          case "${status}" in
-            404) ;;
-            200)
-              echo "docker hub image tag already exists: ${CARRIER_IMAGE}" >&2
-              exit 1
-              ;;
-            *)
-              echo "Could not verify docker hub tag state for ${CARRIER_IMAGE}: ${status}" >&2
-              exit 1
-              ;;
-          esac
+          if [ "${status}" = "200" ]; then
+            echo "docker hub image tag already exists: ${CARRIER_IMAGE}" >&2
+            exit 1
+          fi
 
       - name: Create source archive
         run: |
@@ -367,6 +455,9 @@ jobs:
               for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                   digest.update(chunk)
 
+          release_notes_path = dist / "release-notes.md"
+          release_notes_digest = hashlib.sha256(release_notes_path.read_bytes()).hexdigest()
+
           required_images = [
               line.strip()
               for line in (dist / "prebuilt-required-images.txt").read_text(encoding="utf-8").splitlines()
@@ -383,6 +474,8 @@ jobs:
               "image_archive_sha256": digest.hexdigest(),
               "runtime_images_archive_bytes": bundle.stat().st_size,
               "runtime_images_uncompressed_bytes": raw_bytes,
+              "release_notes": "release-notes.md",
+              "release_notes_sha256": release_notes_digest,
           }
           (dist / "prebuilt-manifest.json").write_text(
               json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -399,10 +492,18 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${RELEASE_REPLACE_EXISTING:-0}" = "1" ]; then
-            if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            if [ "${EXISTING_GITHUB_RELEASE:-0}" = "1" ]; then
+              [ "${AUTHORIZE_DELETE_GITHUB_RELEASE:-0}" = "1" ] || {
+                echo "Missing fresh approval for GitHub release deletion." >&2
+                exit 1
+              }
               gh release delete "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" --yes
             fi
-            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+            if [ "${EXISTING_GIT_TAG:-0}" = "1" ]; then
+              [ "${AUTHORIZE_DELETE_GIT_TAG:-0}" = "1" ] || {
+                echo "Missing fresh approval for Git tag deletion." >&2
+                exit 1
+              }
               gh api --method DELETE \
                 "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" \
                 >/dev/null
@@ -432,6 +533,10 @@ jobs:
               urllib.request.Request(tag_url, headers={"Accept": "application/json"})
           )
           if current_status == 200:
+              if os.environ.get("AUTHORIZE_DELETE_DOCKER_TAG") != "1":
+                  raise SystemExit(
+                      "Missing fresh approval for Docker Hub tag deletion."
+                  )
               login_data = json.dumps(
                   {
                       "identifier": os.environ["DOCKERHUB_USERNAME"],
@@ -510,7 +615,6 @@ jobs:
             -f "ref=refs/tags/${RELEASE_VERSION}" \
             -f "sha=${GITHUB_SHA}" \
             >/dev/null
-          echo "RELEASE_TAG_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
           created_tag_type="$(
             gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" \
               --jq '.object.type'
@@ -527,18 +631,13 @@ jobs:
             echo "Created release tag ${RELEASE_VERSION} points to ${created_tag_sha}, expected ${GITHUB_SHA}." >&2
             exit 1
           }
-          cat > dist/release-notes.md <<EOF
-          Prebuilt carrier image:
-
-          ${CARRIER_IMAGE}
-
-          This release contains the source archive and the single docker carrier image manifest.
-          EOF
+          test -s dist/release-notes.md
           create_draft_release() {
             gh release create "${RELEASE_VERSION}" \
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz" \
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
               "dist/prebuilt-manifest.json" \
+              "dist/release-notes.md" \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${RELEASE_TARGET_REF}" \
               --title "${RELEASE_VERSION}" \
@@ -564,13 +663,11 @@ jobs:
             echo "GitHub draft release creation did not complete." >&2
             exit 1
           }
-          echo "RELEASE_DRAFT_CREATED_BY_RUN=1" >> "${GITHUB_ENV}"
 
       - name: Set up carrier Buildx builder
         run: |
           set -euo pipefail
           BUILDX_BUILDER_NAME="release-carrier-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker buildx rm -f "${BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
           docker buildx create \
             --name "${BUILDX_BUILDER_NAME}" \
             --driver docker-container \
@@ -587,6 +684,12 @@ jobs:
             --provenance=true \
             --sbom=true \
             --progress plain \
+            --label "org.opencontainers.image.title=OMERO Docker Extended prebuilt carrier" \
+            --label "org.opencontainers.image.description=Versioned runtime bundle with human-readable release notes" \
+            --label "org.opencontainers.image.version=${RELEASE_VERSION}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.documentation=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_VERSION}" \
             -f docker/prebuilt-carrier.Dockerfile \
             -t "${CARRIER_IMAGE}" \
             dist
@@ -614,6 +717,10 @@ jobs:
               exit 1
               ;;
           esac
+          [ "$(docker image inspect "${CARRIER_IMAGE}" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "${RELEASE_VERSION}" ]
+          [ "$(docker image inspect "${CARRIER_IMAGE}" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "${GITHUB_SHA}" ]
+          [ "$(docker image inspect "${CARRIER_IMAGE}" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}')" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" ]
+          [ "$(docker image inspect "${CARRIER_IMAGE}" --format '{{ index .Config.Labels "org.opencontainers.image.documentation" }}')" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_VERSION}" ]
           cat > dist/prebuilt-carrier-digest.txt <<EOF
           PREBUILT_IMAGE_REPOSITORY=${DOCKER_REPOSITORY}
           PREBUILT_IMAGE_RELEASE=${RELEASE_VERSION}
@@ -622,18 +729,6 @@ jobs:
           CARRIER_IMAGE=${CARRIER_IMAGE}
           GITHUB_SHA=${GITHUB_SHA}
           EOF
-          cat > dist/release-notes.md <<EOF
-          Prebuilt carrier image:
-
-          ${CARRIER_IMAGE}
-
-          Expected carrier digest:
-
-          ${carrier_digest}
-
-          This release contains the source archive, the single docker carrier image manifest,
-          and prebuilt-carrier-digest.txt for digest-pinned easy installs.
-          EOF
           cid="$(docker create "${CARRIER_IMAGE}")"
           cleanup_verify_container() {
             docker rm -f "${cid}" >/dev/null 2>&1 || true
@@ -641,10 +736,12 @@ jobs:
           trap cleanup_verify_container EXIT
           docker cp "${cid}:/omero-prebuilt/prebuilt-manifest.json" dist/verified-prebuilt-manifest.json
           docker cp "${cid}:/omero-prebuilt/prebuilt-required-images.txt" dist/verified-prebuilt-required-images.txt
+          docker cp "${cid}:/omero-prebuilt/release-notes.md" dist/verified-release-notes.md
           cleanup_verify_container
           trap - EXIT
           cmp dist/prebuilt-manifest.json dist/verified-prebuilt-manifest.json
           cmp dist/prebuilt-required-images.txt dist/verified-prebuilt-required-images.txt
+          cmp dist/release-notes.md dist/verified-release-notes.md
 
       - name: Upload carrier digest release asset
         env:
@@ -719,15 +816,7 @@ jobs:
           RELEASE_TARGET_REF: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ ! -f dist/release-notes.md ]; then
-            cat > dist/release-notes.md <<EOF
-          Prebuilt carrier image:
-
-          ${CARRIER_IMAGE}
-
-          This release contains the source archive and the single docker carrier image manifest.
-          EOF
-          fi
+          test -s dist/release-notes.md
           if [ "${RELEASE_REPLACE_EXISTING:-0}" = "1" ]; then
             target_ref_type="$(
               gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${RELEASE_TARGET_REF}" \
@@ -754,6 +843,7 @@ jobs:
               "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256" \
               "dist/prebuilt-manifest.json" \
               "dist/prebuilt-carrier-digest.txt" \
+              "dist/release-notes.md" \
               --repo "${GITHUB_REPOSITORY}" \
               --clobber
             gh release edit "${RELEASE_VERSION}" \
@@ -809,6 +899,7 @@ jobs:
               f"omero-docker-extended-{os.environ['RELEASE_VERSION']}-source.tar.gz.sha256",
               "prebuilt-manifest.json",
               "prebuilt-carrier-digest.txt",
+              "release-notes.md",
           }
           actual_assets = {asset["name"] for asset in release.get("assets", [])}
           errors = []
@@ -828,31 +919,11 @@ jobs:
           print(f"Published GitHub release {release['url']}")
           PY
 
-      - name: Delete draft GitHub release after failed carrier publish
+      - name: Report retained draft after failed carrier publish
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -z "${RELEASE_VERSION:-}" ]; then
-            exit 0
-          fi
-          if [ "${RELEASE_DRAFT_CREATED_BY_RUN:-0}" = "1" ] || [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
-            release_is_draft="$(
-              gh release view "${RELEASE_VERSION}" \
-                --repo "${GITHUB_REPOSITORY}" \
-                --json isDraft \
-                --jq '.isDraft' 2>/dev/null || true
-            )"
-            if [ "${release_is_draft}" = "true" ]; then
-              gh release delete "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
-            fi
-          fi
-          if [ "${RELEASE_TAG_CREATED_BY_RUN:-0}" = "1" ]; then
-            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
-              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_VERSION}" >/dev/null 2>&1 || true
-            fi
-          fi
+          echo "::warning::Any draft release or Git tag created by this failed run was retained. Deletion requires fresh, separate per-object user approval."
 
       - name: Remove carrier Buildx builder
         if: always()

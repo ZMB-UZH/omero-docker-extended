@@ -24,4 +24,14 @@ Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic 
   duplicates the large runtime archive layer.
 - Release-runner storage cleanup must be derived from the rendered Compose
   image list. Do not hard-code service images or prune required image IDs.
+- Pause for explicit confirmation of the exact release and Docker tags before
+  release work; never infer or auto-increment a version. Carry the matching
+  human-readable `CHANGELOG.md` notes and OCI
+  metadata in the carrier image only after automated disclosure validation and
+  human public-safety review; reject credentials, identities, host details,
+  private infrastructure, findings, vulnerability mechanics, and
+  exploit-enabling detail.
+- Never delete a pre-existing Docker image or tag without fresh approval naming
+  that one object. Approval for a replacement, prior run, or same version does
+  not carry forward.
 - For live runtime probing, follow the Loki-first and service-user rules in `AGENTS.md`.

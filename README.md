@@ -405,7 +405,9 @@ The release workflow flattens the bundled runtime service images before they
 are written into `runtime-images.tar.gz`. The carrier image itself is a
 scratch-based data image with one payload layer and does not include Alpine,
 BusyBox, a package manager, or a shell; it uses `HEALTHCHECK NONE` metadata
-instead of a runnable healthcheck command.
+instead of a runnable healthcheck command. It also carries the exact
+human-readable GitHub release notes at `/omero-prebuilt/release-notes.md` and
+publishes standard OCI version, revision, source, and documentation labels.
 
 This path does not switch to the build workflow if the carrier cannot be pulled, verified, streamed, or loaded. It fails before container startup so existing OMERO data and deployment-local environment files stay under the same installer ownership rules as the standard workflow.
 
@@ -429,7 +431,14 @@ sudo bash ./installation/easy_installation_script.sh
 ```
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
-Actions workflow. Store `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
+Actions workflow. The operator must enter the exact previously confirmed
+GitHub/Docker tag; the workflow never infers or increments a version. A matching
+substantive section in `CHANGELOG.md` is mandatory. The operator must also set
+`confirm_public_release_notes=true` after human review. Automated validation
+then rejects credentials, personal or host-specific information, private
+infrastructure, and exploit-enabling details before any release object is
+created and again after artifact metadata is appended. Store
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as
 repository secrets before running it. The workflow uses GitHub Actions'
 built-in `GITHUB_TOKEN` with job-scoped `contents: write` permission to create
 the GitHub release; no separate GitHub PAT secret is required when repository
@@ -442,11 +451,13 @@ carrier push includes BuildKit SBOM and provenance attestations so Docker Hub
 and Docker Scout have metadata for automatic image analysis. Docker Hub still
 requires image security insights to be enabled for the repository; otherwise
 the Hub UI can continue to show `Security unknown` even when CI has run Scout.
-If the carrier publish or Scout analysis fails after the draft was created, the
-workflow deletes that draft release and its tag. The release job deliberately
-does not use a GitHub Actions environment, because job environments create
-deployment records. Keep the Docker Hub credentials as repository secrets with
-the documented names. Before the runtime archive is saved, the
+If publication fails after a draft or tag was created, the workflow retains
+those objects and reports them; deletion requires fresh approval for each exact
+object. Replacement mode likewise has separate confirmation inputs for the
+GitHub release, Git tag, and Docker tag. The release job deliberately does not
+use a GitHub Actions environment, because job environments create deployment
+records. Keep the Docker Hub credentials as repository secrets with the
+documented names. Before the runtime archive is saved, the
 workflow derives the required image references from Compose and prunes only
 runner-local docker images outside that required set to keep hosted-runner
 storage available without changing the released image list. The

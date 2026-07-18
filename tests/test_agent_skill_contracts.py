@@ -677,6 +677,45 @@ class AgentSkillContractTests(unittest.TestCase):
                 for suite in EXPECTED_SPLIT_TEST_SUITES:
                     self.assertIn(suite, surface_text)
 
+    def test_agent_surfaces_enforce_release_and_deletion_governance(self) -> None:
+        """Verify every agent surface carries public-release safety policy.
+
+        Inputs: agent and workflow instruction fixtures. Output: no policy drift.
+        """
+        relative_paths = (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".github/instructions/workflows.instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+            ".cursor/rules/30-workflows-security.mdc",
+            ".agents/skills/deployment-patterns/SKILL.md",
+            ".agents/skills/docker-patterns/SKILL.md",
+            "docs/reference/ai-agent-runtime-playbook.md",
+        )
+        required_tokens = (
+            "CHANGELOG.md",
+            "automated disclosure",
+            "human public-safety review",
+            "credentials",
+            "private infrastructure",
+            "vulnerability mechanics",
+            "exploit-enabling detail",
+        )
+        for relative_path in relative_paths:
+            text = (self.repo_root / relative_path).read_text(encoding="utf-8")
+            normalized_text = " ".join(text.lower().split())
+            with self.subTest(relative_path=relative_path):
+                for token in required_tokens:
+                    self.assertIn(token.lower(), normalized_text)
+                self.assertIn("exact", normalized_text)
+                self.assertRegex(normalized_text, r"(?:pause|explicit)")
+                self.assertRegex(normalized_text, r"(?:never infer|auto-increment)")
+                self.assertIn("delet", normalized_text)
+                self.assertIn("fresh", normalized_text)
+                self.assertRegex(normalized_text, r"carr(?:y|ies) forward")
+
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
         """Verify agent surfaces avoid host specific clone paths.
 

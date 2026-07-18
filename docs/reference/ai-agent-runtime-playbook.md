@@ -97,11 +97,23 @@ Examples:
   verifies Docker Scout repository analysis for the Docker Hub repository, runs
   Docker Scout `quickview`, `cves`, and `sbom` against the pushed Docker Hub
   tag, and publishes a GitHub release with the same docker-compatible SemVer tag
-  as the carrier image. Same-version rebuilds must use an explicit
-  `release_version` with `replace_existing=true`; replacement mode requires at
-  least one existing release artifact, supports recovery from a partially
-  deleted prior release, and verifies deletion of the prior GitHub release/tag
-  and Docker Hub tag before recreating them.
+  as the carrier image.
+- Before every release dispatch, pause and ask the user to provide or confirm
+  the exact GitHub release tag and Docker repository/tag. The workflow requires
+  that explicit version and never infers or auto-increments it. A matching
+  human-readable `CHANGELOG.md` section is mandatory; the rendered notes become
+  the GitHub release body and asset and are copied into the Docker carrier with
+  OCI release metadata. Automated disclosure validation and explicit human
+  public-safety review are also mandatory. Public notes must reject credentials,
+  personal or host-specific information, private infrastructure, findings,
+  vulnerability mechanics, and exploit-enabling detail.
+- Same-version replacement requires `replace_existing=true`, but that flag is
+  not deletion authorization. Pause and obtain three fresh, separate approvals
+  for the exact GitHub release, Git tag, and Docker tag before enabling the
+  corresponding workflow confirmation. Earlier, blanket, same-version,
+  replace, or recreate permission never carries forward. The workflow fails
+  closed when any existing object lacks its own confirmation and verifies each
+  authorized deletion before recreating the release.
 - Before the workflow saves `runtime-images.tar.gz`, it must derive the
   required image set from the rendered Compose config and may prune only
   runner-local docker images outside that required set. Do not replace this
