@@ -47,8 +47,9 @@
 - Made the direct Python tooling, curated update set, OMERO.server CLI plugins,
   and Figure PDF dependencies reproducible across image builds. This includes
   ReportLab `5.0.0`; its reviewed remote-image trust change does not alter the
-  local-file PDF export path. Retained setuptools `80.9.0` because OMERO startup
-  tooling still imports `pkg_resources`.
+  local-file PDF export path. Updated setuptools to `80.10.2`, the newest
+  release satisfying the upstream `pkg_resources` warning's `<81` guidance,
+  because OMERO startup tooling still imports that API.
 - Added host-agnostic `/tmp` defaults for OMERO temporary files so each image's
   CLI and healthcheck work in standalone container runs; Compose continues to
   override them with the installation-specific temporary path.

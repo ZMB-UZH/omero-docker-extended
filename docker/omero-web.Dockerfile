@@ -36,10 +36,11 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 # Keep direct Python tooling and hardening dependencies reproducible. OMERO's
 # startup tooling still imports pkg_resources, so setuptools remains on the
-# newest compatible release instead of tracking the latest major line.
+# newest compatible release instead of tracking the latest major line. The
+# deprecated API itself instructs affected environments to pin below 81.
 # --------------------------------------------------------------------------
 ARG PIP_VERSION=26.1.2
-ARG SETUPTOOLS_VERSION=80.9.0
+ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.47.0
 ARG CRYPTOGRAPHY_VERSION=49.0.0
 ARG URLLIB3_VERSION=2.7.0

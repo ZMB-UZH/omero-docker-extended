@@ -25,11 +25,12 @@ ENV PIP_NO_CACHE_DIR=1 \
     OMERO_TMPDIR=/tmp
 
 # Keep every direct Python build dependency reproducible. Setuptools remains on
-# the newest pkg_resources-compatible release because omego imports that API
-# directly during database initialization.
+# the newest pkg_resources-compatible release because OMERO imports that API
+# directly during database initialization. The deprecated API itself instructs
+# affected environments to pin Setuptools below 81.
 # ---------------------------------------------------------------------------
 ARG PIP_VERSION=26.1.2
-ARG SETUPTOOLS_VERSION=80.9.0
+ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.47.0
 ARG CRYPTOGRAPHY_VERSION=49.0.0
 ARG URLLIB3_VERSION=2.7.0
