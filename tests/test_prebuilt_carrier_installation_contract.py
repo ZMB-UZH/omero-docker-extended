@@ -612,7 +612,7 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "replace_existing requires an explicit release_version", workflow_text
         )
         self.assertIn("--latest=false", workflow_text)
-        self.assertIn("python3 tools/prepare_ci_compose_environment.py", workflow_text)
+        self.assertIn("python3 -m tools.prepare_ci_compose_environment", workflow_text)
         self.assertIn('(".env_example", ".env")', environment_helper_text)
         self.assertIn("ENV_TEMPLATE_PAIRS", environment_helper_text)
         self.assertIn("_copy_contract_exclusively", environment_helper_text)

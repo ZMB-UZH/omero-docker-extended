@@ -215,7 +215,7 @@ jobs:
             > "dist/omero-docker-extended-${RELEASE_VERSION}-source.tar.gz.sha256"
 
       - name: Prepare synthetic CI environment files
-        run: python3 tools/prepare_ci_compose_environment.py
+        run: python3 -m tools.prepare_ci_compose_environment
 
       - name: Authenticate to docker hub
         env:
