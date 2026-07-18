@@ -9,10 +9,12 @@ control_socket="${OMERO_WEB_GUNICORN_CONTROL_SOCKET:-${runtime_dir}/gunicorn.ctl
 
 # OMERO.web builds the Gunicorn argv with str.split(), not shell parsing.
 # Whitespace therefore cannot be represented safely in WSGI argument paths.
-if [[ "${runtime_dir}" =~ [[:space:]] || "${control_socket}" =~ [[:space:]] ]]; then
-    echo "ERROR: Gunicorn runtime and control-socket paths must not contain whitespace: ${runtime_dir}, ${control_socket}" >&2
-    exit 1
-fi
+case "${runtime_dir}${control_socket}" in
+    *[[:space:]]*)
+        echo "ERROR: Gunicorn runtime and control-socket paths must not contain whitespace: ${runtime_dir}, ${control_socket}" >&2
+        exit 1
+        ;;
+esac
 
 if [[ -n "${OMERO_WEB_VENV:-}" ]]; then
     case "${OMERO_WEB_VENV}" in
