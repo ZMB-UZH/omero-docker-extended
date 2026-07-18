@@ -871,9 +871,10 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             workflow_text,
         )
         self.assertIn(
-            '"https://hub.docker.com/v2/users/login"',
+            '"https://hub.docker.com/v2/auth/token"',
             workflow_text,
         )
+        self.assertNotIn('"https://hub.docker.com/v2/users/login"', workflow_text)
         self.assertIn('method="DELETE"', workflow_text)
         self.assertIn("Docker Hub tag remained visible after deletion", workflow_text)
         self.assertIn(

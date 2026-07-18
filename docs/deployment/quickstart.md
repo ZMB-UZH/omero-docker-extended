@@ -125,6 +125,8 @@ bash installation/easy_installation_script.sh
 Carrier releases are created from the GitHub Actions panel with the manual
 `release-prebuilt-carrier` workflow. Configure `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` as repository secrets before dispatching that workflow. The
+Docker Hub personal access token needs read/write access for normal publication
+and `Delete` permission when `replace_existing=true` recreates an image tag. The
 workflow uses the built-in `GITHUB_TOKEN` with job-scoped `contents: write`
 permission to create the GitHub release; no separate GitHub PAT secret is
 required when repository Actions settings allow workflow write permissions. The
