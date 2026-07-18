@@ -53,6 +53,9 @@
 - Added host-agnostic `/tmp` defaults for OMERO temporary files so each image's
   CLI and healthcheck work in standalone container runs; Compose continues to
   override them with the installation-specific temporary path.
+- Clarified that Portainer's HTTPS-only external endpoint uses a self-signed
+  first-run certificate and requires an operator-supplied, hostname-matching
+  certificate chain for browser-trusted production access.
 - Expanded the offline documentation gate to validate relative links across all
   first-party Markdown documents while excluding external URLs, code examples,
   and immutable vendored documentation from rewrite scope.

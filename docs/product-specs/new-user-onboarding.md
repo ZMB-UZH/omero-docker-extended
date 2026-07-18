@@ -88,7 +88,9 @@ Then confirm:
 
 - Grafana: `http://localhost:3000` -- confirm dashboards load with data.
 - Prometheus: `http://localhost:9090/targets` -- confirm all targets are UP.
-- Portainer: `https://<host>:9443` -- confirm container visibility.
+- Portainer: `https://<host>:9443` -- confirm container visibility and a trusted
+  certificate chain. Portainer's default first-run certificate is self-signed;
+  install a hostname-matching certificate before production external access.
 
 ### 6. First operational checks
 

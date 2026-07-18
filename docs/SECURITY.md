@@ -125,6 +125,12 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
   on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, and does not expose the legacy
   HTTP port. Set `PORTAINER_HOST_BIND=127.0.0.1` when it should be reachable
   only through local access or an authenticated reverse proxy.
+- Portainer generates a self-signed certificate on first use. External access
+  is browser-trusted only after an operator installs a PEM certificate and key
+  whose subject alternative names match the external hostname and whose
+  certificate file includes the complete issuer chain. Portainer supports
+  replacing the certificate after installation; never treat bypassing a
+  browser certificate warning as production TLS validation.
 - Portainer runs with Docker's init shim and a non-TLS container-local TCP
   healthcheck. Prometheus blackbox performs the full HTTPS status probe, keeping
   Docker health reporting reliable without weakening the HTTPS-only management

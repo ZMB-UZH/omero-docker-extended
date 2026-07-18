@@ -458,7 +458,10 @@ the carrier repository; do not store a docker hub account password there.
 - Portainer: `https://<host>:9443` by default
   (`PORTAINER_HOST_BIND=0.0.0.0`); set `PORTAINER_HOST_BIND=127.0.0.1`
   to restrict it to local or reverse-proxy access (set admin password on first
-  login)
+  login). Portainer generates a self-signed certificate by default. For a
+  browser-trusted external endpoint, replace it with a PEM certificate whose
+  subject alternative names match the deployment hostname and include the
+  complete issuer chain; do not bypass browser certificate warnings.
 - OMERO.web: <http://localhost:4090>
 
 Log in to OMERO.web using the root credential configured in `env/omero_secrets.env`.
