@@ -464,6 +464,12 @@ class EnvSafetyGuardTests(unittest.TestCase):
         """
         invalid_cases = [
             ("OMERO_JOB_SERVICE_SECURE", "maybe", "maybe", "must be a boolean"),
+            (
+                "CONFIG_omero_web_debug",
+                "true",
+                "true",
+                "must be disabled in production",
+            ),
             ("OMERO_CLI_PORT", "0", "0", "must be a TCP port"),
             ("OMERO_WEB_HOST_PORT", "65536", "65536", "must be a TCP port"),
             (

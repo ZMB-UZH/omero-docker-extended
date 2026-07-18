@@ -96,6 +96,10 @@
   activate documented optional settings without being reported as schema
   drift. Missing, unsupported, duplicate, and reordered required keys still
   fail closed.
+- Made runtime environment validation reject enabled OMERO.web debug mode. The
+  deployment template already defaults to `false`; upgrades now fail before
+  container recreation if a legacy operator file would enable Django debug in
+  production.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 
