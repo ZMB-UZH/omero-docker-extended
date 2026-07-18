@@ -29,6 +29,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         cls.default_config_script = (
             cls.repo_root / "startup" / "60-default-web-config.sh"
         )
+        cls.web_server_script = cls.repo_root / "startup" / "30-start-omero-web.sh"
         cls.imaris_worker_script = (
             cls.repo_root / "startup" / "40-start-imaris-celery-worker.sh"
         )
@@ -111,6 +112,157 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
         fake_celery.chmod(fake_celery.stat().st_mode | stat.S_IXUSR)
         return bin_dir, calls_file
+
+    @staticmethod
+    def _make_fake_web_server_venv(workspace: Path) -> tuple[Path, Path]:
+        """Create a fake OMERO.web virtualenv.
+
+        Inputs: temporary `workspace`. Output: web root and CLI call-log paths.
+        """
+        web_root = workspace / "web-root"
+        bin_dir = web_root / "venv-3.12" / "bin"
+        bin_dir.mkdir(parents=True)
+        calls_file = workspace / "omero-web-calls.log"
+
+        fake_python = bin_dir / "python"
+        fake_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+        (bin_dir / "activate").write_text("# test virtualenv\n", encoding="utf-8")
+
+        fake_omero = bin_dir / "omero"
+        fake_omero.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n'
+            'if [[ "$*" == "config get omero.web.wsgi_args" ]]; then\n'
+            '    printf \'%s\' "${OMERO_CURRENT_WSGI_ARGS:-}"\n'
+            "fi\n",
+            encoding="utf-8",
+        )
+        fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
+        return web_root, calls_file
+
+    def _run_web_server_launcher(
+        self,
+        workspace: Path,
+        *,
+        wsgi_args: str,
+        current_wsgi_args: str = "",
+    ) -> tuple[list[str], Path]:
+        """Run the OMERO.web launcher against a fake CLI.
+
+        Inputs: workspace and WSGI configurations. Output: CLI calls and runtime path.
+        """
+        web_root, calls_file = self._make_fake_web_server_venv(workspace)
+        runtime_dir = workspace / "persistent-runtime"
+        env = {
+            "PATH": "/bin:/usr/bin",
+            "OMERO_CALLS_FILE": str(calls_file),
+            "OMERO_CURRENT_WSGI_ARGS": current_wsgi_args,
+            "OMERO_WEB_ROOT": str(web_root),
+            "OMERO_WEB_VENV": "venv-3.12",
+            "OMERO_WEB_VAR_DIR": str(runtime_dir.parent),
+            "OMERO_WEB_RUNTIME_DIR": str(runtime_dir),
+            "OMERO_WEB_WSGI_ARGS": wsgi_args,
+        }
+        subprocess.run([BASH_BIN, str(self.web_server_script)], check=True, env=env)
+        return calls_file.read_text(encoding="utf-8").splitlines(), runtime_dir
+
+    def test_web_server_launcher_upgrades_legacy_wsgi_arguments(self) -> None:
+        """Verify legacy arguments receive a writable control socket.
+
+        Inputs: legacy WSGI arguments. Output: one derived control-socket argument.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            calls, runtime_dir = self._run_web_server_launcher(
+                Path(tmpdir),
+                wsgi_args="--chdir /legacy/runtime --timeout 7200",
+            )
+
+        configured_args = calls[1]
+        self.assertEqual(calls[0], "config get omero.web.wsgi_args")
+        self.assertIn("--chdir /legacy/runtime --timeout 7200", configured_args)
+        self.assertIn(
+            f"--control-socket={runtime_dir}/gunicorn.ctl", configured_args
+        )
+        self.assertEqual(configured_args.count("--control-socket"), 1)
+        self.assertEqual(calls[-1], "web start --foreground")
+
+    def test_web_server_launcher_preserves_explicit_control_socket(self) -> None:
+        """Verify an explicit control socket remains authoritative.
+
+        Inputs: custom control-socket argument. Output: unchanged socket selection.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            calls, runtime_dir = self._run_web_server_launcher(
+                Path(tmpdir),
+                wsgi_args="--chdir /custom --control-socket=/custom/gunicorn.ctl",
+            )
+
+        configured_args = calls[1]
+        self.assertIn("--control-socket=/custom/gunicorn.ctl", configured_args)
+        self.assertNotIn(str(runtime_dir), configured_args)
+        self.assertEqual(configured_args.count("--control-socket"), 1)
+
+    def test_web_server_launcher_preserves_disabled_control_socket(self) -> None:
+        """Verify an explicit control-socket opt-out remains authoritative.
+
+        Inputs: `--no-control-socket`. Output: no injected control-socket argument.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            calls, _runtime_dir = self._run_web_server_launcher(
+                Path(tmpdir),
+                wsgi_args="--chdir /custom --no-control-socket",
+            )
+
+        configured_args = calls[1]
+        self.assertIn("--no-control-socket", configured_args)
+        self.assertNotIn("--control-socket", configured_args)
+
+    def test_web_server_launcher_avoids_rewriting_identical_configuration(self) -> None:
+        """Verify identical WSGI configuration is not rewritten.
+
+        Inputs: matching desired and current arguments. Output: read and start only.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = "--chdir /custom --control-socket /custom/gunicorn.ctl"
+            calls, _runtime_dir = self._run_web_server_launcher(
+                Path(tmpdir),
+                wsgi_args=args,
+                current_wsgi_args=args,
+            )
+
+        self.assertEqual(
+            calls,
+            ["config get omero.web.wsgi_args", "web start --foreground"],
+        )
+
+    def test_web_server_launcher_rejects_whitespace_in_runtime_path(self) -> None:
+        """Verify whitespace in an upstream-unsplittable path fails explicitly.
+
+        Inputs: runtime path containing whitespace. Output: clear nonzero startup.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            web_root, calls_file = self._make_fake_web_server_venv(workspace)
+            result = subprocess.run(
+                [BASH_BIN, str(self.web_server_script)],
+                check=False,
+                env={
+                    "PATH": "/bin:/usr/bin",
+                    "OMERO_CALLS_FILE": str(calls_file),
+                    "OMERO_WEB_ROOT": str(web_root),
+                    "OMERO_WEB_VENV": "venv-3.12",
+                    "OMERO_WEB_RUNTIME_DIR": str(workspace / "runtime with spaces"),
+                    "OMERO_WEB_WSGI_ARGS": "--timeout 7200",
+                },
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must not contain whitespace", result.stderr)
+        self.assertFalse(calls_file.exists())
 
     def test_50_config_applies_globbed_files_and_config_env_overrides(self) -> None:
         """Verify 50 config applies globbed files and config env overrides.

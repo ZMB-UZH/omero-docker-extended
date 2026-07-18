@@ -915,24 +915,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 self.assertIn("set -eu", script_text)
                 self.assertIn("Missing required environment variable", script_text)
 
-    def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
-        """Verify supervisord sets writable gunicorn chdir by default.
+    def test_supervisord_uses_writable_gunicorn_runtime_by_default(self) -> None:
+        """Verify supervisord uses the installation-agnostic Gunicorn launcher.
 
-        Inputs: repository fixtures. Output: fails on regressions in supervisord sets writable gunicorn chdir by default.
+        Inputs: repository fixtures. Output: fails on Gunicorn runtime path regressions.
         """
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(
+            encoding="utf-8"
+        )
+        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
             encoding="utf-8"
         )
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
+        launcher_text = (
+            self.repo_root / "startup" / "30-start-omero-web.sh"
+        ).read_text(encoding="utf-8")
         web_bootstrap_text = (
             self.repo_root / "startup" / "10-web-bootstrap.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn("OMERO_WEB_WSGI_ARGS", supervisord_text)
-        self.assertIn("--chdir /opt/omero/web/OMERO.web/var/run", supervisord_text)
+        self.assertIn("command=/opt/omero/web/bin/start-omero-web.sh", supervisord_text)
         self.assertIn(
-            "OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run", env_text
+            "COPY startup/30-start-omero-web.sh /opt/omero/web/bin/start-omero-web.sh",
+            dockerfile_text,
+        )
+        self.assertIn("OMERO_WEB_RUNTIME_DIR", launcher_text)
+        self.assertIn("OMERO_WEB_GUNICORN_CONTROL_SOCKET", launcher_text)
+        self.assertIn('*) wsgi_args="${wsgi_args} --control-socket', launcher_text)
+        self.assertIn(
+            "OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run "
+            "--control-socket /opt/omero/web/OMERO.web/var/run/gunicorn.ctl",
+            env_text,
         )
         self.assertIn('local run_dir="${var_dir}/run"', web_bootstrap_text)
         self.assertIn('local static_dir="${var_dir}/static"', web_bootstrap_text)

@@ -476,6 +476,7 @@ RUN set -euo pipefail; \
 # Configure supervisord to run OMERO.web and plugin background workers
 # -------------------------------------------------------------------
 COPY supervisord.conf /etc/supervisord.conf
+COPY startup/30-start-omero-web.sh /opt/omero/web/bin/start-omero-web.sh
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
 COPY startup/40-start-tools-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh
 RUN set -euo pipefail; \
@@ -488,7 +489,7 @@ COPY startup/60-enforce-ext4-project-quota.sh /opt/omero/web/bin/enforce-ext4-pr
 COPY startup/61-storage-quota-reconcile-loop.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
-    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh /startup/10-web-bootstrap.sh /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
+    chmod 0555 /opt/omero/web/bin/start-omero-web.sh /opt/omero/web/bin/start-imaris-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh /startup/10-web-bootstrap.sh /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
 # FIX: Take ownership of the base image startup chain.
