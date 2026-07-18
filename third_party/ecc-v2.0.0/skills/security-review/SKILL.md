@@ -25,7 +25,6 @@ This skill ensures all code follows security best practices and identifies poten
 #### FAIL: NEVER Do This
 ```typescript
 const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
-// skipcq: SCT-A000
 const dbPassword = "password123" // In source code
 ```
 
@@ -209,6 +208,11 @@ function renderUserContent(html: string) {
 ```
 
 #### Content Security Policy
+
+Start strict and loosen only with a documented removal plan. Do not default to
+`'unsafe-inline'` or `'unsafe-eval'`; they neutralize much of CSP's protection
+and should be treated as temporary compatibility debt.
+
 ```typescript
 // next.config.js
 const securityHeaders = [
@@ -216,8 +220,11 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: `
       default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline';
+      base-uri 'self';
+      object-src 'none';
+      frame-ancestors 'none';
+      script-src 'self';
+      style-src 'self';
       img-src 'self' data: https:;
       font-src 'self';
       connect-src 'self' https://api.example.com;
@@ -239,7 +246,6 @@ const securityHeaders = [
 import { csrf } from '@/lib/csrf'
 
 export async function POST(request: Request) {
-  // skipcq: SCT-A000
   const token = request.headers.get('X-CSRF-Token')
 
   if (!csrf.verify(token)) {

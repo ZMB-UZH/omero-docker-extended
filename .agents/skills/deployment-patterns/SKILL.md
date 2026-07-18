@@ -1,8 +1,8 @@
 ---
 name: deployment-patterns
 description: Deployment and rollout guidance for this repo's dockerized OMERO platform, with emphasis on env contracts and update safety.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/deployment-patterns/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md
 ---
 
 # Deployment Patterns
@@ -11,7 +11,7 @@ Use this skill when changing installation, update, rollout, health, or service t
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/deployment-patterns/SKILL.md` for generic deployment checklists and rollout patterns.
+Start from `third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` for generic deployment checklists and rollout patterns.
 
 ## Repo overlay
 

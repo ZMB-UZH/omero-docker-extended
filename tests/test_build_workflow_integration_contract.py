@@ -1788,12 +1788,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             lint_step["env"]["DEFAULT_BRANCH"],
         )
         self.assertEqual(
-            "(^|/)third_party/(ecc-v1\\.10\\.0|caveman-v1\\.7\\.0)/",
+            "(^|/)third_party/(ecc-v2\\.0\\.0|caveman-v1\\.9\\.1)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
         self.assertEqual(".markdownlint.yaml", lint_step["env"]["MARKDOWN_CONFIG_FILE"])
         self.assertEqual("true", lint_step["env"]["RUN_LOCAL"])
+        self.assertEqual("true", lint_step["env"]["VALIDATE_BASH"])
         self.assertEqual(".yamllint", lint_step["env"]["YAML_CONFIG_FILE"])
         self.assertEqual("true", lint_step["env"]["VALIDATE_ALL_CODEBASE"])
         self.assertEqual(
@@ -1814,7 +1815,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(markdown_config["MD033"])
         self.assertEqual(
-            "third_party/ecc-v1.10.0/**\nthird_party/caveman-v1.7.0/**\n",
+            "third_party/ecc-v2.0.0/**\nthird_party/caveman-v1.9.1/**\n",
             (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
         )
 
@@ -1863,7 +1864,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             upload_step["if"],
         )
         self.assertEqual("true", str(upload_step["with"]["use_oidc"]).lower())
-        self.assertEqual("v11.2.8", upload_step["with"]["version"])
+        self.assertEqual("v11.3.1", upload_step["with"]["version"])
         self.assertNotIn("token", upload_step["with"])
         self.assertFalse(
             any(step.get("name") == "Validate Codecov token" for step in job["steps"])
@@ -1885,7 +1886,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.168.0@sha256:525beaba156b9bd3f9847d6ec0eb8f308e11f407e0c0b2da641e7c8dd99c97d6",
+            "semgrep/semgrep:1.170.0@sha256:c98f8829eea377274ee4b10656458b078b88232469b2ff913f091c2317347c9d",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -2149,6 +2150,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.assertIn("cooldown", update)
             self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
 
+    def test_dependabot_covers_compose_and_dockerfiles(self) -> None:
+        """Verify Docker dependency updates cover both manifest locations.
+
+        Inputs: Dependabot YAML. Output: asserts root and Dockerfile coverage.
+        """
+        import yaml  # noqa: F811 -- available in CI
+
+        dependabot_path = self.repo_root / ".github" / "dependabot.yml"
+        config = yaml.safe_load(dependabot_path.read_text(encoding="utf-8"))
+        docker_directories = {
+            update["directory"]
+            for update in config["updates"]
+            if update["package-ecosystem"] == "docker"
+        }
+
+        self.assertEqual({"/", "/docker"}, docker_directories)
+
+        dockerfile_update = next_or_fail(
+            update
+            for update in config["updates"]
+            if update["package-ecosystem"] == "docker"
+            and update["directory"] == "/docker"
+        )
+        postgres_ignore = next_or_fail(
+            rule
+            for rule in dockerfile_update["ignore"]
+            if rule["dependency-name"] == "postgres"
+        )
+        self.assertEqual(
+            ["version-update:semver-major"], postgres_ignore["update-types"]
+        )
+
     def test_ci_requirement_manifests_pin_every_dependency(self) -> None:
         """Verify ci requirement manifests pin every dependency.
 
@@ -2259,7 +2292,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("--cap-drop ALL", script_text)
         self.assertIn("--security-opt no-new-privileges", script_text)
         self.assertIn("--read-only", script_text)
-        self.assertIn("--tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m", script_text)
+        self.assertIn('--tmpfs "/tmp:rw,noexec,nosuid,nodev,size=16m"', script_text)
         self.assertIn("--pids-limit 128", script_text)
         self.assertIn("--memory 256m", script_text)
 

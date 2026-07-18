@@ -67,8 +67,8 @@ def _load_psycopg2():
     try:
         import psycopg2
         from psycopg2 import extras
-    except ImportError:
-        raise VariableStoreError(errors.psycopg2_missing())
+    except ImportError as exc:
+        raise VariableStoreError(errors.psycopg2_missing()) from exc
 
     _PSYCOPG2_MODULES.module = psycopg2
     _PSYCOPG2_MODULES.extras = extras
@@ -86,8 +86,8 @@ def _load_psycopg2_sql():
 
     try:
         from psycopg2 import sql
-    except ImportError:
-        raise VariableStoreError(errors.psycopg2_missing())
+    except ImportError as exc:
+        raise VariableStoreError(errors.psycopg2_missing()) from exc
 
     _PSYCOPG2_MODULES.sql = sql
     return _PSYCOPG2_MODULES.sql
@@ -232,8 +232,10 @@ def _db_params():
     candidate_str = str(candidate).strip()
     try:
         port = int(candidate_str)
-    except ValueError:
-        raise VariableStoreError(f"Invalid database port value: {candidate_str}")
+    except ValueError as exc:
+        raise VariableStoreError(
+            f"Invalid database port value: {candidate_str}"
+        ) from exc
 
     port_candidates = [port]
 
@@ -427,7 +429,7 @@ def list_variable_sets(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise VariableStoreError(errors.variable_sets_fetch_failed())
+        raise VariableStoreError(errors.variable_sets_fetch_failed()) from None
 
 
 def save_variable_set(username, set_name, var_names):
@@ -478,7 +480,7 @@ def save_variable_set(username, set_name, var_names):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise VariableStoreError(errors.variable_set_save_failed())
+        raise VariableStoreError(errors.variable_set_save_failed()) from None
 
 
 def load_variable_set(username, set_name):
@@ -513,7 +515,7 @@ def load_variable_set(username, set_name):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise VariableStoreError(errors.variable_set_load_failed())
+        raise VariableStoreError(errors.variable_set_load_failed()) from None
 
 
 def delete_variable_set(username, set_name):
@@ -564,7 +566,7 @@ def delete_variable_set(username, set_name):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise VariableStoreError(errors.variable_set_delete_failed())
+        raise VariableStoreError(errors.variable_set_delete_failed()) from None
 
 
 def list_ai_credentials(username):
@@ -599,7 +601,7 @@ def list_ai_credentials(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed())
+        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed()) from None
 
 
 def get_ai_credential(username, provider):
@@ -638,7 +640,7 @@ def get_ai_credential(username, provider):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed())
+        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed()) from None
 
 
 def save_ai_credentials(username, provider, api_key):
@@ -673,7 +675,7 @@ def save_ai_credentials(username, provider, api_key):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise AiCredentialStoreError(errors.ai_credentials_save_failed())
+        raise AiCredentialStoreError(errors.ai_credentials_save_failed()) from None
 
 
 def save_user_settings(username, settings_payload):
@@ -723,7 +725,7 @@ def save_user_settings(username, settings_payload):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserSettingsStoreError(errors.user_settings_save_failed())
+        raise UserSettingsStoreError(errors.user_settings_save_failed()) from None
 
 
 def delete_all_user_settings(username):
@@ -757,7 +759,7 @@ def delete_all_user_settings(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserSettingsStoreError(errors.user_settings_delete_failed())
+        raise UserSettingsStoreError(errors.user_settings_delete_failed()) from None
 
 
 def delete_all_variable_sets(username):
@@ -791,7 +793,7 @@ def delete_all_variable_sets(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise VariableStoreError(errors.variable_sets_delete_failed())
+        raise VariableStoreError(errors.variable_sets_delete_failed()) from None
 
 
 def delete_all_ai_credentials(username):
@@ -825,7 +827,7 @@ def delete_all_ai_credentials(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise AiCredentialStoreError(errors.ai_credentials_delete_failed())
+        raise AiCredentialStoreError(errors.ai_credentials_delete_failed()) from None
 
 
 def delete_all_user_data(username):
@@ -853,7 +855,7 @@ def delete_all_user_data(username):
             conn.commit()
             return deleted_counts
     except (VariableStoreError, AiCredentialStoreError, UserSettingsStoreError):
-        raise UserDataStoreError(errors.user_data_delete_failed())
+        raise UserDataStoreError(errors.user_data_delete_failed()) from None
     except Exception as e:
         logger.error(
             "Failed to delete user data for %s: %s",
@@ -861,7 +863,7 @@ def delete_all_user_data(username):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserDataStoreError(errors.user_data_delete_failed())
+        raise UserDataStoreError(errors.user_data_delete_failed()) from None
 
 
 def _list_user_scoped_tables(conn):

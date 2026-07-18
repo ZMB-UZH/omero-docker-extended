@@ -1,8 +1,8 @@
 ---
 name: python-patterns
 description: Python patterns for this repo's helpers, plugins, services, startup tooling, and environment-driven contracts.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/python-patterns/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/python-patterns/SKILL.md
 ---
 
 # Python Patterns
@@ -11,7 +11,7 @@ Use this skill when writing or refactoring Python in plugin code, shared helpers
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/python-patterns/SKILL.md` for the generic Python guidance.
+Start from `third_party/ecc-v2.0.0/skills/python-patterns/SKILL.md` for the generic Python guidance.
 
 ## Repo overlay
 

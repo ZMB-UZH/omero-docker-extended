@@ -20,12 +20,30 @@ ARG APPLY_DNF_UPDATES=0
 # -----------------------------------------------------
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    TMPDIR=/tmp \
+    OMERO_TMPDIR=/tmp
 
-# Keep setuptools on a pkg_resources-compatible release for omego startup.
-# omego imports pkg_resources directly during DB initialization.
-# --------------------------------------------------------------
+# Keep every direct Python build dependency reproducible. Setuptools remains on
+# the newest pkg_resources-compatible release because omego imports that API
+# directly during database initialization.
+# ---------------------------------------------------------------------------
+ARG PIP_VERSION=26.1.2
 ARG SETUPTOOLS_VERSION=80.9.0
+ARG WHEEL_VERSION=0.47.0
+ARG CRYPTOGRAPHY_VERSION=49.0.0
+ARG URLLIB3_VERSION=2.7.0
+ARG CERTIFI_VERSION=2026.6.17
+ARG IDNA_VERSION=3.18
+ARG REQUESTS_VERSION=2.34.2
+ARG JINJA2_VERSION=3.1.6
+ARG PYOPENSSL_VERSION=26.3.0
+ARG REPORTLAB_VERSION=5.0.0
+ARG MARKDOWN_VERSION=3.10.2
+ARG OMERO_CLI_RENDER_VERSION=0.8.1
+ARG OMERO_METADATA_VERSION=0.13.0
+ARG OMERO_CLI_DUPLICATE_VERSION=0.4.0
+ARG OMERO_RDF_VERSION=0.7.2
 
 # Shared DNF retry settings for transient upstream mirror failures
 # --------------------------------------------------------------
@@ -155,16 +173,16 @@ RUN set -euo pipefail; \
             exit 1; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-            pip \
+            "pip==${PIP_VERSION}" \
             "setuptools==${SETUPTOOLS_VERSION}" \
-            wheel \
-            "cryptography>=42.0.0" \
-            "urllib3>=2.6.3" \
-            "certifi" \
-            "idna>=3.7" \
-            "requests>=2.32.0" \
-            "jinja2>=3.1.6" \
-            "pyopenssl>=24.0.0"; \
+            "wheel==${WHEEL_VERSION}" \
+            "cryptography==${CRYPTOGRAPHY_VERSION}" \
+            "urllib3==${URLLIB3_VERSION}" \
+            "certifi==${CERTIFI_VERSION}" \
+            "idna==${IDNA_VERSION}" \
+            "requests==${REQUESTS_VERSION}" \
+            "jinja2==${JINJA2_VERSION}" \
+            "pyopenssl==${PYOPENSSL_VERSION}"; \
         "${VENV_DIR}/bin/python" -c "import importlib.metadata as metadata; import setuptools, wheel, cryptography, urllib3; print(\"Python packaging import check succeeded (setuptools={})\".format(metadata.version(\"setuptools\")))"; \
     done
 
@@ -189,8 +207,8 @@ RUN set -euo pipefail; \
             exit 1; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-            reportlab \
-            markdown \
+            "reportlab==${REPORTLAB_VERSION}" \
+            "markdown==${MARKDOWN_VERSION}" \
             "tifffile==${TIFFFILE_VERSION}"; \
     done
 
@@ -208,10 +226,10 @@ RUN set -euo pipefail; \
             exit 1; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-            omero-cli-render \
-            omero-metadata \
-            omero-cli-duplicate \
-            omero-rdf; \
+            "omero-cli-render==${OMERO_CLI_RENDER_VERSION}" \
+            "omero-metadata==${OMERO_METADATA_VERSION}" \
+            "omero-cli-duplicate==${OMERO_CLI_DUPLICATE_VERSION}" \
+            "omero-rdf==${OMERO_RDF_VERSION}"; \
     done
 
 # Install OMERO.dropbox into the OMERO.server virtualenv
@@ -272,10 +290,10 @@ RUN set -euo pipefail; \
             exit 1; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-            pip \
-            pytest==7.4.4 \
+            "pip==${PIP_VERSION}" \
+            pytest==9.1.1 \
             "setuptools==${SETUPTOOLS_VERSION}" \
-            wheel; \
+            "wheel==${WHEEL_VERSION}"; \
         SITE_PACKAGES="$("${VENV_DIR}/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
         chown -R omero-server:omero-server "${SITE_PACKAGES}"; \
     done
@@ -425,7 +443,7 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
 ARG BIOP_OMERO_SCRIPTS_REF="main"
-ARG BIOP_OMERO_SCRIPTS_COMMIT="96c32450c3516a7c0d23731b71e1e10df2c48e72"
+ARG BIOP_OMERO_SCRIPTS_COMMIT="c9cc4615b1fab11450faa1e65e083dc59b825083"
 RUN set -euo pipefail; \
     echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_REF}"; \
     rm -rf /tmp/biop-omero-scripts; \
@@ -678,15 +696,15 @@ RUN set -euo pipefail; \
         if [[ ! -x "${VENV_DIR}/bin/python" ]]; then continue; fi; \
         echo "Applying curated compatibility-safe Python security updates in ${VENV_DIR}..."; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-            pip \
-            wheel \
-            "cryptography>=42.0.0" \
-            "urllib3>=2.2.2" \
-            certifi \
-            "idna>=3.7" \
-            "requests>=2.32.0" \
-            "jinja2>=3.1.6" \
-            "pyopenssl>=24.0.0" || \
+            "pip==${PIP_VERSION}" \
+            "wheel==${WHEEL_VERSION}" \
+            "cryptography==${CRYPTOGRAPHY_VERSION}" \
+            "urllib3==${URLLIB3_VERSION}" \
+            "certifi==${CERTIFI_VERSION}" \
+            "idna==${IDNA_VERSION}" \
+            "requests==${REQUESTS_VERSION}" \
+            "jinja2==${JINJA2_VERSION}" \
+            "pyopenssl==${PYOPENSSL_VERSION}" || \
             echo "WARNING: Some curated Python hardening updates failed (non-fatal)."; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
         echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \

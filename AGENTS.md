@@ -109,7 +109,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
 - Never create, edit, overwrite, delete, normalize, or print values from non-example deployment env files (`.env`, `installation_paths.env`, `env/*.env`) unless the user explicitly grants a one-off exception for that exact operation; examples remain the tracked contract.
 - Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root. Use `python3 tools/env_safety_guard.py template-check` only to report env-template key drift without values.
-- Validate Markdown with `npx --yes markdownlint-cli2@0.22.1` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
+- Validate Markdown with `npx --yes markdownlint-cli2@0.23.1` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
 - Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` when the Docker-backed Super-Linter gate must be mirrored locally.
 - `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates. GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result.
 
@@ -122,7 +122,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - `docs/reference/ai-agent-runtime-playbook.md`: deep operational procedures and pitfalls.
 - `docs/reference/ai-agent-skills.md`: harness-neutral skill catalog for `.agents/skills/`.
 - `docs/reference/ai-agent-integrations.md`: Copilot, Cursor, Claude, Gemini, and ECC adapter map.
-- `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v1.10.0/`: pinned ECC provenance.
+- `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v2.0.0/`: pinned ECC provenance.
 - `docs/reference/ai-agent-security-prevention-playbook.md`: canonical anti-regression security guide.
 - `docs/reference/plugin-help-page-style-guide.md`: canonical plugin help page formatting and verification rules.
 
@@ -147,7 +147,7 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Open one domain doc, one nearest test module, and one matching skill before broadening context.
 - Stop once you can name the exact files to edit and the exact suites to run.
 - Summarize long docs once and reuse the summary instead of reopening them repeatedly.
-- Prefer the narrowest correct split test lane instead of the full matrix during debugging.
+- Keep a verification ledger keyed by command and relevant tree state: use the narrowest correct lane during debugging, do not repeat a passing gate until its inputs change, and run the full matrix once against the final tree.
 
 ## Verification minimum
 

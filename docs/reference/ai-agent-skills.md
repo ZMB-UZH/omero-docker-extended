@@ -4,7 +4,7 @@ This document catalogs the repository's shared skill surface for AI Agents.
 
 The skills live under `.agents/skills/`. Harnesses that support skill discovery can load them directly. Harnesses that do not can still read the corresponding `SKILL.md` files manually.
 
-ECC-derived overlays point back to the pinned upstream snapshot in `third_party/ecc-v1.10.0/`. Repo-native operational skills remain local-only.
+ECC-derived overlays point back to the pinned upstream snapshot in `third_party/ecc-v2.0.0/`. Repo-native operational skills remain local-only.
 
 ## Precedence
 
@@ -110,12 +110,13 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
 - `caveman` changes reply style only. It never changes routing, tool use, verification scope, or the need to surface uncertainty clearly.
-- The repo-local overlay intentionally stays narrower than upstream `v1.7.0`:
+- The repo-local overlay intentionally stays narrower than upstream `v1.9.1`:
   no hooks, no plugin auto-loading, no `.codex` hook config, no natural-language
   auto-activation, no `CAVEMAN_DEFAULT_MODE` or `off` handling, no
   `caveman-help`, no smart installer, no cavecrew subagents, no
   `caveman-shrink`, no stats/statusline scripts, no `caveman-init`, and no
-  `/compress` context rewriting. Keep the useful v1.7.0 style guards: do not
+  `/compress` context rewriting. Keep the useful v1.9.1 style guards: preserve
+  the user's language, never invent prose abbreviations or causal arrows, never
   abbreviate code symbols, and drop compression when it creates ambiguity.
 
 ## Maintenance rules

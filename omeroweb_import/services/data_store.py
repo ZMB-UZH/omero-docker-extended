@@ -39,8 +39,8 @@ def _load_psycopg2():
     try:
         import psycopg2
         from psycopg2 import extras
-    except ImportError:
-        raise UserSettingsStoreError(errors.psycopg2_missing())
+    except ImportError as exc:
+        raise UserSettingsStoreError(errors.psycopg2_missing()) from exc
 
     return psycopg2, extras
 
@@ -56,8 +56,8 @@ def _load_psycopg2_sql():
 
     try:
         from psycopg2 import sql
-    except ImportError:
-        raise UserSettingsStoreError(errors.psycopg2_missing())
+    except ImportError as exc:
+        raise UserSettingsStoreError(errors.psycopg2_missing()) from exc
 
     return sql
 
@@ -289,7 +289,7 @@ def save_user_settings(username, settings_payload):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserSettingsStoreError(errors.user_settings_save_failed())
+        raise UserSettingsStoreError(errors.user_settings_save_failed()) from None
 
 
 def save_special_method_settings(username, method_key, settings_payload):
@@ -341,7 +341,9 @@ def save_special_method_settings(username, method_key, settings_payload):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserSettingsStoreError(errors.special_method_settings_save_failed())
+        raise UserSettingsStoreError(
+            errors.special_method_settings_save_failed()
+        ) from None
 
 
 def load_special_method_settings(username, method_key):
@@ -377,4 +379,4 @@ def load_special_method_settings(username, method_key):
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
-        raise UserSettingsStoreError(errors.db_connection_failed())
+        raise UserSettingsStoreError(errors.db_connection_failed()) from None

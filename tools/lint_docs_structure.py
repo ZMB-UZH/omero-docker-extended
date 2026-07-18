@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import sys
 from typing import Iterable, Sequence
+from urllib.parse import unquote, urlsplit
 
 if __package__ in (None, ""):  # pragma: no cover - direct script execution path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -60,6 +62,22 @@ REQUIRED_INDEX_LINKS: tuple[str, ...] = (
     "`design-docs/index.md`",
     "`exec-plans/tech-debt-tracker.md`",
     "`product-specs/index.md`",
+)
+
+FIRST_PARTY_MARKDOWN_GLOBS: tuple[str, ...] = (
+    "*.md",
+    ".agents/**/*.md",
+    ".github/**/*.md",
+    "docs/**/*.md",
+)
+FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+INLINE_LINK_RE = re.compile(
+    r"!?\[[^\]\n]*\]\(\s*(?:<([^>\n]+)>|([^\s)\n]+))"
+    r"(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)"
+)
+REFERENCE_LINK_RE = re.compile(
+    r"^\s{0,3}\[[^\]\n]+\]:\s*(?:<([^>\n]+)>|([^\s]+))", re.MULTILINE
 )
 
 
@@ -128,6 +146,88 @@ def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
     return errors
 
 
+def _visible_markdown(text: str) -> str:
+    """Return Markdown prose with fenced and inline code removed.
+
+    Inputs: `text`. Output: visible Markdown prose as `str`.
+    """
+    visible_lines: list[str] = []
+    inside_fence = False
+    for line in text.splitlines():
+        if FENCE_RE.match(line):
+            inside_fence = not inside_fence
+            continue
+        if not inside_fence:
+            visible_lines.append(INLINE_CODE_RE.sub("", line))
+    return "\n".join(visible_lines)
+
+
+def _relative_link_destinations(text: str) -> list[str]:
+    """Extract inline and reference-style link destinations from prose.
+
+    Inputs: `text`. Output: ordered link destinations as `list[str]`.
+    """
+    visible = _visible_markdown(text)
+    matches = (*INLINE_LINK_RE.finditer(visible), *REFERENCE_LINK_RE.finditer(visible))
+    return [
+        next(group for group in match.groups() if group is not None)
+        for match in matches
+    ]
+
+
+def _resolved_relative_link(
+    repo_root: Path, source_path: Path, destination: str
+) -> Path | None:
+    """Resolve a local Markdown destination or return None for non-file links.
+
+    Inputs: `repo_root`, `source_path`, and `destination`. Output: resolved local
+    `Path`, or None when the destination does not identify a local file.
+    """
+    if destination.startswith(("#", "/")):
+        return None
+    parsed = urlsplit(destination)
+    if parsed.scheme or parsed.netloc or not parsed.path:
+        return None
+    return (source_path.parent / unquote(parsed.path)).resolve()
+
+
+def validate_relative_markdown_links(repo_root: Path) -> list[ValidationError]:
+    """Validate relative links in every first-party Markdown document.
+
+    Inputs: `repo_root`. Output: collected `ValidationError` entries.
+    """
+    repo_root = repo_root.resolve()
+    markdown_paths = sorted(
+        {
+            path
+            for pattern in FIRST_PARTY_MARKDOWN_GLOBS
+            for path in repo_root.glob(pattern)
+            if path.is_file()
+        }
+    )
+    errors: list[ValidationError] = []
+    for source_path in markdown_paths:
+        text = source_path.read_text(encoding="utf-8")
+        for destination in _relative_link_destinations(text):
+            resolved = _resolved_relative_link(repo_root, source_path, destination)
+            if resolved is None:
+                continue
+            source_display = source_path.relative_to(repo_root).as_posix()
+            if not resolved.is_relative_to(repo_root):
+                errors.append(
+                    ValidationError(
+                        f"{source_display} has repository-escaping link: {destination}"
+                    )
+                )
+            elif not resolved.exists():
+                errors.append(
+                    ValidationError(
+                        f"{source_display} has broken relative link: {destination}"
+                    )
+                )
+    return errors
+
+
 def run_validations(repo_root: Path) -> Sequence[ValidationError]:
     """All validations and return aggregated errors.
 
@@ -138,6 +238,7 @@ def run_validations(repo_root: Path) -> Sequence[ValidationError]:
         validate_required_paths,
         validate_index_links,
         validate_context_surfaces,
+        validate_relative_markdown_links,
     )
     for validator in validators:
         errors.extend(validator(repo_root))

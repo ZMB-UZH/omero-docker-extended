@@ -630,14 +630,14 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             step for step in steps if step["name"] == "Install Docker Scout CLI"
         )
         self.assertEqual(
-            "1.22.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
+            "1.23.1", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
         )
         expected_scout_sha256 = "".join(
             (
-                "a3c6c38741153a84",
-                "77be61eccc9d4849",
-                "0745496bddbd0c5e",
-                "0fc301c334fdd734",
+                "0f778f9d833f28bc",
+                "6cccff95e3303984",
+                "9c0afcecafa38d9f",
+                "46fe74bfd0915714",
             )
         )
         self.assertEqual(
@@ -653,6 +653,18 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "${HOME}/.docker/cli-plugins/docker-scout", scout_install_step["run"]
         )
         self.assertIn("docker scout version", scout_install_step["run"])
+        scout_action_lines = [
+            line.strip()
+            for line in workflow_text.splitlines()
+            if "uses: docker/scout-action@" in line
+        ]
+        self.assertGreaterEqual(len(scout_action_lines), 1)
+        expected_action_suffix = (
+            f"# v{scout_install_step['env']['DOCKER_SCOUT_CLI_VERSION']}"
+        )
+        self.assertTrue(
+            all(line.endswith(expected_action_suffix) for line in scout_action_lines)
+        )
         scout_enable_step = next_or_fail(
             step
             for step in steps
@@ -688,6 +700,20 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         self.assertLess(
             workflow_text.index("Ensure Docker Scout repository analysis is enabled"),
             workflow_text.index("Build hardened flattened runtime images"),
+        )
+        scout_upload_step = next_or_fail(
+            step
+            for step in steps
+            if step["name"] == "Upload carrier analysis to Docker Scout"
+        )
+        self.assertEqual("strmt7", scout_upload_step["env"]["DOCKER_SCOUT_ORG"])
+        self.assertIn("docker scout push \\", scout_upload_step["run"])
+        self.assertIn('--org "${DOCKER_SCOUT_ORG}"', scout_upload_step["run"])
+        self.assertIn("--sbom", scout_upload_step["run"])
+        self.assertIn('"${CARRIER_IMAGE}"', scout_upload_step["run"])
+        self.assertLess(
+            workflow_text.index("Upload carrier analysis to Docker Scout"),
+            workflow_text.index("Analyze Docker Hub carrier image with Docker Scout"),
         )
         self.assertIn(
             "from tools.env_safety_guard import resolve_env_references",

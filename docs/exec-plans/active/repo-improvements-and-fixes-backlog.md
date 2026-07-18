@@ -33,9 +33,9 @@ This backlog is grounded in the current repository state and documentation:
   edge-case coverage for touched giant modules, and service-boundary smoke
   validation.
 - The GitHub workflow set covers docs validation, tests, Ruff, Vulture,
-  super-linter, and security scanning, but still lacks deployment-style
-  validation, dedicated shell/workflow linting, and broader docs-drift
-  enforcement.
+  Super-Linter workflow/Zizmor validation, release-time Compose rendering and
+  image builds, Bash linting, and security scanning. It still lacks a fast
+  pre-release deployment smoke lane and broader docs-drift enforcement.
 - Remaining `omeroweb_upload` references are either historical archive entries,
   a startup compatibility alias, or tests proving that alias is normalized to
   `omeroweb_import`. Do not remove them as cleanup unless a migration removes
@@ -46,7 +46,7 @@ This backlog is grounded in the current repository state and documentation:
 | Item | Evidence | Why it is P0 |
 | --- | --- | --- |
 | Add targeted deployment and infrastructure validation lanes | `tests.yml` enforces split pytest suites, but no workflow yet builds changed Dockerfiles, smoke-tests startup wrappers, or validates deployment wiring. | App correctness is gated, but rollout regressions can still bypass CI. |
-| Maintain SHA-pinned GitHub Actions and add workflow-policy linting | Workflows are pinned by full commit SHA, but there is still no dedicated `actionlint` or workflow-policy lane to keep them that way. | Supply-chain hardening lasts only if the repo detects drift back to weaker workflow hygiene. |
+| Maintain SHA-pinned GitHub Actions and workflow-policy linting | Workflows are pinned by full commit SHA, and Super-Linter runs both GitHub Actions validation and Zizmor. | Supply-chain hardening lasts only if the repo keeps those checks current and detects drift back to weaker workflow hygiene. |
 | Keep root `SECURITY.md` and `docs/SECURITY.md` synchronized | The root `SECURITY.md` forwards GitHub-native surfaces to `docs/SECURITY.md`. | Security-policy drift would break GitHub-native discoverability and create conflicting guidance. |
 | Preserve the zero-added-alert gate and close remaining Scorecard governance findings | The live 2026-06-27 snapshot has no open file-level GitHub findings; remaining alerts are `CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. | The current baseline is strong enough that new findings should be treated as regressions. |
 | Add docs-drift guardrails for compose env-file usage | Manual compose examples are aligned on `installation_paths.env`, `env/omero_secrets.env`, and `env/omeroserver.env`, but the repo still lacks a dedicated drift-checking lane for that contract. | Operators rely on those commands directly, so future drift would become an operational outage. |
@@ -68,7 +68,7 @@ This backlog is grounded in the current repository state and documentation:
 | Introduce explicit plugin-db migration and bootstrap ownership | Data-store modules currently create schema on demand during runtime paths. | This needs design care and should not be rushed into production code paths. |
 | Centralize OMERO session and CLI helper logic | Import, Imaris, and startup paths all solve versions of venv, CLI, and session resolution. | Shared helpers will help, but only after the high-risk logic is well tested. |
 | Audit and reduce the broad `@csrf_exempt` surface | The codebase still has many write endpoints marked `@csrf_exempt` across OMP, Admin Tools, and Import. | This is important, but the repo should first clarify which endpoints truly require the exemption. |
-| Expand Dependabot and repo automation coverage | `.github/dependabot.yml` currently covers a narrow subset of ecosystems and paths. | This improves sustainability after the main CI and policy work is in place. |
+| Expand Dependabot and repo automation coverage | `.github/dependabot.yml` covers actions, CI Python locks, OMP Python dependencies, root Compose images, and Dockerfiles; versions embedded in shell/env build arguments still require explicit review. | This improves sustainability after the main CI and policy work is in place. |
 | Expand docs linting from structure checks to broader drift checks | The current linter validates required paths and index tokens, but broader stale-name and topology drift still relies on narrower regression tests and manual review. | This will pay off once the next round of docs-drift fixes lands. |
 
 ## P2 Later
@@ -100,6 +100,8 @@ This backlog is grounded in the current repository state and documentation:
 | 2026-03-22 | Created the initial evidence-based backlog from repository docs, workflows, tests, and code structure.                     |
 | 2026-03-22 | Expanded the backlog into explicit P0/P1/P2 items tied to named files, documented findings, and observed repository drift. |
 | 2026-04-26 | Refreshed the backlog against current tests, scanner snapshots, intentional legacy aliases, and default-branch guidance.   |
+| 2026-07-18 | Corrected workflow-linting and release-validation evidence and expanded Dependabot to cover root Compose images.           |
+| 2026-07-18 | Enabled Bash validation in Super-Linter and cleared the full ShellCheck 0.11.0 repository scan.                            |
 
 ## Decision Log
 

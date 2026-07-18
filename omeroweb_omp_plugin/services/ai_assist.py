@@ -321,14 +321,14 @@ def _post_json(url, headers, payload, timeout=15):
             message = errors.provider_http_status_with_detail(status_code, detail)
         if retry_after:
             message = errors.provider_http_retry_after(message, retry_after)
-        raise AiAssistError(message)
+        raise AiAssistError(message) from None
     except requests.RequestException as exc:
         logger.warning(
             "AI provider connection error for %s: %s",
             safe_url,
             exc,
         )
-        raise AiAssistError(errors.provider_unreachable())
+        raise AiAssistError(errors.provider_unreachable()) from None
 
 
 def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
@@ -364,7 +364,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         try:
             return response["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError):
-            raise AiAssistError(errors.provider_response_empty())
+            raise AiAssistError(errors.provider_response_empty()) from None
 
     if provider == "claude":
         payload = {
@@ -382,7 +382,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         try:
             return response["content"][0]["text"]
         except (KeyError, IndexError, TypeError):
-            raise AiAssistError(errors.provider_response_empty())
+            raise AiAssistError(errors.provider_response_empty()) from None
 
     if provider == "gemini":
         selected_model = model or _GEMINI_DEFAULT_MODEL
@@ -408,7 +408,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         try:
             return response["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError, TypeError):
-            raise AiAssistError(errors.provider_response_empty())
+            raise AiAssistError(errors.provider_response_empty()) from None
 
     if provider == "cohere":
         payload = {
@@ -458,16 +458,16 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
             return content
         except requests.ConnectionError:
             logger.warning("Local AI (Ollama) not reachable at %s", url)
-            raise AiAssistError(errors.provider_unreachable())
+            raise AiAssistError(errors.provider_unreachable()) from None
         except requests.Timeout:
             logger.warning(
                 "Local AI (Ollama) timed out after %ds", OLLAMA_TIMEOUT_SECONDS
             )
-            raise AiAssistError(errors.provider_unreachable())
+            raise AiAssistError(errors.provider_unreachable()) from None
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response is not None else 0
             logger.warning("Local AI (Ollama) HTTP error %s", status_code)
-            raise AiAssistError(errors.provider_http_status(status_code))
+            raise AiAssistError(errors.provider_http_status(status_code)) from None
 
     raise AiAssistError(errors.provider_not_supported(provider))
 

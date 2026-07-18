@@ -181,7 +181,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── docs/                              # Full documentation set (see docs/index.md)
 ├── fuzzing/                           # Fuzz targets for parser and input-boundary checks
 ├── logo/                              # Runtime logo template asset
-├── third_party/ecc-v1.10.0/            # Pinned selected ECC v1.10.0 skill snapshot (MIT)
+├── third_party/ecc-v2.0.0/            # Pinned selected ECC v2.0.0 skill snapshot (MIT)
 ├── tools/                             # Agent, env-safety, lint, release, and CI tools
 ├── tests/                             # Test suite
 └── typings/                           # Local type stubs
@@ -207,20 +207,20 @@ The table below lists the long-running services available in the full profile se
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.14 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.14 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
-| `redis` | redis:8.6.4-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.30.11 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `redis` | redis:8.8.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `ollama` | ollama/ollama:0.32.1 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
-| `prometheus` | prom/prometheus:v3.12.0 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `prometheus` | prom/prometheus:v3.13.1 | Metrics scraping and storage | 127.0.0.1:9090 |
 | `grafana` | grafana/grafana:13.1.0 | Dashboards and visualization | 127.0.0.1:3000 |
 | `loki` | grafana/loki:3.7.3 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.17.0 | Log collection pipeline (file-based) | 12345 (internal) |
+| `alloy` | grafana/alloy:v1.17.1 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
-| `node-exporter` | prom/node-exporter:v1.11.1 | Host-level metrics | 9100 (internal) |
-| `cadvisor` | ghcr.io/google/cadvisor:0.60.3 | Container resource metrics | 8080 (internal) |
-| `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.19.1 | OMERO database metrics | 9187 (internal) |
-| `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.19.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.86.0-alpine | Redis metrics | 9121 (internal) |
+| `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
+| `cadvisor` | ghcr.io/google/cadvisor:0.60.5 | Container resource metrics | 8080 (internal) |
+| `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
+| `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.87.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 

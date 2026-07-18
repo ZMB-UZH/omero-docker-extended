@@ -72,7 +72,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.15.20", doc_text)
+        self.assertIn("0.15.22", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -131,9 +131,9 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.15.20", config["required-version"])
+        self.assertEqual("==0.15.22", config["required-version"])
         self.assertEqual("py39", config["target-version"])
-        self.assertEqual(["F", "E7", "E9"], config["lint"]["select"])
+        self.assertEqual(["F", "E7", "E9", "B904", "LOG014"], config["lint"]["select"])
         self.assertEqual({}, config["lint"].get("per-file-ignores", {}))
 
     def test_pre_commit_uses_pinned_ruff_hooks(self) -> None:
@@ -145,7 +145,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
-        expected_rev = "c59bba8fb259db0fec2bb" + "b77ad8ba51ea7341b56"
+        expected_rev = "2700fd5671c633760d91" + "2769c041bfcde2b9a01b"
         self.assertEqual(expected_rev, repo["rev"])
         self.assertRegex(repo["rev"], r"^[0-9a-f]{40}$")
         hooks = {hook["id"]: hook for hook in repo["hooks"]}
@@ -181,7 +181,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             uses_values,
         )
         self.assertIn(
-            "astral-sh/ruff-action@0ce1b0bf8b818ef400413f810f8a11cdbda0034b",
+            "astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89",
             uses_values,
         )
         self.assertIn("ruff check .", run_values)
@@ -190,7 +190,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.15.20", install_step["with"]["version"])
+        self.assertEqual("0.15.22", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

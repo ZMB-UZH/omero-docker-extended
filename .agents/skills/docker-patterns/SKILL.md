@@ -1,8 +1,8 @@
 ---
 name: docker-patterns
 description: docker and Compose patterns for this repo's multi-container OMERO runtime, startup scripts, and hardening rules.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md
 ---
 
 # Docker Patterns
@@ -11,7 +11,7 @@ Use this skill when changing Dockerfiles, `docker-compose.yml`, startup scripts,
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md` for generic container and Compose patterns.
+Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic container and Compose patterns.
 
 ## Repo overlay
 

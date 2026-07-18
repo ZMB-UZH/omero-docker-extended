@@ -60,7 +60,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.17.0"
+    image: "grafana/alloy:v1.17.1"
     restart: unless-stopped
     command:
       - "run"
@@ -90,7 +90,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.12.0"
+    image: "prom/prometheus:v3.13.1"
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -147,7 +147,7 @@ services:
       - no-new-privileges:true
 
   node-exporter:
-    image: "prom/node-exporter:v1.11.1"
+    image: "prom/node-exporter:v1.12.1"
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
@@ -193,7 +193,7 @@ services:
       - no-new-privileges:true
 
   cadvisor:
-    image: "ghcr.io/google/cadvisor:0.60.3"
+    image: "ghcr.io/google/cadvisor:0.60.5"
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
@@ -221,7 +221,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter:
-    image: "prometheuscommunity/postgres-exporter:v0.19.1"
+    image: "prometheuscommunity/postgres-exporter:v0.20.1"
     restart: unless-stopped
     entrypoint: ["/postgres-exporter-entrypoint.sh"]
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
@@ -251,7 +251,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter-plugin:
-    image: "prometheuscommunity/postgres-exporter:v0.19.1"
+    image: "prometheuscommunity/postgres-exporter:v0.20.1"
     restart: unless-stopped
     entrypoint: ["/postgres-exporter-entrypoint.sh"]
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
@@ -279,7 +279,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.86.0-alpine"
+    image: "oliver006/redis_exporter:v1.87.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -448,7 +448,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.6.4-alpine"
+    image: "redis:8.8.0-alpine"
     restart: unless-stopped
     command:
       - redis-server
@@ -648,7 +648,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.30.11"
+    image: "ollama/ollama:0.32.1"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

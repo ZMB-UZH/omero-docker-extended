@@ -1,8 +1,8 @@
 ---
 name: verification-loop
 description: Repository-specific verification flow for OMERO Docker Extended. Runs docs validation, Ruff, split pytest suites, and targeted fallback checks without overstating coverage.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md
 ---
 
 # Verification Loop
@@ -11,9 +11,21 @@ Use this skill after any non-trivial change and before committing, pushing, or o
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md` for the generic verify-before-finish workflow.
+Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the generic verify-before-finish workflow.
 
 ## Verification order
+
+### Efficiency and invalidation
+
+- Keep a verification ledger containing the exact command, relevant tree state,
+  result, and artifact under test.
+- Do not repeat a passing command until one of its inputs changes. A final
+  repository-wide matrix supersedes earlier unchanged targeted runs.
+- Run independent read-only checks in parallel when resources permit. Serialize
+  image builds and live tests that mutate shared Docker, database, OMERO, or
+  persistent-storage state.
+- During iteration, select tests from the changed ownership boundary. Run the
+  complete required matrix once against the final tree and before release.
 
 ### 1. Documentation structure
 

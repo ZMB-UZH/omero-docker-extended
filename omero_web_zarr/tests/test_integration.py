@@ -1,4 +1,5 @@
 import builtins
+import logging
 import os
 import warnings
 from datetime import datetime
@@ -2022,6 +2023,7 @@ def test_store_backed_region_response_rejects_invalid_requests(monkeypatch):
 
 
 def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_and_missing_image(
+    caplog,
     monkeypatch,
 ):
     """Confirm render regular image region with safe tile size rejects invalid levels and missing image is rejected at the boundary.
@@ -2036,6 +2038,7 @@ def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_
     )
     request.session = {"connector": {"server_id": 1}}
     image = _PreparedRegionImage()
+    caplog.set_level(logging.DEBUG, logger=integration.LOGGER.name)
 
     monkeypatch.setattr(
         webgateway_views,
@@ -2052,6 +2055,13 @@ def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_
     )
     assert invalid_level.status_code == 400
     assert invalid_level.content.decode("utf-8") == "invalid resolution level"
+    invalid_level_records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "invalid resolution level"
+    ]
+    assert invalid_level_records
+    assert all(record.exc_info is None for record in invalid_level_records)
 
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",

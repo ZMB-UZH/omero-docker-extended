@@ -344,7 +344,9 @@ def ensure_root(root: Path, *, create_root: bool, mode: int) -> RootState:
         except FileNotFoundError:
             raise SyncError(f"DropBox root parent does not exist: {parent}") from None
         if not stat.S_ISDIR(parent_lstat.st_mode):
-            raise SyncError(f"DropBox root parent is not a directory: {parent}")
+            raise SyncError(
+                f"DropBox root parent is not a directory: {parent}"
+            ) from None
         root.mkdir(mode=mode, exist_ok=False)
         root_lstat = root.lstat()
         if (root_lstat.st_uid, root_lstat.st_gid) != (

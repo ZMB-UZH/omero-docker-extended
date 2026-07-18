@@ -454,7 +454,6 @@ def mock_config():
     """Create a mock with a property."""
     config = Mock()
     type(config).debug = PropertyMock(return_value=True)
-    # skipcq: SCT-A000
     type(config).api_key = PropertyMock(return_value="test-key")
     return config
 

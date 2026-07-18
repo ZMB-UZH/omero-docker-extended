@@ -39,7 +39,7 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 - Configuration templates: `env/*_example.env`, `installation_paths_example.env`
 - Full doc hub: `docs/index.md`
 - Cross-agent adapter map: `docs/reference/ai-agent-integrations.md`
-- Pinned ECC provenance: `docs/reference/ai-agent-upstream-sources.md`, `third_party/ecc-v1.10.0/`
+- Pinned ECC provenance: `docs/reference/ai-agent-upstream-sources.md`, `third_party/ecc-v2.0.0/`
 
 ## Verification
 

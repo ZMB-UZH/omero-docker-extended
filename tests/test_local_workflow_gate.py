@@ -221,12 +221,51 @@ class LocalWorkflowGateTests(unittest.TestCase):
             image_matches[0], self.tool._read_super_linter_image(REPO_ROOT)
         )
 
+    def test_super_linter_gate_mirrors_workflow_lint_scope(self) -> None:
+        """Verify the local Super-Linter gate mirrors the workflow lint scope.
+
+        Inputs: mocked Docker execution and repository fixtures. Output: verifies
+        Bash validation and current vendor exclusions reach the container.
+        """
+        context = self.tool.GateContext(
+            repo_root=REPO_ROOT,
+            artifact_dir=REPO_ROOT / ".cache" / "test-local-workflow-gate",
+            tool_venv=REPO_ROOT / ".cache" / "test-local-workflow-gate" / "venv",
+            python="/usr/bin/python3",
+            keep_going=False,
+        )
+
+        with (
+            unittest.mock.patch.object(
+                self.tool, "_require_executable", return_value="/usr/bin/docker"
+            ),
+            unittest.mock.patch.object(
+                self.tool, "_default_branch", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                self.tool,
+                "_read_super_linter_image",
+                return_value="ghcr.io/super-linter/super-linter:test",
+            ),
+            unittest.mock.patch.object(self.tool, "_run") as run,
+        ):
+            self.tool.run_super_linter(context)
+
+        command = run.call_args.args[0]
+        environment = run.call_args.kwargs["env"]
+        self.assertIn("VALIDATE_BASH", command)
+        self.assertEqual("true", environment["VALIDATE_BASH"])
+        self.assertEqual(
+            r"(^|/)third_party/(ecc-v2\.0\.0|caveman-v1\.9\.1)/",
+            environment["FILTER_REGEX_EXCLUDE"],
+        )
+
     def test_setup_reads_ruff_version_from_repo_config(self) -> None:
         """Verify setup reads ruff version from repo config.
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.15.20", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.15.22", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

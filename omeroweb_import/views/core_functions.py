@@ -5933,8 +5933,8 @@ def _open_trusted_managed_root_fd(root_path: Path) -> int:
             root_path,
             _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
         )
-    except NotADirectoryError:
-        raise FileNotFoundError(os.fspath(root_path))
+    except NotADirectoryError as exc:
+        raise FileNotFoundError(os.fspath(root_path)) from exc
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             raise _invalid_managed_path(os.fspath(root_path)) from exc
@@ -6084,9 +6084,9 @@ def _managed_parent_directory_fd(
                     directory_name,
                     display_path,
                 )
-            except FileNotFoundError:
+            except FileNotFoundError as exc:
                 if not create_parents:
-                    raise _invalid_managed_path(display_path)
+                    raise _invalid_managed_path(display_path) from exc
                 next_fd = _create_managed_subdirectory(
                     dir_fd,
                     directory_name,

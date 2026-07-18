@@ -188,6 +188,14 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   that instruction or tool concisely with regression coverage.
 - Run each test directory as a separate `pytest` invocation.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
+- Maintain a verification ledger with the exact command, relevant tree state,
+  result, and runtime artifact. Do not repeat a passing check unless one of
+  those inputs changed.
+- Parallelize independent read-only gates when host resources permit. Serialize
+  Docker builds and live operations that share containers, databases, OMERO
+  objects, temporary paths, or persistent storage.
+- Use targeted ownership-boundary checks while editing, then run the full
+  required matrix once against the final tree before release.
 - Tests and live verification must not assume pre-existing non-root users,
   groups, images, datasets, projects, screens, files, annotations, script IDs,
   acquisition metadata, plugin index rows, or host-specific paths. If a check

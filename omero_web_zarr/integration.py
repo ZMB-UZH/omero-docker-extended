@@ -688,7 +688,7 @@ def _regular_tile_region_args(request, image, conn=None):
         viewer_level = int(fields[0])
         level, message = _regular_viewer_level(viewer_level, max_viewer_level)
         if message is not None:
-            LOGGER.debug(message, exc_info=True)
+            LOGGER.debug(message)
             return _regular_region_bad_request(message)
         return int(fields[1]) * width, int(fields[2]) * height, width, height, level
     except Exception:

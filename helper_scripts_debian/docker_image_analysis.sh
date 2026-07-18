@@ -440,7 +440,7 @@ run_probe_with_shell() {
     --cap-drop ALL
     --security-opt no-new-privileges
     --read-only
-    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m
+    --tmpfs "/tmp:rw,noexec,nosuid,nodev,size=16m"
     --pids-limit 128
     --memory 256m
     --entrypoint "$shell_path"
