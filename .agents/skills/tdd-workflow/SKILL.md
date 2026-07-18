@@ -1,8 +1,8 @@
 ---
 name: tdd-workflow
 description: TDD guidance for repo changes using narrow regression tests, split pytest lanes, and docs updates as part of done-ness.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/tdd-workflow/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/tdd-workflow/SKILL.md
 ---
 
 # TDD Workflow
@@ -11,7 +11,7 @@ Use this skill when adding features, fixing bugs, or refactoring behavior that s
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/tdd-workflow/SKILL.md` for the generic red-green-refactor workflow.
+Start from `third_party/ecc-v2.0.0/skills/tdd-workflow/SKILL.md` for the generic red-green-refactor workflow.
 
 ## Repo overlay
 

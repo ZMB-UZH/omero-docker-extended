@@ -30,7 +30,24 @@ ARG DNF_USE_ROCKY_MIRRORLIST=1
 # -----------------------------------------------------
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    TMPDIR=/tmp \
+    OMERO_TMPDIR=/tmp
+
+# Keep direct Python tooling and hardening dependencies reproducible. OMERO's
+# startup tooling still imports pkg_resources, so setuptools remains on the
+# newest compatible release instead of tracking the latest major line.
+# --------------------------------------------------------------------------
+ARG PIP_VERSION=26.1.2
+ARG SETUPTOOLS_VERSION=80.9.0
+ARG WHEEL_VERSION=0.47.0
+ARG CRYPTOGRAPHY_VERSION=49.0.0
+ARG URLLIB3_VERSION=2.7.0
+ARG CERTIFI_VERSION=2026.6.17
+ARG IDNA_VERSION=3.18
+ARG REQUESTS_VERSION=2.34.2
+ARG JINJA2_VERSION=3.1.6
+ARG PYOPENSSL_VERSION=26.3.0
 
 # Locate OMERO.web venv, validate layout, and ensure stable OMERO.web symlink
 # ---------------------------------------------------------------------------
@@ -130,7 +147,10 @@ RUN set -euo pipefail; \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
     fi; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.22.1"
 
 ## Optional: remove build dependencies again to keep image smaller
@@ -222,16 +242,17 @@ RUN set -euo pipefail; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        matplotlib \
-        pytest==7.4.4 \
+        matplotlib==3.11.1 \
+        pytest==9.1.1 \
+        portalocker==3.2.0 \
         psycopg2-binary==2.9.12 \
         celery==5.6.3 \
-        redis==5.0.8 \
-        "django-redis>=5.4.0" \
-        omero-fpbioimage \
-        omero-gallery \
-        omero-parade \
-        omero-web-zarr \
+        redis==8.0.1 \
+        django-redis==7.0.0 \
+        omero-fpbioimage==0.4.1 \
+        omero-gallery==3.4.3 \
+        omero-parade==0.2.4 \
+        omero-web-zarr==0.1.1 \
         "ome-zarr==${OME_ZARR_PY_VERSION}" \
         "omero-cli-zarr==${OMERO_CLI_ZARR_VERSION}" \
         "tifffile==${TIFFFILE_VERSION}"; \
@@ -410,16 +431,16 @@ RUN set -euo pipefail; \
         exit 1; \
     fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-        pip \
-        "setuptools>=78.1.1" \
-        wheel \
-        "cryptography>=42.0.0" \
-        "urllib3>=2.6.3" \
-        certifi \
-        "idna>=3.7" \
-        "requests>=2.32.0" \
-        "jinja2>=3.1.6" \
-        "pyopenssl>=24.0.0"
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}" \
+        "cryptography==${CRYPTOGRAPHY_VERSION}" \
+        "urllib3==${URLLIB3_VERSION}" \
+        "certifi==${CERTIFI_VERSION}" \
+        "idna==${IDNA_VERSION}" \
+        "requests==${REQUESTS_VERSION}" \
+        "jinja2==${JINJA2_VERSION}" \
+        "pyopenssl==${PYOPENSSL_VERSION}"
 
 # ---------------------------------------------------------------------------
 # Final security hardening pass (APPLY_SECURITY_HARDENING=1)

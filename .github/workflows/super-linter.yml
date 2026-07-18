@@ -29,10 +29,11 @@ jobs:
       - name: Super-Linter
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          FILTER_REGEX_EXCLUDE: (^|/)third_party/(ecc-v1\.10\.0|caveman-v1\.7\.0)/
+          FILTER_REGEX_EXCLUDE: (^|/)third_party/(ecc-v2\.0\.0|caveman-v1\.9\.1)/
           LINTER_RULES_PATH: .
           MARKDOWN_CONFIG_FILE: .markdownlint.yaml
           RUN_LOCAL: 'true'
+          VALIDATE_BASH: 'true'
           YAML_CONFIG_FILE: .yamllint
           VALIDATE_ALL_CODEBASE: 'true'
           VALIDATE_GIT_MERGE_CONFLICT_MARKERS: 'true'
@@ -49,6 +50,7 @@ jobs:
             -e LINTER_RULES_PATH \
             -e MARKDOWN_CONFIG_FILE \
             -e RUN_LOCAL \
+            -e VALIDATE_BASH \
             -e YAML_CONFIG_FILE \
             -e VALIDATE_ALL_CODEBASE \
             -e VALIDATE_GIT_MERGE_CONFLICT_MARKERS \

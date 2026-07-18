@@ -1,8 +1,8 @@
 ---
 name: security-review
 description: Security review for uploads, filesystem paths, SQL, responses, subprocesses, Docker, workflows, and secrets in this repo.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/security-review/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/security-review/SKILL.md
 ---
 
 # Security Review
@@ -13,7 +13,7 @@ Use this skill when reviewing or changing security-sensitive code outside a scan
 
 ## Repo overlay
 
-- Start from `third_party/ecc-v1.10.0/skills/security-review/SKILL.md` and follow the mandatory security read order in `AGENTS.md`.
+- Start from `third_party/ecc-v2.0.0/skills/security-review/SKILL.md` and follow the mandatory security read order in `AGENTS.md`.
 - Focus on helper and boundary correctness: uploads, filesystem paths, SQL, responses, subprocesses, Docker/workflows, outbound HTTP, logs, and secrets.
 - Prefer root-cause fixes over suppressions or call-site patches.
 - Treat env parsing and shell interpolation as security boundaries, not convenience helpers.

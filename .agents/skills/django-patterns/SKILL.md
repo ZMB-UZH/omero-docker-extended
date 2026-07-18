@@ -1,8 +1,8 @@
 ---
 name: django-patterns
 description: "Django patterns for OMERO.web plugins: app boundaries, views, services, templates, and shared helper usage."
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/django-patterns/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/django-patterns/SKILL.md
 ---
 
 # Django Patterns
@@ -11,7 +11,7 @@ Use this skill when changing OMERO.web plugin views, services, templates, routin
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/django-patterns/SKILL.md` for the generic Django architecture guidance.
+Start from `third_party/ecc-v2.0.0/skills/django-patterns/SKILL.md` for the generic Django architecture guidance.
 
 ## Repo overlay
 

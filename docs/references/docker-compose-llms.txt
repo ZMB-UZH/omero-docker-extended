@@ -16,8 +16,8 @@ Core services:
 - omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
 - database (port 5432): PostgreSQL 16.14, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.14, OMERO plugin database.
-- redis (port 6379): Redis 8.6.4-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
-- ollama (port 11434 internal): Ollama 0.30.11 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
+- redis (port 6379): Redis 8.8.0-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
+- ollama (port 11434 internal): Ollama 0.32.1 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 
 Supporting services:
 
@@ -27,16 +27,16 @@ Supporting services:
 
 Monitoring services:
 
-- prometheus (127.0.0.1:9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.12.0.
+- prometheus (127.0.0.1:9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.13.1.
 - grafana (127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.1.0.
 - loki (127.0.0.1:3100): log aggregation backend, grafana/loki:3.7.3.
-- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.17.0.
+- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.17.1.
 - blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.28.0.
-- node-exporter: host metrics, prom/node-exporter:v1.11.1.
-- cadvisor: container metrics, ghcr.io/google/cadvisor:0.60.3.
-- postgres-exporter: OMERO database metrics, prometheuscommunity/postgres-exporter:v0.19.1.
-- postgres-exporter-plugin: plugin database metrics, prometheuscommunity/postgres-exporter:v0.19.1.
-- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.86.0-alpine.
+- node-exporter: host metrics, prom/node-exporter:v1.12.1.
+- cadvisor: container metrics, ghcr.io/google/cadvisor:0.60.5.
+- postgres-exporter: OMERO database metrics, prometheuscommunity/postgres-exporter:v0.20.1.
+- postgres-exporter-plugin: plugin database metrics, prometheuscommunity/postgres-exporter:v0.20.1.
+- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.87.0-alpine.
 - path-usage-exporter: custom Python 3.12 service exporting host path usage metrics via node-exporter textfile collector.
 - crowdsec (profile-gated, port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
 

@@ -1,7 +1,7 @@
 ---
 name: security-finding-triager
 description: Triage code-scanning findings using the repo's live runbook, closed-history ledger, and canonical prevention playbook before editing security-sensitive code.
-origin: repo-local skill informed by ECC v1.10.0 workflow patterns
+origin: repo-local skill informed by ECC v2.0.0 workflow patterns
 ---
 
 # Security Finding Triager

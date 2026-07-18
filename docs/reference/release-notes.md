@@ -1,5 +1,78 @@
 # Release Notes
 
+## 2026-07-18 Dependency and Runtime Refresh
+
+- Updated pinned GitHub Actions for CodeQL (`4.37.1`), Ruff (`4.1.0`), and
+  Docker Scout (`1.23.1`), and aligned the pinned Scout CLI to `1.23.1` after
+  reviewing upstream release notes and verifying the CLI archive digest.
+- Updated the Codecov uploader CLI to `11.3.1` after reviewing its upload URL
+  validation changes and corrected Linux x86_64 build baseline. Retained the
+  official OSV reusable action at its latest release, `2.3.8`; OSV Scanner
+  `2.4.0` has not yet been published through that action.
+- Updated the repository lint and preview toolchains to Ruff `0.15.22`,
+  markdownlint-cli2 `0.23.1`, Node.js LTS `24.18.0`, Vite `8.1.5`, Vitest
+  `4.1.10`, jsdom `29.1.1`, and Playwright `1.61.1` after reviewing their
+  compatibility ranges and intervening release notes.
+- Extended the narrow Ruff correctness gate with `B904` and made translated
+  exception causes explicit. Database and AI-provider wrappers now suppress raw
+  backend context after sanitized logging, while harmless import failures retain
+  their diagnostic cause.
+- Removed an invalid `exc_info` request from the regular-image tile validation
+  path and added `LOG014` coverage so expected client errors cannot emit a
+  misleading `NoneType: None` traceback.
+- Updated the immutable Semgrep workflow image to `1.170.0` after reviewing the
+  `1.169.0` and `1.170.0` release notes, including its Dockerfile heredoc parser
+  fix, and verifying the published multi-platform image digest.
+- Added Dependabot Docker coverage for the root Compose manifest while retaining
+  the separate `/docker` Dockerfile update surface. PostgreSQL major upgrades
+  remain held for migration review while patch releases and digest refreshes are
+  now allowed through normal Dependabot maintenance.
+- Made release publication explicitly upload the carrier SBOM analysis to Docker
+  Scout before running the release CVE report, so Docker Hub receives stored
+  analysis data instead of relying only on a one-off CLI report.
+- Enabled Bash validation in Super-Linter and corrected the hardened image
+  probe's quoted tmpfs argument and an unused retry-loop variable found by a
+  full ShellCheck `0.11.0` pass. The local `all` profile now forwards the same
+  Bash scope and current vendor exclusion regex as the GitHub workflow.
+- Refreshed hash-locked CI dependencies, including Mypy `2.3.0`, Django and
+  django-stubs `6.0.7`, Coverage `7.15.2`, NumPy `2.5.1`, matplotlib `3.11.1`,
+  and tifffile `2026.7.14`.
+- Replaced floating OMERO.web Python installs with exact current pins, made the
+  plugin runtime's direct `portalocker` dependency explicit instead of relying
+  on a transitive OMERO.web dependency, upgraded
+  redis-py from `5.0.8` to `8.0.1` for Redis 8.8 support, and updated in-image
+  pytest to `9.1.1`. Celery remains at its current `5.6.3` release.
+- Made the direct Python tooling, curated update set, OMERO.server CLI plugins,
+  and Figure PDF dependencies reproducible across image builds. This includes
+  ReportLab `5.0.0`; its reviewed remote-image trust change does not alter the
+  local-file PDF export path. Retained setuptools `80.9.0` because OMERO startup
+  tooling still imports `pkg_resources`.
+- Added host-agnostic `/tmp` defaults for OMERO temporary files so each image's
+  CLI and healthcheck work in standalone container runs; Compose continues to
+  override them with the installation-specific temporary path.
+- Expanded the offline documentation gate to validate relative links across all
+  first-party Markdown documents while excluding external URLs, code examples,
+  and immutable vendored documentation from rewrite scope.
+- Added input-aware verification-efficiency rules for AI agents: deduplicate
+  successful checks until their inputs change, parallelize independent
+  read-only gates, serialize stateful live operations, and run one complete
+  matrix against the final tree before release.
+- Updated the selected vendored AI reference skills to ECC `2.0.0` and caveman
+  `1.9.1`, preserving exact upstream provenance while explicitly excluding
+  hooks, control-plane components, MCP configuration, installers, implicit
+  activation, and multi-agent orchestration from the active repo overlays.
+- Updated the monitoring and supporting service images for Alloy `v1.17.1`,
+  Prometheus `v3.13.1`, Node exporter `v1.12.1`, cAdvisor `0.60.5`, Postgres
+  exporter `v0.20.1`, Redis exporter `v1.87.0-alpine`, Redis `8.8.0-alpine`,
+  and Ollama `0.32.1`.
+- Refreshed immutable Ubuntu 26.04 and PostgreSQL 16.14 base-image digests and
+  advanced the pinned BIOP OMERO-scripts revision after verifying that the
+  installed CellProfiler export script is unchanged upstream.
+- Kept OMERO.web at the current upstream `5.32.0` release after reviewing its
+  upgrade notes and source diff against `5.31.1`; the custom API server patch
+  targets files untouched by that release. The production `ome-zarr==0.16.0`
+  and Bio-Formats2Raw `0.11.0` compatibility holds remain unchanged.
+
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 
 - Added a manual `release-prebuilt-carrier` GitHub Actions workflow that creates

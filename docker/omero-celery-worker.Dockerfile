@@ -4,7 +4,7 @@
 ## Dedicated Celery worker image for OMERO Imaris exports
 ## Ubuntu 26.04 LTS base (NOT slim), pinned Python packages.
 
-FROM ubuntu:26.04@sha256:53958ec7b67c2c9355df922dd08dbf0360611f8c3cdb656875e81873db9ffdba
+FROM ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
 
 USER root
 
@@ -12,13 +12,28 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Europe/Zurich \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    TMPDIR=/tmp \
+    OMERO_TMPDIR=/tmp
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------
 ARG APPLY_SECURITY_HARDENING=0
+
+# Keep direct Python tooling and hardening dependencies reproducible. Retain
+# setuptools 80.9.0 because OMERO's Python stack still imports pkg_resources.
+# --------------------------------------------------------------------------
+ARG PIP_VERSION=26.1.2
+ARG SETUPTOOLS_VERSION=80.9.0
+ARG WHEEL_VERSION=0.47.0
+ARG CRYPTOGRAPHY_VERSION=49.0.0
+ARG URLLIB3_VERSION=2.7.0
+ARG CERTIFI_VERSION=2026.6.17
+ARG IDNA_VERSION=3.18
+ARG REQUESTS_VERSION=2.34.2
+ARG JINJA2_VERSION=3.1.6
 
 RUN set -euo pipefail; \
     apt-get update; \
@@ -64,10 +79,13 @@ ENV VENV=/opt/venv
 # ZeroC Ice 3.6.5 ships legacy C sources that need POSIX declarations with GCC 15.
 RUN set -euo pipefail; \
     python3.10 -m venv "$VENV"; \
-    "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel; \
+    "$VENV/bin/python" -m pip install --upgrade \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}"; \
     CFLAGS="-std=gnu17 -D_DEFAULT_SOURCE" "$VENV/bin/python" -m pip install \
         "celery==5.6.3" \
-        "redis==5.0.8" \
+        "redis==8.0.1" \
         "omero-py==5.22.1"
 
 # Non-root runtime user
@@ -98,7 +116,15 @@ RUN set -euo pipefail; \
     fi; \
     echo "Applying curated compatibility-safe Python hardening in ${VENV}..."; \
     "$VENV/bin/python" -m pip install --no-cache-dir --upgrade \
-        pip setuptools wheel cryptography certifi idna requests jinja2 urllib3; \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}" \
+        "cryptography==${CRYPTOGRAPHY_VERSION}" \
+        "certifi==${CERTIFI_VERSION}" \
+        "idna==${IDNA_VERSION}" \
+        "requests==${REQUESTS_VERSION}" \
+        "jinja2==${JINJA2_VERSION}" \
+        "urllib3==${URLLIB3_VERSION}"; \
     echo "Skipping blanket celery-worker venv upgrades to preserve pinned/runtime-integrated packages."
 
 USER celery

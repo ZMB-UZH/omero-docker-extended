@@ -32,15 +32,15 @@ class CavemanSkillContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in vendored caveman reference exists.
         """
         self.assertTrue(
-            (self.repo_root / "third_party/caveman-v1.7.0/LICENSE").is_file()
+            (self.repo_root / "third_party/caveman-v1.9.1/LICENSE").is_file()
         )
         self.assertTrue(
             (
-                self.repo_root / "third_party/caveman-v1.7.0/skills/caveman/SKILL.md"
+                self.repo_root / "third_party/caveman-v1.9.1/skills/caveman/SKILL.md"
             ).is_file()
         )
         self.assertFalse(
-            (self.repo_root / "third_party/caveman-v1.7.0/README.md").exists()
+            (self.repo_root / "third_party/caveman-v1.9.1/README.md").exists()
         )
         self.assertFalse((self.repo_root / "third_party/caveman-v1.6.0").exists())
 
@@ -64,10 +64,13 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("cavecrew subagents", skill_text)
         self.assertIn("stats/statusline scripts", skill_text)
         self.assertIn("never abbreviate code symbols", skill_text)
+        self.assertIn("Preserve the user's dominant language", skill_text)
+        self.assertIn("Do not invent prose abbreviations", skill_text)
+        self.assertIn("Do not narrate the mode", skill_text)
         self.assertIn("All supported agents", skill_text)
         self.assertIn(".codex", skill_text)
         self.assertIn("natural-language auto-activation", skill_text)
-        self.assertIn("third_party/caveman-v1.7.0/skills/caveman/SKILL.md", skill_text)
+        self.assertIn("third_party/caveman-v1.9.1/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
         """Verify caveman adapter disables implicit invocation.
@@ -187,20 +190,20 @@ class CavemanSkillContractTests(unittest.TestCase):
         upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
         reviewed_caveman_commit = "".join(
             (
-                "ef6050c5e1848b6880ff",
-                "47c32ade1a608a64f85e",
+                "0d95a81d35a9f2d123a5",
+                "e9430d1cfc43d55f1bb0",
             )
         )
         self.assertIn(
-            "Reviewed release notes: `v1.5.1`, `v1.6.0`, and `v1.7.0`",
+            "`v1.8.2`, `v1.9.0`, and `v1.9.1`",
             upstream_text,
         )
-        self.assertIn("Reviewed open issues on 2026-05-04", upstream_text)
-        self.assertIn("caveman release tag: `v1.7.0`", upstream_text)
+        self.assertIn("observed and reviewed on 2026-07-18", upstream_text)
+        self.assertIn("caveman release tag: `v1.9.1`", upstream_text)
         self.assertIn("caveman-shrink", upstream_text)
         self.assertIn("cavecrew subagents", upstream_text)
         self.assertIn(reviewed_caveman_commit, upstream_text)
-        self.assertIn("third_party/caveman-v1.7.0/", upstream_text)
+        self.assertIn("third_party/caveman-v1.9.1/", upstream_text)
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         """Verify readme documents opt in caveman badge.

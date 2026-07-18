@@ -63,7 +63,7 @@ This repository does not run ECC's installer directly against the working tree.
 
 Instead it uses:
 
-- a pinned upstream snapshot under `third_party/ecc-v1.10.0/`
+- a pinned upstream snapshot under `third_party/ecc-v2.0.0/`
 - repo-specific overlays in `.agents/skills/`
 - native adapter files for each harness
 
@@ -73,7 +73,7 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 This repository also carries an opt-in `caveman` communication overlay:
 
-- vendored upstream prompt reference material under `third_party/caveman-v1.7.0/`
+- vendored upstream prompt reference material under `third_party/caveman-v1.9.1/`
 - a repo-local overlay at `.agents/skills/caveman/`
 - shared-skill catalog routing in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and `.cursor/rules/00-omero-core.mdc`
 
@@ -86,13 +86,14 @@ Compression stays opt-in and quality-first:
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-Upstream `caveman` `v1.7.0` adds stats receipts, statusline savings,
-`caveman-shrink` MCP description compression, cavecrew subagents, a smart
-multi-agent installer, `caveman-init`, security hardening, and sharper style
-guards for code symbols and ambiguity. This repo imports only the
-prompt-reference lessons that preserve opt-in reply compression; it does not
-import those activation, hook, installer, MCP, subagent, statusline, stats,
-configuration, or context-rewrite surfaces.
+Upstream `caveman` `v1.9.1` replaces unverified savings claims with a measured
+65% average output-token reduction, preserves the user's language, rejects
+invented abbreviations and causal arrows that do not save tokens, and forbids
+self-referential mode narration. It also includes hooks, stats, installers,
+`caveman-shrink`, `caveman-init`, and cavecrew orchestration. This repo imports
+only the prompt-reference clarity lessons; activation, hook, installer, MCP,
+subagent, statusline, stats, configuration, and context-rewrite surfaces remain
+disabled.
 
 The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, smart installer, cavecrew subagents, `caveman-shrink`, stats/statusline scripts, and compression-tool context rewriting are not activated in this repo.
 
@@ -206,7 +207,7 @@ refuse to build or refresh one.
 | Event | Matcher | Action | Rule enforced |
 | --- | --- | --- | --- |
 | PostToolUse | Write\|Edit | Run `ruff check --fix` and `ruff format` on edited `.py` files | Ruff is the canonical Python formatter and lint gate |
-| PostToolUse | Write\|Edit | Run `npx --yes markdownlint-cli2@0.22.1` on edited `.md` files | Validate Markdown with a pinned package instead of tracking the unpinned latest package |
+| PostToolUse | Write\|Edit | Run `npx --yes markdownlint-cli2@0.23.1` on edited `.md` files | Validate Markdown with a pinned package instead of tracking the unpinned latest package |
 | PreToolUse | Bash | Run `python3 tools/env_safety_guard.py check` before `docker compose` commands | Verify deployment env files are intact before compose operations |
 
 These hooks are Claude Code-specific (other harnesses do not support hooks). The underlying rules are documented in `AGENTS.md` so all agents follow them regardless of automation.

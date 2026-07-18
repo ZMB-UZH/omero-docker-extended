@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from tools.agent_context_policy import CONTEXT_SURFACE_CONTRACTS
-from tools.lint_docs_structure import run_validations
+from tools.lint_docs_structure import run_validations, validate_relative_markdown_links
 
 
 class DocsStructureLintTests(unittest.TestCase):
@@ -119,6 +119,46 @@ class DocsStructureLintTests(unittest.TestCase):
                     in err.message
                     for err in errors
                 )
+            )
+
+    def test_relative_link_validation_covers_first_party_documents(self) -> None:
+        """Validate local links while ignoring external URLs, anchors, and code.
+
+        Inputs: temporary repository fixtures. Output: verifies valid links pass
+        and broken or repository-escaping links are reported.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            docs_dir = repo_root / "docs"
+            docs_dir.mkdir()
+            (repo_root / "README.md").write_text(
+                "\n".join(
+                    (
+                        "[valid](docs/target.md#section)",
+                        "[external](https://example.invalid/missing.md)",
+                        "[anchor](#local-heading)",
+                        "`[inline code](docs/missing-inline.md)`",
+                        "```markdown",
+                        "[fenced example](docs/missing-fenced.md)",
+                        "```",
+                        "[reference]: <docs/target.md>",
+                    )
+                ),
+                encoding="utf-8",
+            )
+            (docs_dir / "target.md").write_text(
+                "[broken](missing.md)\n[escape](../../outside.md)\n",
+                encoding="utf-8",
+            )
+
+            errors = validate_relative_markdown_links(repo_root)
+
+            self.assertEqual(
+                sorted(error.message for error in errors),
+                [
+                    "docs/target.md has broken relative link: missing.md",
+                    "docs/target.md has repository-escaping link: ../../outside.md",
+                ],
             )
 
 

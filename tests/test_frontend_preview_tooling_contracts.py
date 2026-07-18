@@ -47,13 +47,13 @@ def test_frontend_preview_tooling_manifest_pins_expected_versions():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["name"] == "omero-agent-frontend-preview-tooling"
-    assert manifest["node_version"] == "24.15.0"
+    assert manifest["node_version"] == "24.18.0"
     assert manifest["dependencies"] == {
-        "vite": "8.0.7",
-        "vitest": "4.1.4",
-        "jsdom": "29.0.2",
-        "@vitest/browser-playwright": "4.1.4",
-        "playwright": "1.59.1",
+        "vite": "8.1.5",
+        "vitest": "4.1.10",
+        "jsdom": "29.1.1",
+        "@vitest/browser-playwright": "4.1.10",
+        "playwright": "1.61.1",
     }
 
 
@@ -87,7 +87,7 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
     Inputs: repository fixtures. Output: fails on regressions in frontend preview wrapper requires exact node version.
     """
     tooling = load_frontend_preview_tooling()
-    manifest = {"node_version": "24.15.0"}
+    manifest = {"node_version": "24.18.0"}
     completed = subprocess.CompletedProcess(
         args=["node", "--version"], returncode=0, stdout="v25.9.0\n"
     )
@@ -97,7 +97,7 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
             tooling, "ensure_command_available", return_value="/usr/bin/node"
         ),
         mock.patch.object(tooling.subprocess, "run", return_value=completed),
-        pytest.raises(RuntimeError, match="need v24.15.0"),
+        pytest.raises(RuntimeError, match="need v24.18.0"),
     ):
         tooling.ensure_node_version(manifest)
 
@@ -130,19 +130,19 @@ def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
     tooling = load_frontend_preview_tooling()
 
     assert (
-        tooling.node_release_path("24.15.0", "node-v24.15.0-linux-x64.tar.xz")
-        == "/dist/v24.15.0/node-v24.15.0-linux-x64.tar.xz"
+        tooling.node_release_path("24.18.0", "node-v24.18.0-linux-x64.tar.xz")
+        == "/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz"
     )
     assert (
-        tooling.node_release_path("24.15.0", "SHASUMS256.txt")
-        == "/dist/v24.15.0/SHASUMS256.txt"
+        tooling.node_release_path("24.18.0", "SHASUMS256.txt")
+        == "/dist/v24.18.0/SHASUMS256.txt"
     )
     with pytest.raises(RuntimeError, match="Invalid Node.js version"):
-        tooling.node_release_path("../24.15.0", "SHASUMS256.txt")
+        tooling.node_release_path("../24.18.0", "SHASUMS256.txt")
     with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
-        tooling.node_release_path("24.15.0", "node-v25.0.0-linux-x64.tar.xz")
+        tooling.node_release_path("24.18.0", "node-v25.0.0-linux-x64.tar.xz")
     with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
-        tooling.node_release_path("24.15.0", "node-v24.15.0-linux-../x64.tar.xz")
+        tooling.node_release_path("24.18.0", "node-v24.18.0-linux-../x64.tar.xz")
 
 
 def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_path):
@@ -170,7 +170,7 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(tooling.subprocess, "run", _fake_run)
 
-    tooling.download_node_release_file("24.15.0", "SHASUMS256.txt", tmp_path / "out")
+    tooling.download_node_release_file("24.18.0", "SHASUMS256.txt", tmp_path / "out")
 
     args, kwargs = calls[0]
     assert args[:2] == ["/bin/curl", "--fail"]
@@ -178,7 +178,7 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
     assert args[args.index("--proto") + 1] == "=https"
     tls_option_prefix = "-" * 2 + "tls"
     assert all(not arg.startswith(tls_option_prefix) for arg in args)
-    assert args[-1] == "https://nodejs.org/dist/v24.15.0/SHASUMS256.txt"
+    assert args[-1] == "https://nodejs.org/dist/v24.18.0/SHASUMS256.txt"
     assert kwargs["timeout"] == 60
     assert kwargs["check"] is False
 
@@ -260,7 +260,7 @@ def test_frontend_preview_skill_points_to_wrapper_and_drops_stale_temp_setup():
     assert "do not guess a repo path" in skill_text
     assert "$REPO_ROOT/omero-web/omero/static" not in skill_text
     assert "mktemp -d /tmp/vite-preview" not in skill_text
-    assert "npm install vite@8.0.7" not in skill_text
+    assert "npm install vite@8.1.5" not in skill_text
 
 
 def test_frontend_preview_vitest_config_exposes_browser_mode_support():

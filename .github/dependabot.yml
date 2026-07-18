@@ -45,6 +45,19 @@ updates:
       prefix: "deps(pip)"
 
   - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:20"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps(compose)"
+
+  - package-ecosystem: "docker"
     directory: "/docker"
     schedule:
       interval: "weekly"
@@ -56,5 +69,7 @@ updates:
     open-pull-requests-limit: 10
     ignore:
       - dependency-name: "postgres"
+        update-types:
+          - "version-update:semver-major"
     commit-message:
       prefix: "deps(docker)"

@@ -5,15 +5,15 @@
 #     --output-file .github/requirements/tests-ci.txt \
 #     .github/requirements/tests-ci.in
 pytest==9.1.1
-coverage==7.14.3
-django==6.0.6
+coverage==7.15.2
+django==6.0.7
 cryptography==49.0.0
 pyyaml==6.0.3
 portalocker==3.2.0
 psycopg2-binary==2.9.12
-numpy==2.5.0
+numpy==2.5.1
 numcodecs==0.16.5
-matplotlib==3.11.0
+matplotlib==3.11.1
 ome-zarr==0.16.0
 zarr==3.2.1
-tifffile==2026.6.1
+tifffile==2026.7.14

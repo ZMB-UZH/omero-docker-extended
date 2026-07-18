@@ -220,9 +220,8 @@ apt_get() {
 
 ensure_dns_ok() {
     local host="${1:-deb.debian.org}"
-    local i
 
-    for i in {1..8}; do
+    for _ in {1..8}; do
         if getent hosts "${host}" >/dev/null 2>&1; then
             return 0
         fi

@@ -1,8 +1,8 @@
 ---
 name: django-security
 description: Django and OMERO.web security rules for views, uploads, responses, permissions, and admin-only surfaces.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/django-security/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/django-security/SKILL.md
 ---
 
 # Django Security
@@ -11,7 +11,7 @@ Use this skill when touching Django views, uploads, JSON responses, templates, o
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/django-security/SKILL.md` for the generic Django security checklist.
+Start from `third_party/ecc-v2.0.0/skills/django-security/SKILL.md` for the generic Django security checklist.
 
 ## Repo overlay
 

@@ -1,8 +1,8 @@
 ---
 name: context-budget
 description: Keep agent context small and high-signal by routing into AGENTS, the nearest docs, and the narrowest correct test lanes.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/context-budget/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/context-budget/SKILL.md
 ---
 
 # Context Budget
@@ -11,7 +11,7 @@ Use this skill when a task is getting broad, slow, or repetitive, or when the us
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/context-budget/SKILL.md` for the generic context-audit mindset.
+Start from `third_party/ecc-v2.0.0/skills/context-budget/SKILL.md` for the generic context-audit mindset.
 
 ## Fast route
 
@@ -30,3 +30,7 @@ Start from `third_party/ecc-v1.10.0/skills/context-budget/SKILL.md` for the gene
 - Summarize long docs once and reuse the summary instead of reopening the same file repeatedly.
 - Prefer the nearest skill in `.agents/skills/` over re-deriving a workflow from scratch.
 - For verification, run only the relevant split test lanes, not every suite by default.
+- Keep a verification ledger of successful commands and the relevant tree state; do not rerun an unchanged gate merely for reassurance.
+- Invalidate only checks whose code, configuration, fixtures, dependencies, or runtime artifact changed.
+- Run independent read-only checks in parallel when host resources permit; serialize builds and live mutations that share Docker, databases, or persistent storage.
+- Run the full required matrix once against the final tree before release.

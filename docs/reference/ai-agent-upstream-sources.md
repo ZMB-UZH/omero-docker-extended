@@ -5,20 +5,24 @@ This document records the pinned upstream AI Agent material vendored into this r
 ## ECC snapshot
 
 - Upstream repository: `affaan-m/everything-claude-code`
-- Release tag: `v1.10.0`
-- Release commit: `846ffb75da9a5f4e677d927af1ad4a1951652267`
-- Local vendor path: `third_party/ecc-v1.10.0/`
-- License: MIT (`third_party/ecc-v1.10.0/LICENSE`)
+- Release tag: `v2.0.0`
+- Release commit: `8ad4151095e453301ce0e50374103bcd8f50ded2`
+- Local vendor path: `third_party/ecc-v2.0.0/`
+- License: MIT (`third_party/ecc-v2.0.0/LICENSE`)
+- Vendored files: `LICENSE`, the selected skill files listed below, and the
+  security review's referenced cloud checklist only. Upstream README,
+  installers, hooks, and cross-platform runtime documentation remain upstream
+  so the repository's Linux-only operating contract stays unambiguous.
 - DeepSource-only `skipcq` annotation lines may appear in selected vendored
   skill files to suppress false-positive secret findings in instructional
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
-- Latest upstream observed on 2026-06-27: `v2.0.0`. The repo keeps the
-  selected `v1.10.0` snapshot until a dedicated vendor update can preserve the
-  repo's single-session, host-agnostic, Linux-only workflow contracts. Do not
-  import the broader cross-harness control-pane, orchestration, or connector
-  policy surfaces as a drive-by update.
+- Latest upstream observed and reviewed on 2026-07-18: `v2.0.0`. The selected
+  skill snapshot is current. The repo imports no ECC control pane, hooks,
+  commands, connectors, session adapters, MCP configuration, worktree service,
+  or multi-agent orchestration; the repo's single-session, host-agnostic, and
+  Linux-only workflow contracts remain authoritative.
 
 ## Selected upstream skills
 
@@ -26,21 +30,21 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 
 | Local skill or surface | Pinned upstream source |
 | --- | --- |
-| `search-first` | `third_party/ecc-v1.10.0/skills/search-first/SKILL.md` |
-| `documentation-lookup` | `third_party/ecc-v1.10.0/skills/documentation-lookup/SKILL.md` |
-| `verification-loop` | `third_party/ecc-v1.10.0/skills/verification-loop/SKILL.md` |
-| `security-review` | `third_party/ecc-v1.10.0/skills/security-review/SKILL.md` |
-| `python-patterns` | `third_party/ecc-v1.10.0/skills/python-patterns/SKILL.md` |
-| `python-testing` | `third_party/ecc-v1.10.0/skills/python-testing/SKILL.md` |
-| `django-patterns` | `third_party/ecc-v1.10.0/skills/django-patterns/SKILL.md` |
-| `django-security` | `third_party/ecc-v1.10.0/skills/django-security/SKILL.md` |
-| `django-verification` | `third_party/ecc-v1.10.0/skills/django-verification/SKILL.md` |
-| `docker-patterns` | `third_party/ecc-v1.10.0/skills/docker-patterns/SKILL.md` |
-| `deployment-patterns` | `third_party/ecc-v1.10.0/skills/deployment-patterns/SKILL.md` |
-| `postgres-patterns` | `third_party/ecc-v1.10.0/skills/postgres-patterns/SKILL.md` |
-| `tdd-workflow` | `third_party/ecc-v1.10.0/skills/tdd-workflow/SKILL.md` |
-| `ai-regression-testing` | `third_party/ecc-v1.10.0/skills/ai-regression-testing/SKILL.md` |
-| `context-budget` | `third_party/ecc-v1.10.0/skills/context-budget/SKILL.md` |
+| `search-first` | `third_party/ecc-v2.0.0/skills/search-first/SKILL.md` |
+| `documentation-lookup` | `third_party/ecc-v2.0.0/skills/documentation-lookup/SKILL.md` |
+| `verification-loop` | `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` |
+| `security-review` | `third_party/ecc-v2.0.0/skills/security-review/SKILL.md` |
+| `python-patterns` | `third_party/ecc-v2.0.0/skills/python-patterns/SKILL.md` |
+| `python-testing` | `third_party/ecc-v2.0.0/skills/python-testing/SKILL.md` |
+| `django-patterns` | `third_party/ecc-v2.0.0/skills/django-patterns/SKILL.md` |
+| `django-security` | `third_party/ecc-v2.0.0/skills/django-security/SKILL.md` |
+| `django-verification` | `third_party/ecc-v2.0.0/skills/django-verification/SKILL.md` |
+| `docker-patterns` | `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` |
+| `deployment-patterns` | `third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` |
+| `postgres-patterns` | `third_party/ecc-v2.0.0/skills/postgres-patterns/SKILL.md` |
+| `tdd-workflow` | `third_party/ecc-v2.0.0/skills/tdd-workflow/SKILL.md` |
+| `ai-regression-testing` | `third_party/ecc-v2.0.0/skills/ai-regression-testing/SKILL.md` |
+| `context-budget` | `third_party/ecc-v2.0.0/skills/context-budget/SKILL.md` |
 
 ## CocoIndex Code skill
 
@@ -77,18 +81,18 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 ## caveman reference snapshot
 
 - Repository: `JuliusBrussee/caveman`
-- Reviewed release notes: `v1.5.1`, `v1.6.0`, and `v1.7.0` for the upgrade path from the prior `v1.5.0` pin
-- Reviewed open issues on 2026-05-04: Gemini install/frontmatter failures (`#325`, `#328`, `#330`), update-command confusion (`#321`), Opencode edit refusal (`#304`), and mid-session prose drift (`#303`)
-- caveman release tag: `v1.7.0`
-- caveman release commit: `ef6050c5e1848b6880ff47c32ade1a608a64f85e`
-- Latest upstream observed on 2026-06-27: `v1.9.0`. The repo keeps the
-  selected `v1.7.0` snapshot until a dedicated vendor update can preserve the
-  disabled installer, hook, natural-language activation, compression-tool, MCP,
-  and cavecrew surfaces.
-- caveman vendor path: `third_party/caveman-v1.7.0/`
-- License: MIT (`third_party/caveman-v1.7.0/LICENSE`)
+- Reviewed release notes: `v1.5.1`, `v1.6.0`, `v1.7.0`, `v1.8.0` through
+  `v1.8.2`, `v1.9.0`, and `v1.9.1`.
+- caveman release tag: `v1.9.1`
+- caveman release commit: `0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0`
+- Latest upstream observed and reviewed on 2026-07-18: `v1.9.1`. The selected
+  prompt reference is current while installer, hook, natural-language
+  activation, compression-tool, MCP, stats, and cavecrew surfaces remain
+  disabled.
+- caveman vendor path: `third_party/caveman-v1.9.1/`
+- License: MIT (`third_party/caveman-v1.9.1/LICENSE`)
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
-- Selected upstream reference: `third_party/caveman-v1.7.0/skills/caveman/SKILL.md`
+- Selected upstream reference: `third_party/caveman-v1.9.1/skills/caveman/SKILL.md`
 - Integration rule: the active repo surface is `.agents/skills/caveman/`; it
   is an all-agent, opt-in overlay for lower-token replies and internal AI
   prompting only. Upstream hooks, plugin auto-loading, `.codex` hook config,
@@ -96,6 +100,7 @@ Do not replace the local overlays with the upstream files verbatim unless the re
   `off`, `caveman-help`, compression-tool context rewriting, stats/statusline
   scripts, `caveman-shrink`, `caveman-init`, cavecrew subagents, and smart
   installer side effects stay disabled. The local overlay starts at lite
-  compression, preserves the upstream v1.7.0 code-symbol and ambiguity guards,
+  compression, preserves the upstream v1.9.1 language, code-symbol,
+  no-invented-abbreviation, no-self-reference, and ambiguity guards,
   and never changes routing, tool choice, verification scope, or uncertainty
   handling.

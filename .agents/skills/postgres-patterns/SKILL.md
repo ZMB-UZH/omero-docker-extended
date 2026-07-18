@@ -1,8 +1,8 @@
 ---
 name: postgres-patterns
 description: PostgreSQL guidance for the main OMERO database, plugin database, migrations, indexes, and maintenance contracts.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/postgres-patterns/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/postgres-patterns/SKILL.md
 ---
 
 # PostgreSQL Patterns
@@ -11,7 +11,7 @@ Use this skill when changing SQL, schema behavior, plugin persistence, or mainte
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/postgres-patterns/SKILL.md` for the generic PostgreSQL patterns.
+Start from `third_party/ecc-v2.0.0/skills/postgres-patterns/SKILL.md` for the generic PostgreSQL patterns.
 
 ## Repo overlay
 

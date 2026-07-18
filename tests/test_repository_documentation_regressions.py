@@ -627,7 +627,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.30.11"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.32.1"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -644,10 +644,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.30.11",
+            "README.md": "ollama/ollama:0.32.1",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.30.11",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.32.1",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():
@@ -685,6 +685,28 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertRegex(adapter_text, r"(parity|full parity)")
         self.assertIn("compact rewrites", docs_skill_text)
         self.assertIn("dropping required meaning", docs_skill_text)
+
+    def test_agent_verification_is_efficient_without_reducing_quality(self) -> None:
+        """Require input-aware test deduplication and one final full matrix.
+
+        Inputs: repository instruction fixtures. Output: verifies efficient
+        verification rules retain the final-tree quality gate.
+        """
+        agents_text = self.read_text("AGENTS.md")
+        context_skill = self.read_text(".agents/skills/context-budget/SKILL.md")
+        verification_skill = self.read_text(".agents/skills/verification-loop/SKILL.md")
+        runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+
+        for text in (agents_text, context_skill, verification_skill, runtime_text):
+            with self.subTest(surface=text[:40]):
+                self.assertIn("verification ledger", text)
+                self.assertIn("full", text)
+                self.assertIn("final tree", text)
+        self.assertIn("do not rerun an unchanged gate", context_skill)
+        self.assertIn("Do not repeat a passing command", verification_skill)
+        self.assertIn("Parallelize independent read-only gates", runtime_text)
+        self.assertIn("Serialize", runtime_text)
+        self.assertIn("persistent storage", runtime_text)
 
     def test_agent_instructions_close_proven_retry_loops_after_verification(
         self,
@@ -1056,7 +1078,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in markdownlint command is pinned integration.
         """
-        expected = "npx --yes markdownlint-cli2@0.22.1"
+        expected = "npx --yes markdownlint-cli2@0.23.1"
         self.assertIn(expected, self.read_text("AGENTS.md"))
         self.assertIn(
             expected,

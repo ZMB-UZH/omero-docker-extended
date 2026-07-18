@@ -1,7 +1,7 @@
 ---
 name: plugin-regression-triager
 description: Map changed files to the correct split pytest suites and fast regression checks for this repository.
-origin: repo-local skill informed by ECC v1.10.0 workflow patterns
+origin: repo-local skill informed by ECC v2.0.0 workflow patterns
 ---
 
 # Plugin Regression Triager

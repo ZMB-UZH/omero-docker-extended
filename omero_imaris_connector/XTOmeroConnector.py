@@ -8581,7 +8581,7 @@ class OMEROWebClient:
                             f"Authentication error ({e.code}) while polling OMERO "
                             "converter IMS export. "
                             "Session may have expired. Please try again."
-                        )
+                        ) from None
                     raise
 
                 last_state = poll_payload.get("state")

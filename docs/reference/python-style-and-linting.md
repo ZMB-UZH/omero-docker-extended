@@ -11,8 +11,8 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 - These workflows intentionally avoid hard-coded branch names in `on:` filters.
   The default-branch guard lives at the job level so a maintainer can rename
   the default branch without editing workflow YAML.
-- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.20`).
-- The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`. The current Mypy CI pin is `2.1.0`.
+- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.15.22`).
+- The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`. The current Mypy CI pin is `2.3.0`.
 - The Vulture workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/vulture-ci.txt` lockfile as its cache key, then runs `python3 tools/vulture_check.py`.
 - CI runs:
   - `ruff check .`
@@ -98,7 +98,11 @@ ruff format .
 ## Lint scope
 
 - Ruff formatting applies repo-wide to tracked Python files.
-- The lint gate is intentionally narrow: `F`, `E7`, and `E9`.
+- The lint gate is intentionally narrow: `F`, `E7`, `E9`, `B904`, and
+  `LOG014`. Translated exceptions must preserve or deliberately suppress their
+  cause, and exception traceback logging is allowed only while handling an
+  active exception. Together these rules protect sanitized logging boundaries
+  and prevent misleading `NoneType: None` output.
 - The current repository baseline does not use `per-file-ignores` in `.ruff.toml`.
 - Do not reintroduce file-level Ruff exceptions casually. Prefer fixing the underlying code and covering it with targeted tests.
 - The Mypy gate scans tracked production Python files only. Tests, docs, vendored third-party content, hidden harness folders, `conftest.py`, and test-named modules stay out of scope by design.

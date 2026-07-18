@@ -70,7 +70,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.16.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
-        self.assertIn("TIFFFILE_VERSION=2026.3.3", env_text)
+        self.assertIn("TIFFFILE_VERSION=2026.7.14", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
         self.assertIn(
             "BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2",
@@ -123,25 +123,30 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.43.0-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.17.0"', compose_text)
-        self.assertIn('image: "prom/prometheus:v3.12.0"', compose_text)
-        self.assertIn('image: "prom/node-exporter:v1.11.1"', compose_text)
-        self.assertIn('image: "oliver006/redis_exporter:v1.86.0-alpine"', compose_text)
-        self.assertIn('image: "redis:8.6.4-alpine"', compose_text)
-        self.assertIn('image: "ghcr.io/google/cadvisor:0.60.3"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.17.1"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.13.1"', compose_text)
+        self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
+        self.assertIn(
+            'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
+            compose_text,
+        )
+        self.assertIn('image: "oliver006/redis_exporter:v1.87.0-alpine"', compose_text)
+        self.assertIn('image: "redis:8.8.0-alpine"', compose_text)
+        self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.3"', compose_text)
         self.assertIn('image: "grafana/grafana:13.1.0"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.30.11"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.32.1"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
-        self.assertNotIn("grafana/alloy:v1.15.1", compose_text)
-        self.assertNotIn("prom/prometheus:v3.11.2", compose_text)
-        self.assertNotIn("prom/node-exporter:v1.10.2", compose_text)
-        self.assertNotIn("oliver006/redis_exporter:v1.82.0-alpine", compose_text)
-        self.assertNotIn("redis:8.6.2-alpine", compose_text)
-        self.assertNotIn("gcr.io/cadvisor/cadvisor:v0.55.1", compose_text)
+        self.assertNotIn("grafana/alloy:v1.17.0", compose_text)
+        self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
+        self.assertNotIn("prom/node-exporter:v1.11.1", compose_text)
+        self.assertNotIn("prometheuscommunity/postgres-exporter:v0.19.1", compose_text)
+        self.assertNotIn("oliver006/redis_exporter:v1.86.0-alpine", compose_text)
+        self.assertNotIn("redis:8.6.4-alpine", compose_text)
+        self.assertNotIn("ghcr.io/google/cadvisor:0.60.3", compose_text)
         self.assertNotIn("grafana/loki:3.6.7", compose_text)
         self.assertNotIn("grafana/grafana:12.4.1", compose_text)
-        self.assertNotIn("ollama/ollama:0.21.0", compose_text)
+        self.assertNotIn("ollama/ollama:0.30.11", compose_text)
 
     def test_portainer_management_surface_is_https_only_and_hardened(self) -> None:
         """Verify Portainer is default-on, HTTPS-only, and container-hardened.
@@ -338,11 +343,28 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/omero-celery-worker.Dockerfile")
         self.assertIn(
             "FROM ubuntu:26.04@"
-            "sha256:53958ec7b67c2c9355df922dd08dbf0360611f8c3cdb656875e81873db9ffdba",
+            "sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb",
             dockerfile_text,
         )
         self.assertNotIn(
-            "sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64",
+            "sha256:53958ec7b67c2c9355df922dd08dbf0360611f8c3cdb656875e81873db9ffdba",
+            dockerfile_text,
+        )
+
+    def test_postgres_1614_base_image_uses_current_verified_digest(self) -> None:
+        """Verify the PostgreSQL 16.14 maintenance base uses its current digest.
+
+        Inputs: repository fixtures. Output: fails on stale PostgreSQL digests.
+        """
+
+        dockerfile_text = self.read_text("docker/pg-maintenance.Dockerfile")
+        self.assertIn(
+            "FROM postgres:16.14@"
+            "sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20",
+            dockerfile_text,
+        )
+        self.assertNotIn(
+            "sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54",
             dockerfile_text,
         )
 
@@ -372,10 +394,85 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on stale omero-py pins.
         """
         expected_pin = '"omero-py==5.22.1"'
-        self.assertIn(expected_pin, self.read_text("docker/omero-web.Dockerfile"))
+        web_dockerfile_text = self.read_text("docker/omero-web.Dockerfile")
+        worker_dockerfile_text = self.read_text("docker/omero-celery-worker.Dockerfile")
+        server_dockerfile_text = self.read_text("docker/omero-server.Dockerfile")
+
+        self.assertIn(expected_pin, web_dockerfile_text)
         self.assertIn(
             expected_pin,
-            self.read_text("docker/omero-celery-worker.Dockerfile"),
+            worker_dockerfile_text,
+        )
+        for package_pin in (
+            "matplotlib==3.11.1",
+            "pytest==9.1.1",
+            "portalocker==3.2.0",
+            "psycopg2-binary==2.9.12",
+            "celery==5.6.3",
+            "redis==8.0.1",
+            "django-redis==7.0.0",
+            "omero-fpbioimage==0.4.1",
+            "omero-gallery==3.4.3",
+            "omero-parade==0.2.4",
+            "omero-web-zarr==0.1.1",
+        ):
+            with self.subTest(package_pin=package_pin):
+                self.assertIn(package_pin, web_dockerfile_text)
+        self.assertIn('"redis==8.0.1"', worker_dockerfile_text)
+        self.assertIn("pytest==9.1.1", server_dockerfile_text)
+        self.assertNotIn("redis==5.0.8", web_dockerfile_text)
+        self.assertNotIn("redis==5.0.8", worker_dockerfile_text)
+        self.assertNotIn("pytest==7.4.4", server_dockerfile_text)
+        self.assertNotIn("django-redis>=", web_dockerfile_text)
+
+    def test_omero_image_direct_python_dependencies_are_exactly_pinned(self) -> None:
+        """Verify direct image dependencies cannot resolve to changing versions.
+
+        Inputs: repository fixtures. Output: verifies exact package and temporary
+        directory defaults in every OMERO application image.
+        """
+        server_text = self.read_text("docker/omero-server.Dockerfile")
+        web_text = self.read_text("docker/omero-web.Dockerfile")
+        worker_text = self.read_text("docker/omero-celery-worker.Dockerfile")
+
+        common_version_args = (
+            "ARG PIP_VERSION=26.1.2",
+            "ARG SETUPTOOLS_VERSION=80.9.0",
+            "ARG WHEEL_VERSION=0.47.0",
+            "ARG CRYPTOGRAPHY_VERSION=49.0.0",
+            "ARG URLLIB3_VERSION=2.7.0",
+            "ARG CERTIFI_VERSION=2026.6.17",
+            "ARG IDNA_VERSION=3.18",
+            "ARG REQUESTS_VERSION=2.34.2",
+            "ARG JINJA2_VERSION=3.1.6",
+        )
+        for dockerfile_text in (server_text, web_text, worker_text):
+            for version_arg in common_version_args:
+                with self.subTest(version_arg=version_arg):
+                    self.assertIn(version_arg, dockerfile_text)
+            self.assertIn("TMPDIR=/tmp", dockerfile_text)
+            self.assertIn("OMERO_TMPDIR=/tmp", dockerfile_text)
+
+        for version_arg in (
+            "ARG PYOPENSSL_VERSION=26.3.0",
+            "ARG REPORTLAB_VERSION=5.0.0",
+            "ARG MARKDOWN_VERSION=3.10.2",
+            "ARG OMERO_CLI_RENDER_VERSION=0.8.1",
+            "ARG OMERO_METADATA_VERSION=0.13.0",
+            "ARG OMERO_CLI_DUPLICATE_VERSION=0.4.0",
+            "ARG OMERO_RDF_VERSION=0.7.2",
+        ):
+            with self.subTest(version_arg=version_arg):
+                self.assertIn(version_arg, server_text)
+
+        self.assertIn("ARG PYOPENSSL_VERSION=26.3.0", web_text)
+        self.assertNotRegex(
+            "\n".join((server_text, web_text, worker_text)),
+            r"(?m)^\s+(pip|setuptools|wheel|cryptography|urllib3|certifi|idna|requests|jinja2)(?:\s+\\)?$",
+        )
+        self.assertNotRegex(
+            server_text,
+            r"(?m)^\s+(reportlab|markdown|omero-cli-render|omero-metadata|omero-cli-duplicate|omero-rdf)(?:\s+\\|;)?$",
         )
 
     def test_omeroserver_dockerfile_fails_closed_without_dropbox_version(self) -> None:

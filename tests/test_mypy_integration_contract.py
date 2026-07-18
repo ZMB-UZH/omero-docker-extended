@@ -70,15 +70,15 @@ class MypyIntegrationContractTests(TestCase):
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
-        self.assertIn("mypy==2.1.0", source)
-        self.assertIn("django==6.0.6", source)
+        self.assertIn("mypy==2.3.0", source)
+        self.assertIn("django==6.0.7", source)
         self.assertIn("pip-compile", compiled)
-        self.assertIn("mypy==2.1.0", compiled)
-        self.assertIn("django==6.0.6", compiled)
-        self.assertIn("django-stubs==6.0.6", compiled)
-        self.assertIn("types-requests==2.33.0.20260518", compiled)
-        self.assertIn("types-atheris==3.0.0.20260518", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20260518", compiled)
+        self.assertIn("mypy==2.3.0", compiled)
+        self.assertIn("django==6.0.7", compiled)
+        self.assertIn("django-stubs==6.0.7", compiled)
+        self.assertIn("types-requests==2.33.0.20260712", compiled)
+        self.assertIn("types-atheris==3.1.0.20260630", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20260712", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 
@@ -174,7 +174,7 @@ class MypyIntegrationContractTests(TestCase):
             "tests/test_mypy_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.7.0/tools/helper.py",
+            "third_party/caveman-v1.9.1/tools/helper.py",
             ".agents/skills/caveman/agents/openai.yaml",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",

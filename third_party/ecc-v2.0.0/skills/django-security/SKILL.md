@@ -46,7 +46,6 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Secret key (must be set via environment variable)
-# skipcq: SCT-1000
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
     raise ImproperlyConfigured('DJANGO_SECRET_KEY environment variable is required')
@@ -530,14 +529,12 @@ env = environ.Env(
 # reading .env file
 environ.Env.read_env()
 
-# skipcq: SCT-A000
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DATABASE_URL = env('DATABASE_URL')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
 
 # .env file (never commit this)
 DEBUG=False
-# skipcq: SCT-A000
 SECRET_KEY=your-secret-key-here
 DATABASE_URL=postgresql://user:password@localhost:5432/dbname
 ALLOWED_HOSTS=example.com,www.example.com

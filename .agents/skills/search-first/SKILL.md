@@ -1,8 +1,8 @@
 ---
 name: search-first
 description: Research-before-coding workflow for OMERO Docker Extended. Check the repo, tests, official upstream docs, and release notes before writing new code.
-origin: ECC v1.10.0 adapted for OMERO Docker Extended
-upstream: third_party/ecc-v1.10.0/skills/search-first/SKILL.md
+origin: ECC v2.0.0 adapted for OMERO Docker Extended
+upstream: third_party/ecc-v2.0.0/skills/search-first/SKILL.md
 ---
 
 # Search First
@@ -11,7 +11,7 @@ Use this skill before introducing new code, dependencies, wrappers, or automatio
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v1.10.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
+Start from `third_party/ecc-v2.0.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
 
 ## When to activate
 
@@ -36,6 +36,7 @@ Start from `third_party/ecc-v1.10.0/skills/search-first/SKILL.md` for the generi
 - Treat `env/*_example.env` and `installation_paths_example.env` as canonical contracts.
 - Adopt when the existing pattern is already correct, extend when a thin repo wrapper is enough, and build custom only when the repo needs a stricter contract.
 - Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session for research in this repo.
+- The vendored ECC `Agent(...)` research example is reference-only and is prohibited by the preceding single-session rule.
 - Do not leak PATs, tokens, passwords, or internal URLs into web queries or docs tools.
 - For security-sensitive facts, use primary sources only.
 - For version-sensitive facts, cite the exact version, release tag, or document page used.

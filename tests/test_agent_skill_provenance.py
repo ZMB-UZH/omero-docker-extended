@@ -54,9 +54,20 @@ class AgentSkillProvenanceTests(TestCase):
             self.sources.repo_url,
         )
         self.assertEqual(
-            ("https://github.com/affaan-m/everything-claude-code/tree/v1.10.0/skills"),
+            ("https://github.com/affaan-m/everything-claude-code/tree/v2.0.0/skills"),
             self.sources.skills_tree_url,
         )
+
+    def test_vendor_snapshot_excludes_upstream_runtime_documentation(self) -> None:
+        """Verify the vendor snapshot excludes upstream runtime documentation.
+
+        Inputs: repository fixtures. Output: verifies unused cross-platform
+        installation material is absent from the Linux-only snapshot.
+        """
+        vendor_root = self.repo_root / "third_party" / "ecc-v2.0.0"
+
+        self.assertTrue((vendor_root / "LICENSE").is_file())
+        self.assertFalse((vendor_root / "README.md").exists())
 
     def test_fetch_text_rejects_unapproved_hosts_and_schemes(self) -> None:
         """Confirm fetch text rejects unapproved hosts and schemes is rejected at the boundary.
