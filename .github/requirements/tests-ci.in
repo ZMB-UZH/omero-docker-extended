@@ -6,7 +6,7 @@
 #     .github/requirements/tests-ci.in
 pytest==9.1.1
 coverage==7.15.2
-django==6.0.7
+django==5.2.16
 cryptography==49.0.0
 pyyaml==6.0.3
 portalocker==3.2.0

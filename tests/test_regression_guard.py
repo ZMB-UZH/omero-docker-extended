@@ -112,12 +112,12 @@ class RegressionGuardEngineTests(unittest.TestCase):
         )
         self.assertTrue(any(f.rule_id == "RG002" for f in findings))
 
-    def test_only_documented_grafana_proxy_csrf_exemption_is_allowed(self) -> None:
-        """Verify the one documented Grafana CSRF exception stays narrow.
+    def test_all_csrf_exemptions_are_rejected(self) -> None:
+        """Verify no view can bypass the repository-wide CSRF contract.
 
         Inputs: synthesized views. Output: fails on CSRF guard drift.
         """
-        allowed = self._scan_one(
+        grafana_proxy = self._scan_one(
             "module/grafana.py",
             "from django.views.decorators.csrf import csrf_exempt\n"
             "from omeroweb.decorators import login_required\n"
@@ -126,27 +126,17 @@ class RegressionGuardEngineTests(unittest.TestCase):
             "@login_required()\n"
             "@require_root_user\n"
             "def grafana_proxy(request):\n"
-            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
+            "    '''Legacy proxy exemption must be rejected.'''\n"
             "    pass\n",
         )
-        self.assertFalse(any(f.rule_id == "RG006" for f in allowed))
-
-        missing_controls = self._scan_one(
-            "module/grafana_missing_controls.py",
-            "from django.views.decorators.csrf import csrf_exempt\n"
-            "@csrf_exempt\n"
-            "def grafana_proxy(request):\n"
-            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
-            "    pass\n",
-        )
-        self.assertTrue(any(f.rule_id == "RG006" for f in missing_controls))
+        self.assertTrue(any(f.rule_id == "RG006" for f in grafana_proxy))
 
         other_view = self._scan_one(
             "module/other.py",
             "from django.views.decorators.csrf import csrf_exempt\n"
             "@csrf_exempt\n"
             "def other_proxy(request):\n"
-            "    '''RegressionGuard: allowed @csrf_exempt for the Grafana proxy only.'''\n"
+            "    '''No production endpoint may bypass CSRF enforcement.'''\n"
             "    pass\n",
         )
         self.assertTrue(any(f.rule_id == "RG006" for f in other_view))

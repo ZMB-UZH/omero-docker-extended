@@ -33,9 +33,10 @@ This backlog is grounded in the current repository state and documentation:
   edge-case coverage for touched giant modules, and service-boundary smoke
   validation.
 - The GitHub workflow set covers docs validation, tests, Ruff, Vulture,
-  Super-Linter workflow/Zizmor validation, release-time Compose rendering and
-  image builds, Bash linting, and security scanning. It still lacks a fast
-  pre-release deployment smoke lane and broader docs-drift enforcement.
+  Super-Linter workflow/Zizmor/Bash validation, release-time image builds, and
+  a dedicated deployment-contract lane for Compose rendering, topology, image
+  pins, and Buildx checks. It still lacks a dynamic full-stack startup lane and
+  broader docs-drift enforcement.
 - Remaining `omeroweb_upload` references are either historical archive entries,
   a startup compatibility alias, or tests proving that alias is normalized to
   `omeroweb_import`. Do not remove them as cleanup unless a migration removes
@@ -45,13 +46,12 @@ This backlog is grounded in the current repository state and documentation:
 
 | Item | Evidence | Why it is P0 |
 | --- | --- | --- |
-| Add targeted deployment and infrastructure validation lanes | `tests.yml` enforces split pytest suites, but no workflow yet builds changed Dockerfiles, smoke-tests startup wrappers, or validates deployment wiring. | App correctness is gated, but rollout regressions can still bypass CI. |
+| Extend deployment contracts with a dynamic full-stack startup lane | `deployment-contracts.yml` validates Compose interpolation, profiles, topology, image pins, and all six local build definitions without mutating image tags. It does not start the complete service stack. | Static deployment drift is gated, but service-boundary startup failures still need runtime evidence. |
 | Maintain SHA-pinned GitHub Actions and workflow-policy linting | Workflows are pinned by full commit SHA, and Super-Linter runs both GitHub Actions validation and Zizmor. | Supply-chain hardening lasts only if the repo keeps those checks current and detects drift back to weaker workflow hygiene. |
 | Keep root `SECURITY.md` and `docs/SECURITY.md` synchronized | The root `SECURITY.md` forwards GitHub-native surfaces to `docs/SECURITY.md`. | Security-policy drift would break GitHub-native discoverability and create conflicting guidance. |
 | Preserve the zero-added-alert gate and close remaining Scorecard governance findings | The live 2026-06-27 snapshot has no open file-level GitHub findings; remaining alerts are `CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. | The current baseline is strong enough that new findings should be treated as regressions. |
 | Add docs-drift guardrails for compose env-file usage | Manual compose examples are aligned on `installation_paths.env`, `env/omero_secrets.env`, and `env/omeroserver.env`, but the repo still lacks a dedicated drift-checking lane for that contract. | Operators rely on those commands directly, so future drift would become an operational outage. |
 | Add docs-drift guardrails for service-count and supervisord topology facts | `README.md`, `ARCHITECTURE.md`, `AGENTS.md`, and `docs/references/docker-compose-llms.txt` track Compose counts; `supervisord.conf` now runs four managed programs. | Topology drift would mislead operators and future automation. |
-| Finish Import plugin canonicalization | `omeroweb_import/views/index_view.py` still uses `from .core_functions import *` while a newer `services/` layout also exists. | The import path is the biggest workflow and still has split ownership. |
 | Protect broad OMP and Import coverage during refactors | Existing OMP and Import suites are substantial, but the largest modules still need focused edge-case tests when touched. | The repo should preserve current coverage strength while reducing giant-module risk. |
 
 ## P1 Next
@@ -63,11 +63,10 @@ This backlog is grounded in the current repository state and documentation:
 | Split `omeroweb_omp_plugin/views/index_view.py` and `job_view.py` | OMP carries large view modules despite broad package-level regression coverage. | Refactoring here is safer when each touched path gets focused tests. |
 | Add plugin-level metrics for jobs, parse time, import duration, and export duration | `docs/QUALITY_SCORE.md` and `docs/exec-plans/tech-debt-tracker.md` both call this out directly. | The observability stack is ready; the application layer is what is missing. |
 | Define SLOs and alert rules for the platform | The same docs call out missing SLOs and alerts, and `docs/operations/monitoring.md` already lists recommended minimum alerts. | Strong value, but it depends on agreeing what "healthy" means first. |
-| Expand the local quality gate and checked-in hook layer | The repo has `.pre-commit-config.yaml` and `.ruff.toml`, but it still lacks broader checked-in hooks for shell and workflow linting or other fast local guards. | This should follow the CI work so local and remote checks converge. |
+| Expand the checked-in local hook layer | CI and `tools/run_local_workflow_gates.py` cover shell and workflow linting, while `.pre-commit-config.yaml` currently exposes only Ruff. | Fast optional hooks should mirror proven CI checks without duplicating the complete pre-push matrix. |
 | Consolidate duplicated plugin-database persistence helpers | OMP, Import, and Tools each manage psycopg2 access and schema creation patterns. | Useful refactor, but not as urgent as shipping infrastructure validation. |
 | Introduce explicit plugin-db migration and bootstrap ownership | Data-store modules currently create schema on demand during runtime paths. | This needs design care and should not be rushed into production code paths. |
 | Centralize OMERO session and CLI helper logic | Import, Imaris, and startup paths all solve versions of venv, CLI, and session resolution. | Shared helpers will help, but only after the high-risk logic is well tested. |
-| Audit and reduce the broad `@csrf_exempt` surface | The codebase still has many write endpoints marked `@csrf_exempt` across OMP, Admin Tools, and Import. | This is important, but the repo should first clarify which endpoints truly require the exemption. |
 | Expand dependency automation coverage | `.github/dependabot.yml` covers actions, CI Python locks, OMP Python dependencies, and Dockerfiles. Dependabot's Docker updater does not parse Compose manifests, so Compose and shell/env build versions still require explicit audited review. | This improves sustainability after the main CI and policy work is in place. |
 | Expand docs linting from structure checks to broader drift checks | The current linter validates required paths and index tokens, but broader stale-name and topology drift still relies on narrower regression tests and manual review. | This will pay off once the next round of docs-drift fixes lands. |
 
@@ -80,16 +79,15 @@ This backlog is grounded in the current repository state and documentation:
 | Add fuzz or property-based testing for parser-like logic | `docs/operations/code-scanning.md` explicitly notes missing fuzzing integration. | Good long-term safety net after deterministic unit and integration lanes exist. |
 | Add a broader full-deployment test suite with realistic service dependencies | The quality docs already note the absence of a full deployment validation suite. | Better as a second-stage quality investment after fast CI exists. |
 | Continue reducing giant-module pressure through surgical refactors | Large files exist across Import, Admin Tools, OMP, and Imaris service code. | This should be continuous maintenance, not a disruptive rewrite. |
-| Split dev, staging, and prod examples or safer default examples | `env/omeroweb_example.env` still carries `CONFIG_omero_web_debug=true`, which is easy to copy into real deployments. | Worth fixing, but not before the repo's current correctness and operator-document accuracy. |
 | Reduce local repo-status noise from helper-generated artifacts | Helper-created runtime artifacts can make local status harder to read if not ignored or cleaned. | Repo hygiene matters, but it is below correctness and operator-document accuracy. |
 | Strengthen release-note and migration discipline | `docs/reference/release-notes.md` exists, but release hygiene is still mostly procedural rather than enforced. | Best added once CI, docs-drift checks, and branch policy are stable. |
 
 ## Recommended Delivery Order
 
-1. Tighten the existing CI with deployment-smoke and workflow-policy lanes first, because they are the cheapest multiplier on every later change.
+1. Extend the deployment-contract lane with dynamic startup validation while preserving its non-mutating static checks.
 2. Preserve the current no-new-file-level-alert baseline and close the remaining Scorecard governance findings.
 3. Protect the highest-risk docs contracts: compose env-file commands, topology facts, supervisord process names, and intentional legacy aliases.
-4. Make the Import path canonical, then break up the biggest modules with focused edge-case tests.
+4. Preserve the canonical explicit Import surface while breaking up the biggest modules with focused edge-case tests.
 5. Add plugin metrics, SLOs, and alert rules once the workflows and tests can keep them honest.
 6. Land slower quality investments such as fuzzing, broader deployment suites, secret rotation, and release hygiene after the repo's baseline is stable.
 
@@ -100,8 +98,9 @@ This backlog is grounded in the current repository state and documentation:
 | 2026-03-22 | Created the initial evidence-based backlog from repository docs, workflows, tests, and code structure.                     |
 | 2026-03-22 | Expanded the backlog into explicit P0/P1/P2 items tied to named files, documented findings, and observed repository drift. |
 | 2026-04-26 | Refreshed the backlog against current tests, scanner snapshots, intentional legacy aliases, and default-branch guidance.   |
-| 2026-07-18 | Corrected workflow-linting and release-validation evidence and expanded Dependabot to cover root Compose images.           |
+| 2026-07-18 | Corrected workflow-linting and release evidence and documented Dependabot's Compose parsing limitation.                    |
 | 2026-07-18 | Enabled Bash validation in Super-Linter and cleared the full ShellCheck 0.11.0 repository scan.                            |
+| 2026-07-18 | Added non-mutating deployment contracts and removed superseded Import, CSRF, and debug-default backlog entries.            |
 
 ## Decision Log
 

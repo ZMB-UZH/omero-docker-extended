@@ -435,13 +435,8 @@ def _ast_sql_interpolation(tree: ast.AST, _src: str) -> list[tuple[int, int, str
     return hits
 
 
-_ALLOWED_CSRF_EXEMPT_DOC_MARKER = (
-    "RegressionGuard: allowed @csrf_exempt for the Grafana proxy only."
-)
-
-
 def _decorator_name(decorator: ast.expr) -> str | None:
-    """Return a simple decorator name for guard allowlist checks.
+    """Return a simple decorator name for regression checks.
 
     Inputs: `decorator`. Output: decorator name or None.
     """
@@ -451,24 +446,6 @@ def _decorator_name(decorator: ast.expr) -> str | None:
     if isinstance(target, ast.Name):
         return target.id
     return None
-
-
-def _allowed_csrf_exempt(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a CSRF exemption is the documented Grafana proxy exception.
-
-    Inputs: `node`. Output: bool.
-    """
-    if node.name != "grafana_proxy":
-        return False
-    docstring = ast.get_docstring(node) or ""
-    if _ALLOWED_CSRF_EXEMPT_DOC_MARKER not in docstring:
-        return False
-    decorator_names = {
-        name for name in (_decorator_name(dec) for dec in node.decorator_list) if name
-    }
-    return {"csrf_exempt", "login_required", "require_root_user"}.issubset(
-        decorator_names
-    )
 
 
 def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]]:
@@ -484,14 +461,12 @@ def _ast_csrf_exempt(tree: ast.AST, _src: str) -> list[tuple[int, int, str, str]
             target = dec.func if isinstance(dec, ast.Call) else dec
             name = _decorator_name(dec)
             if name == "csrf_exempt":
-                if _allowed_csrf_exempt(node):
-                    continue
                 hits.append(
                     (
                         target.lineno,
                         target.col_offset,
                         "@csrf_exempt usage. Send X-CSRFToken from the client instead; "
-                        "only the documented Grafana proxy exception is allowed.",
+                        "no production exemptions are allowed.",
                         f"@csrf_exempt on {node.name}",
                     )
                 )

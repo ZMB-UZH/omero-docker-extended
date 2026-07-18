@@ -408,6 +408,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             worker_dockerfile_text,
         )
         for package_pin in (
+            "django==5.2.16",
             "matplotlib==3.11.1",
             "pytest==9.1.1",
             "portalocker==3.2.0",

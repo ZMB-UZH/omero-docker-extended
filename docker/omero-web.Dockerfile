@@ -242,6 +242,7 @@ RUN set -euo pipefail; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+        django==5.2.16 \
         matplotlib==3.11.1 \
         pytest==9.1.1 \
         portalocker==3.2.0 \
