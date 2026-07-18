@@ -35,6 +35,8 @@ governance, and compatibility across the customized OMERO stack.
 
 ### Changed
 
+- Disabled Grafana Live in the HTTP-only Admin Tools proxy topology so proxied
+  dashboards refresh normally without recurring WebSocket handshake errors.
 - Updated the OMERO.server, OMERO.web, and task-worker packaging toolchain to
   the newest compatible Setuptools release and aligned OMERO.web runtime and CI
   coverage with the supported Django 5.2 maintenance line.

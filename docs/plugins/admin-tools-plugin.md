@@ -153,6 +153,9 @@ proxy prefix, preventing top-right **Sign in** redirects from escaping to an
 unmapped root route. Grafana root requests (`/`) through the proxy now redirect
 users directly to the configured default OMERO dashboard route under the proxy
 prefix (for example when users click **Home** or complete **Sign in**).
+Grafana Live is disabled in Compose because this authenticated Django proxy is
+HTTP-only and does not tunnel WebSockets. Dashboard queries and refreshes use
+ordinary proxied HTTP requests, avoiding recurring failed Live handshakes.
 Prometheus requests are proxied as standard request/response traffic only; the
 proxy root redirects to the Prometheus targets page. If a proxied backend
 exposes `/api/v1/notifications/live` as `text/event-stream`, the proxy
