@@ -96,6 +96,7 @@ def test_run_script_retries_until_processor_available(
             Inputs: constructor receives no public arguments. Output: initializes fake state.
             """
             self.calls = 0
+            self.processor_waits = []
 
         def runScript(self, *args, **kwargs):
             """Run the script for `DummyService`.
@@ -104,6 +105,7 @@ def test_run_script_retries_until_processor_available(
             NoProcessorAvailable when validation or the called operation fails.
             """
             self.calls += 1
+            self.processor_waits.append(args[2])
             if self.calls == 1:
                 raise NoProcessorAvailable("No processor available")
             return 123
@@ -123,6 +125,7 @@ def test_run_script_retries_until_processor_available(
     job_id = imaris_service._run_script(None, script_id=1, image_id=2, wait_secs=0)
     assert job_id == 123
     assert service.calls == 2
+    assert service.processor_waits == [None, None]
 
 
 def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None:

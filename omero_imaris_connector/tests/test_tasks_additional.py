@@ -440,7 +440,7 @@ def test_run_script_via_omero_api_covers_success_failure_and_cancel_paths(
         "conn": conn,
         "script_id": 7,
         "image_id": 11,
-        "wait_secs": 0,
+        "wait_secs": None,
     }
     assert all(meta["script_backend"] == "script_service" for _, meta in status_updates)
     assert any(meta.get("script_job_id") == 444 for _, meta in status_updates)
