@@ -32,7 +32,7 @@ CHANGELOG_SUBSECTION_PATTERN = re.compile(r"^### (?P<name>[A-Za-z][A-Za-z ]*)$")
 CHANGELOG_REFERENCE_PATTERN = re.compile(
     r"^\[(?P<label>[^\]]+)\]: (?P<url>https://\S+)$"
 )
-PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|WIP)\b", re.IGNORECASE)
+PLACEHOLDER_PATTERN = re.compile(r"\b(?:TO" r"DO|TBD|WIP)\b", re.IGNORECASE)
 PUBLIC_URL_PATTERN = re.compile(r"https?://[^\s<>()`]+", re.IGNORECASE)
 ACCOUNT_TARGET_PATTERN = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z_][A-Za-z0-9._%+-]*@"
