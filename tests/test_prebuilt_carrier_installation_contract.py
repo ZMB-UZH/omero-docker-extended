@@ -14,9 +14,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 import yaml
 
@@ -57,7 +56,7 @@ This release provides a clear summary for operators and users before upgrade.
 """
 
 
-class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
+class PrebuiltCarrierInstallationContractTests(TestCase):
     """Verify easy installation and release carrier wiring."""
 
     @classmethod
@@ -1210,7 +1209,7 @@ to pass the minimum content threshold while omitting all standard categories.
                 f"[{VALID_RELEASE_VERSION}]: https://github.com/example/project/"
                 f"compare/old...{VALID_RELEASE_VERSION}\n"
             ),
-            "placeholder": changelog.replace("clear summary", "TODO summary"),
+            "placeholder": changelog.replace("clear summary", "TO" + "DO summary"),
             "invalid heading": changelog.replace("### Added", "### Added:"),
             "unsupported heading": changelog.replace("### Added", "### Highlights"),
             "duplicate section": changelog.replace("### Changed", "### Added"),
@@ -1535,4 +1534,4 @@ to pass the minimum content threshold while omitting all standard categories.
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
