@@ -1,5 +1,11 @@
 # Release Notes
 
+`CHANGELOG.md` is the canonical, operator-facing release record and the only
+source published as GitHub and Docker release notes. This document is a
+maintainer change history. Release automation applies automated disclosure
+validation and requires explicit human review before publishing any canonical
+entry.
+
 ## 2026-07-18 Dependency and Runtime Refresh
 
 - Updated pinned GitHub Actions for CodeQL (`4.37.1`), Ruff (`4.1.0`), and
@@ -110,6 +116,16 @@
 - Passed the Grafana runtime environment into OMERO Web as well as Grafana, so
   the authenticated dashboard proxy honors deployment-specific admin usernames
   instead of silently assuming the template default.
+- Made release tags explicit, user-confirmed workflow inputs instead of inferred
+  or auto-incremented values. Every release now requires a substantive matching
+  `CHANGELOG.md` section that becomes the GitHub release body and asset and is
+  copied into the Docker carrier with OCI release metadata.
+- Split replacement deletion authority into independent GitHub release, Git
+  tag, and Docker tag confirmations. Failed release runs retain drafts and tags
+  for inspection; cleanup requires fresh approval naming each exact object.
+- Standardized canonical release entries on Keep a Changelog categories,
+  previous-version comparison links, upgrade and verification notes, automated
+  public-disclosure validation, and explicit human review.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 

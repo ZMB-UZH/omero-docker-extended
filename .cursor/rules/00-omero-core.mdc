@@ -3,14 +3,12 @@ description: Core repo-wide rules for OMERO Docker Extended
 alwaysApply: true
 ---
 
-# OMERO Core Rules
-
-## Single-session rule
-
-- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
+- Single-session rule: AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
 - Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use. Continue only after explicit user approval or the Codex Security UI Start Scan handoff; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 - Start with `AGENTS.md`, including its pinned Karpathy agent baseline, before proposing code changes; develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI Agent <>`; AI co-author trailers use `Co-authored-by: AI Agent` with no email; audits include anonymous contributors (`contributors?anon=1`); non-AI commits use real human GitHub or human author identities, never host/local placeholders. Adapters are additive only.
+- Pause before every release for explicit confirmation of the exact GitHub release tag and Docker repository/tag; never infer or auto-increment versions. Require a matching human-readable `CHANGELOG.md` section, automated disclosure validation, and human public-safety review; never publish credentials, personal or host-specific information, private infrastructure, findings, vulnerability mechanics, or exploit-enabling detail. Publish the same notes through GitHub and the Docker carrier.
+- Pause before deleting any pre-existing or persistent object. Every GitHub release, Git tag, Docker image/tag, branch, file tree, volume, backup, data object, or remote artifact needs fresh approval naming that single deletion; blanket, earlier, same-version, replace, or recreate permission never carries forward.
 - Use `docs/reference/ai-agent-context-routing.md`, `.agents/skills/`, and `docs/reference/ai-agent-skills.md` for narrow context, numeric caps, and reusable workflows.
 - Broad navigation has mandatory `cocoindex-code` MCP: use `.agents/skills/cocoindex-code-search/` for semantic routing before `rg`; keep `AGENT_COCOINDEX_HOME` out of `.cocoindex_code/`, use `mcp-smoke`, cold/external cache, text-decodable only. For edits: `index --allow-dirty-index` or `search --refresh "<query>"`; MCP search itself never refreshes and can return stale active-index text.
 - Keep config environment-driven; never edit, normalize, delete, or print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception; never use retired `.deepsource.toml`; use PAT/credential manager for GitHub HTTPS Git; ask immediately for missing GitHub credentials.

@@ -1,12 +1,11 @@
 # Claude Code instructions
 
-Project-specific instructions for Claude Code sessions working on this repository.
-Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
+Project-specific Claude adapter; start with `AGENTS.md` and its pinned Karpathy agent baseline.
 
 ## Single-session rule
 
 - AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
-- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use. Continue only after explicit user approval or the Codex Security UI Start Scan handoff; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
+- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use. Continue only after explicit user approval or the Codex Security UI Start Scan handoff; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
 ## Fast load order
 
@@ -18,17 +17,18 @@ Start with `AGENTS.md`, including its pinned Karpathy agent baseline.
 
 ## Core rules
 
-- Treat `AGENTS.md` as the universal baseline and this file as a Claude-specific adapter.
 - Commit identity is fixed by `AGENTS.md`: AI-created or amended commits use `AI Agent <>`; never use profile-mapped AI/tool emails; AI co-author trailers use `Co-authored-by: AI Agent` with no email; audits include anonymous contributors (`contributors?anon=1`).
 - Non-AI commits use real human GitHub or actual human author identities, never host/local placeholders. Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch; resolve it dynamically and do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine work.
-- Keep context small: load one task class, one code root, one nearest test module, and one matching skill, and follow the routing doc's numeric caps before broadening scope.
-- Use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
+- Pause before every release and obtain explicit confirmation of the exact GitHub release tag and Docker repository/tag; never infer or auto-increment versions. Require a matching human-readable `CHANGELOG.md` section, automated disclosure validation, and human public-safety review.
+  Never publish credentials, personal or host-specific information, private infrastructure, findings, vulnerability mechanics, or exploit-enabling detail. Publish the same notes through GitHub and the Docker carrier.
+- Pause before deleting any pre-existing or persistent object. Each GitHub release, Git tag, Docker image/tag, branch, file tree, volume, backup, data object, or remote artifact needs fresh approval naming that one deletion; blanket, earlier, same-version, replace, or recreate permission never carries forward.
+- Keep context small: load one task class, one code root, one nearest test module, and one matching skill; follow the routing doc's numeric caps and use `.agents/skills/` and `docs/reference/ai-agent-skills.md` for reusable workflows.
 - CocoIndex: broad navigation has a mandatory `cocoindex-code` MCP check and uses `.agents/skills/cocoindex-code-search/` for semantic routing before exact `rg`; use direct `rg` first only for precise string, symbol, scanner-count, or already-small searches.
   State cold-index waits once; external cache/state stays under `AGENT_COCOINDEX_HOME`, outside `.cocoindex_code/`, text-decodable; `mcp-smoke` verifies MCP changes. For current edits run `index --allow-dirty-index` or `search --refresh "<query>"`; MCP search itself never refreshes and can return stale active-index text.
 - If the user asks for lower-token replies, use opt-in `caveman`; it is only for internal AI communication, never repo docs/comments/docstrings/function descriptions/user-facing copy, and changes reply style only, not routing, tool choice, verification scope, or uncertainty handling. Drop it when safety, sequencing, or ambiguity matters.
 - Keep configuration environment-driven. Do not hard-code paths, credentials, hostnames, ports, or edit/normalize/print values from non-example deployment env files such as `env/omero_secrets.env` without an explicit one-off user exception.
 - Do not search for, create, restore, or edit `.deepsource.toml`; use `tools/scanner_inventory.py` for live counts and `tools/regression_guard.py` before commit. GitHub HTTPS Git needs a PAT, never an account password; use `tools/git_push_with_pat.py`. If a GitHub PAT is missing, ask immediately and pause for input; continue only unrelated local work until GitHub auth is available.
-- Live-test functional OMERO/installation changes when appropriate/requested: reconcile dirty/stale live roots, rebuild/restart from exact checkout before commit/push, then confirm green GitHub workflows and no DeepSource count increase when auth/repo access exists; if DeepSource is skipped or unavailable due credentials, subscription, repo access, or API availability, report it and continue verification.
+- Live-test OMERO/installation changes when appropriate/requested: reconcile dirty/stale live roots, rebuild/restart from exact checkout before commit/push, then confirm green GitHub workflows and no DeepSource count increase when auth/repo access exists; if DeepSource is skipped or unavailable due credentials, subscription, repo access, or API availability, report it and continue verification.
 - Update `docs/` when behavior or operating assumptions change; less is more only when fewer lines prove full parity and all repo rules; fix proven bad instructions/tools only after the correct workflow is verified.
 
 ## Repository anchors

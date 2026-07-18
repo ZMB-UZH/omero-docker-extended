@@ -11,4 +11,6 @@ globs:
 - Refresh action versions from official GitHub releases or tags before changing pins, and pin by full commit SHA.
 - Use the security docs and code-scanning runbooks before changing scanner or workflow logic.
 - Keep workflow runbooks and agent guidance default-branch-aware; do not tell agents to create branches or draft PRs for routine workflow checks.
+- Release workflows require an exact, explicit user-confirmed GitHub release tag and Docker repository/tag plus a matching human-readable `CHANGELOG.md` section; do not infer or auto-increment versions. Require automated disclosure validation and human public-safety review, rejecting credentials, personal or host-specific information, private infrastructure, findings, vulnerability mechanics, and exploit-enabling detail.
+- Replacement workflows must gate GitHub release, Git tag, and Docker tag deletion behind separate fresh per-object confirmations. Earlier or same-version approval never carries forward.
 - Do not bind pure CI jobs to GitHub Actions environments unless you intentionally want deployment records for that workflow.

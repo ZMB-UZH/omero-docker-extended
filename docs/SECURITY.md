@@ -83,7 +83,14 @@ expected `sha256:` carrier digest from the GitHub release asset
 verified carrier bundle. The carrier wrapper is a scratch-based data image with
 no OS package layer, shell, or package manager;
 it uses `HEALTHCHECK NONE` metadata instead of a runnable healthcheck command,
-and only the bundled runtime service images carry OS package surfaces.
+and only the bundled runtime service images carry OS package surfaces. Every
+release requires an explicit operator-confirmed tag and a version-matched
+human-readable changelog; the same notes and OCI release metadata are stored in
+the carrier. Automated disclosure validation and explicit human review are
+mandatory and block credentials, personal or host-specific information, private
+infrastructure, and exploit-enabling detail before publication. Existing GitHub
+releases, Git tags, and Docker tags can be removed
+only through separate fresh per-object confirmations in replacement mode.
 
 ## Image pinning
 
