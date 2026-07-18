@@ -509,7 +509,7 @@ jobs:
                   }
               ).encode("utf-8")
               login_request = urllib.request.Request(
-                  "https://hub.docker.com/v2/users/login",
+                  "https://hub.docker.com/v2/auth/token",
                   data=login_data,
                   headers={"Accept": "application/json", "Content-Type": "application/json"},
                   method="POST",
