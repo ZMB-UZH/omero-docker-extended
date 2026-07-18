@@ -55,6 +55,8 @@ governance, and compatibility across the customized OMERO stack.
 
 ### Fixed
 
+- Corrected IMS export processor acquisition so healthy OMERO script processors
+  have the documented bounded callback window before an export is retried.
 - Corrected authenticated monitoring integration so dashboards use the
   deployment's configured identity and remain available through the supported
   OMERO administration workflow.

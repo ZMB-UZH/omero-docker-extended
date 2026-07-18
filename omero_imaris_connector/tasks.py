@@ -569,7 +569,7 @@ def _run_script_via_omero_api(
             conn,
             script_id=script_id,
             image_id=image_id,
-            wait_secs=0,
+            wait_secs=None,
             status_callback=_forward_status,
         )
         state, outputs = _wait_for_script_service_process(

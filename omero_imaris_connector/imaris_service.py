@@ -615,8 +615,15 @@ def _run_script(
         svc = services[0]
 
         try:
-            # timeout/wait parameter: 0 = return immediately with ScriptProcess
-            proc = svc.runScript(int(script_id), inputs, rint(0))
+            # waitSecs controls processor acquisition, not script completion.
+            # None uses OMERO's bounded default and avoids a zero-timeout race
+            # with the Processor's asynchronous validation callback.
+            processor_wait = (
+                rint(max(1, int(wait_secs)))
+                if wait_secs is not None and wait_secs > 0
+                else None
+            )
+            proc = svc.runScript(int(script_id), inputs, processor_wait)
 
             if proc is None:
                 raise RuntimeError("IMS export script returned no process handle")
