@@ -92,6 +92,10 @@
 - Tightened the regression guard so every production `@csrf_exempt` decorator
   is rejected. The repository has no production CSRF exemptions; authenticated
   proxy and bridge requests remain subject to Django CSRF validation.
+- Aligned deployment template checks with runtime validation so operators can
+  activate documented optional settings without being reported as schema
+  drift. Missing, unsupported, duplicate, and reordered required keys still
+  fail closed.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 

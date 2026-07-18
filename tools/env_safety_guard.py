@@ -28,6 +28,7 @@ import json
 import re
 import shutil
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -843,25 +844,36 @@ def cmd_template_check(repo_root: Path) -> int:
             failures += 1
             continue
 
-        example_keys = parse_env_keys(example_path)
+        required_keys = parse_env_keys(example_path)
+        optional_keys = tuple(parse_commented_env_assignments(example_path))
         actual_keys = parse_env_keys(actual_path)
-        if actual_keys == example_keys:
+        required_set = set(required_keys)
+        optional_set = set(optional_keys)
+        actual_set = set(actual_keys)
+        missing = [key for key in required_keys if key not in actual_set]
+        unsupported = [
+            key for key in actual_keys if key not in required_set | optional_set
+        ]
+        duplicates = sorted(
+            key for key, count in Counter(actual_keys).items() if count > 1
+        )
+        actual_required_order = [key for key in actual_keys if key in required_set]
+        order_differs = actual_required_order != required_keys
+        if not missing and not unsupported and not duplicates and not order_differs:
             continue
 
-        example_set = set(example_keys)
-        actual_set = set(actual_keys)
-        missing = [key for key in example_keys if key not in actual_set]
-        extra = [key for key in actual_keys if key not in example_set]
         print(
             f"ERROR: {actual_rel} does not match {example_rel} assignment keys.",
             file=sys.stderr,
         )
         if missing:
             print(f"  Missing keys: {', '.join(missing)}", file=sys.stderr)
-        if extra:
-            print(f"  Extra keys: {', '.join(extra)}", file=sys.stderr)
-        if not missing and not extra:
-            print("  Key set matches, but order differs.", file=sys.stderr)
+        if unsupported:
+            print(f"  Unsupported keys: {', '.join(unsupported)}", file=sys.stderr)
+        if duplicates:
+            print(f"  Duplicate keys: {', '.join(duplicates)}", file=sys.stderr)
+        if order_differs:
+            print("  Required key order differs from the template.", file=sys.stderr)
         failures += 1
 
     if failures:

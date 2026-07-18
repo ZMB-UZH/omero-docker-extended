@@ -375,6 +375,21 @@ class EnvSafetyGuardTests(unittest.TestCase):
 
         self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
 
+    def test_template_check_accepts_configured_optional_keys(self):
+        """Verify optional template assignments may be activated deployment-locally.
+
+        Inputs: repository fixtures. Output: fails when optional keys are rejected.
+        """
+        files: dict[str, str] = {}
+        manifest_lines = []
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "A=example\n# OPTIONAL=example\nB=example\n"
+            files[actual_rel] = "OPTIONAL=live\nA=live\nB=live\n"
+            manifest_lines.append(actual_rel)
+        repo = self._make_repo(manifest_lines, files)
+
+        self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
+
     def test_runtime_env_check_reports_missing_extra_and_type_errors(self):
         """Verify runtime env check reports missing extra and type errors.
 
