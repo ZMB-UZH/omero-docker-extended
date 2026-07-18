@@ -248,13 +248,13 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                     OMERO_USER_DATA_PATH="${{OMERO_DATA_PATH}}/omero_user_data"
                     OMERO_IMPORT_PATH="${{OMERO_TMP_PATH}}/omeroweb-import"
                     OMERO_SERVER_VAR_PATH="${{OMERO_DATA_PATH}}/omero_server_var"
-                    OMERO_WEB_VAR_PATH="${{OMERO_DATA_PATH}}/omero_web_var"
                     OMERO_SERVER_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_server_logs"
+                    OMERO_WEB_VAR_PATH="${{OMERO_DATA_PATH}}/omero_web_var"
                     OMERO_WEB_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_web_logs"
                     OMERO_WEB_SUPERVISOR_LOGS_PATH="${{OMERO_DATA_PATH}}/omero_web_supervisor_logs"
+                    PORTAINER_DATA_PATH="${{OMERO_DATA_PATH}}/portainer_data"
                     PROMETHEUS_DATA_PATH="${{OMERO_DATA_PATH}}/prometheus_data"
                     GRAFANA_DATA_PATH="${{OMERO_DATA_PATH}}/grafana_data"
-                    PORTAINER_DATA_PATH="${{OMERO_DATA_PATH}}/portainer_data"
                     LOKI_DATA_PATH="${{OMERO_DATA_PATH}}/loki_data"
                     ALLOY_DATA_PATH="${{OMERO_DATA_PATH}}/alloy_data"
                     PG_MAINTENANCE_DATA_PATH="${{OMERO_DATA_PATH}}/pg_maintenance_data"
@@ -278,6 +278,18 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             self.assertIn(
                 f"USER_DATA=/tmp/omero data; touch {marker_file}/omero_user_data",
                 result.stdout,
+            )
+
+            def assignment_keys(path: Path) -> list[str]:
+                return [
+                    line.split("=", 1)[0]
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if line and not line.startswith("#") and "=" in line
+                ]
+
+            self.assertEqual(
+                assignment_keys(self.repo_root / "installation_paths_example.env"),
+                assignment_keys(env_file),
             )
 
     def test_env_assignment_resolver_expands_safe_references_without_eval(
