@@ -100,6 +100,9 @@
   deployment template already defaults to `false`; upgrades now fail before
   container recreation if a legacy operator file would enable Django debug in
   production.
+- Aligned the installation-path generator with its canonical environment
+  template. Re-running the installer now preserves the required assignment
+  order accepted by `template-check` instead of creating configuration drift.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 
