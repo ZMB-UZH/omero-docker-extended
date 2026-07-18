@@ -63,6 +63,21 @@ def test_omeroweb_grafana_proxy_receives_backend_auth_configuration() -> None:
     assert "./env/omero_secrets.env" in env_files
 
 
+def test_grafana_live_is_disabled_for_the_http_only_admin_tools_proxy() -> None:
+    """Verify Grafana does not start unsupported browser WebSocket sessions.
+
+    Inputs: repository Compose configuration. Output: fails when the HTTP-only
+    Admin Tools proxy can emit recurring Grafana Live handshake failures.
+    """
+    compose = yaml.safe_load(
+        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+
+    grafana_environment = compose["services"]["grafana"]["environment"]
+
+    assert grafana_environment["GF_LIVE_MAX_CONNECTIONS"] == "0"
+
+
 def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
     """Verify database cache hit ratio queries guard zero denominators.
 

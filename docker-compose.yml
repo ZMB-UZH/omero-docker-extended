@@ -314,6 +314,8 @@ services:
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
+      # Admin Tools proxies Grafana over HTTP and intentionally does not proxy WebSockets.
+      GF_LIVE_MAX_CONNECTIONS: "0"
       GF_METRICS_ENABLED: "true"
     depends_on:
       prometheus:

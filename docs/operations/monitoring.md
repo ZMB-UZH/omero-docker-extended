@@ -140,6 +140,11 @@ Four dashboards auto-provisioned in the `OMERO` folder:
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
 
+Grafana Live is disabled with `GF_LIVE_MAX_CONNECTIONS=0`. Admin Tools proxies
+Grafana over standard HTTP and intentionally does not tunnel WebSockets; the
+dashboards use their configured refresh interval and retain full query and
+navigation behavior without repeated failed Live handshakes in browsers.
+
 ### Path usage exporter controls
 
 The default Compose stack mounts `installation_paths.env` at
