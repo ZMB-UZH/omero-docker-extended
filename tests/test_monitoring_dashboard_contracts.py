@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = REPO_ROOT / "monitoring" / "grafana" / "dashboards"
@@ -44,6 +46,21 @@ def test_grafana_dashboards_are_valid_json() -> None:
     """
     for dashboard_path in sorted(DASHBOARD_DIR.glob("*.json")):
         json.loads(dashboard_path.read_text(encoding="utf-8"))
+
+
+def test_omeroweb_grafana_proxy_receives_backend_auth_configuration() -> None:
+    """Verify OMERO.web receives both Grafana backend auth env files.
+
+    Inputs: repository Compose configuration. Output: fails when a custom
+    Grafana admin identity cannot be used by the authenticated proxy.
+    """
+    compose = yaml.safe_load(
+        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+    env_files = compose["services"]["omeroweb"]["env_file"]
+
+    assert "./env/grafana.env" in env_files
+    assert "./env/omero_secrets.env" in env_files
 
 
 def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:

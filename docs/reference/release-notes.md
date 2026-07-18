@@ -103,6 +103,9 @@
 - Aligned the installation-path generator with its canonical environment
   template. Re-running the installer now preserves the required assignment
   order accepted by `template-check` instead of creating configuration drift.
+- Passed the Grafana runtime environment into OMERO Web as well as Grafana, so
+  the authenticated dashboard proxy honors deployment-specific admin usernames
+  instead of silently assuming the template default.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 

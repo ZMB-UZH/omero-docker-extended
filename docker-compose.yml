@@ -500,6 +500,7 @@ services:
       - ./env/omeroserver.env
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
+      - ./env/grafana.env
     networks:
       omero:
         aliases:
