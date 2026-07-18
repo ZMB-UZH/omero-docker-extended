@@ -15,6 +15,12 @@ running containers or `docker compose config`; do not assume these host ports.
 | Grafana | `http://localhost:3000` on `127.0.0.1` | Dashboards |
 | Loki | `http://localhost:3100` on `127.0.0.1` | Log query API |
 
+Portainer's first-run certificate is self-signed. A production external URL
+needs an operator-supplied PEM certificate whose subject alternative names
+match the URL and whose certificate file contains the complete issuer chain.
+Use Portainer's supported certificate replacement workflow instead of
+bypassing browser certificate warnings.
+
 ## Internal-only endpoints (Docker network)
 
 | Service | Internal URL | Purpose |
