@@ -36,7 +36,9 @@
   Bash scope and current vendor exclusion regex as the GitHub workflow.
 - Refreshed hash-locked CI dependencies, including Mypy `2.3.0`, Django and
   django-stubs `6.0.7`, Coverage `7.15.2`, NumPy `2.5.1`, matplotlib `3.11.1`,
-  and tifffile `2026.7.14`.
+  and tifffile `2026.3.3`. Tifffile is intentionally held at its newest
+  Python 3.11-compatible release because `2026.4.11` dropped Python 3.11,
+  which remains the runtime in the current OMERO.server base image.
 - Replaced floating OMERO.web Python installs with exact current pins, made the
   plugin runtime's direct `portalocker` dependency explicit instead of relying
   on a transitive OMERO.web dependency, upgraded

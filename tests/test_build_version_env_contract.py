@@ -70,7 +70,11 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.16.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.11.0", env_text)
-        self.assertIn("TIFFFILE_VERSION=2026.7.14", env_text)
+        self.assertIn(
+            "2026.3.3 is the newest compatible release",
+            env_text,
+        )
+        self.assertIn("TIFFFILE_VERSION=2026.3.3", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
         self.assertIn(
             "BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2",
