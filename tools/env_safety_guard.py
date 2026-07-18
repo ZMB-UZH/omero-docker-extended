@@ -552,6 +552,13 @@ def validate_assignment_value(
     if key in BOOL_KEYS:
         if not is_bool_value(value):
             errors.append(f"{key} must be a boolean")
+        elif key == "CONFIG_omero_web_debug" and value.lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }:
+            errors.append(f"{key} must be disabled in production")
         return errors
 
     if key in PORT_KEYS or key.endswith("_PORT"):
