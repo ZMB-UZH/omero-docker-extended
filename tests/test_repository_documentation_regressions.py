@@ -581,14 +581,26 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         backlog_text = self.read_text(
             "docs/exec-plans/active/repo-improvements-and-fixes-backlog.md"
         )
+        quality_plan_text = self.read_text(
+            "docs/exec-plans/active/repo-quality-skills-hooks-actions.md"
+        )
         self.assertIn("broad OMP/Import regression suites", quality_text)
-        self.assertIn("deployment/live integration", quality_text)
+        self.assertIn("dynamic deployment/live integration", quality_text)
+        self.assertIn("CI validation of the rendered", quality_text)
+        self.assertIn("Compose topology", quality_text)
         self.assertNotIn("limited unit test coverage for OMP and Import", quality_text)
         self.assertNotIn("Add unit test coverage for OMP", tracker_text)
         self.assertNotIn("Add unit test coverage for Import", tracker_text)
+        self.assertIn("dynamic full-stack startup/live validation", tracker_text)
         self.assertIn("OMP has 19", backlog_text)
         self.assertIn("Import has 37", backlog_text)
         self.assertIn("33,000 test-source lines", backlog_text)
+        self.assertIn("`deployment-contracts.yml` validates", backlog_text)
+        self.assertNotIn("from .core_functions import *", backlog_text)
+        self.assertNotIn("still has many write endpoints", backlog_text)
+        self.assertNotIn("CONFIG_omero_web_debug=true", backlog_text)
+        self.assertIn("dynamic full-stack startup validation", quality_plan_text)
+        self.assertIn("Super-Linter shell/workflow validation", quality_plan_text)
 
     def test_generated_schema_docs_match_plugin_data_stores(self) -> None:
         """Verify generated schema docs match plugin data stores.

@@ -552,6 +552,9 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
         Inputs: release workflow fixture. Output: asserts manual release metadata.
         """
         workflow_text = self.read_text(".github/workflows/release-prebuilt-carrier.yml")
+        environment_helper_text = self.read_text(
+            "tools/prepare_ci_compose_environment.py"
+        )
         workflow = yaml.safe_load(workflow_text)
         triggers = workflow[True]
 
@@ -609,16 +612,23 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             "replace_existing requires an explicit release_version", workflow_text
         )
         self.assertIn("--latest=false", workflow_text)
-        self.assertIn(".env_example", workflow_text)
-        self.assertIn("installation_paths_example.env", workflow_text)
-        self.assertIn('glob("*_example.env")', workflow_text)
-        self.assertIn("shutil.copyfile(source, target)", workflow_text)
+        self.assertIn("python3 tools/prepare_ci_compose_environment.py", workflow_text)
+        self.assertIn('(".env_example", ".env")', environment_helper_text)
+        self.assertIn("ENV_TEMPLATE_PAIRS", environment_helper_text)
+        self.assertIn("_copy_contract_exclusively", environment_helper_text)
+        self.assertIn("os.O_EXCL", environment_helper_text)
+        self.assertIn("os.O_NOFOLLOW", environment_helper_text)
+        self.assertIn("os.O_CLOEXEC", environment_helper_text)
         self.assertIn(
             '["docker", "compose", "-f", "docker-compose.yml", "config", "--profiles"]',
-            workflow_text,
+            environment_helper_text,
         )
-        self.assertIn('env_values["COMPOSE_PROFILES"] = ",".join', workflow_text)
-        self.assertIn("No Compose profiles discovered for release build", workflow_text)
+        self.assertIn(
+            'values[COMPOSE_PROFILES_KEY] = ",".join', environment_helper_text
+        )
+        self.assertIn(
+            "No Compose profiles discovered for CI validation", environment_helper_text
+        )
         self.assertIn("DOCKERHUB_TOKEN", workflow_text)
         self.assertIn("--password-stdin", workflow_text)
         self.assertNotIn("DOCKERHUB_ACCESS_TOKEN", workflow_text)
@@ -716,16 +726,21 @@ class PrebuiltCarrierInstallationContractTests(unittest.TestCase):
             workflow_text.index("Analyze Docker Hub carrier image with Docker Scout"),
         )
         self.assertIn(
-            "from tools.env_safety_guard import resolve_env_references",
-            workflow_text,
+            "from tools.env_safety_guard import (",
+            environment_helper_text,
         )
-        self.assertIn("resolve_env_references(value, env_values)", workflow_text)
-        self.assertIn("Unresolved synthetic environment reference", workflow_text)
-        self.assertNotIn('env_values["REDIS_SAVE_POLICY"] =', workflow_text)
-        self.assertNotIn('env_values["REDIS_APPENDONLY"] =', workflow_text)
-        self.assertNotIn('env_values["REDIS_MAXMEMORY"] =', workflow_text)
-        self.assertNotIn('env_values["REDIS_MAXMEMORY_POLICY"] =', workflow_text)
-        self.assertNotIn('env_values["REDIS_DATA_TMPFS_SIZE"] =', workflow_text)
+        self.assertIn("resolve_env_references,", environment_helper_text)
+        self.assertIn(
+            "resolve_env_references(value, resolved_values)", environment_helper_text
+        )
+        self.assertIn(
+            "Unresolved synthetic environment reference", environment_helper_text
+        )
+        self.assertNotIn('values["REDIS_SAVE_POLICY"] =', environment_helper_text)
+        self.assertNotIn('values["REDIS_APPENDONLY"] =', environment_helper_text)
+        self.assertNotIn('values["REDIS_MAXMEMORY"] =', environment_helper_text)
+        self.assertNotIn('values["REDIS_MAXMEMORY_POLICY"] =', environment_helper_text)
+        self.assertNotIn('values["REDIS_DATA_TMPFS_SIZE"] =', environment_helper_text)
         self.assertNotIn('COMPOSE_PROFILES="sysctl-init,crowdsec"', workflow_text)
 
     def test_workflows_do_not_use_github_actions_environments(self) -> None:

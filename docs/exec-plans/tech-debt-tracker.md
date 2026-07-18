@@ -4,7 +4,7 @@ Known technical debt items. Review before planning new work to avoid compounding
 
 | Item                                                                                | Priority | Owner      | Status |
 | ----------------------------------------------------------------------------------- | -------- | ---------- | ------ |
-| Add deployment-smoke/live integration validation for OMP and Import workflows       | High     | Unassigned | Open   |
+| Add dynamic full-stack startup/live validation for OMP and Import workflows         | High     | Unassigned | Open   |
 | Add focused edge-case coverage when refactoring large OMP and Import modules        | Medium   | Unassigned | Open   |
 | Define SLO targets for OMERO.web response time and import success rate              | Medium   | Unassigned | Open   |
 | Add Prometheus alert rules for critical service failures                            | Medium   | Unassigned | Open   |
@@ -12,7 +12,6 @@ Known technical debt items. Review before planning new work to avoid compounding
 | Add plan template for multi-service operational changes                             | Medium   | Unassigned | Open   |
 | Add plugin-specific application metrics (job counts, parse times, import durations) | Medium   | Unassigned | Open   |
 | Implement automated secret rotation tooling                                         | Low      | Unassigned | Open   |
-| Add integration test suite for full deployment validation                           | Low      | Unassigned | Open   |
 
 ## Conventions
 

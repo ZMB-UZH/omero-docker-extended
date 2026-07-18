@@ -1306,199 +1306,6 @@ def _validate_staged_target_path(upload_root: Path, staged_path: str):
     return error
 
 
-def _managed_fd_fallback_enabled() -> bool:
-    """Return whether managed upload helpers need path-based fallback behavior.
-
-    Inputs: none. Output: `bool`.
-    """
-    return os.name == "nt"
-
-
-def _path_is_within_root(
-    path: Path, root: Path
-) -> bool:  # pragma: no cover - Windows fallback
-    """Return whether `path` stays within `root`.
-
-    Inputs: `path` (Path), `root` (Path). Output: `bool`.
-    """
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def _fallback_staged_target_path(
-    upload_root: Path,
-    normalized_path: str,
-    *,
-    create_parents: bool = False,
-) -> tuple[Path | None, str | None]:  # pragma: no cover - Windows fallback
-    """Resolve a staged upload target without directory fds on platforms needing it.
-
-    Inputs: `upload_root`, `normalized_path`, `create_parents`. Output: `(path,
-    error)`.
-    """
-    relative_parts = PurePosixPath(normalized_path).parts
-    validation_error = _managed_relative_path_validation_error(
-        Path(upload_root),
-        relative_parts,
-        max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
-    )
-    if validation_error:
-        return None, validation_error
-
-    root_path = Path(upload_root)
-    try:
-        root_path.mkdir(parents=True, exist_ok=True)
-        root_resolved = root_path.resolve(strict=True)
-    except OSError:
-        return None, errors.invalid_filename("/".join(relative_parts))
-
-    current = root_path
-    for directory_name in relative_parts[:-1]:
-        current = current / directory_name
-        try:
-            if current.exists():
-                if current.is_symlink() or not current.is_dir():
-                    return None, errors.invalid_filename("/".join(relative_parts))
-            elif create_parents:
-                current.mkdir(mode=_MANAGED_DIRECTORY_CREATE_MODE)
-            else:
-                return None, errors.invalid_filename("/".join(relative_parts))
-        except OSError:
-            return None, errors.invalid_filename("/".join(relative_parts))
-
-    try:
-        parent_resolved = current.resolve(strict=True)
-    except OSError:
-        return None, errors.invalid_filename("/".join(relative_parts))
-    if not _path_is_within_root(parent_resolved, root_resolved):
-        return None, errors.invalid_filename("/".join(relative_parts))
-
-    target = current / relative_parts[-1]
-    if target.exists() and target.is_symlink():
-        return None, errors.invalid_filename("/".join(relative_parts))
-    return target, None
-
-
-def _append_upload_chunks_to_staged_path_fallback(
-    upload_root: Path, normalized_path: str, upload
-):  # pragma: no cover - Windows fallback
-    """Append upload chunks using path APIs on platforms without directory fds.
-
-    Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
-    """
-    target, target_error = _fallback_staged_target_path(
-        upload_root,
-        normalized_path,
-        create_parents=True,
-    )
-    if target_error:
-        return None, None, target_error
-    if target is None:
-        return (
-            None,
-            None,
-            _managed_upload_internal_error(
-                errors.unexpected_server_error_uploading_files()
-            ),
-        )
-
-    initial_size = target.stat().st_size if target and target.exists() else 0
-    max_size = _get_upload_staged_file_max_bytes()
-    bytes_written = 0
-    try:
-        with open(target, "ab") as handle:
-            for chunk in upload.chunks():
-                chunk_size = len(chunk)
-                if initial_size + bytes_written + chunk_size > max_size:
-                    try:
-                        handle.truncate(initial_size)
-                    except OSError:  # pragma: no cover - cleanup failure guard
-                        logger.debug("Suppressed exception in cleanup", exc_info=True)
-                    return None, None, errors.upload_file_too_large(max_size)
-                handle.write(chunk)
-                bytes_written += chunk_size
-        saved_size = target.stat().st_size if target else 0
-    except OSError as exc:
-        logger.warning(
-            "Failed to append staged upload chunks for %s: %s",
-            sanitize_log_value(normalized_path),
-            sanitize_log_value(exc),
-        )
-        return (
-            None,
-            None,
-            _managed_upload_internal_error(
-                errors.unexpected_server_error_uploading_files()
-            ),
-        )
-    return bytes_written, saved_size, None
-
-
-def _replace_staged_upload_file_fallback(
-    upload_root: Path, normalized_path: str, upload
-):  # pragma: no cover - Windows fallback
-    """Replace a staged upload file using path APIs where directory fds are absent.
-
-    Inputs: `upload_root`, `normalized_path`, `upload`. Output: `tuple`.
-    """
-    target, target_error = _fallback_staged_target_path(
-        upload_root,
-        normalized_path,
-        create_parents=True,
-    )
-    if target_error:
-        return None, target_error
-    if target is None:
-        return (
-            None,
-            _managed_upload_internal_error(
-                errors.unexpected_server_error_uploading_files()
-            ),
-        )
-
-    max_size = _get_upload_staged_file_max_bytes()
-    bytes_written = 0
-    limit_error = None
-    try:
-        with open(target, "wb") as handle:
-            for chunk in upload.chunks():
-                chunk_size = len(chunk)
-                if bytes_written + chunk_size > max_size:
-                    limit_error = errors.upload_file_too_large(max_size)
-                    try:
-                        handle.truncate(0)
-                    except OSError:  # pragma: no cover - cleanup failure guard
-                        logger.debug("Suppressed exception in cleanup", exc_info=True)
-                    break
-                handle.write(chunk)
-                bytes_written += chunk_size
-        if limit_error:
-            try:
-                target.unlink()
-            except FileNotFoundError:  # pragma: no cover - cleanup race guard
-                logger.debug("Oversized staged upload was already removed.")
-            except OSError:  # pragma: no cover - cleanup failure guard
-                logger.debug("Suppressed exception in cleanup", exc_info=True)
-            return None, limit_error
-        saved_size = target.stat().st_size if target else 0
-    except OSError as exc:
-        logger.warning(
-            "Failed to replace staged upload file %s: %s",
-            sanitize_log_value(normalized_path),
-            sanitize_log_value(exc),
-        )
-        return (
-            None,
-            _managed_upload_internal_error(
-                errors.unexpected_server_error_uploading_files()
-            ),
-        )
-    return saved_size, None
-
-
 def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, upload):
     """Append the upload chunks to staged path.
 
@@ -1507,11 +1314,6 @@ def _append_upload_chunks_to_staged_path(upload_root: Path, staged_path: str, up
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, None, normalize_error
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        return _append_upload_chunks_to_staged_path_fallback(
-            upload_root, normalized_path, upload
-        )
-
     bytes_written = 0
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
@@ -1591,28 +1393,6 @@ def _reset_staged_upload_file(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return normalize_error
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        target, target_error = _fallback_staged_target_path(
-            upload_root,
-            normalized_path,
-            create_parents=True,
-        )
-        if target_error:
-            return target_error
-        if target and target.exists():
-            try:
-                target.unlink()
-            except OSError as exc:
-                logger.warning(
-                    "Failed to reset staged upload file %s: %s",
-                    sanitize_log_value(normalized_path),
-                    sanitize_log_value(exc),
-                )
-                return _managed_upload_internal_error(
-                    errors.unexpected_server_error_uploading_files()
-                )
-        return None
-
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
         Path(upload_root),
@@ -1664,33 +1444,6 @@ def _staged_upload_size(upload_root: Path, staged_path: str):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        target, target_error = _fallback_staged_target_path(
-            upload_root,
-            normalized_path,
-            create_parents=True,
-        )
-        if target_error:
-            return None, target_error
-        if not target or not target.exists():
-            return 0, None
-        if not target.is_file() or target.is_symlink():
-            return None, errors.invalid_filename(normalized_path)
-        try:
-            return target.stat().st_size, None
-        except OSError as exc:
-            logger.warning(
-                "Failed to inspect staged upload file %s: %s",
-                sanitize_log_value(normalized_path),
-                sanitize_log_value(exc),
-            )
-            return (
-                None,
-                _managed_upload_internal_error(
-                    errors.unexpected_server_error_uploading_files()
-                ),
-            )
-
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
         Path(upload_root),
@@ -1754,38 +1507,6 @@ def _staged_upload_chunk_matches(
         )
 
     expected_size = max(0, int(chunk_end) - int(chunk_start))
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        target, target_error = _fallback_staged_target_path(
-            upload_root,
-            normalized_path,
-            create_parents=False,
-        )
-        if target_error:
-            return False, target_error
-        if not target or not target.exists():
-            return False, None
-        if not target.is_file() or target.is_symlink():
-            return False, errors.invalid_filename(normalized_path)
-        try:
-            with open(target, "rb") as handle:
-                handle.seek(int(chunk_start))
-                staged_bytes = handle.read(expected_size)
-        except OSError as exc:
-            logger.warning(
-                "Failed to inspect staged upload chunk for %s: %s",
-                sanitize_log_value(normalized_path),
-                sanitize_log_value(exc),
-            )
-            return (
-                False,
-                _managed_upload_internal_error(
-                    errors.unexpected_server_error_uploading_files()
-                ),
-            )
-        if len(staged_bytes) != expected_size:
-            return False, None
-        return hashlib.sha256(staged_bytes).hexdigest() == digest, None
-
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
         Path(upload_root),
@@ -1847,11 +1568,6 @@ def _replace_staged_upload_file(upload_root: Path, staged_path: str, upload):
     normalized_path, normalize_error = _normalize_upload_relative_path(staged_path)
     if normalize_error:
         return None, normalize_error
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        return _replace_staged_upload_file_fallback(
-            upload_root, normalized_path, upload
-        )
-
     relative_parts = PurePosixPath(normalized_path).parts
     runtime_error = _managed_parent_runtime_error(
         Path(upload_root),
@@ -5813,8 +5529,10 @@ def _job_lock_path(job_id: str) -> Path:
     )
 
 
-_MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-_MANAGED_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
+# Linux is the supported server runtime. Direct constants intentionally fail
+# during startup instead of silently weakening descriptor-relative path checks.
+_MANAGED_DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY
+_MANAGED_NOFOLLOW_FLAG = os.O_NOFOLLOW
 _MANAGED_DIRECTORY_CREATE_MODE = 0o700
 _MANAGED_FILE_CREATE_MODE = 0o600
 _MANAGED_COMPONENT_RE = re.compile(r"(?!\.{1,2}$)[^/\\\x00]+")
@@ -6182,22 +5900,6 @@ def _resolve_managed_child_parts(
         relative_parts,
         max_bytes=max_bytes,
     )
-    if _managed_fd_fallback_enabled():  # pragma: no cover - Windows fallback
-        root_resolved = root_path.resolve(strict=True)
-        parent = root_path
-        for directory_name in normalized_parts[:-1]:
-            parent = parent / directory_name
-            if not parent.exists():
-                break
-            if parent.is_symlink() or not parent.is_dir():
-                raise _invalid_managed_path("/".join(normalized_parts))
-        parent_resolved = parent.resolve(strict=False)
-        if not _path_is_within_root(parent_resolved, root_resolved):
-            raise _invalid_managed_path("/".join(normalized_parts))
-        target = _managed_child_path(root_path, normalized_parts)
-        if target.exists() and target.is_symlink():
-            raise _invalid_managed_path("/".join(normalized_parts))
-        return target
     _validate_existing_managed_path_segments(root_path, normalized_parts)
     return _managed_child_path(root_path, normalized_parts)
 
@@ -7765,9 +7467,7 @@ def _copy_zarr_tree_from_directory_fd(
             destination_child.mkdir(mode=ZARR_SHARED_TRANSFER_DIR_MODE, exist_ok=False)
             child_fd = os.open(
                 name,
-                os.O_RDONLY
-                | getattr(os, "O_DIRECTORY", 0)
-                | getattr(os, "O_NOFOLLOW", 0),
+                _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG,
                 dir_fd=source_fd,
             )
             try:
@@ -7785,7 +7485,7 @@ def _copy_zarr_tree_from_directory_fd(
         if stat.S_ISREG(child_stat.st_mode):
             file_fd = os.open(
                 name,
-                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                os.O_RDONLY | _MANAGED_NOFOLLOW_FLAG,
                 dir_fd=source_fd,
             )
             try:
@@ -7808,9 +7508,10 @@ def _copy_zarr_tree_without_symlinks_posix(source: Path, destination: Path) -> N
 
     Inputs: source directory path and destination path. Output: None.
     """
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        source_fd = os.open(source, flags)
+        source_fd = os.open(
+            source, _MANAGED_DIRECTORY_OPEN_FLAGS | _MANAGED_NOFOLLOW_FLAG
+        )
     except OSError as exc:
         raise RuntimeError(f"Failed to open staged Zarr source safely: {exc}") from exc
     try:
@@ -7823,44 +7524,12 @@ def _copy_zarr_tree_without_symlinks_posix(source: Path, destination: Path) -> N
         os.close(source_fd)
 
 
-def _copy_zarr_tree_without_symlinks_portable(
-    source: Path, destination: Path
-) -> None:  # pragma: no cover - exercised on platforms without POSIX no-follow opens
-    """Copy a Zarr tree with per-entry symlink checks.
-
-    Inputs: source directory path and destination path. Output: None.
-    """
-    if source.is_symlink():
-        raise RuntimeError("Staged Zarr source is a symlink.")
-    if not source.is_dir():
-        raise RuntimeError("Staged Zarr source is not a directory.")
-    destination.mkdir(mode=ZARR_SHARED_TRANSFER_DIR_MODE, exist_ok=False)
-    for entry in source.iterdir():
-        destination_child = destination / entry.name
-        if entry.is_symlink():
-            raise RuntimeError(
-                f"Staged Zarr source contains a symlinked member: {entry.name}"
-            )
-        if entry.is_dir():
-            _copy_zarr_tree_without_symlinks_portable(entry, destination_child)
-        elif entry.is_file():
-            shutil.copyfile(entry, destination_child)
-            destination_child.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
-        else:
-            raise RuntimeError(
-                f"Staged Zarr source contains an unsupported member: {entry.name}"
-            )
-
-
 def _copy_zarr_tree_without_symlinks(source: Path, destination: Path) -> None:
     """Copy a staged Zarr tree while rejecting symlinks and special files.
 
     Inputs: source directory path and destination path. Output: None.
     """
-    if os.name == "posix" and hasattr(os, "O_NOFOLLOW"):
-        _copy_zarr_tree_without_symlinks_posix(source, destination)
-        return
-    _copy_zarr_tree_without_symlinks_portable(source, destination)
+    _copy_zarr_tree_without_symlinks_posix(source, destination)
 
 
 def _prepare_server_readable_zarr_source(

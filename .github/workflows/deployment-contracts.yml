@@ -1,0 +1,104 @@
+name: deployment-contracts
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deployment-contracts:
+    name: Deployment contracts
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.14.4'
+
+      - name: Prepare synthetic CI environment files
+        run: python3 tools/prepare_ci_compose_environment.py
+
+      - name: Validate Compose and build contracts
+        run: |
+          set -euo pipefail
+          compose=(docker compose -f docker-compose.yml)
+          "${compose[@]}" config --quiet
+
+          mapfile -t services < <("${compose[@]}" config --services | sort -u)
+          [ "${#services[@]}" -eq 21 ] || {
+            printf 'Expected 21 Compose services, found %s:\n' "${#services[@]}" >&2
+            printf '  %s\n' "${services[@]}" >&2
+            exit 1
+          }
+
+          mapfile -t profiles < <("${compose[@]}" config --profiles | sort -u)
+          [ "${#profiles[@]}" -eq 2 ] || {
+            printf 'Expected 2 Compose profiles, found %s:\n' "${#profiles[@]}" >&2
+            printf '  %s\n' "${profiles[@]}" >&2
+            exit 1
+          }
+
+          mapfile -t images < <("${compose[@]}" config --images | sort -u)
+          [ "${#images[@]}" -eq 19 ] || {
+            printf 'Expected 19 Compose images, found %s:\n' "${#images[@]}" >&2
+            printf '  %s\n' "${images[@]}" >&2
+            exit 1
+          }
+          for image in "${images[@]}"; do
+            case "${image}" in
+              ''|latest|*:latest|*:latest@*)
+                printf 'Floating Compose image reference: %s\n' "${image}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          bake_plan="${RUNNER_TEMP}/compose-bake-plan.json"
+          "${compose[@]}" build --print > "${bake_plan}"
+          python3 - "${bake_plan}" <<'PY'
+          from __future__ import annotations
+
+          import json
+          import sys
+          from pathlib import Path
+
+          plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          targets = plan.get("target", {})
+          if not isinstance(targets, dict) or len(targets) != 6:
+              target_names = sorted(targets) if isinstance(targets, dict) else []
+              raise SystemExit(
+                  f"Expected 6 Compose build targets, found {len(target_names)}: "
+                  + ", ".join(target_names)
+              )
+          root = Path.cwd().resolve()
+          for name, target in sorted(targets.items()):
+              if not isinstance(target, dict):
+                  raise SystemExit(f"Invalid Bake target definition: {name}")
+              context = Path(target.get("context", "."))
+              if not context.is_absolute():
+                  context = root / context
+              dockerfile = context / target.get("dockerfile", "Dockerfile")
+              if not dockerfile.is_file():
+                  raise SystemExit(f"Missing Dockerfile for Bake target {name}: {dockerfile}")
+          print(f"Validated {len(targets)} Compose build target(s).")
+          PY
+
+          docker buildx bake \
+            --file "${bake_plan}" \
+            --check \
+            --set '*.output=type=cacheonly' \
+            --progress plain

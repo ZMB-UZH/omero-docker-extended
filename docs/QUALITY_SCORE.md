@@ -3,11 +3,12 @@
 Current quality assessment by domain. Scores range from 1 (critical gaps) to 5 (production-excellent).
 
 - **Deployment reproducibility**: score `4`, target `5`. Automated installation
-  script, pinned versions, and env templates. CI validates docs structure. Gap:
-  no automated integration test suite for full deployment.
+  script, pinned versions, env templates, and CI validation of the rendered
+  Compose topology and all six local build definitions. Gap: no automated
+  dynamic startup test for the complete service stack.
 - **Plugin maintainability**: score `4`, target `5`. Consistent plugin layout,
   shared library, typed env helpers, and broad OMP/Import regression suites.
-  Gap: deployment/live integration coverage and continued large-module
+  Gap: dynamic deployment/live integration coverage and continued large-module
   reduction.
 - **Operational clarity**: score `4`, target `5`. Full monitoring stack
   (Prometheus, Grafana, Loki, Alloy), 4 dashboards, and admin tools plugin.
@@ -31,7 +32,7 @@ Update this table when major quality improvements or regressions land. Include t
 
 ## Priority improvements
 
-1. Add deployment-smoke and live integration validation for OMP and Import workflows.
+1. Add dynamic full-stack startup and live integration validation for OMP and Import workflows.
 2. Define SLO targets for OMERO.web response time and import success rate.
 3. Add alert rules to Prometheus for critical service failures.
 4. Expand troubleshooting docs for database-related failures.

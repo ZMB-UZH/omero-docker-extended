@@ -68,7 +68,6 @@ def test_core_function_small_helper_edges_cover_early_validation_paths(
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
     closed_fds = []
-    monkeypatch.setattr(core_functions, "_managed_fd_fallback_enabled", lambda: False)
     monkeypatch.setattr(
         core_functions,
         "_managed_parent_runtime_error",

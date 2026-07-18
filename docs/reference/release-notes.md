@@ -23,10 +23,10 @@
 - Updated the immutable Semgrep workflow image to `1.170.0` after reviewing the
   `1.169.0` and `1.170.0` release notes, including its Dockerfile heredoc parser
   fix, and verifying the published multi-platform image digest.
-- Added Dependabot Docker coverage for the root Compose manifest while retaining
-  the separate `/docker` Dockerfile update surface. PostgreSQL major upgrades
-  remain held for migration review while patch releases and digest refreshes are
-  now allowed through normal Dependabot maintenance.
+- Retained Dependabot Docker coverage for the `/docker` Dockerfile surface and
+  documented that its Docker updater does not parse Compose manifests. Compose
+  image pins continue through audited release-note and compatibility review;
+  PostgreSQL major upgrades remain held for explicit migration review.
 - Made release publication explicitly upload the carrier SBOM analysis to Docker
   Scout before running the release CVE report, so Docker Hub receives stored
   analysis data instead of relying only on a one-off CLI report.
@@ -34,11 +34,11 @@
   probe's quoted tmpfs argument and an unused retry-loop variable found by a
   full ShellCheck `0.11.0` pass. The local `all` profile now forwards the same
   Bash scope and current vendor exclusion regex as the GitHub workflow.
-- Refreshed hash-locked CI dependencies, including Mypy `2.3.0`, Django and
-  django-stubs `6.0.7`, Coverage `7.15.2`, NumPy `2.5.1`, matplotlib `3.11.1`,
-  and tifffile `2026.3.3`. Tifffile is intentionally held at its newest
-  Python 3.11-compatible release because `2026.4.11` dropped Python 3.11,
-  which remains the runtime in the current OMERO.server base image.
+- Refreshed hash-locked CI dependencies, including Mypy `2.3.0`, Django
+  `5.2.16`, django-stubs and django-stubs-ext `5.2.9`, Coverage `7.15.2`, NumPy
+  `2.5.1`, matplotlib `3.11.1`, and tifffile `2026.7.14`. The Django line now
+  matches OMERO.web `5.32.0`'s supported `>=5.2.9,<5.3` range instead of testing
+  against the incompatible Django 6 series.
 - Replaced floating OMERO.web Python installs with exact current pins, made the
   plugin runtime's direct `portalocker` dependency explicit instead of relying
   on a transitive OMERO.web dependency, upgraded
@@ -74,6 +74,24 @@
   upgrade notes and source diff against `5.31.1`; the custom API server patch
   targets files untouched by that release. The production `ome-zarr==0.16.0`
   and Bio-Formats2Raw `0.11.0` compatibility holds remain unchanged.
+- Pinned Django `5.2.16` in the OMERO.web runtime image after reviewing the
+  upstream OMERO.web dependency range and Django patch release notes. The
+  runtime and Python 3.14 CI locks now exercise the same supported Django line.
+- Added a least-privilege deployment-contract workflow that resolves the
+  tracked environment templates, validates all Compose profiles and 21-service
+  topology, and runs Buildx checks for all six local Docker build targets with
+  cache-only output so validation cannot overwrite deployment image tags.
+- Replaced the release workflow's duplicated synthetic environment block with
+  a tested Linux helper that creates short-lived mode-`0600` runtime files,
+  rejects pre-existing or symlinked targets, exports only validated values, and
+  removes partial files after failures.
+- Removed unsupported non-POSIX managed-upload and quota-account fallbacks. The
+  runtime now fails explicitly when its documented Linux filesystem contracts
+  are unavailable instead of silently changing persistence or ownership
+  behavior.
+- Tightened the regression guard so every production `@csrf_exempt` decorator
+  is rejected. The repository has no production CSRF exemptions; authenticated
+  proxy and bridge requests remain subject to Django CSRF validation.
 
 ## 2026-05-26 Prebuilt Carrier Installation and Toolchain Pins
 

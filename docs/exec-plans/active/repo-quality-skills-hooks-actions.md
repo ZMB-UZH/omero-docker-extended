@@ -5,23 +5,26 @@
 Define a practical quality-improvement stack for this repository that makes
 agent work, local development, and GitHub automation more consistent and less
 error-prone. The plan is intentionally grounded in the current repo state:
-there is already docs validation, split-test CI, Ruff, Vulture, super-linter,
-security scanning, Dependabot, and extensive plugin/runtime code, but there is
-not yet a deployment-smoke or dedicated shell/workflow-lint layer that covers
-the infrastructure-heavy parts of this repo.
+there is already docs validation, split-test CI, Ruff, Vulture, Super-Linter,
+deployment-contract validation, Dependabot, and extensive plugin/runtime code.
+The remaining infrastructure gap is dynamic full-stack startup validation.
 
 ## Observed Baseline
 
 - Documentation structure is enforced by `tools/lint_docs_structure.py` and a dedicated docs workflow.
 - Security scanning is already present through `security-code-scanning.yml`, with CodeQL, Trivy, Semgrep, Bandit, Hadolint, DevSkim, OSV Scanner, and Scorecard.
-- Dependabot exists, but coverage is narrow: pip updates only for `omeroweb_omp_plugin`, plus Docker updates at the repo root and `/docker`.
+- Dependabot covers GitHub Actions, hash-locked CI Python dependencies, OMP
+  Python dependencies, and Dockerfiles under `/docker`. Compose image tags need
+  audited manual review because Dependabot's Docker updater does not parse
+  Compose manifests.
 - The checked-in workflows now include `tests.yml`, which runs the split pytest suites, plus dedicated `ruff.yml`, `vulture.yml`, and `super-linter.yml` gates.
 - The repo already has a visible local hook and lint surface through `.pre-commit-config.yaml` and `.ruff.toml`, but it still lacks broader checked-in hooks for shell/workflow linting and related fast infrastructure checks.
 - The codebase is large and operationally sensitive: Docker Compose, startup scripts, OMERO session handling, plugin databases, and runtime bootstrap logic all need deterministic behavior.
 - The current code-scanning runbook keeps historical finding classes for trend
   analysis, while the 2026-04-26 live GitHub snapshot has no open file-level
   findings. Remaining open GitHub alerts are repository-level Scorecard items.
-- Workflow hygiene is stronger than before: GitHub Actions are pinned by commit SHA, but the repo still relies on manual review instead of a dedicated workflow-policy or `actionlint` lane.
+- Workflow hygiene is enforced by full-SHA action pins, Super-Linter's GitHub
+  Actions and Zizmor validators, and repository contract tests.
 - The repo already documents a precise split-pytest policy in `AGENTS.md`, and `tests.yml` now enforces it directly.
 - The code-scanning runbook still provides the evidence basis for supply-chain and policy hardening work, even though the root `SECURITY.md` and action-SHA pinning gaps have been fixed in-tree.
 
@@ -60,17 +63,20 @@ These should be local, fast, and deterministic. They are meant to fail early bef
 
 ## Recommended GitHub Actions
 
-The current workflows already cover docs validation, split tests, Ruff, Vulture, super-linter, and security scanning. Quality would still improve if the repository added the missing infrastructure and drift-specific lanes below.
+The current workflows cover docs validation, split tests, Mypy, Ruff, Vulture,
+Super-Linter, release builds, and static deployment contracts. Quality would
+still improve with the remaining runtime and drift-specific lanes below.
 
 | Workflow | What it should do | Why it is grounded in this repo | Priority |
 | --- | --- | --- | --- |
 | change-aware test selection lane | skip or narrow expensive lanes based on touched paths while preserving the existing `tests.yml` split-suite contract | The repo already has the full split-test workflow; the missing piece is path-aware speed. | Next |
 | lightweight local-quality mirror lane | run `python3 -m py_compile`, docs lint, and lightweight static checks on changed files | The repo has strong CI gates now, but local and changed-file feedback is still thinner. | Next |
-| `shell-and-workflow-lint.yml` | run `shellcheck`, `actionlint`, and YAML validation | The repo has many shell and workflow files but no dedicated enforcement lane. | Now |
-| `docker-smoke.yml` | build changed Dockerfiles and run targeted smoke and contract tests | Dockerfiles and startup wrappers are central to repo correctness. | Now |
+| Super-Linter shell/workflow validation | run ShellCheck, GitHub Actions validation, Zizmor, and YAML validation | This is enforced in `super-linter.yml` and mirrored by the local `all` profile. | Done |
+| `deployment-contracts.yml` | resolve tracked env templates, validate Compose topology and image pins, and run non-mutating Buildx checks | Static deployment and Dockerfile wiring are critical-path contracts. | Done |
+| dynamic stack validation lane | start the complete Compose stack in a disposable Linux environment and run service-boundary probes | Build definition checks cannot prove runtime startup, migrations, or cross-service behavior. | Next |
 | `docs-drift.yml` | catch stale plugin names, stale topology facts, supervisord process drift, and missing index entries | The repo already benefits from narrower docs-drift regression tests, but broader drift enforcement is still incomplete. | Now |
 | `security-code-scanning.yml` `security-delta` job | fail when new code-scanning alerts are introduced by the current security workflow run | The security runbook already defines severity SLAs and default-branch acceptance expectations. | Done |
-| `action-pin-policy.yml` | verify GitHub Actions stay pinned to approved SHAs and least-privilege permissions | SHA pinning is in place now, but the repo still lacks an automated guard against regression. | Next |
+| action-pin policy contracts | verify GitHub Actions stay pinned to full SHAs and least-privilege permissions | Regression-guard and workflow contract tests enforce the current policy. | Done |
 | `release-hygiene.yml` | require release-note and docs updates when startup, env, or operator behavior changes | The repo says docs must change when behavior changes, but the rule is not automated. | Next |
 | `dependency-hygiene.yml` | validate Dependabot coverage and optionally inventory dependency surfaces | Dependabot exists but only covers a narrow subset of the repo. | Later |
 | `nightly-stack-validation.yml` | run a slower compose-level validation path on a schedule or manual dispatch | The repo already notes the absence of a full deployment validation suite. | Later |
@@ -88,11 +94,12 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 
 ## Recommended Order
 
-1. Add `shell-and-workflow-lint.yml`, `docker-smoke.yml`, and docs-drift checks so infrastructure changes stop bypassing the existing CI gates.
-2. Add a change-aware test-selection or lightweight local-quality mirror lane to complement the already-present full `tests.yml` workflow.
-3. Tighten workflow hygiene further with automated pin-policy checks, `CODEOWNERS`, and current-default-branch protection.
-4. Expand Dependabot and add slower nightly or manual full-stack validation only after the infrastructure lanes are stable.
-5. Revisit the skill set after the automation layer lands and trim or merge skills based on real maintenance behavior.
+1. Add disposable dynamic full-stack startup checks to complement the existing static deployment-contract workflow.
+2. Add broader docs-drift checks for topology, environment, and operator-command contracts.
+3. Add a change-aware test-selection or lightweight local-quality mirror lane without weakening the final full `tests.yml` matrix.
+4. Maintain `CODEOWNERS`, current-default-branch protection, and the existing automated action-pin policy contracts.
+5. Expand dependency automation only where the package ecosystem can parse the source accurately; keep Compose updates under audited review.
+6. Revisit the skill set after the automation layer lands and trim or merge skills based on real maintenance behavior.
 
 ## Progress Log
 
@@ -100,6 +107,9 @@ The current workflows already cover docs validation, split tests, Ruff, Vulture,
 - 2026-03-22: Identified the earlier quality baseline before the current `tests`, `ruff`, `vulture`, and `super-linter` workflows landed.
 - 2026-03-22: Expanded the plan into concrete skill, hook, workflow, and repo-setting recommendations tied to the checked-in gaps.
 - 2026-04-26: Refreshed scanner, stale-name, and default-branch language against current docs, workflows, and tests.
+- 2026-07-18: Recorded the enforced Super-Linter shell/workflow checks, action
+  pin contracts, and non-mutating deployment-contract workflow; narrowed the
+  remaining deployment gap to dynamic full-stack startup validation.
 
 ## Decision Log
 
