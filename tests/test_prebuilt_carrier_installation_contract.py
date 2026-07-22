@@ -1195,6 +1195,14 @@ to pass the minimum content threshold while omitting all standard categories.
 
 [{VALID_RELEASE_VERSION}]: https://github.com/example/project/compare/0.9.0...{VALID_RELEASE_VERSION}
 """
+        oversized_changelog = changelog.replace(
+            "- Improves the primary workflow with a documented compatible "
+            "implementation.",
+            "\n".join(
+                "- Summarizes one notable operator-facing compatible change."
+                for _ in range(60)
+            ),
+        )
         invalid_changelogs = {
             "missing heading": changelog.replace(
                 f"## [{VALID_RELEASE_VERSION}]", "## [9.9.9]"
@@ -1209,6 +1217,7 @@ to pass the minimum content threshold while omitting all standard categories.
                 f"[{VALID_RELEASE_VERSION}]: https://github.com/example/project/"
                 f"compare/old...{VALID_RELEASE_VERSION}\n"
             ),
+            "oversized body": oversized_changelog,
             "placeholder": changelog.replace("clear summary", "TO" + "DO summary"),
             "invalid heading": changelog.replace("### Added", "### Added:"),
             "unsupported heading": changelog.replace("### Added", "### Highlights"),

@@ -77,6 +77,7 @@ STANDARD_CHANGELOG_SECTIONS = frozenset(
 REQUIRED_RELEASE_SECTIONS = frozenset({"Upgrade Notes", "Verification"})
 ALLOWED_CHANGELOG_SECTIONS = STANDARD_CHANGELOG_SECTIONS | REQUIRED_RELEASE_SECTIONS
 MINIMUM_CHANGELOG_BODY_CHARACTERS = 200
+MAXIMUM_CHANGELOG_BODY_WORDS = 350
 
 
 @dataclass(frozen=True)
@@ -327,6 +328,11 @@ def validate_release_changelog_body(body: str, release_version: str) -> None:
     """
     if len(body) < MINIMUM_CHANGELOG_BODY_CHARACTERS:
         raise ValueError(f"CHANGELOG.md section for {release_version} is too short.")
+    if len(body.split()) > MAXIMUM_CHANGELOG_BODY_WORDS:
+        raise ValueError(
+            f"CHANGELOG.md section for {release_version} exceeds the "
+            f"{MAXIMUM_CHANGELOG_BODY_WORDS}-word public release-note limit."
+        )
     if PLACEHOLDER_PATTERN.search(body) is not None:
         raise ValueError(
             f"CHANGELOG.md section for {release_version} contains placeholder text."

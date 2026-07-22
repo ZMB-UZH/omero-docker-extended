@@ -26,6 +26,10 @@ Start from `third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` for gene
 - Before every release, pause for the user's exact GitHub release tag and Docker
   repository/tag; never infer or auto-increment a version. Require matching
   human-readable `CHANGELOG.md` notes in both release channels. Require
+  curated, concise notes containing only notable operator or user impact,
+  compatibility or required upgrade actions, and a brief verification summary;
+  omit commit-by-commit detail, internal workflow or governance narration,
+  agent activity, and exhaustive test inventories. Require
   automated disclosure validation and human public-safety review; release notes
   must not expose credentials, identities, host details, private infrastructure,
   findings, vulnerability mechanics, or exploit-enabling detail.
