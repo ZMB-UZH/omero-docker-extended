@@ -57,6 +57,8 @@ governance, and compatibility across the customized OMERO stack.
   the corresponding upstream commit.
 - Updated the log collector and dashboard service to their current compatible
   releases after reviewing migration notes and published image platforms.
+- Updated the local AI inference service to its current compatible patch
+  release after validating its service and model-management API behavior.
 
 ### Fixed
 

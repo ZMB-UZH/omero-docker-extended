@@ -139,7 +139,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.3"', compose_text)
         self.assertIn('image: "grafana/grafana:13.1.1"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.32.1"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.32.2"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -150,7 +150,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("ghcr.io/google/cadvisor:0.60.3", compose_text)
         self.assertNotIn("grafana/loki:3.6.7", compose_text)
         self.assertNotIn("grafana/grafana:13.1.0", compose_text)
-        self.assertNotIn("ollama/ollama:0.30.11", compose_text)
+        self.assertNotIn("ollama/ollama:0.32.1", compose_text)
 
     def test_portainer_management_surface_is_https_only_and_hardened(self) -> None:
         """Verify Portainer is default-on, HTTPS-only, and container-hardened.

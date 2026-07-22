@@ -639,7 +639,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.32.1"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.32.2"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -656,10 +656,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.32.1",
+            "README.md": "ollama/ollama:0.32.2",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.32.1",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.32.2",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():
