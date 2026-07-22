@@ -28,6 +28,17 @@ updates:
       # with the Python 3.14 CI resolver. ome-zarr 0.18.0 currently resolves to
       # ome-zarr-models 1.8.0rc0 under Python 3.14.
       - dependency-name: "ome-zarr"
+      # OMERO.web 5.32.x requires Django >=5.2.9,<5.3. Keep CI typing aligned
+      # with the deployed runtime while continuing to receive 5.2.x updates.
+      - dependency-name: "django"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "django-stubs"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "django-stubs-ext"
+        update-types:
+          - "version-update:semver-major"
     commit-message:
       prefix: "deps(ci-pip)"
 
