@@ -22,6 +22,9 @@ entry.
 - Retained Ollama `0.32.1`, the current stable release, after reviewing and
   validating the newer prerelease image without promoting it into the
   production deployment contract.
+- Corrected the local-model deployment guidance to require an explicit model
+  pull before first use; the Ollama generate endpoint does not implicitly
+  download a missing configured model.
 - Replaced volatile copied Python file/line totals in the acceleration design
   note with reproducible Linux commands and tracked-tree invariant checks. This
   avoids unrelated documentation churn while preserving the note's measured

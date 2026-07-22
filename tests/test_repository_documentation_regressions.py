@@ -666,6 +666,12 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             with self.subTest(ollama_path=relative_path):
                 self.assertIn(phrase, self.read_text(relative_path))
 
+        ollama_design = self.read_text(
+            "docs/design-docs/ai-filename-parsing-investigation.md"
+        )
+        self.assertIn("must be pulled before first use", ollama_design)
+        self.assertNotIn("auto-pulled on first use", ollama_design)
+
     def test_doc_compaction_requires_objective_meaning_preservation(self) -> None:
         """Verify doc compaction requires objective meaning preservation.
 
