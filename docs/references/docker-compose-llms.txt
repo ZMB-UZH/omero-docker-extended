@@ -28,9 +28,9 @@ Supporting services:
 Monitoring services:
 
 - prometheus (127.0.0.1:9090): metrics scraping with 10 direct targets plus blackbox HTTP/TCP probes, prom/prometheus:v3.13.1.
-- grafana (127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.1.0.
+- grafana (127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.1.1.
 - loki (127.0.0.1:3100): log aggregation backend, grafana/loki:3.7.3.
-- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.17.1.
+- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.18.0.
 - blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.28.0.
 - node-exporter: host metrics, prom/node-exporter:v1.12.1.
 - cadvisor: container metrics, ghcr.io/google/cadvisor:0.60.5.

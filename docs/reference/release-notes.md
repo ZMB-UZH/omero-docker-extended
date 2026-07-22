@@ -14,6 +14,11 @@ entry.
   its runtime migration, manifest-fetch retry behavior, and removed input. The
   repository does not use the removed `pip-install` input, and its hosted runner
   version satisfies the action's current runtime requirements.
+- Updated Alloy to `v1.18.0` after reviewing its migration notes and confirming
+  that the repository's file-tail/Loki pipeline does not use any changed
+  OpenTelemetry receiver, exporter, extension, or Kafka setting.
+- Updated Grafana to `13.1.1` after reviewing its patch notes and verifying its
+  published Linux/amd64 image manifest.
 
 ## 2026-07-18 Dependency and Runtime Refresh
 
