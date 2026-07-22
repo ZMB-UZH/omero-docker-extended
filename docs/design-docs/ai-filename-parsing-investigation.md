@@ -164,7 +164,8 @@ OMERO.web (OMP Plugin) ---> Ollama API (:11434) ---> Qwen2.5:3B (GGUF, CPU)
 ## Deployment
 
 - Deployment container: `ollama/ollama:0.32.1`
-- Model: `qwen2.5:3b` (auto-pulled on first use)
+- Model: `qwen2.5:3b` (must be pulled before first use; Ollama does not
+  download missing models implicitly)
 - Port: 11434 (internal Docker network only)
 - Volume: `/disks/omero_temp/ollama:/root/.ollama`
 - Memory: ~2GB for model + ~1GB runtime overhead
