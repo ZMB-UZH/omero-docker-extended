@@ -177,7 +177,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         run_values = [step.get("run") for step in steps if "run" in step]
 
         self.assertIn(
-            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             uses_values,
         )
         self.assertIn(
