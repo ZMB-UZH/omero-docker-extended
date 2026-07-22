@@ -58,6 +58,8 @@ governance, and compatibility across the customized OMERO stack.
 - Corrected IMS export processor acquisition and completion handling so healthy
   OMERO script processors receive the documented bounded callback window and
   successful conversions are recognized from their process return codes.
+- Corrected completed IMS export result handling so attached OMERO file metadata
+  cannot make a successful conversion appear to fail before download.
 - Corrected authenticated monitoring integration so dashboards use the
   deployment's configured identity and remain available through the supported
   OMERO administration workflow.

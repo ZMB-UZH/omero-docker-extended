@@ -719,6 +719,20 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Parallelize independent read-only gates", runtime_text)
         self.assertIn("Serialize", runtime_text)
         self.assertIn("persistent storage", runtime_text)
+        self.assertIn("reuse fresh evidence", agents_text)
+        self.assertIn("stable final tree", agents_text)
+        for adapter_path in (
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            with self.subTest(adapter_path=adapter_path):
+                adapter_text = " ".join(self.read_text(adapter_path).split())
+                self.assertIn("reuse fresh evidence", adapter_text)
+                self.assertRegex(
+                    adapter_text, r"never rerun unchanged (checks|checks or tools)"
+                )
 
     def test_agent_instructions_close_proven_retry_loops_after_verification(
         self,

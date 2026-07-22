@@ -148,8 +148,8 @@ Do not start coding until you can name the helper boundary you will harden and t
 - Treat the routing doc's numeric caps as mandatory, not advisory.
 - Open one domain doc, one nearest test module, and one matching skill before broadening context.
 - Stop once you can name the exact files to edit and the exact suites to run.
-- Summarize long docs once and reuse the summary instead of reopening them repeatedly.
-- Keep a verification ledger keyed by command and relevant tree state: use the narrowest correct lane during debugging, do not repeat a passing gate until its inputs change, and run the full matrix once against the final tree.
+- Summarize long docs once, batch independent read-only work with bounded output, and reuse fresh evidence instead of reopening files or repolling unchanged external state.
+- Keep a verification ledger keyed by command and relevant tree/runtime state: do not retry a failed tool without a changed hypothesis or input, do not repeat an unchanged passing gate, and run the full matrix once against the stable final tree.
 
 ## Verification minimum
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import stat
@@ -1675,6 +1676,61 @@ def test_ims_task_owner_token_survives_success_public_failure_and_cancel(
         "owner_token": owner_marker,
     }
     assert len(closed) == 3
+
+
+def test_ims_task_result_excludes_non_json_script_outputs(monkeypatch, tmp_path):
+    """Keep a successful Celery result encodable when OMERO returns model objects.
+
+    Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: strict JSON-safe
+    task result retaining the downloadable IMS outputs.
+    """
+    tasks = _import_tasks(monkeypatch)
+    conn = types.SimpleNamespace(
+        close=lambda **_kwargs: None,
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda _value: None),
+    )
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-json-output"),
+        update_state=lambda **_kwargs: None,
+    )
+    export_path = str(tmp_path / "result.ims")
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    monkeypatch.setattr(
+        tasks,
+        "_open_export_connection",
+        lambda *_args, **_kwargs: conn,
+    )
+    monkeypatch.setattr(tasks, "_find_script_id", lambda _conn: 91)
+    monkeypatch.setattr(tasks, "export_task_cancel_requested", lambda _task_id: False)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_api",
+        lambda **_kwargs: {
+            "Export_Path": types.SimpleNamespace(val=export_path),
+            "Export_Name": types.SimpleNamespace(val="result.ims"),
+            "File_Annotation_Id": types.SimpleNamespace(val=77),
+            "File_Annotation": types.SimpleNamespace(getId=lambda: 77),
+        },
+    )
+
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=12,
+        session_key="session-key",
+        host="omeroserver",
+        port=4064,
+    )
+
+    assert result == {
+        "state": "FINISHED",
+        "outputs": {
+            "Export_Path": export_path,
+            "Export_Name": "result.ims",
+            "File_Annotation_Id": 77,
+        },
+        "error": None,
+    }
+    assert json.loads(json.dumps(result, allow_nan=False)) == result
 
 
 def test_close_export_connection_accepts_gateway_close_signature_variants(

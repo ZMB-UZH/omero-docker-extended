@@ -132,7 +132,7 @@ def _read_process_job_file(job_id):
 
 
 def _serialize_outputs(outputs):
-    """Return the serialize outputs.
+    """Return script outputs that are safe for JSON-backed transports.
 
     Inputs: `outputs`. Output: `serialized`.
     """
@@ -140,7 +140,18 @@ def _serialize_outputs(outputs):
         return None
     serialized = {}
     for key, value in outputs.items():
-        serialized[str(key)] = _unwrap_rtype(value)
+        output_key = str(key)
+        output_value = _unwrap_rtype(value)
+        try:
+            json.dumps(output_value, allow_nan=False)
+        except (TypeError, ValueError, OverflowError):
+            logger.debug(
+                "Skipping non-JSON-safe IMS output %s (%s).",
+                output_key,
+                type(output_value).__name__,
+            )
+            continue
+        serialized[output_key] = output_value
     return serialized
 
 
