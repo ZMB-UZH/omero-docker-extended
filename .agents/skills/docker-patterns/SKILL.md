@@ -31,6 +31,10 @@ Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic 
   human public-safety review; reject credentials, identities, host details,
   private infrastructure, findings, vulnerability mechanics, and
   exploit-enabling detail.
+- Keep release notes curated and concise: include only notable operator or user
+  impact, compatibility or required upgrade actions, and a brief verification
+  summary; omit commit-by-commit detail, internal workflow or governance
+  narration, agent activity, and exhaustive test inventories.
 - Never delete a pre-existing Docker image or tag without fresh approval naming
   that one object. Approval for a replacement, prior run, or same version does
   not carry forward.

@@ -696,6 +696,8 @@ class AgentSkillContractTests(unittest.TestCase):
         )
         required_tokens = (
             "CHANGELOG.md",
+            "curated",
+            "concise",
             "automated disclosure",
             "human public-safety review",
             "credentials",

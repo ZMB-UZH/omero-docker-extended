@@ -103,7 +103,11 @@ Examples:
   that explicit version and never infers or auto-increments it. A matching
   human-readable `CHANGELOG.md` section is mandatory; the rendered notes become
   the GitHub release body and asset and are copied into the Docker carrier with
-  OCI release metadata. Automated disclosure validation and explicit human
+  OCI release metadata. Keep notes curated and concise: include only notable
+  operator or user impact, compatibility or required upgrade actions, and a
+  brief verification summary; omit commit-by-commit detail, internal workflow
+  or governance narration, agent activity, and exhaustive test inventories.
+  Automated disclosure validation and explicit human
   public-safety review are also mandatory. Public notes must reject credentials,
   personal or host-specific information, private infrastructure, findings,
   vulnerability mechanics, and exploit-enabling detail.
