@@ -23,7 +23,7 @@ The OMP plugin (`omeroweb_omp_plugin/services/ai_assist.py`) sends filenames to 
 ## Infrastructure
 
 All models were tested via the then-current Ollama deployment container. The
-active deployment now pins `ollama/ollama:0.32.2`; benchmark conclusions remain
+active deployment now pins `ollama/ollama:0.32.1`; benchmark conclusions remain
 about the tested model outputs rather than that historical container version.
 Models were stored on `/disks/omero_temp/ollama`. GGUF quantized formats.
 
@@ -163,7 +163,7 @@ OMERO.web (OMP Plugin) ---> Ollama API (:11434) ---> Qwen2.5:3B (GGUF, CPU)
 
 ## Deployment
 
-- Deployment container: `ollama/ollama:0.32.2`
+- Deployment container: `ollama/ollama:0.32.1`
 - Model: `qwen2.5:3b` (auto-pulled on first use)
 - Port: 11434 (internal Docker network only)
 - Volume: `/disks/omero_temp/ollama:/root/.ollama`
