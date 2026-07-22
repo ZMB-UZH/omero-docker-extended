@@ -208,7 +208,7 @@ The table below lists the long-running services available in the full profile se
 | `database` | postgres:16.14 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.14 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.8.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.32.2 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `ollama` | ollama/ollama:0.32.1 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.13.1 | Metrics scraping and storage | 127.0.0.1:9090 |
