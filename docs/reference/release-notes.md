@@ -19,6 +19,9 @@ entry.
   OpenTelemetry receiver, exporter, extension, or Kafka setting.
 - Updated Grafana to `13.1.1` after reviewing its patch notes and verifying its
   published Linux/amd64 image manifest.
+- Updated Ollama to `0.32.2` after reviewing its server and model-management
+  changes and verifying its version, model-list, and JSON API behavior in the
+  published Linux/amd64 image.
 
 ## 2026-07-18 Dependency and Runtime Refresh
 
