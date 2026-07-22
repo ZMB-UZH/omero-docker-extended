@@ -52,6 +52,9 @@ governance, and compatibility across the customized OMERO stack.
 - Updated release and agent instructions to require explicit destructive-action
   authorization, evidence-based verification, and deduplicated test execution
   without changing application runtime behavior.
+- Refreshed the immutable GitHub checkout and Python setup actions after
+  reviewing their current releases and verifying every workflow pin against
+  the corresponding upstream commit.
 
 ### Fixed
 

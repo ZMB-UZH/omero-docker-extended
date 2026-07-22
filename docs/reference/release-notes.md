@@ -6,6 +6,15 @@ maintainer change history. Release automation applies automated disclosure
 validation and requires explicit human review before publishing any canonical
 entry.
 
+## 2026-07-22 Workflow Dependency Refresh
+
+- Updated the immutable `actions/checkout` pin to `v7.0.1` after reviewing its
+  input-handling and escaping fixes and verifying the tag's peeled commit.
+- Updated the immutable `actions/setup-python` pin to `v7.0.0` after reviewing
+  its runtime migration, manifest-fetch retry behavior, and removed input. The
+  repository does not use the removed `pip-install` input, and its hosted runner
+  version satisfies the action's current runtime requirements.
+
 ## 2026-07-18 Dependency and Runtime Refresh
 
 - Updated pinned GitHub Actions for CodeQL (`4.37.1`), Ruff (`4.1.0`), and

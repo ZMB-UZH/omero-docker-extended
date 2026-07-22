@@ -1447,12 +1447,12 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 f"Test suite {suite!r} missing from CI workflow",
             )
 
-    def test_all_workflow_checkout_steps_use_verified_v6_pin(self) -> None:
-        """Verify the all workflow checkout steps use verified v6 pin execution contract.
+    def test_all_workflow_checkout_steps_use_verified_current_pin(self) -> None:
+        """Verify all workflow checkout steps use the current verified pin.
 
-        Inputs: repository fixtures. Output: fails on regressions in all workflow checkout steps use verified v6 pin integration.
+        Inputs: repository fixtures. Output: fails when workflow checkout pins drift.
         """
-        expected_checkout = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+        expected_checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
         workflow_dir = self.repo_root / ".github" / "workflows"
         for workflow_path in workflow_dir.glob("*.yml"):
             workflow_text = workflow_path.read_text(encoding="utf-8")
@@ -1644,7 +1644,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 for job in workflow["jobs"].values()
                 for step in job.get("steps", [])
                 if step.get("uses")
-                == "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+                == "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
             ]
             with self.subTest(relative_path=relative_path):
                 self.assertEqual(expected, actual)
@@ -1780,7 +1780,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             step for step in steps if step.get("name") == "Checkout"
         )
         self.assertEqual(
-            "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             checkout_step["uses"],
         )
         self.assertEqual(0, checkout_step["with"]["fetch-depth"])

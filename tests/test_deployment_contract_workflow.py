@@ -47,11 +47,11 @@ def test_deployment_contract_workflow_validates_full_compose_build_graph() -> No
     )
 
     assert checkout["uses"] == (
-        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     )
     assert checkout["with"]["persist-credentials"] is False
     assert setup_python["uses"] == (
-        "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
     )
     assert setup_python["with"]["python-version"] == "3.14.4"
     assert prepare["run"] == "python3 -m tools.prepare_ci_compose_environment"
