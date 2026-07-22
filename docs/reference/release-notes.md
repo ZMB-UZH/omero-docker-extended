@@ -25,7 +25,7 @@ entry.
 
 ## 2026-07-18 Dependency and Runtime Refresh
 
-- Updated pinned GitHub Actions for CodeQL (`4.37.1`), Ruff (`4.1.0`), and
+- Updated pinned GitHub Actions for CodeQL (`4.37.3`), Ruff (`4.1.0`), and
   Docker Scout (`1.23.1`), and aligned the pinned Scout CLI to `1.23.1` after
   reviewing upstream release notes and verifying the CLI archive digest.
 - Updated the Codecov uploader CLI to `11.3.1` after reviewing its upload URL
