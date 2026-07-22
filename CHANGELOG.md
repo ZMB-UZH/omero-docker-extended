@@ -55,6 +55,8 @@ governance, and compatibility across the customized OMERO stack.
 - Refreshed the immutable GitHub checkout and Python setup actions after
   reviewing their current releases and verifying every workflow pin against
   the corresponding upstream commit.
+- Updated the log collector and dashboard service to their current compatible
+  releases after reviewing migration notes and published image platforms.
 
 ### Fixed
 

@@ -212,9 +212,9 @@ The table below lists the long-running services available in the full profile se
 | `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.13.1 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.1.0 | Dashboards and visualization | 127.0.0.1:3000 |
+| `grafana` | grafana/grafana:13.1.1 | Dashboards and visualization | 127.0.0.1:3000 |
 | `loki` | grafana/loki:3.7.3 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.17.1 | Log collection pipeline (file-based) | 12345 (internal) |
+| `alloy` | grafana/alloy:v1.18.0 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.5 | Container resource metrics | 8080 (internal) |

@@ -68,9 +68,9 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 ### Monitoring stack
 
 - **Prometheus** (v3.13.1): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
-- **Grafana** (13.1.0): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Grafana** (13.1.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 - **Loki** (3.7.3): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.17.1): collects OMERO server/web internal log files and pushes them to Loki.
+- **Alloy** (v1.18.0): collects OMERO server/web internal log files and pushes them to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
 - **Node exporter** (v1.12.1): host-level metrics.
 - **cAdvisor** (v0.60.5): container resource metrics.
