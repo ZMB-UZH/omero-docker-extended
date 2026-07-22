@@ -845,6 +845,37 @@ def test_normalize_job_state_handles_wrapped_values(
     )
 
 
+@pytest.mark.parametrize(
+    ("poll_result", "expected"),
+    [
+        (None, None),
+        (0, "FINISHED"),
+        (1, "FAILED"),
+        (-9, "FAILED"),
+        ("0", "FINISHED"),
+        ("17", "FAILED"),
+        (" finished ", "FINISHED"),
+    ],
+)
+def test_normalize_process_poll_result_maps_exit_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    poll_result: object,
+    expected: str | None,
+) -> None:
+    """Verify OMERO process return codes are not interpreted as job-state names.
+
+    Inputs: pytest cases and monkeypatch fixture. Output: fails on incorrect mapping.
+    """
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    assert imaris_service._normalize_process_poll_result(poll_result) == expected
+    assert (
+        imaris_service._normalize_process_poll_result(SimpleNamespace(val=0))
+        == "FINISHED"
+    )
+
+
 def test_detach_script_process_falls_back_to_close_without_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

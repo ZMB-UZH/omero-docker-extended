@@ -31,6 +31,7 @@ from .imaris_service import (
     _extract_output_value,
     _find_script_id,
     _normalize_job_state,
+    _normalize_process_poll_result,
     _serialize_outputs,
     _run_script,
 )
@@ -504,7 +505,7 @@ def _wait_for_script_service_process(
                 stopped = _stop_script_service_process(proc)
                 raise RuntimeError(_EXPORT_CANCELLED_MESSAGE)
             try:
-                last_state = _normalize_job_state(proc.poll())
+                last_state = _normalize_process_poll_result(proc.poll())
             except Exception:
                 last_state = None
             elapsed = time.time() - start_time

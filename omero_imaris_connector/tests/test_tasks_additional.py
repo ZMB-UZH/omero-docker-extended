@@ -363,7 +363,7 @@ def test_run_script_via_omero_api_covers_success_failure_and_cancel_paths(
     class _FinishedProcess:
         """ScriptProcess stand-in for successful and failed completions."""
 
-        def __init__(self, state="FINISHED", outputs=None):
+        def __init__(self, state=0, outputs=None):
             """Create a process double with fixed poll results.
 
             Inputs: optional state and outputs. Output: initialized double.
@@ -477,7 +477,7 @@ def test_run_script_via_omero_api_covers_success_failure_and_cancel_paths(
         tasks,
         "_run_script",
         lambda *_args, **_kwargs: _FinishedProcess(
-            state="FAILED",
+            state=7,
             outputs={"Export_Path": str(export_path), "Message": "done"},
         ),
     )

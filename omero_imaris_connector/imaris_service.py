@@ -245,7 +245,7 @@ def _poll_process_job(job_id):
 
     proc = record["handle"]
     try:
-        state = _normalize_job_state(proc.poll())
+        state = _normalize_process_poll_result(proc.poll())
     except Exception:
         state = None
 
@@ -1044,7 +1044,7 @@ def _wait_for_process(proc, timeout):
     try:
         while time.time() < deadline:
             try:
-                last_state = _normalize_job_state(proc.poll())
+                last_state = _normalize_process_poll_result(proc.poll())
             except Exception:
                 last_state = None
             if last_state:
@@ -1101,6 +1101,25 @@ def _normalize_job_state(state):
     if not state:
         return None
     return state.upper()
+
+
+def _normalize_process_poll_result(result):
+    """Map an OMERO ``Process.poll`` result to a terminal state.
+
+    Inputs: an OMERO ``RInt`` return code, raw integer, compatible textual state,
+    or ``None`` while the process is running. Output: normalized state or ``None``.
+    """
+    if result is None:
+        return None
+
+    value = _unwrap_rtype(result)
+    if isinstance(value, int):
+        return "FINISHED" if value == 0 else "FAILED"
+
+    normalized = _normalize_job_state(value)
+    if normalized and re.fullmatch(r"[+-]?\d+", normalized):
+        return "FINISHED" if int(normalized) == 0 else "FAILED"
+    return normalized
 
 
 def _detach_script_process(proc, reason=""):
