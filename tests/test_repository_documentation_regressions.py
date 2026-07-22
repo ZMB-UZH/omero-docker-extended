@@ -1018,10 +1018,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("git ls-files '*.pyi'", workflow_text)
         self.assertIn("git ls-files '*.js' '*.jsx' '*.mjs'", workflow_text)
 
-    def test_python_acceleration_doc_counts_match_current_tree(self) -> None:
-        """Verify python acceleration doc counts match current tree.
+    def test_python_acceleration_doc_scope_matches_current_tree(self) -> None:
+        """Verify the acceleration analysis uses stable tracked-tree scopes.
 
-        Inputs: repository fixtures. Output: fails on regressions in python acceleration doc counts match current tree.
+        Inputs: repository fixtures. Output: fails when the documented footprint
+        conclusion or cited production-module scope no longer matches the tree.
         """
         doc_text = self.read_text("docs/design-docs/python-acceleration-options.md")
         production_paths = self.git_files(
@@ -1038,10 +1039,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         test_lines = sum(len(self.read_text(path).splitlines()) for path in test_paths)
 
-        self.assertIn(f"Production Python files: `{len(production_paths)}`", doc_text)
-        self.assertIn(f"Production Python lines: `{production_lines:,}`", doc_text)
-        self.assertIn(f"Test Python files: `{len(test_paths)}`", doc_text)
-        self.assertIn(f"Test Python lines: `{test_lines:,}`", doc_text)
+        self.assertGreater(len(production_paths), 0)
+        self.assertGreater(len(test_paths), 0)
+        self.assertGreater(test_lines, production_lines)
+        self.assertIn("Most tracked Python in the repository is test code", doc_text)
+        self.assertIn("git ls-files -z '*.py'", doc_text)
+        self.assertIn("git ls-files -z 'tests/*.py' '*/tests/*.py'", doc_text)
+        self.assertNotIn("Production Python files: `", doc_text)
+        self.assertNotIn("Production Python lines: `", doc_text)
+        self.assertNotIn("Test Python files: `", doc_text)
+        self.assertNotIn("Test Python lines: `", doc_text)
 
         for relative_path in (
             "omeroweb_import/views/core_functions.py",
@@ -1053,8 +1060,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "omeroweb_import/services/ome_zarr_support.py",
         ):
             with self.subTest(relative_path=relative_path):
-                line_count = len(self.read_text(relative_path).splitlines())
-                self.assertIn(f"`{relative_path}`: `{line_count:,}` lines", doc_text)
+                self.assertIn(relative_path, production_paths)
+                self.assertIn(f"`{relative_path}`", doc_text)
 
     def test_agent_instructions_require_current_default_branch_development(
         self,

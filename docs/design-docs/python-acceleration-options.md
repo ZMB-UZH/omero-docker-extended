@@ -3,7 +3,8 @@
 Investigation conducted on 2026-04-12 for the repository-wide question of
 whether the Python-heavy portions of this codebase can be accelerated through
 fully automatic conversion, Cython, or another runtime/compiler approach.
-Repository file counts were refreshed on 2026-07-22.
+Repository composition was reviewed on 2026-07-22. Reproducible commands are
+provided instead of copied counters that become stale after unrelated changes.
 
 ## Goal
 
@@ -35,36 +36,45 @@ Answer four architecture questions before any implementation work:
 
 ### Python footprint
 
-- Production Python files: `158`
-- Production Python lines: `82,827`
-- Test Python files: `186`
-- Test Python lines: `135,117`
+Production code excludes the top-level and package-local test trees, vendored
+code, and agent reference material. Test code includes the top-level and
+package-local test trees. Recompute the current file and line totals on Linux
+from the tracked tree:
+
+```bash
+git ls-files -z '*.py' ':!:tests/*' ':!:*/tests/*' ':!:third_party/*' ':!:.agents/*' \
+  | tee >(tr -cd '\0' | wc -c >&2) | xargs -0 wc -l
+git ls-files -z 'tests/*.py' '*/tests/*.py' \
+  | tee >(tr -cd '\0' | wc -c >&2) | xargs -0 wc -l
+```
 
 Most tracked Python in the repository is test code, so any "convert all Python"
 strategy would mostly compile tests unless the build is carefully filtered.
+The documentation regression suite derives both scopes from Git and verifies
+that this relationship remains true.
 
 ### Largest production modules inspected
 
-- `omero_imaris_connector/XTOmeroConnector.py`: `15,358` lines
-- `omeroweb_import/views/core_functions.py`: `10,223` lines
-- `omeroweb_admin_tools/views/index_view.py`: `3,592` lines
-- `tools/cocoindex_agent_search.py`: `3,114` lines
-- `omeroweb_import/views/index_view.py`: `1,888` lines
-- `omero_web_zarr/integration.py`: `1,808` lines
-- `omeroweb_tools/services/enhanced_search_service.py`: `1,687` lines
-- `omeroweb_import/services/ome_zarr_support.py`: `1,669` lines
-- `omero_web_zarr/utils.py`: `1,556` lines
-- `omeroweb_tools/services/acquisition_metadata.py`: `1,468` lines
-- `tools/regression_guard.py`: `1,428` lines
-- `omeroweb_tools/services/enhanced_search_store.py`: `1,422` lines
-- `omeroweb_admin_tools/services/log_query.py`: `1,375` lines
-- `omero_imaris_connector/imaris_service.py`: `1,390` lines
-- `omero_imaris_connector/views.py`: `1,335` lines
-- `tools/env_safety_guard.py`: `1,270` lines
-- `omeroweb_import/services/omero/sem_edx_parser.py`: `1,245` lines
-- `omero_web_zarr/views.py`: `1,287` lines
-- `omeroweb_omp_plugin/views/index_view.py`: `1,216` lines
-- `omero_imaris_connector/omero_scripts/IMS_Export.py`: `1,171` lines
+- `omero_imaris_connector/XTOmeroConnector.py`
+- `omeroweb_import/views/core_functions.py`
+- `omeroweb_admin_tools/views/index_view.py`
+- `tools/cocoindex_agent_search.py`
+- `omeroweb_import/views/index_view.py`
+- `omero_web_zarr/integration.py`
+- `omeroweb_tools/services/enhanced_search_service.py`
+- `omeroweb_import/services/ome_zarr_support.py`
+- `omero_web_zarr/utils.py`
+- `omeroweb_tools/services/acquisition_metadata.py`
+- `tools/regression_guard.py`
+- `omeroweb_tools/services/enhanced_search_store.py`
+- `omeroweb_admin_tools/services/log_query.py`
+- `omero_imaris_connector/imaris_service.py`
+- `omero_imaris_connector/views.py`
+- `tools/env_safety_guard.py`
+- `omeroweb_import/services/omero/sem_edx_parser.py`
+- `omero_web_zarr/views.py`
+- `omeroweb_omp_plugin/views/index_view.py`
+- `omero_imaris_connector/omero_scripts/IMS_Export.py`
 
 ### Dominant runtime patterns
 
