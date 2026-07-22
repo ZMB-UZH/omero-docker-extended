@@ -12,7 +12,7 @@ details, or technical information that would enable misuse.
 
 No changes are currently recorded.
 
-## [1.1.0-main.1] - 2026-07-18
+## [1.1.0-main.1] - 2026-07-22
 
 This release consolidates the complete set of notable changes since
 `1.0.1-main.1`. It focuses on dependable upgrades, reproducible release
