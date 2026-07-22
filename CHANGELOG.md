@@ -59,6 +59,8 @@ governance, and compatibility across the customized OMERO stack.
   releases after reviewing migration notes and published image platforms.
 - Updated the local AI inference service to its current compatible patch
   release after validating its service and model-management API behavior.
+- Replaced volatile copied source-count snapshots in the acceleration design
+  note with reproducible Linux commands and stable tracked-tree invariants.
 
 ### Fixed
 

@@ -22,6 +22,10 @@ entry.
 - Updated Ollama to `0.32.2` after reviewing its server and model-management
   changes and verifying its version, model-list, and JSON API behavior in the
   published Linux/amd64 image.
+- Replaced volatile copied Python file/line totals in the acceleration design
+  note with reproducible Linux commands and tracked-tree invariant checks. This
+  avoids unrelated documentation churn while preserving the note's measured
+  repository-specific conclusion.
 
 ## 2026-07-18 Dependency and Runtime Refresh
 
