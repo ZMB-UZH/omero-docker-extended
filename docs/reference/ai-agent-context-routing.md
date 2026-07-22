@@ -62,7 +62,7 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 - `omeroweb_tools/tests/`: Tools landing page, Enhanced search, acquisition metadata index, help UI
 - `omero_web_zarr/tests/`: store-backed image rendering and webgateway overrides
 
-Run only the touched lanes while iterating. Run the full split matrix before final push when the change spans multiple domains or shared infrastructure.
+Run only touched lanes while inputs are changing. Record each result against its tree/runtime state, reuse fresh evidence, and run the full split matrix once before final push when the stable change spans multiple domains or shared infrastructure.
 
 ## Always-loaded surface policy
 

@@ -467,6 +467,40 @@ def test_serialize_outputs_unwraps_rtypes(monkeypatch: pytest.MonkeyPatch) -> No
     assert imaris_service._serialize_outputs(["not", "a", "dict"]) is None
 
 
+def test_serialize_outputs_omits_values_rejected_by_json_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep usable IMS outputs when ScriptService also returns model objects.
+
+    Inputs: pytest provides `monkeypatch`. Output: a JSON-safe output mapping.
+    """
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    cycle = []
+    cycle.append(cycle)
+    outputs = {
+        "Export_Path": SimpleNamespace(val="/exports/demo.ims"),
+        "Export_Name": SimpleNamespace(val="demo.ims"),
+        "File_Annotation_Id": SimpleNamespace(val=77),
+        "File_Annotation": SimpleNamespace(getId=lambda: 77),
+        "Nested": {"items": [1, True, None, "safe"]},
+        "Bytes": b"not-json",
+        "Non_Finite": float("nan"),
+        "Cycle": cycle,
+    }
+
+    serialized = imaris_service._serialize_outputs(outputs)
+
+    assert serialized == {
+        "Export_Path": "/exports/demo.ims",
+        "Export_Name": "demo.ims",
+        "File_Annotation_Id": 77,
+        "Nested": {"items": [1, True, None, "safe"]},
+    }
+    assert json.loads(json.dumps(serialized, allow_nan=False)) == serialized
+
+
 def test_poll_process_job_times_out_stale_disk_record(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
