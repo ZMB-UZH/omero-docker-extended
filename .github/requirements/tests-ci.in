@@ -16,4 +16,4 @@ numcodecs==0.16.5
 matplotlib==3.11.1
 ome-zarr==0.16.0
 zarr==3.2.1
-tifffile==2026.7.14
+tifffile==2026.7.31
