@@ -9,7 +9,7 @@ coverage==7.15.2
 django==5.2.16
 cryptography==49.0.0
 pyyaml==6.0.3
-portalocker==3.2.0
+portalocker==4.1.0
 psycopg2-binary==2.9.12
 numpy==2.5.1
 numcodecs==0.16.5
