@@ -5,7 +5,7 @@
 #     --output-file .github/requirements/mypy-ci.txt \
 #     .github/requirements/mypy-ci.in
 mypy==2.3.0
-django==5.2.16
+django==5.2.17
 django-stubs==5.2.9
 django-stubs-ext==5.2.9
 types-requests==2.33.0.20260712
