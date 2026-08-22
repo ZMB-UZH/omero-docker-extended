@@ -20,6 +20,8 @@ details, or technical information that would enable misuse.
 
 - Prevented stale generated Compose settings from selecting mismatched build
   artifacts during upgrades.
+- Restored native Zarr conversion compatibility with the updated converter
+  runtime.
 
 ### Upgrade Notes
 

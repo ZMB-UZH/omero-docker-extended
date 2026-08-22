@@ -574,6 +574,29 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn('"tifffile==${TIFFFILE_VERSION}"', dockerfile_text)
 
+    def test_omeroweb_uses_isolated_supported_bioformats2raw_java(self) -> None:
+        """Verify bioformats2raw runs on Java 17 without changing the image-wide Java default.
+
+        Inputs: Dockerfile and launcher fixtures. Output: fails on converter runtime regressions.
+        """
+        dockerfile_text = self.read_text("docker/omero-web.Dockerfile")
+        launcher_text = self.read_text("docker/bioformats2raw-launcher.sh")
+
+        self.assertIn("java-17-openjdk-headless", dockerfile_text)
+        self.assertIn(
+            "COPY docker/bioformats2raw-launcher.sh /tmp/bioformats2raw-launcher.sh",
+            dockerfile_text,
+        )
+        self.assertIn(
+            "install -o root -g root -m 0755 /tmp/bioformats2raw-launcher.sh "
+            "/usr/local/bin/bioformats2raw",
+            dockerfile_text,
+        )
+        self.assertNotIn("ENV JAVA_HOME=", dockerfile_text)
+        self.assertIn('readonly java_home="/usr/lib/jvm/jre-17-openjdk"', launcher_text)
+        self.assertIn('export JAVA_HOME="${java_home}"', launcher_text)
+        self.assertIn('exec "${converter}" "$@"', launcher_text)
+
     def test_omeroweb_dockerfile_installs_single_pinned_vizarr_build(self) -> None:
         """Verify omeroweb dockerfile installs single pinned Vizarr build.
 
