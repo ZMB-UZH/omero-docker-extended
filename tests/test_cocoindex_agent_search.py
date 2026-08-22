@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -21,9 +22,112 @@ def test_package_pin_and_hashes_are_exact() -> None:
     Inputs: repository fixtures. Output: fails on regressions in package pin and hashes are exact.
     """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
-        "cocoindex-code[full]==0.2.37"
+        "cocoindex-code[full]==0.2.41"
     )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
+
+
+def test_device_selector_accepts_supported_accelerators() -> None:
+    """Verify device selection is explicit and rejects unknown backends.
+
+    Inputs: repository parser. Output: asserts supported and rejected choices.
+    """
+    parser = cocoindex_agent_search.build_parser()
+
+    for device in cocoindex_agent_search.EMBEDDING_DEVICE_CHOICES:
+        parsed = parser.parse_args(["index", "--device", device])
+        assert parsed.device == device
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["index", "--device", "gpu"])
+
+
+def test_configure_embedding_device_persists_cpu_and_auto(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify explicit CPU and automatic selection stay in external settings.
+
+    Inputs: pytest fixtures. Output: asserts isolated settings persistence.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    settings = SimpleNamespace(embedding=SimpleNamespace(device=None))
+    saved: list[object] = []
+    settings_dirs: list[str | None] = []
+
+    def load_user_settings() -> SimpleNamespace:
+        """Return the test-controlled CocoIndex settings.
+
+        Inputs: none. Output: `SimpleNamespace` settings.
+        """
+        settings_dirs.append(os.environ.get("COCOINDEX_CODE_DIR"))
+        return settings
+
+    def save_user_settings(value: object) -> None:
+        """Record one test-controlled CocoIndex settings write.
+
+        Inputs: `value`. Output: None.
+        """
+        settings_dirs.append(os.environ.get("COCOINDEX_CODE_DIR"))
+        saved.append(value)
+
+    settings_module = SimpleNamespace(
+        load_user_settings=load_user_settings,
+        save_user_settings=save_user_settings,
+    )
+    monkeypatch.setenv("COCOINDEX_TEST_SENTINEL", "preserved")
+    monkeypatch.delenv("COCOINDEX_CODE_DIR", raising=False)
+    monkeypatch.setattr(
+        cocoindex_agent_search, "prepend_venv_site_package_paths", lambda _context: None
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search.importlib,
+        "import_module",
+        lambda name: (
+            settings_module if name == "cocoindex_code.settings" else pytest.fail(name)
+        ),
+    )
+
+    assert cocoindex_agent_search.configure_embedding_device(context, "cpu") == "cpu"
+    assert settings.embedding.device == "cpu"
+    assert saved == [settings]
+    assert settings_dirs == [str(context.settings_dir), str(context.settings_dir)]
+    assert os.environ["COCOINDEX_TEST_SENTINEL"] == "preserved"
+    assert "COCOINDEX_CODE_DIR" not in os.environ
+
+    assert cocoindex_agent_search.configure_embedding_device(context, "auto") == "auto"
+    assert settings.embedding.device is None
+    assert saved == [settings, settings]
+    assert settings_dirs == [str(context.settings_dir)] * 4
+    assert os.environ["COCOINDEX_TEST_SENTINEL"] == "preserved"
+    assert "COCOINDEX_CODE_DIR" not in os.environ
+
+
+def test_configure_embedding_device_rejects_unavailable_cuda(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify unavailable accelerators fail before external settings change.
+
+    Inputs: pytest fixtures. Output: asserts an unavailable-device failure.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "probe_embedding_devices",
+        lambda _context: {"cuda": False, "mps": False},
+    )
+
+    with pytest.raises(RuntimeError, match="requested but is unavailable"):
+        cocoindex_agent_search.configure_embedding_device(context, "cuda")
 
 
 def test_benchmark_doc_records_package_hash_evidence() -> None:
@@ -1955,6 +2059,7 @@ def test_run_index_preserves_excluded_paths(
         ["index"],
         timeout=cocoindex_agent_search.timeout_seconds("index"),
         excluded_paths=excluded_paths,
+        requested_device=None,
     )
 
 
@@ -2089,13 +2194,18 @@ def test_command_search_indexes_only_with_explicit_flag(
     )
 
     def fake_index(
-        _context: cocoindex_agent_search.CocoIndexContext, *, allow_dirty: bool
+        _context: cocoindex_agent_search.CocoIndexContext,
+        *,
+        allow_dirty: bool,
+        requested_device: str | None,
     ) -> str:
         """Simulate index so the surrounding test controls that dependency.
 
         Inputs: `_context` (cocoindex_agent_search.CocoIndexContext), `allow_dirty`
-        (bool). Output: `str`.
+        (bool), `requested_device` (str | None). Output: `str`.
         """
+        assert allow_dirty is True
+        assert requested_device is None
         cocoindex_agent_search.target_sqlite_db(context).parent.mkdir(parents=True)
         cocoindex_agent_search.target_sqlite_db(context).write_bytes(b"sqlite")
         return ""
@@ -2125,7 +2235,11 @@ def test_command_search_indexes_only_with_explicit_flag(
 
     captured = capsys.readouterr()
     assert captured.out == completed.stdout
-    mocked_index.assert_called_once_with(context, allow_dirty=True)
+    mocked_index.assert_called_once_with(
+        context,
+        allow_dirty=True,
+        requested_device=None,
+    )
     assert mocked_existing.call_args.args[1] == [
         "search",
         "--limit",
@@ -2197,7 +2311,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":'
             '{"tools":[{"name":"search"},{"name":"status"}]}}\n'
         ),
@@ -2215,7 +2329,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         include_search=False,
     ) == {
         "server_name": "cocoindex-code",
-        "server_version": "0.2.37",
+        "server_version": "0.2.41",
         "tools": ["search", "status"],
     }
     assert mocked_run.call_args.args[0] == [
@@ -2251,7 +2365,7 @@ def test_mcp_stdio_smoke_include_search_fails_on_tool_error(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"missing index"}],"isError":true}}\n'
@@ -2286,7 +2400,7 @@ def test_mcp_stdio_smoke_include_search_records_success(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.37"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"File: AGENTS.md:1"}],"isError":false}}\n'

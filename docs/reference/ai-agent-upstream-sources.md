@@ -18,8 +18,10 @@ This document records the pinned upstream AI Agent material vendored into this r
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
-- Latest upstream observed and reviewed on 2026-07-18: `v2.0.0`. The selected
-  skill snapshot is current. The repo imports no ECC control pane, hooks,
+- Latest upstream observed and reviewed on 2026-08-22: `v2.1.0`. The 15
+  selected skill files are unchanged from the pinned `v2.0.0` snapshot, so
+  their content is current without importing the new Plan Canvas, harness,
+  hosted-compute, hook, or orchestration surfaces. The repo imports no ECC control pane, hooks,
   commands, connectors, session adapters, MCP configuration, worktree service,
   or multi-agent orchestration; the repo's single-session, host-agnostic, and
   Linux-only workflow contracts remain authoritative.
@@ -52,7 +54,7 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 - Upstream native installation command:
   `pipx install 'cocoindex-code[full]'`
 - Verified upstream release tag:
-  `v0.2.37` at `2e96b45636e6538dd4a374fd8a7283be110998b4`
+  `v0.2.41` at `9fd2e7470a8b042a338dc3cc47fb9940ac5ebb59`
 - Local path: `.agents/skills/cocoindex-code-search/`
 - Integration rule: keep one repository-local CocoIndex workflow and generate
   MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a
@@ -81,18 +83,19 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 ## caveman reference snapshot
 
 - Repository: `JuliusBrussee/caveman`
-- Reviewed release notes: `v1.5.1`, `v1.6.0`, `v1.7.0`, `v1.8.0` through
-  `v1.8.2`, `v1.9.0`, and `v1.9.1`.
-- caveman release tag: `v1.9.1`
-- caveman release commit: `0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0`
-- Latest upstream observed and reviewed on 2026-07-18: `v1.9.1`. The selected
+- Reviewed release notes: `v1.5.1` through `v1.9.1`, `v2.0.0`, `v2.1.0`, and
+  `v2.2.0`.
+- caveman release tag: `v2.2.0`
+- caveman release commit: `9aa63945a349bef17206540650db48c30fafbdf2`
+- Latest upstream observed and reviewed on 2026-08-22: `v2.2.0`. The selected
   prompt reference is current while installer, hook, natural-language
   activation, compression-tool, MCP, stats, and cavecrew surfaces remain
   disabled.
-- caveman vendor path: `third_party/caveman-v1.9.1/`
-- License: MIT (`third_party/caveman-v1.9.1/LICENSE`)
+- caveman vendor path: `third_party/caveman-v2.2.0/`
+- License: MIT (`third_party/caveman-v2.2.0/LICENSE`); the upstream license
+  scope note keeps engine-linked components under BSL-1.1, and none are vendored.
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
-- Selected upstream reference: `third_party/caveman-v1.9.1/skills/caveman/SKILL.md`
+- Selected upstream reference: `third_party/caveman-v2.2.0/skills/caveman/SKILL.md`
 - Integration rule: the active repo surface is `.agents/skills/caveman/`; it
   is an all-agent, opt-in overlay for lower-token replies and internal AI
   prompting only. Upstream hooks, plugin auto-loading, `.codex` hook config,
@@ -100,7 +103,8 @@ Do not replace the local overlays with the upstream files verbatim unless the re
   `off`, `caveman-help`, compression-tool context rewriting, stats/statusline
   scripts, `caveman-shrink`, `caveman-init`, cavecrew subagents, and smart
   installer side effects stay disabled. The local overlay starts at lite
-  compression, preserves the upstream v1.9.1 language, code-symbol,
-  no-invented-abbreviation, no-self-reference, and ambiguity guards,
+  compression, preserves the upstream v2.2.0 language, negation, numeric,
+  code-symbol, persisted-prose, no-invented-abbreviation, no-self-reference,
+  destructive-command, and ambiguity guards,
   and never changes routing, tool choice, verification scope, or uncertainty
   handling.

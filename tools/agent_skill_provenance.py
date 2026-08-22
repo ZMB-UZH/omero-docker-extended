@@ -25,6 +25,18 @@ SCANNER_ANNOTATION_LINE_RE = re.compile(
 )
 ALLOWED_FETCH_SCHEMES: frozenset[str] = frozenset({"https"})
 ALLOWED_FETCH_HOSTS: frozenset[str] = frozenset({"raw.githubusercontent.com"})
+CAVEMAN_SECTION_RE = re.compile(
+    r"^## caveman reference snapshot\s*$\n(?P<body>.*?)(?=^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+CAVEMAN_REPOSITORY_RE = re.compile(r"^- Repository: `([^`]+)`$", re.MULTILINE)
+CAVEMAN_TAG_RE = re.compile(r"^- caveman release tag: `([^`]+)`$", re.MULTILINE)
+CAVEMAN_COMMIT_RE = re.compile(r"^- caveman release commit: `([^`]+)`$", re.MULTILINE)
+CAVEMAN_VENDOR_PATH_RE = re.compile(r"^- caveman vendor path: `([^`]+)`$", re.MULTILINE)
+CAVEMAN_LICENSE_PATH_RE = re.compile(r"^- License: MIT \(`([^`]+)`\)", re.MULTILINE)
+CAVEMAN_SKILL_PATH_RE = re.compile(
+    r"^- Selected upstream reference: `([^`]+)`$", re.MULTILINE
+)
 
 
 @dataclass(frozen=True)
@@ -146,6 +158,36 @@ class AgentSkillUpstreamSources:
         )
 
 
+@dataclass(frozen=True)
+class VendoredReferenceSources:
+    """Pinned metadata for a small curated upstream reference snapshot."""
+
+    repo_slug: str
+    tag: str
+    commit: str
+    vendor_path: str
+    vendor_files: dict[str, str]
+
+    @property
+    def vendor_root_path(self) -> Path:
+        """Return the normalized repository-relative vendor root.
+
+        Inputs: documented instance metadata. Output: repository-relative `Path`.
+        """
+        return Path(self.vendor_path.rstrip("/"))
+
+    def raw_file_url(self, name: str) -> str:
+        """Return the allowlisted raw URL for a documented vendored file.
+
+        Inputs: reference `name`. Output: upstream HTTPS URL.
+        """
+        relative_path = Path(self.vendor_files[name]).relative_to(self.vendor_root_path)
+        return (
+            "https://raw.githubusercontent.com/"
+            f"{self.repo_slug}/{self.tag}/{relative_path.as_posix()}"
+        )
+
+
 def _extract_required_match(pattern: re.Pattern[str], text: str, label: str) -> str:
     """Extract the required match.
 
@@ -194,6 +236,54 @@ def load_upstream_sources(repo_root: Path) -> AgentSkillUpstreamSources:
         vendor_path=vendor_path,
         skill_vendor_paths=skill_vendor_paths,
     )
+
+
+def load_caveman_upstream_sources(repo_root: Path) -> VendoredReferenceSources:
+    """Load curated Caveman metadata from the provenance document.
+
+    Inputs: `repo_root`. Output: `VendoredReferenceSources`. Raises:
+    RuntimeError when required metadata is absent or escapes its vendor root.
+    """
+    doc_text = (repo_root / UPSTREAM_SOURCES_DOC_PATH).read_text(encoding="utf-8")
+    section_match = CAVEMAN_SECTION_RE.search(doc_text)
+    if section_match is None:
+        raise RuntimeError(
+            f"{UPSTREAM_SOURCES_DOC_PATH} is missing the caveman reference section."
+        )
+    section = section_match.group("body")
+    repo_slug = _extract_required_match(
+        CAVEMAN_REPOSITORY_RE, section, "caveman repository"
+    )
+    tag = _extract_required_match(CAVEMAN_TAG_RE, section, "caveman release tag")
+    commit = _extract_required_match(
+        CAVEMAN_COMMIT_RE, section, "caveman release commit"
+    )
+    vendor_path = _extract_required_match(
+        CAVEMAN_VENDOR_PATH_RE, section, "caveman vendor path"
+    )
+    vendor_files = {
+        "LICENSE": _extract_required_match(
+            CAVEMAN_LICENSE_PATH_RE, section, "caveman license path"
+        ),
+        "caveman": _extract_required_match(
+            CAVEMAN_SKILL_PATH_RE, section, "caveman skill path"
+        ),
+    }
+    sources = VendoredReferenceSources(
+        repo_slug=repo_slug,
+        tag=tag,
+        commit=commit,
+        vendor_path=vendor_path,
+        vendor_files=vendor_files,
+    )
+    for name, file_path in sources.vendor_files.items():
+        try:
+            Path(file_path).relative_to(sources.vendor_root_path)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Documented caveman {name} path escapes {vendor_path}: {file_path}"
+            ) from exc
+    return sources
 
 
 def strip_local_scanner_annotations(text: str) -> str:

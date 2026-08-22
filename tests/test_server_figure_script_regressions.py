@@ -35,6 +35,20 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             self.dockerfile,
         )
 
+    def test_biop_script_source_is_immutable_and_current(self):
+        """Verify the installed BIOP script uses the reviewed source commit.
+
+        Inputs: repository fixtures. Output: fails on a mutable or stale source pin.
+        """
+        self.assertIn(
+            'ARG BIOP_OMERO_SCRIPTS_COMMIT="3dd78c7420f42bca427575dfdc3acf9192d4f12d"',
+            self.dockerfile,
+        )
+        self.assertIn(
+            'if [[ "${actual_commit}" != "${BIOP_OMERO_SCRIPTS_COMMIT}" ]]',
+            self.dockerfile,
+        )
+
     def test_bootstrap_register_script_sync_skips_package_markers(self):
         """Verify the bootstrap register script sync skips package markers execution contract.
 

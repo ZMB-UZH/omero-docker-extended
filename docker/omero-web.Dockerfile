@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.32.0@sha256:21eda1b301b6e68fab4382df31a4b797218de3aaff3bba08c05b498c20eec8b7
+FROM openmicroscopy/omero-web-standalone:5.33.0-1@sha256:fac13ff1f14ee29c610091b1e0a8c717583a43c4256efadedae5685c4f4eedb4
 
 # Run image build steps as root
 # -----------------------------
@@ -39,16 +39,16 @@ ENV PIP_NO_CACHE_DIR=1 \
 # newest compatible release instead of tracking the latest major line. The
 # deprecated API itself instructs affected environments to pin below 81.
 # --------------------------------------------------------------------------
-ARG PIP_VERSION=26.1.2
+ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
-ARG WHEEL_VERSION=0.47.0
-ARG CRYPTOGRAPHY_VERSION=49.0.0
+ARG WHEEL_VERSION=0.48.0
+ARG CRYPTOGRAPHY_VERSION=50.0.0
 ARG URLLIB3_VERSION=2.7.0
-ARG CERTIFI_VERSION=2026.6.17
-ARG IDNA_VERSION=3.18
+ARG CERTIFI_VERSION=2026.7.22
+ARG IDNA_VERSION=3.19
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
-ARG PYOPENSSL_VERSION=26.3.0
+ARG PYOPENSSL_VERSION=26.4.0
 
 # Locate OMERO.web venv, validate layout, and ensure stable OMERO.web symlink
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ RUN set -euo pipefail; \
         "pip==${PIP_VERSION}" \
         "setuptools==${SETUPTOOLS_VERSION}" \
         "wheel==${WHEEL_VERSION}"; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.22.1"
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.23.0"
 
 ## Optional: remove build dependencies again to keep image smaller
 ## ---------------------------------------------------------------
@@ -202,7 +202,7 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 ARG OMERO_CLI_ZARR_VERSION
 ARG OME_ZARR_PY_VERSION
 ARG BIOFORMATS2RAW_VERSION
-ARG BIOFORMATS2RAW_SHA256=ea5352eb684ed989622559e2cd594077ce5f58b6fe375ede08518856622a3864
+ARG BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6
 ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
@@ -243,13 +243,13 @@ RUN set -euo pipefail; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        django==5.2.16 \
+        django==5.2.17 \
         matplotlib==3.11.1 \
         pytest==9.1.1 \
-        portalocker==3.2.0 \
+        portalocker==4.2.0 \
         psycopg2-binary==2.9.12 \
         celery==5.6.3 \
-        redis==8.0.1 \
+        redis==8.1.0 \
         django-redis==7.0.0 \
         omero-fpbioimage==0.4.1 \
         omero-gallery==3.4.3 \

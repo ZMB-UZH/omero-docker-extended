@@ -95,10 +95,10 @@ only through separate fresh per-object confirmations in replacement mode.
 ## Image pinning
 
 - All docker images in `docker-compose.yml` use explicit version tags (e.g.,
-  `postgres:16.14`, `redis:8.8.0-alpine`). Untagged images and floating aliases
+  `postgres:16.14`, `redis:8.10.1-alpine`). Untagged images and floating aliases
   such as `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
   `current` are prohibited.
-- Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.1`, `celery==5.6.3`).
+- Dockerfiles pin base images and key package versions (e.g., `omero-py==5.23.0`, `celery==5.6.3`).
 - Dependabot monitors pip and docker dependencies weekly and opens PRs for updates.
 
 ## Input validation

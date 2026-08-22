@@ -84,14 +84,47 @@ def main(argv: list[str] | None = None) -> int:
                 f"{skill_name} after scanner annotations"
             )
 
+    caveman_sources = agent_skill_provenance.load_caveman_upstream_sources(repo_root)
+    caveman_commit = agent_skill_provenance.resolve_remote_tag_commit(
+        caveman_sources.repo_slug,
+        caveman_sources.tag,
+        cwd=repo_root,
+    )
+    if caveman_commit != caveman_sources.commit:
+        failures.append(
+            "Pinned caveman release commit mismatch: "
+            f"doc has {caveman_sources.commit}, upstream tag resolves to "
+            f"{caveman_commit}."
+        )
+    else:
+        print(
+            "OK caveman release tag "
+            f"{caveman_sources.tag} resolves to documented commit "
+            f"{caveman_sources.commit}"
+        )
+
+    for reference_name in sorted(caveman_sources.vendor_files):
+        vendor_path = repo_root / caveman_sources.vendor_files[reference_name]
+        local_text = vendor_path.read_text(encoding="utf-8")
+        upstream_text = agent_skill_provenance.fetch_text(
+            caveman_sources.raw_file_url(reference_name),
+            timeout=args.timeout,
+        )
+        if local_text.rstrip("\n") != upstream_text.rstrip("\n"):
+            failures.append(
+                f"Vendored caveman mismatch for {reference_name}: {vendor_path}"
+            )
+        else:
+            print(f"OK vendored caveman snapshot matches {reference_name}")
+
     if failures:
         for failure in failures:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
 
     print(
-        "Verified vendored upstream snapshot, release tag, and selected skill files "
-        "against the live upstream source."
+        "Verified vendored upstream snapshots, release tags, and selected skill "
+        "files against the live upstream sources."
     )
     return 0
 

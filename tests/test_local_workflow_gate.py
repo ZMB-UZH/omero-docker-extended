@@ -256,7 +256,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertIn("VALIDATE_BASH", command)
         self.assertEqual("true", environment["VALIDATE_BASH"])
         self.assertEqual(
-            r"(^|/)third_party/(ecc-v2\.0\.0|caveman-v1\.9\.1)/",
+            r"(^|/)third_party/(ecc-v2\.0\.0|caveman-v2\.2\.0)/",
             environment["FILTER_REGEX_EXCLUDE"],
         )
 
@@ -265,7 +265,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.15.22", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.16.4", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

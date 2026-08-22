@@ -10,7 +10,16 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
-No changes are currently recorded.
+### Changed
+
+- Updated OMERO.web to 5.33.0 with its compatible Django and OMERO.py releases.
+- Refreshed the monitoring, management, cache, local-AI, CI, and developer
+  toolchain versions after upstream compatibility review.
+
+### Upgrade Notes
+
+- Rebuild the customized application images during deployment.
+- No OMERO.server database migration or storage-layout change is required.
 
 ## [1.1.0-main.1] - 2026-07-22
 

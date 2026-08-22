@@ -116,7 +116,7 @@ def test_extractor_accepts_common_version_specifiers(tmp_path):
     dockerfile.write_text(
         textwrap.dedent(
             """
-            FROM python:3.14.4
+            FROM python:3.14.7
             RUN python -m pip install --no-cache-dir \\
                 "example~=1.2" \\
                 "another>=1,<2" \\

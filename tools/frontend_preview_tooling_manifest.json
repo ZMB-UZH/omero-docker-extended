@@ -1,11 +1,11 @@
 {
   "name": "omero-agent-frontend-preview-tooling",
-  "node_version": "24.18.0",
+  "node_version": "24.19.0",
   "dependencies": {
-    "vite": "8.1.5",
-    "vitest": "4.1.10",
-    "jsdom": "29.1.1",
-    "@vitest/browser-playwright": "4.1.10",
-    "playwright": "1.61.1"
+    "vite": "8.2.2",
+    "vitest": "4.1.11",
+    "jsdom": "30.0.1",
+    "@vitest/browser-playwright": "4.1.11",
+    "playwright": "1.62.1"
   }
 }

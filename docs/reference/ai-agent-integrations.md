@@ -73,7 +73,7 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 This repository also carries an opt-in `caveman` communication overlay:
 
-- vendored upstream prompt reference material under `third_party/caveman-v1.9.1/`
+- vendored upstream prompt reference material under `third_party/caveman-v2.2.0/`
 - a repo-local overlay at `.agents/skills/caveman/`
 - shared-skill catalog routing in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and `.cursor/rules/00-omero-core.mdc`
 
@@ -86,10 +86,11 @@ Compression stays opt-in and quality-first:
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-Upstream `caveman` `v1.9.1` replaces unverified savings claims with a measured
-65% average output-token reduction, preserves the user's language, rejects
-invented abbreviations and causal arrows that do not save tokens, and forbids
-self-referential mode narration. It also includes hooks, stats, installers,
+Upstream `caveman` `v2.2.0` preserves the measured 65% average output-token
+reduction baseline, adds negation, number, unit, grammar, persisted-prose, and
+destructive-command clarity guards, rejects invented abbreviations and causal
+arrows that do not save tokens, and forbids self-referential mode narration.
+It also includes hooks, stats, installers,
 `caveman-shrink`, `caveman-init`, and cavecrew orchestration. This repo imports
 only the prompt-reference clarity lessons; activation, hook, installer, MCP,
 subagent, statusline, stats, configuration, and context-rewrite surfaces remain
@@ -152,12 +153,18 @@ edits with `rg`, file reads, and tests in the real checkout.
 
 When CocoIndex reports a cold semantic index, agents should tell the user once
 in one short sentence that the first search can take several minutes and later
-searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.37
+searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.41
 to include every Git-visible mirrored file pattern instead of upstream's
 extension list. CocoIndex indexes text-decodable content and skips undecodable
 binary files, so agents must not claim semantic search inside arbitrary binary
 formats or add repo-specific language rewrites or file-type exclusions without a
 tested, documented configuration contract.
+
+Embedding-device selection remains automatic, so Sentence Transformers uses a
+Linux-visible accelerator when supported and otherwise uses CPU. Operators can
+request `cuda`, `mps`, `cpu`, or `auto` with the wrapper's `--device` option or
+`AGENT_COCOINDEX_DEVICE`; explicit unavailable accelerators fail before an
+index or query starts.
 
 Upstream CocoIndex Code documents native MCP setup as installing the full
 package and registering `ccc mcp` with the agent. This repo keeps that MCP

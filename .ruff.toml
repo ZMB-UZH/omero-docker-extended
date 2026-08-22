@@ -1,5 +1,6 @@
-required-version = "==0.15.22"
+required-version = "==0.16.4"
 target-version = "py39"
+extend-exclude = ["third_party"]
 
 [lint]
 select = ["F", "E7", "E9", "B904", "LOG014"]
