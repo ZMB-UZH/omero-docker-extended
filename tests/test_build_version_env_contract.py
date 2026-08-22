@@ -589,7 +589,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn('alternatives --set java "${BASE_JAVA}"', dockerfile_text)
         self.assertIn(
-            'java -version 2>&1 | grep -F \'1.8.0\' >/dev/null',
+            "java -version 2>&1 | grep -F '1.8.0' >/dev/null",
             dockerfile_text,
         )
         self.assertIn(
