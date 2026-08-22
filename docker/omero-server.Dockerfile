@@ -208,6 +208,7 @@ RUN set -euo pipefail; \
             exit 1; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+            "omero-py==5.23.0" \
             "reportlab==${REPORTLAB_VERSION}" \
             "markdown==${MARKDOWN_VERSION}" \
             "tifffile==${TIFFFILE_VERSION}"; \
