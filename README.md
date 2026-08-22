@@ -205,11 +205,11 @@ The table below lists the long-running services available in the full profile se
 | --- | --- | --- | --- |
 | `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
-| `database` | postgres:16.14 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.14 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
+| `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
+| `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.10.1-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `ollama` | ollama/ollama:0.32.15 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
-| `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
+| `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.44.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.14.0 | Metrics scraping and storage | 127.0.0.1:9090 |
 | `grafana` | grafana/grafana:13.2.0 | Dashboards and visualization | 127.0.0.1:3000 |

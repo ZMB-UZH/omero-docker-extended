@@ -10,6 +10,13 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 10
+    ignore:
+      # hadolint-action 3.4.0 embeds Hadolint 2.15.0, whose upstream #1240
+      # regression misclassifies Bash Dockerfile RUN instructions as POSIX sh.
+      # Re-evaluate this hold when a later action embeds the upstream fix.
+      - dependency-name: "hadolint/hadolint-action"
+        versions:
+          - "3.4.0"
     commit-message:
       prefix: "deps(actions)"
 

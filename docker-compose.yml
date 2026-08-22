@@ -335,7 +335,7 @@ services:
       - no-new-privileges:true
 
   database:
-    image: "postgres:16.14"
+    image: "postgres:16.15"
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
@@ -537,7 +537,7 @@ services:
       - no-new-privileges:true
 
   database_plugin:
-    image: "postgres:16.14"
+    image: "postgres:16.15"
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:

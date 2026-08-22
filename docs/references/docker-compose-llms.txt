@@ -14,8 +14,8 @@ Core services:
 
 - omeroserver (host port from OMERO_SERVER_HOST_PORT, default 4064; container/API port from OMERO_CLI_PORT, default 4064): OMERO.server, custom Dockerfile, depends on database.
 - omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
-- database (port 5432): PostgreSQL 16.14, OMERO core database.
-- database_plugin (port 5433): PostgreSQL 16.14, OMERO plugin database.
+- database (port 5432): PostgreSQL 16.15, OMERO core database.
+- database_plugin (port 5433): PostgreSQL 16.15, OMERO plugin database.
 - redis (port 6379): Redis 8.10.1-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
 - ollama (port 11434 internal): Ollama 0.32.15 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 

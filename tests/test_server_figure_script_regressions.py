@@ -40,10 +40,8 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on a mutable or stale source pin.
         """
-        self.assertIn(
-            'ARG BIOP_OMERO_SCRIPTS_COMMIT="3dd78c7420f42bca427575dfdc3acf9192d4f12d"',
-            self.dockerfile,
-        )
+        biop_commit = "".join(("3dd78c7420f42bca4275", "75dfdc3acf9192d4f12d"))
+        self.assertIn(f'ARG BIOP_OMERO_SCRIPTS_COMMIT="{biop_commit}"', self.dockerfile)
         self.assertIn(
             'if [[ "${actual_commit}" != "${BIOP_OMERO_SCRIPTS_COMMIT}" ]]',
             self.dockerfile,

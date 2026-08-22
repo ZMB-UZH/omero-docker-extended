@@ -137,9 +137,68 @@ class LocalWorkflowGateTests(unittest.TestCase):
             self.tool.PROFILES["ci"],
         )
         self.assertEqual(
-            self.tool.PROFILES["ci"] + (self.tool.run_super_linter,),
+            self.tool.PROFILES["ci"]
+            + (self.tool.run_hadolint, self.tool.run_super_linter),
             self.tool.PROFILES["all"],
         )
+
+    def test_hadolint_gate_uses_compatible_pinned_engine(self) -> None:
+        """Verify the local Hadolint gate pins the workflow-compatible engine.
+
+        Inputs: local gate and workflow sources. Output: asserts immutable compatible pins.
+        """
+
+        workflow_text = (
+            REPO_ROOT / ".github" / "workflows" / "security-code-scanning.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5",
+            workflow_text,
+        )
+        self.assertIn("v2.14.0", self.tool.HADOLINT_IMAGE)
+        self.assertRegex(self.tool.HADOLINT_IMAGE, r"@sha256:[0-9a-f]{64}$")
+
+    def test_hadolint_gate_fails_when_scanner_reports_results(self) -> None:
+        """Verify the local Hadolint gate rejects scanner findings.
+
+        Inputs: mocked Docker execution and temporary repository. Output: asserts a failed gate result.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            (repo_root / "docker").mkdir()
+            (repo_root / "docker" / "example.Dockerfile").write_text(
+                "FROM example:1\n", encoding="utf-8"
+            )
+            context = self.tool.GateContext(
+                repo_root=repo_root,
+                artifact_dir=repo_root / ".cache",
+                tool_venv=repo_root / ".venv",
+                python="/usr/bin/python3",
+                keep_going=False,
+            )
+            sarif = '{"runs":[{"results":[{"ruleId":"DL0001"}]}]}'
+
+            with (
+                unittest.mock.patch.object(
+                    self.tool, "_require_executable", return_value="/usr/bin/docker"
+                ),
+                unittest.mock.patch.object(
+                    self.tool.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess(
+                        args=(), returncode=0, stdout=sarif, stderr=""
+                    ),
+                ) as run,
+                self.assertRaisesRegex(self.tool.GateError, "Hadolint findings"),
+            ):
+                self.tool.run_hadolint(context)
+
+            command = run.call_args.args[0]
+            self.assertEqual(
+                "hadolint", command[command.index(self.tool.HADOLINT_IMAGE) + 1]
+            )
 
     def test_test_gate_uses_clean_explicit_coverage_files(self) -> None:
         """Verify the local pytest gate writes explicit fresh coverage files.

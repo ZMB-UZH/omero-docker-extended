@@ -13,8 +13,8 @@ details, or technical information that would enable misuse.
 ### Changed
 
 - Updated OMERO.web to 5.33.0 with its compatible Django and OMERO.py releases.
-- Refreshed the monitoring, management, cache, local-AI, CI, and developer
-  toolchain versions after upstream compatibility review.
+- Refreshed PostgreSQL, monitoring, management, cache, local-AI, CI, and
+  developer toolchain versions after upstream compatibility review.
 
 ### Upgrade Notes
 

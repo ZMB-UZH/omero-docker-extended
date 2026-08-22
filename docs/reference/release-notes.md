@@ -26,10 +26,17 @@ entry.
 - Updated Portainer `2.44.0`, Loki `3.7.6`, Alloy `1.18.1`, Prometheus `3.14.0`,
   Grafana `13.2.0`, Redis `8.10.1`, Redis exporter `1.89.0`, and Ollama
   `0.32.15` after reviewing their intervening release and upgrade notes.
-- Refreshed immutable PostgreSQL 16.14 and Ubuntu 26.04 base-image digests.
-- Updated CodeQL `4.37.8`, OSV action `2.5.1`, Scorecard `2.4.4`, Hadolint
-  action `3.4.0`, Docker Scout action and CLI `1.24.0`, Python `3.14.7`, Ruff
+- Updated PostgreSQL to `16.15` after reviewing its minor-release migration
+  notes. The update requires no dump/restore, and the repository does not
+  configure the logical-decoding or extension scenarios that require operator
+  action. Refreshed the immutable PostgreSQL and Ubuntu 26.04 base-image
+  digests.
+- Updated CodeQL `4.37.8`, OSV action `2.5.1`, Scorecard `2.4.4`, Docker Scout
+  action and CLI `1.24.0`, Python `3.14.7`, Ruff
   `0.16.4`, Node.js `24.19.0`, and the pinned browser-preview toolchain.
+  Retained Hadolint action `3.3.0` because `3.4.0` embeds Hadolint `2.15.0`,
+  whose upstream shell-detection regression is incompatible with the
+  repository's Bash Dockerfiles.
 - Regenerated every hash-locked CI dependency graph under Linux Python 3.14.7
   with pip-tools `7.6.1`, including Django stubs `6.1.0`, which upstream still
   tests against the deployed Django 5.2 line.
