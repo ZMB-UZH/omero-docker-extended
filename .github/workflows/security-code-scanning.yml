@@ -124,7 +124,7 @@ jobs:
           skip-dirs: third_party
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -169,7 +169,7 @@ jobs:
         run: semgrep scan --sarif --config auto --exclude third_party . > semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -339,21 +339,21 @@ jobs:
           PY
 
       - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
         if: always() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
         if: always() && steps.discover.outputs.test_dirs != ''
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
@@ -419,7 +419,7 @@ jobs:
           no-fail: true
 
       - name: Upload Hadolint results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -469,7 +469,7 @@ jobs:
           exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: devskim-results.sarif
           category: devskim
@@ -546,7 +546,7 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@37f2634a92ba38a0926ef79a0748ac8ae7d95ab2 # v4.37.8
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
