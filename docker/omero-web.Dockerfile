@@ -134,6 +134,7 @@ RUN set -euo pipefail; \
         procps-ng \
         quota \
         e2fsprogs \
+        java-17-openjdk-headless \
         docker-ce-cli \
         docker-compose-plugin; \
     dnf clean all || true; \
@@ -193,6 +194,7 @@ COPY third_party /tmp/third_party
 COPY docs/help /tmp/omero_plugin_help_docs
 COPY docker/patch_omeroweb_api_servers.py /tmp/patch_omeroweb_api_servers.py
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
+COPY docker/bioformats2raw-launcher.sh /tmp/bioformats2raw-launcher.sh
 
 COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_fallback.py
 # Install psycopg2-binary
@@ -294,10 +296,10 @@ RUN set -euo pipefail; \
         exit 1; \
     fi; \
     ln -s "${install_dir}" "${stable_link}"; \
-    ln -sf "${stable_link}/bin/bioformats2raw" /usr/local/bin/bioformats2raw; \
     chmod 0755 "${install_dir}/bin/bioformats2raw"; \
+    install -o root -g root -m 0755 /tmp/bioformats2raw-launcher.sh /usr/local/bin/bioformats2raw; \
     /usr/local/bin/bioformats2raw --help >/dev/null; \
-    rm -f "${archive}"
+    rm -f "${archive}" /tmp/bioformats2raw-launcher.sh
 
 # Patch OMERO.web API server discovery and keep optional top-logo context keys
 # defined when unset. The API patch makes `/api/v0/servers/` return the
