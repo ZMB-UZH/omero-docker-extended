@@ -488,6 +488,7 @@ services:
         OMERO_CLI_ZARR_VERSION: "${OMERO_CLI_ZARR_VERSION:?Set OMERO_CLI_ZARR_VERSION in env/omeroserver.env}"
         OME_ZARR_PY_VERSION: "${OME_ZARR_PY_VERSION:?Set OME_ZARR_PY_VERSION in env/omeroserver.env}"
         BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"
+        BIOFORMATS2RAW_SHA256: "${BIOFORMATS2RAW_SHA256:?Set BIOFORMATS2RAW_SHA256 in env/omeroserver.env}"
         TIFFFILE_VERSION: "${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}"
     restart: unless-stopped
     # Startup reconciles bind-mounted runtime paths, then drops to omero-web.

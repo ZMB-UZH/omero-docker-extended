@@ -202,12 +202,13 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 ARG OMERO_CLI_ZARR_VERSION
 ARG OME_ZARR_PY_VERSION
 ARG BIOFORMATS2RAW_VERSION
-ARG BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6
+ARG BIOFORMATS2RAW_SHA256
 ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
     : "${OME_ZARR_PY_VERSION:?OME_ZARR_PY_VERSION must be provided from env/omeroserver.env}"; \
     : "${BIOFORMATS2RAW_VERSION:?BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env}"; \
+    : "${BIOFORMATS2RAW_SHA256:?BIOFORMATS2RAW_SHA256 must be provided from env/omeroserver.env}"; \
     : "${TIFFFILE_VERSION:?TIFFFILE_VERSION must be provided from env/omeroserver.env}"; \
     mapfile -t VIZARR_BUILD_DIRS < <(find /tmp/third_party -mindepth 1 -maxdepth 1 -type d -name 'vizarr-*' | sort); \
     if [[ "${#VIZARR_BUILD_DIRS[@]}" -ne 1 ]]; then \

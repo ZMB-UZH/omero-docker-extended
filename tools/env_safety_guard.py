@@ -91,6 +91,7 @@ DOT_ENV_REQUIRED_KEYS = (
     "OMERO_CLI_ZARR_VERSION",
     "OME_ZARR_PY_VERSION",
     "BIOFORMATS2RAW_VERSION",
+    "BIOFORMATS2RAW_SHA256",
     "TIFFFILE_VERSION",
     "BIOFORMATS_VERSION",
     "BIOFORMATS_SHA256",
@@ -101,6 +102,20 @@ DOT_ENV_REQUIRED_KEYS = (
     "REDIS_DATA_TMPFS_SIZE",
 )
 DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
+DOT_ENV_DIRECT_KEYS = frozenset(
+    {
+        "COMPOSE_PROJECT_NAME",
+        "PORTAINER_HOST_BIND",
+        "REDIS_SAVE_POLICY",
+        "REDIS_APPENDONLY",
+        "REDIS_MAXMEMORY",
+        "REDIS_MAXMEMORY_POLICY",
+        "REDIS_DATA_TMPFS_SIZE",
+    }
+)
+DOT_ENV_MIRRORED_KEYS = tuple(
+    key for key in DOT_ENV_REQUIRED_KEYS if key not in DOT_ENV_DIRECT_KEYS
+)
 REQUIRED_NONEMPTY_ENV_KEYS = frozenset(
     {
         "OMERO_DB_PASS",
@@ -466,6 +481,58 @@ def resolve_env_references(value: str, assignments: dict[str, str]) -> str:
     raise ValueError("too many nested env references")
 
 
+def load_compose_source_assignments(repo_root: Path) -> dict[str, str]:
+    """Return merged source assignments used to generate `.env`.
+
+    Inputs: `repo_root`. Output: `dict[str, str]`.
+    """
+    assignments: dict[str, str] = {}
+    for relative_path in EXPECTED_COMPOSE_ENV_FILES:
+        env_path = repo_root / relative_path
+        if not env_path.is_file():
+            raise ValueError(f"{relative_path} is missing")
+        try:
+            assignments.update(parse_active_env_assignments(env_path))
+        except OSError as exc:
+            raise ValueError(f"{relative_path} could not be read") from exc
+    return assignments
+
+
+def validate_dot_env_mirror_values(
+    repo_root: Path, dot_env: dict[str, str]
+) -> list[str]:
+    """Reject stale generated `.env` values without exposing their contents.
+
+    Inputs: `repo_root`, parsed `dot_env`. Output: validation messages.
+    """
+    try:
+        source_assignments = load_compose_source_assignments(repo_root)
+    except ValueError as exc:
+        return [f".env mirror sources cannot be validated: {exc}"]
+
+    errors: list[str] = []
+    for key in DOT_ENV_MIRRORED_KEYS:
+        if key not in source_assignments:
+            errors.append(f"source deployment env is missing mirrored key {key}")
+            continue
+        if key not in dot_env:
+            errors.append(f".env is missing mirrored key {key}")
+            continue
+        try:
+            expected = resolve_env_references(
+                source_assignments[key], source_assignments
+            )
+            actual = resolve_env_references(dot_env[key], source_assignments | dot_env)
+        except ValueError as exc:
+            errors.append(f".env mirror for {key} cannot be safely resolved: {exc}")
+            continue
+        if actual != expected:
+            errors.append(
+                f".env mirror for {key} does not match its source deployment env"
+            )
+    return errors
+
+
 def is_bool_value(value: str) -> bool:
     """Return whether bool value.
 
@@ -743,10 +810,13 @@ def cmd_compose_guard(repo_root: Path) -> int:
     declared_root = Path(installation_path).expanduser().resolve()
     current_root = repo_root.resolve()
     expected_project_name = expected_compose_project_name(repo_root)
-    dot_env = load_env_assignments(repo_root / DOT_ENV_NAME)
-    configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
-
     errors: list[str] = []
+    try:
+        dot_env = parse_active_env_assignments(repo_root / DOT_ENV_NAME)
+    except ValueError as exc:
+        dot_env = {}
+        errors.append(f"{DOT_ENV_NAME}: {exc}")
+    configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
     if current_root != declared_root:
         errors.append(
             "Repository root does not match OMERO_INSTALLATION_PATH: "
@@ -757,6 +827,7 @@ def cmd_compose_guard(repo_root: Path) -> int:
             ".env COMPOSE_PROJECT_NAME does not match the canonical project name: "
             f"{configured_project_name or '<missing>'} != {expected_project_name}"
         )
+    errors.extend(validate_dot_env_mirror_values(repo_root, dot_env))
 
     if errors:
         print(
@@ -790,8 +861,12 @@ def cmd_dot_env_check(repo_root: Path) -> int:
         print(f"ERROR: Missing {DOT_ENV_NAME}.", file=sys.stderr)
         return 1
 
-    dot_env = load_env_assignments(dot_env_path)
     failures: list[str] = []
+    try:
+        dot_env = parse_active_env_assignments(dot_env_path)
+    except ValueError as exc:
+        dot_env = {}
+        failures.append(f"{DOT_ENV_NAME}: {exc}")
     expected_project_name = expected_compose_project_name(repo_root)
     configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
     if configured_project_name != expected_project_name:
@@ -818,6 +893,7 @@ def cmd_dot_env_check(repo_root: Path) -> int:
         failures.append(
             ".env is missing compose interpolation keys: " + ", ".join(missing_keys)
         )
+    failures.extend(validate_dot_env_mirror_values(repo_root, dot_env))
 
     if failures:
         print(
@@ -1014,6 +1090,8 @@ def validate_dot_env_values(repo_root: Path, context: dict[str, str]) -> list[st
             errors.append(
                 f"{DOT_ENV_NAME}: COMPOSE_PROJECT_NAME does not match canonical project name"
             )
+
+    errors.extend(validate_dot_env_mirror_values(repo_root, assignments))
 
     for key, raw_value in assignments.items():
         try:

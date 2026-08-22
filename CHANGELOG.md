@@ -16,6 +16,11 @@ details, or technical information that would enable misuse.
 - Refreshed PostgreSQL, monitoring, management, cache, local-AI, CI, and
   developer toolchain versions after upstream compatibility review.
 
+### Fixed
+
+- Prevented stale generated Compose settings from selecting mismatched build
+  artifacts during upgrades.
+
 ### Upgrade Notes
 
 - Rebuild the customized application images during deployment.

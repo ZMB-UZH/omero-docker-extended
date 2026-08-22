@@ -715,6 +715,11 @@ run_image_build() {
         return 1
     fi
 
+    if [ -z "${BIOFORMATS2RAW_SHA256:-}" ]; then
+        echo "ERROR: Missing required configuration variable BIOFORMATS2RAW_SHA256 in ${server_env_source}" >&2
+        return 1
+    fi
+
     if [ -z "${TIFFFILE_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable TIFFFILE_VERSION in ${server_env_source}" >&2
         return 1
@@ -939,6 +944,7 @@ export_compose_interpolation_env() {
         OMERO_CLI_ZARR_VERSION
         OME_ZARR_PY_VERSION
         BIOFORMATS2RAW_VERSION
+        BIOFORMATS2RAW_SHA256
         TIFFFILE_VERSION
         BIOFORMATS_VERSION
         BIOFORMATS_SHA256
@@ -2325,6 +2331,7 @@ OMERO_DROPBOX_VERSION=${OMERO_DROPBOX_VERSION}
 OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}
 OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}
 BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}
+BIOFORMATS2RAW_SHA256=${BIOFORMATS2RAW_SHA256}
 TIFFFILE_VERSION=${TIFFFILE_VERSION}
 BIOFORMATS_VERSION=${BIOFORMATS_VERSION}
 BIOFORMATS_SHA256=${BIOFORMATS_SHA256}

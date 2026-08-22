@@ -71,8 +71,9 @@ Examples:
   `up` and inspect `.dockerignore`; generated runtime roots such as
   `omero_data/`, `omero_temp/`, `postgresdb/`, `node_modules/`, and
   `.project-pull.*/` must stay excluded from build contexts.
-- Build ARGs such as `OMERO_DROPBOX_VERSION`, `BIOFORMATS2RAW_VERSION`, and
-  `BIOFORMATS_SHA256` come from `env/omeroserver.env`. `docker-compose.yml`
+- Build ARGs such as `OMERO_DROPBOX_VERSION`, `BIOFORMATS2RAW_VERSION`,
+  `BIOFORMATS2RAW_SHA256`, and `BIOFORMATS_SHA256` come from
+  `env/omeroserver.env`. `docker-compose.yml`
   and `docker/<service>.Dockerfile` fail closed when those values are absent
   instead of silently falling back to in-code defaults.
 
@@ -138,7 +139,10 @@ Examples:
 
 ## bioformats2raw version compatibility
 
-- `bioformats2raw` is installed in the `omeroweb` container. The version is controlled by `BIOFORMATS2RAW_VERSION` from `env/omeroserver.env`.
+- `bioformats2raw` is installed in the `omeroweb` container. Its version and
+  official release digest are controlled by `BIOFORMATS2RAW_VERSION` and
+  `BIOFORMATS2RAW_SHA256` from `env/omeroserver.env`; the Compose guard rejects
+  a stale generated `.env` mirror before any build or deployment.
 - Before upgrading `bioformats2raw`, verify Java compatibility: run `bioformats2raw --version` inside the container. If the new version requires a newer Java runtime (check "class file version" errors), you must first install the required JDK in the Dockerfile.
 - The base image `openmicroscopy/omero-web-standalone` ships Java 8 (class file version 52). `bioformats2raw` v0.11.x works with Java 8. Starting from v0.12.x, Java 11+ (class file version 55) is required.
 - `bioformats2raw` bundles its own Bio-Formats version. Check `bioformats2raw --version` output for the bundled Bio-Formats version. This is independent of any Bio-Formats version used by OMERO.server.

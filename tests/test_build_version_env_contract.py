@@ -51,6 +51,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertNotIn("OMERO_CLI_ZARR_VERSION=", env_text)
         self.assertNotIn("OME_ZARR_PY_VERSION=", env_text)
         self.assertNotIn("BIOFORMATS2RAW_VERSION=", env_text)
+        self.assertNotIn("BIOFORMATS2RAW_SHA256=", env_text)
         self.assertNotIn("TIFFFILE_VERSION=", env_text)
         self.assertNotIn("BIOFORMATS_VERSION=", env_text)
         self.assertNotIn("BIOFORMATS_SHA256=", env_text)
@@ -70,6 +71,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.16.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.12.1", env_text)
+        self.assertIn(
+            "BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6",
+            env_text,
+        )
         self.assertIn(
             "2026.3.3 is the newest compatible release",
             env_text,
@@ -101,6 +106,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             'BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
+        self.assertIn(
+            'BIOFORMATS2RAW_SHA256: "${BIOFORMATS2RAW_SHA256:?Set BIOFORMATS2RAW_SHA256 in env/omeroserver.env}"',
             compose_text,
         )
         self.assertIn(
@@ -536,10 +545,12 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("ARG OMERO_CLI_ZARR_VERSION\n", dockerfile_text)
         self.assertIn("ARG OME_ZARR_PY_VERSION\n", dockerfile_text)
         self.assertIn("ARG BIOFORMATS2RAW_VERSION\n", dockerfile_text)
+        self.assertIn("ARG BIOFORMATS2RAW_SHA256\n", dockerfile_text)
         self.assertIn("ARG TIFFFILE_VERSION\n", dockerfile_text)
         self.assertNotIn("ARG OMERO_CLI_ZARR_VERSION=", dockerfile_text)
         self.assertNotIn("ARG OME_ZARR_PY_VERSION=", dockerfile_text)
         self.assertNotIn("ARG BIOFORMATS2RAW_VERSION=", dockerfile_text)
+        self.assertNotIn("ARG BIOFORMATS2RAW_SHA256=", dockerfile_text)
         self.assertNotIn("ARG TIFFFILE_VERSION=", dockerfile_text)
         self.assertIn(
             "OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env",
@@ -553,16 +564,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env",
             dockerfile_text,
         )
-        bioformats2raw_sha256 = "".join(
-            (
-                "51fbbf04a83c2042",
-                "b707fce016ad0c82",
-                "60d37194ff8fe7d9",
-                "86d53f4ebee116a6",
-            )
-        )
         self.assertIn(
-            f"ARG BIOFORMATS2RAW_SHA256={bioformats2raw_sha256}", dockerfile_text
+            "BIOFORMATS2RAW_SHA256 must be provided from env/omeroserver.env",
+            dockerfile_text,
         )
         self.assertIn(
             "TIFFFILE_VERSION must be provided from env/omeroserver.env",
@@ -618,6 +622,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}", script_text)
         self.assertIn("OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}", script_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
+        self.assertIn("BIOFORMATS2RAW_SHA256=${BIOFORMATS2RAW_SHA256}", script_text)
         self.assertIn("TIFFFILE_VERSION=${TIFFFILE_VERSION}", script_text)
         self.assertIn("BIOFORMATS_VERSION=${BIOFORMATS_VERSION}", script_text)
         self.assertIn("BIOFORMATS_SHA256=${BIOFORMATS_SHA256}", script_text)
@@ -648,6 +653,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             "Missing required configuration variable BIOFORMATS2RAW_VERSION in ${server_env_source}",
+            script_text,
+        )
+        self.assertIn(
+            "Missing required configuration variable BIOFORMATS2RAW_SHA256 in ${server_env_source}",
             script_text,
         )
         self.assertIn(
