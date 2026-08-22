@@ -91,6 +91,11 @@ RUN set -euo pipefail; \
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
 # -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
+    BASE_JAVA="$(readlink -e "$(command -v java)")"; \
+    if [[ -z "${BASE_JAVA}" || ! -x "${BASE_JAVA}" ]]; then \
+        echo "ERROR: Could not resolve the OMERO.web base image Java runtime" >&2; \
+        exit 1; \
+    fi; \
     curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo; \
     dnf_retry() { \
         local attempt=1; \
@@ -137,6 +142,12 @@ RUN set -euo pipefail; \
         java-17-openjdk-headless \
         docker-ce-cli \
         docker-compose-plugin; \
+    alternatives --set java "${BASE_JAVA}"; \
+    if [[ "$(readlink -e "$(command -v java)")" != "${BASE_JAVA}" ]]; then \
+        echo "ERROR: Java 17 installation changed the image-wide Java runtime" >&2; \
+        exit 1; \
+    fi; \
+    java -version 2>&1 | grep -F '1.8.0' >/dev/null; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true
 
