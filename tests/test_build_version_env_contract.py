@@ -425,6 +425,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             expected_pin,
             worker_dockerfile_text,
         )
+        self.assertIn(expected_pin, server_dockerfile_text)
         for package_pin in (
             "django==5.2.17",
             "matplotlib==3.11.1",
