@@ -213,6 +213,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         alloy_service = compose_text.split("\n  alloy:\n", 1)[1].split(
             "\n  prometheus:\n", 1
         )[0]
+        self.assertIn("--disable-reporting", alloy_service)
         self.assertIn("--storage.path=/data-alloy", compose_text)
         self.assertIn(
             "${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw",

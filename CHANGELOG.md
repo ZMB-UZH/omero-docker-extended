@@ -15,6 +15,7 @@ details, or technical information that would enable misuse.
 - Updated OMERO.web to 5.33.0 with its compatible Django and OMERO.py releases.
 - Refreshed PostgreSQL, monitoring, management, cache, local-AI, CI, and
   developer toolchain versions after upstream compatibility review.
+- Disabled Alloy usage reporting to avoid unnecessary telemetry retries.
 
 ### Fixed
 
