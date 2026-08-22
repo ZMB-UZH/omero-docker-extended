@@ -1,7 +1,7 @@
 ---
 name: cocoindex-code-search
 description: Mandatory MCP-first workflow for the repo's pinned host-side CocoIndex Code semantic routing and token reduction without writing index artifacts into the live checkout.
-origin: repo-local skill based on verified cocoindex-code 0.2.37 behavior
+origin: repo-local skill based on verified cocoindex-code 0.2.41 behavior
 ---
 
 # CocoIndex Code Search
@@ -50,14 +50,19 @@ context before exact `rg`, file reads, and tests.
 10. Run
    `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`
    when changing this workflow or after a major CocoIndex Code release.
-11. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
+11. Leave device selection automatic by default. CocoIndex/Sentence Transformers
+    will use a supported accelerator when its Linux runtime exposes one. Use
+    `--device cuda`, `--device mps`, or `AGENT_COCOINDEX_DEVICE` only for an
+    intentional override; unavailable explicit accelerators must fail before
+    indexing. Use `--device auto` to restore upstream automatic selection.
+12. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
    likely; the hybrid path is for broad routing where candidate output would be
    large.
 
 ## Artifact rules
 
 - Never run `ccc init` directly in the live checkout.
-- Keep pinned `cocoindex-code[full]==0.2.37`; do not use a floating version.
+- Keep pinned `cocoindex-code[full]==0.2.41`; do not use a floating version.
 - The wrapper indexes an external mirror of Git-visible non-ignored files.
   Settings, runtime files, model caches, and SQLite databases stay under XDG
   paths or `AGENT_COCOINDEX_HOME`, never under the live repository.
@@ -75,7 +80,7 @@ context before exact `rg`, file reads, and tests.
   working directory. Do not put installation-specific paths in committed files.
 - Do not add, commit, or normalize `.cocoindex_code/` in the repository.
 - Do not index real `.env` files; only example env contracts are allowed.
-- The mirror asks CocoIndex Code 0.2.37 to include every Git-visible mirrored
+- The mirror asks CocoIndex Code 0.2.41 to include every Git-visible mirrored
   file pattern. CocoIndex indexes text-decodable content and safely skips
   undecodable binary files; do not claim semantic search inside arbitrary binary
   formats.

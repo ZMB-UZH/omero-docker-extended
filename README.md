@@ -207,20 +207,20 @@ The table below lists the long-running services available in the full profile se
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.14 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.14 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
-| `redis` | redis:8.8.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.32.1 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `redis` | redis:8.10.1-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `ollama` | ollama/ollama:0.32.15 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.14) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.43.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
-| `prometheus` | prom/prometheus:v3.13.1 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.1.1 | Dashboards and visualization | 127.0.0.1:3000 |
-| `loki` | grafana/loki:3.7.3 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.18.0 | Log collection pipeline (file-based) | 12345 (internal) |
+| `portainer` | portainer/portainer-ce:2.44.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
+| `prometheus` | prom/prometheus:v3.14.0 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `grafana` | grafana/grafana:13.2.0 | Dashboards and visualization | 127.0.0.1:3000 |
+| `loki` | grafana/loki:3.7.6 | Log aggregation backend | 127.0.0.1:3100 |
+| `alloy` | grafana/alloy:v1.18.1 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.5 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.87.0-alpine | Redis metrics | 9121 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.89.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
@@ -624,7 +624,7 @@ handshake, raw protocol probes, and tool listing with
 `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
 only against an existing active index. If it cold-indexes, agents tell the user
 once that the first search can take several minutes; later searches reuse the
-external cache. The mirror asks CocoIndex Code 0.2.37 to include every
+external cache. The mirror asks CocoIndex Code 0.2.41 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

@@ -3,6 +3,18 @@
 One-off developer note. Update this document only on explicit maintainer
 request or after a major CocoIndex Code release.
 
+## 2026-08-22 Validation Refresh
+
+- Validated `cocoindex-code[full]==0.2.41` with stdio MCP initialization,
+  tool-listing, four protocol-version probes, and the 10-case routing benchmark.
+- The refreshed semantic pass placed an expected file in the top five for 8 of
+  10 cases versus 5 of 10 for broad `rg`, while reducing semantic candidate
+  output to 43,755 characters versus 331,108 broad-search characters.
+- The default embedding-device setting remains automatic. The wrapper now also
+  validates intentional `cuda`, `mps`, `cpu`, and `auto` overrides before use.
+- The detailed package hashes and benchmark tables below remain the historical
+  baseline for the original 2026-04-27 measurement.
+
 ## Scope
 
 This benchmark validates the repository's hybrid AI Agent search workflow:

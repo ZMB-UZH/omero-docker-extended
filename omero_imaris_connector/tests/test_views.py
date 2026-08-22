@@ -1737,6 +1737,12 @@ def test_export_cli_process_helpers_validate_proc_and_signal_edges(monkeypatch):
 
     monkeypatch.setattr(views, "Path", _ZombiePath)
     assert views._process_is_zombie(123)
+    monkeypatch.setattr(
+        _ZombiePath,
+        "read_text",
+        staticmethod(lambda **_kwargs: (_ for _ in ()).throw(OSError)),
+    )
+    assert not views._process_is_zombie(123)
     monkeypatch.setattr(views, "Path", real_path)
 
     monkeypatch.setattr(

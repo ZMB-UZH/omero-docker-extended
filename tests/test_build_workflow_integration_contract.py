@@ -1628,11 +1628,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         import yaml  # noqa: F811  — available in CI
 
         expected_versions = {
-            ".github/workflows/docs-knowledge-base.yml": ["3.14.4"],
-            ".github/workflows/mypy.yml": ["3.14.4"],
-            ".github/workflows/tests.yml": ["3.14.4"],
-            ".github/workflows/vulture.yml": ["3.14.4"],
-            ".github/workflows/security-code-scanning.yml": ["3.14.4", "3.14.4"],
+            ".github/workflows/docs-knowledge-base.yml": ["3.14.7"],
+            ".github/workflows/mypy.yml": ["3.14.7"],
+            ".github/workflows/tests.yml": ["3.14.7"],
+            ".github/workflows/vulture.yml": ["3.14.7"],
+            ".github/workflows/security-code-scanning.yml": ["3.14.7", "3.14.7"],
         }
 
         for relative_path, expected in expected_versions.items():
@@ -1802,7 +1802,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             lint_step["env"]["DEFAULT_BRANCH"],
         )
         self.assertEqual(
-            "(^|/)third_party/(ecc-v2\\.0\\.0|caveman-v1\\.9\\.1)/",
+            "(^|/)third_party/(ecc-v2\\.0\\.0|caveman-v2\\.2\\.0)/",
             lint_step["env"]["FILTER_REGEX_EXCLUDE"],
         )
         self.assertEqual(".", lint_step["env"]["LINTER_RULES_PATH"])
@@ -1829,7 +1829,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertFalse(markdown_config["MD033"])
         self.assertEqual(
-            "third_party/ecc-v2.0.0/**\nthird_party/caveman-v1.9.1/**\n",
+            "third_party/ecc-v2.0.0/**\nthird_party/caveman-v2.2.0/**\n",
             (self.repo_root / ".markdownlintignore").read_text(encoding="utf-8"),
         )
 

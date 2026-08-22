@@ -70,18 +70,18 @@ class MypyIntegrationContractTests(TestCase):
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
-        self.assertIn("mypy==2.3.0", source)
-        self.assertIn("django==5.2.16", source)
-        self.assertIn("django-stubs==5.2.9", source)
-        self.assertIn("django-stubs-ext==5.2.9", source)
+        self.assertIn("mypy==2.3.1", source)
+        self.assertIn("django==5.2.17", source)
+        self.assertIn("django-stubs==6.1.0", source)
+        self.assertIn("django-stubs-ext==6.1.0", source)
         self.assertIn("pip-compile", compiled)
-        self.assertIn("mypy==2.3.0", compiled)
-        self.assertIn("django==5.2.16", compiled)
-        self.assertIn("django-stubs==5.2.9", compiled)
-        self.assertIn("django-stubs-ext==5.2.9", compiled)
+        self.assertIn("mypy==2.3.1", compiled)
+        self.assertIn("django==5.2.17", compiled)
+        self.assertIn("django-stubs==6.1.0", compiled)
+        self.assertIn("django-stubs-ext==6.1.0", compiled)
         self.assertIn("types-requests==2.33.0.20260712", compiled)
         self.assertIn("types-atheris==3.1.0.20260630", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20260712", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20260724", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 
@@ -135,7 +135,7 @@ class MypyIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.4", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.7", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         cache_dependency_paths = setup_step["with"][
             "cache-dependency-path"
@@ -177,7 +177,7 @@ class MypyIntegrationContractTests(TestCase):
             "tests/test_mypy_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.9.1/tools/helper.py",
+            "third_party/caveman-v2.2.0/tools/helper.py",
             ".agents/skills/caveman/agents/openai.yaml",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",

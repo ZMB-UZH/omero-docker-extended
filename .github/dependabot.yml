@@ -24,11 +24,11 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     ignore:
-      # Held until upstream provides a stable ome-zarr-models release compatible
-      # with the Python 3.14 CI resolver. ome-zarr 0.18.0 currently resolves to
-      # ome-zarr-models 1.8.0rc0 under Python 3.14.
+      # ome-zarr 0.18 requires ome-zarr-models, whose stable releases currently
+      # require Python <3.14. Keep the Python 3.14 CI graph on the newest line
+      # with a stable, fully compatible resolver result.
       - dependency-name: "ome-zarr"
-      # OMERO.web 5.32.x requires Django >=5.2.9,<5.3. Keep CI typing aligned
+      # OMERO.web 5.33.x requires Django >=5.2.9,<5.3. Keep CI typing aligned
       # with the deployed runtime while continuing to receive 5.2.x updates.
       - dependency-name: "django"
         update-types:

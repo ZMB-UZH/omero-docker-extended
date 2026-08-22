@@ -87,7 +87,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
   worktrees unless the caller uses the matching explicit dirty flag. If it
   cold-indexes, tell the user once that the first search can take several
   minutes and then uses the external cache. Its mirror asks CocoIndex Code
-  0.2.37 to include every Git-visible mirrored file pattern; CocoIndex indexes
+  0.2.41 to include every Git-visible mirrored file pattern; CocoIndex indexes
   text-decodable content and skips undecodable binary files, so do not add
   repo-specific language rewrites or file-type exclusions without a tested,
   documented configuration contract. Use direct `rg` first only for precise
@@ -110,14 +110,15 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 - `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
 - `caveman` changes reply style only. It never changes routing, tool use, verification scope, or the need to surface uncertainty clearly.
-- The repo-local overlay intentionally stays narrower than upstream `v1.9.1`:
+- The repo-local overlay intentionally stays narrower than upstream `v2.2.0`:
   no hooks, no plugin auto-loading, no `.codex` hook config, no natural-language
   auto-activation, no `CAVEMAN_DEFAULT_MODE` or `off` handling, no
   `caveman-help`, no smart installer, no cavecrew subagents, no
   `caveman-shrink`, no stats/statusline scripts, no `caveman-init`, and no
-  `/compress` context rewriting. Keep the useful v1.9.1 style guards: preserve
-  the user's language, never invent prose abbreviations or causal arrows, never
-  abbreviate code symbols, and drop compression when it creates ambiguity.
+  `/compress` context rewriting. Keep the useful v2.2.0 style guards: preserve
+  language and negation, keep numbers and units exact, never invent prose
+  abbreviations or causal arrows, never abbreviate code symbols, keep persisted
+  prose normal, and drop compression when it creates ambiguity.
 
 ## Maintenance rules
 

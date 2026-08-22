@@ -6,6 +6,41 @@ maintainer change history. Release automation applies automated disclosure
 validation and requires explicit human review before publishing any canonical
 entry.
 
+## 2026-08-22 Runtime and Dependency Refresh
+
+- Updated OMERO.web to `5.33.0-1` after reviewing the tagged release notes,
+  tagged `UPGRADING.md`, dependency metadata, and the upstream source changes.
+  The deployment was already on Django 5.2, so the earlier session migration
+  does not apply to this upgrade. OMERO.server remains on `5.6.18`, the newest
+  official server-container release; upstream does not publish a 5.7.x server
+  image. Its upgrade guide confirms no database migration is required within
+  the 5.6 line.
+- Updated the compatible application stack to OMERO.py `5.23.0`, Django
+  `5.2.17`, portalocker `4.2.0`, redis-py `8.1.0`, omero-metadata `0.14.0`, and
+  current compatible packaging and document-generation dependencies. Retained
+  `ome-zarr==0.16.0` and runtime `tifffile==2026.3.3` because their newer lines
+  do not satisfy the complete Python 3.14 CI and Python 3.11 server contracts.
+- Updated bioformats2raw to `0.12.1` after confirming that its complete CLI
+  contract remains compatible with the import plugin. Refreshed the immutable
+  BIOP script-source commit; the installed script itself is unchanged.
+- Updated Portainer `2.44.0`, Loki `3.7.6`, Alloy `1.18.1`, Prometheus `3.14.0`,
+  Grafana `13.2.0`, Redis `8.10.1`, Redis exporter `1.89.0`, and Ollama
+  `0.32.15` after reviewing their intervening release and upgrade notes.
+- Refreshed immutable PostgreSQL 16.14 and Ubuntu 26.04 base-image digests.
+- Updated CodeQL `4.37.8`, OSV action `2.5.1`, Scorecard `2.4.4`, Hadolint
+  action `3.4.0`, Docker Scout action and CLI `1.24.0`, Python `3.14.7`, Ruff
+  `0.16.4`, Node.js `24.19.0`, and the pinned browser-preview toolchain.
+- Regenerated every hash-locked CI dependency graph under Linux Python 3.14.7
+  with pip-tools `7.6.1`, including Django stubs `6.1.0`, which upstream still
+  tests against the deployed Django 5.2 line.
+- Updated the host-side CocoIndex Code wrapper and repo-local skill to `0.2.41`
+  while preserving external caches, exact-search validation, and on-demand
+  indexing safeguards. Added validated automatic and on-demand embedding-device
+  selection with an early failure for unavailable explicit accelerators.
+- Refreshed the curated caveman prompt reference to `2.2.0` and retained only
+  its measurable clarity and token-efficiency safeguards. Verified that ECC
+  `2.1.0` does not change any of the 15 vendored skill files.
+
 ## 2026-07-22 Workflow Dependency Refresh
 
 - Updated the immutable `actions/checkout` pin to `v7.0.1` after reviewing its

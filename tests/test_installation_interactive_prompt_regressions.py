@@ -311,7 +311,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         OMERO_DROPBOX_VERSION=5.7.0
                         OMERO_CLI_ZARR_VERSION=0.8.0
                         OME_ZARR_PY_VERSION=0.16.0
-                        BIOFORMATS2RAW_VERSION=0.11.0
+                        BIOFORMATS2RAW_VERSION=0.12.1
                         TIFFFILE_VERSION=2026.3.3
                         BIOFORMATS_VERSION=8.5.0
                         BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2
@@ -417,7 +417,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         OMERO_DROPBOX_VERSION=5.7.0
                         OMERO_CLI_ZARR_VERSION=0.8.0
                         OME_ZARR_PY_VERSION=0.16.0
-                        BIOFORMATS2RAW_VERSION=0.11.0
+                        BIOFORMATS2RAW_VERSION=0.12.1
                         TIFFFILE_VERSION=2026.3.3
                         BIOFORMATS_VERSION=8.5.0
                         BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2

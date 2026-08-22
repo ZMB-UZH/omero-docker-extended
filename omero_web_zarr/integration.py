@@ -4,7 +4,7 @@ import logging
 import time
 import traceback
 from functools import wraps
-from typing import Any, cast
+from typing import Any
 
 from django.conf import settings
 from django.http import Http404
@@ -200,9 +200,8 @@ def _store_backed_render_response(image, request, z=None, t=None, download=False
         image.getName(),
         default=f"Image-{image.id}",
     )
-    response["Content-Disposition"] = cast(
-        str,
-        content_disposition_header(True, f"{filename}.{suffix}"),
+    response["Content-Disposition"] = content_disposition_header(
+        True, f"{filename}.{suffix}"
     )
     return response
 

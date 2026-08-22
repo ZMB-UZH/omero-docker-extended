@@ -25,7 +25,7 @@ from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
-PACKAGE_VERSION = "0.2.37"
+PACKAGE_VERSION = "0.2.41"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
 MCP_PYTHON_COMMAND = "python3"
@@ -34,7 +34,9 @@ MCP_JSONRPC_VERSION = "2.0"
 MCP_SEARCH_TOOL_NAME = "search"
 ARTIFACT_ROOT_ENV = "AGENT_COCOINDEX_HOME"
 REPO_ROOT_ENV = "AGENT_COCOINDEX_REPO"
+DEVICE_ENV = "AGENT_COCOINDEX_DEVICE"
 TIMEOUT_ENV_PREFIX = "AGENT_COCOINDEX_TIMEOUT_"
+EMBEDDING_DEVICE_CHOICES = ("auto", "cpu", "cuda", "mps")
 MIRROR_SCHEMA_VERSION = "1"
 FILE_COPY_CHUNK_BYTES = 1024 * 1024
 DENIED_MIRROR_BASENAMES = frozenset({".env"})
@@ -1216,9 +1218,71 @@ def ensure_project_settings_match_mirror(context: CocoIndexContext) -> bool:
     return changed
 
 
+def probe_embedding_devices(context: CocoIndexContext) -> dict[str, bool]:
+    """Return accelerator availability reported by the installed PyTorch.
+
+    Inputs: `context`. Output: availability for CUDA and Apple MPS.
+    """
+    script = (
+        "import json, torch\n"
+        "mps = getattr(torch.backends, 'mps', None)\n"
+        "print(json.dumps({'cuda': bool(torch.cuda.is_available()), "
+        "'mps': bool(mps is not None and mps.is_available())}))\n"
+    )
+    result = checked_command(
+        [str(context.venv_dir / "bin" / "python"), "-c", script],
+        cwd=context.repo_root,
+        env=ccc_env(context),
+        timeout=timeout_seconds("verify_install"),
+    )
+    payload = json.loads(result.stdout)
+    if not isinstance(payload, dict) or set(payload) != {"cuda", "mps"}:
+        raise RuntimeError("CocoIndex device probe returned an invalid payload.")
+    if not all(isinstance(value, bool) for value in payload.values()):
+        raise RuntimeError("CocoIndex device probe returned non-boolean values.")
+    return cast(dict[str, bool], payload)
+
+
+def configure_embedding_device(
+    context: CocoIndexContext, requested_device: str | None
+) -> str | None:
+    """Persist an explicit device request in external CocoIndex settings.
+
+    Inputs: `context`, optional `requested_device`. Output: normalized device or None.
+    With no request, CocoIndex retains upstream automatic accelerator
+    selection. `auto` restores that behavior; explicit accelerators fail early
+    when the installed runtime cannot use them.
+    """
+    requested = requested_device or os.environ.get(DEVICE_ENV)
+    if requested is None:
+        return None
+    normalized = requested.strip().lower()
+    if normalized not in EMBEDDING_DEVICE_CHOICES:
+        choices = ", ".join(EMBEDDING_DEVICE_CHOICES)
+        raise RuntimeError(f"{DEVICE_ENV} must be one of: {choices}.")
+    if normalized in {"cuda", "mps"}:
+        available = probe_embedding_devices(context)
+        if not available[normalized]:
+            raise RuntimeError(
+                f"CocoIndex embedding device {normalized!r} was requested but "
+                "is unavailable in the installed Linux runtime."
+            )
+
+    prepend_venv_site_package_paths(context)
+    with patched_process_env(ccc_env(context)):
+        settings_module = importlib.import_module("cocoindex_code.settings")
+        user_settings = settings_module.load_user_settings()
+        target_device = None if normalized == "auto" else normalized
+        if user_settings.embedding.device != target_device:
+            user_settings.embedding.device = target_device
+            settings_module.save_user_settings(user_settings)
+    return normalized
+
+
 def ensure_ready(
     context: CocoIndexContext,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
+    requested_device: str | None = None,
 ) -> None:
     """Install and prepare the external mirror.
 
@@ -1228,6 +1292,7 @@ def ensure_ready(
     ensure_mirror(context, excluded_paths)
     ensure_project_initialized(context)
     ensure_project_settings_match_mirror(context)
+    configure_embedding_device(context, requested_device)
 
 
 def emit_cold_index_notice_if_needed(context: CocoIndexContext) -> None:
@@ -1257,13 +1322,14 @@ def run_ccc(
     args: list[str],
     timeout: int | None = None,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
+    requested_device: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """The pinned ccc executable inside the external mirror.
 
     Inputs: `context`, `args`, `timeout`, `excluded_paths`. Output:
     `subprocess.CompletedProcess[str]`.
     """
-    ensure_ready(context, excluded_paths)
+    ensure_ready(context, excluded_paths, requested_device)
     with daemon_session(context):
         return checked_command(
             [str(context.ccc_bin), *args],
@@ -1335,6 +1401,7 @@ def run_index(
     *,
     allow_dirty: bool,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
+    requested_device: str | None = None,
 ) -> str:
     """An explicit disk-heavy CocoIndex index operation.
 
@@ -1348,6 +1415,7 @@ def run_index(
         ["index"],
         timeout=timeout_seconds("index"),
         excluded_paths=excluded_paths,
+        requested_device=requested_device,
     )
     write_active_index_metadata(context)
     return output.stdout
@@ -1636,6 +1704,7 @@ def run_benchmark(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
     *,
     allow_dirty: bool = False,
+    requested_device: str | None = None,
 ) -> dict[str, object]:
     """The reproducible hybrid search benchmark.
 
@@ -1648,7 +1717,12 @@ def run_benchmark(
     ensure_mirror(context, excluded_paths)
     ensure_project_initialized(context)
     index_start = time.perf_counter()
-    run_index(context, allow_dirty=allow_dirty, excluded_paths=excluded_paths)
+    run_index(
+        context,
+        allow_dirty=allow_dirty,
+        excluded_paths=excluded_paths,
+        requested_device=requested_device,
+    )
     index_elapsed = time.perf_counter() - index_start
 
     rg_bin = resolve_required_executable("rg")
@@ -1722,7 +1796,11 @@ def command_index(args: argparse.Namespace) -> None:
     repo_root = resolve_repo_root()
     require_clean_index_target(repo_root, allow_dirty=allow_dirty)
     context = resolve_context(repo_root=repo_root)
-    output = run_index(context, allow_dirty=allow_dirty)
+    output = run_index(
+        context,
+        allow_dirty=allow_dirty,
+        requested_device=getattr(args, "device", None),
+    )
     print(output, end="")
 
 
@@ -1747,6 +1825,7 @@ def command_search(args: argparse.Namespace) -> None:
         refresh=args.refresh,
         allow_index=getattr(args, "index_if_missing", False),
         allow_dirty=allow_dirty,
+        requested_device=getattr(args, "device", None),
     )
     print(output, end="")
 
@@ -1761,6 +1840,7 @@ def run_search(
     refresh: bool,
     allow_index: bool,
     allow_dirty: bool = False,
+    requested_device: str | None = None,
 ) -> str:
     """A CocoIndex Code search and return the rendered search output.
 
@@ -1770,11 +1850,21 @@ def run_search(
     external operations fail.
     """
     if refresh:
-        run_index(context, allow_dirty=allow_dirty)
+        run_index(
+            context,
+            allow_dirty=allow_dirty,
+            requested_device=requested_device,
+        )
     elif not target_sqlite_db(context).exists():
         if not allow_index:
             raise IndexRequiredError(INDEX_REQUIRED_MESSAGE)
-        run_index(context, allow_dirty=allow_dirty)
+        run_index(
+            context,
+            allow_dirty=allow_dirty,
+            requested_device=requested_device,
+        )
+    else:
+        configure_embedding_device(context, requested_device)
     ccc_args = ["search", "--limit", str(limit)]
     if path:
         ccc_args.extend(["--path", path])
@@ -2978,8 +3068,24 @@ def command_benchmark(args: argparse.Namespace) -> None:
         args.output,
         excluded_paths,
         allow_dirty=allow_dirty,
+        requested_device=getattr(args, "device", None),
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def add_embedding_device_argument(command_parser: argparse.ArgumentParser) -> None:
+    """Add the validated optional embedding-device selector to one command.
+
+    Inputs: `command_parser`. Output: None.
+    """
+    command_parser.add_argument(
+        "--device",
+        choices=EMBEDDING_DEVICE_CHOICES,
+        help=(
+            "Embedding device. Default keeps CocoIndex automatic selection; "
+            "explicit cuda/mps requests fail when unavailable."
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3016,6 +3122,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow indexing the current dirty worktree digest.",
     )
+    add_embedding_device_argument(index)
     index.set_defaults(func=command_index)
 
     search = subparsers.add_parser("search", help="Search the semantic index.")
@@ -3027,6 +3134,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Build the semantic index if it is missing for this repository digest.",
     )
+    add_embedding_device_argument(search)
     search.add_argument(
         "--refresh",
         action="store_true",
@@ -3091,6 +3199,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow benchmarking the current dirty worktree digest.",
     )
+    add_embedding_device_argument(benchmark)
     benchmark.set_defaults(func=command_benchmark)
 
     return parser

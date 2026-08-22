@@ -4,7 +4,7 @@
 ## Dedicated Celery worker image for OMERO Imaris exports
 ## Ubuntu 26.04 LTS base (NOT slim), pinned Python packages.
 
-FROM ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
+FROM ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
 
 USER root
 
@@ -26,13 +26,13 @@ ARG APPLY_SECURITY_HARDENING=0
 # newest Setuptools release below 81 because OMERO's Python stack still imports
 # pkg_resources, whose own deprecation warning requires that compatibility pin.
 # --------------------------------------------------------------------------
-ARG PIP_VERSION=26.1.2
+ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
-ARG WHEEL_VERSION=0.47.0
-ARG CRYPTOGRAPHY_VERSION=49.0.0
+ARG WHEEL_VERSION=0.48.0
+ARG CRYPTOGRAPHY_VERSION=50.0.0
 ARG URLLIB3_VERSION=2.7.0
-ARG CERTIFI_VERSION=2026.6.17
-ARG IDNA_VERSION=3.18
+ARG CERTIFI_VERSION=2026.7.22
+ARG IDNA_VERSION=3.19
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 
@@ -86,8 +86,8 @@ RUN set -euo pipefail; \
         "wheel==${WHEEL_VERSION}"; \
     CFLAGS="-std=gnu17 -D_DEFAULT_SOURCE" "$VENV/bin/python" -m pip install \
         "celery==5.6.3" \
-        "redis==8.0.1" \
-        "omero-py==5.22.1"
+        "redis==8.1.0" \
+        "omero-py==5.23.0"
 
 # Non-root runtime user
 RUN set -euo pipefail; \

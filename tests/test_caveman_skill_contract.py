@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from tools import agent_skill_provenance
+
 
 class CavemanSkillContractTests(unittest.TestCase):
     """Test cases for caveman skill contract tests."""
@@ -32,15 +34,15 @@ class CavemanSkillContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in vendored caveman reference exists.
         """
         self.assertTrue(
-            (self.repo_root / "third_party/caveman-v1.9.1/LICENSE").is_file()
+            (self.repo_root / "third_party/caveman-v2.2.0/LICENSE").is_file()
         )
         self.assertTrue(
             (
-                self.repo_root / "third_party/caveman-v1.9.1/skills/caveman/SKILL.md"
+                self.repo_root / "third_party/caveman-v2.2.0/skills/caveman/SKILL.md"
             ).is_file()
         )
         self.assertFalse(
-            (self.repo_root / "third_party/caveman-v1.9.1/README.md").exists()
+            (self.repo_root / "third_party/caveman-v2.2.0/README.md").exists()
         )
         self.assertFalse((self.repo_root / "third_party/caveman-v1.6.0").exists())
 
@@ -67,10 +69,15 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("Preserve the user's dominant language", skill_text)
         self.assertIn("Do not invent prose abbreviations", skill_text)
         self.assertIn("Do not narrate the mode", skill_text)
+        self.assertIn(
+            "Never remove `not`, `never`, `no`, `only`, or `except`", skill_text
+        )
+        self.assertIn("persisted text for other people", skill_text.lower())
+        self.assertIn("Required progress updates", skill_text)
         self.assertIn("All supported agents", skill_text)
         self.assertIn(".codex", skill_text)
         self.assertIn("natural-language auto-activation", skill_text)
-        self.assertIn("third_party/caveman-v1.9.1/skills/caveman/SKILL.md", skill_text)
+        self.assertIn("third_party/caveman-v2.2.0/skills/caveman/SKILL.md", skill_text)
 
     def test_caveman_adapter_disables_implicit_invocation(self) -> None:
         """Verify caveman adapter disables implicit invocation.
@@ -190,20 +197,36 @@ class CavemanSkillContractTests(unittest.TestCase):
         upstream_text = self.read_text("docs/reference/ai-agent-upstream-sources.md")
         reviewed_caveman_commit = "".join(
             (
-                "0d95a81d35a9f2d123a5",
-                "e9430d1cfc43d55f1bb0",
+                "9aa63945a349bef17206",
+                "540650db48c30fafbdf2",
             )
         )
-        self.assertIn(
-            "`v1.8.2`, `v1.9.0`, and `v1.9.1`",
-            upstream_text,
-        )
-        self.assertIn("observed and reviewed on 2026-07-18", upstream_text)
-        self.assertIn("caveman release tag: `v1.9.1`", upstream_text)
+        self.assertIn("`v2.0.0`, `v2.1.0`, and", upstream_text)
+        self.assertIn("`v2.2.0`", upstream_text)
+        self.assertIn("observed and reviewed on 2026-08-22", upstream_text)
+        self.assertIn("caveman release tag: `v2.2.0`", upstream_text)
         self.assertIn("caveman-shrink", upstream_text)
         self.assertIn("cavecrew subagents", upstream_text)
         self.assertIn(reviewed_caveman_commit, upstream_text)
-        self.assertIn("third_party/caveman-v1.9.1/", upstream_text)
+        self.assertIn("third_party/caveman-v2.2.0/", upstream_text)
+
+    def test_caveman_provenance_metadata_is_machine_verifiable(self) -> None:
+        """Verify caveman paths and raw URLs resolve from documented metadata.
+
+        Inputs: repository fixtures. Output: fails on invalid provenance metadata.
+        """
+        sources = agent_skill_provenance.load_caveman_upstream_sources(self.repo_root)
+
+        self.assertEqual("JuliusBrussee/caveman", sources.repo_slug)
+        self.assertEqual("v2.2.0", sources.tag)
+        self.assertEqual(
+            "third_party/caveman-v2.2.0/LICENSE", sources.vendor_files["LICENSE"]
+        )
+        self.assertEqual(
+            "https://raw.githubusercontent.com/JuliusBrussee/caveman/"
+            "v2.2.0/skills/caveman/SKILL.md",
+            sources.raw_file_url("caveman"),
+        )
 
     def test_readme_documents_opt_in_caveman_badge(self) -> None:
         """Verify readme documents opt in caveman badge.

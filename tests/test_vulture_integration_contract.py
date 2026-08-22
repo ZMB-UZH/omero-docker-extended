@@ -85,7 +85,7 @@ class VultureIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.4", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.7", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         self.assertEqual(
             ".github/requirements/vulture-ci.txt",
@@ -117,7 +117,7 @@ class VultureIntegrationContractTests(TestCase):
             "tests/test_vulture_integration_contract.py",
             "omeroweb_import/tests/test_core_function_helpers.py",
             "docs/conf.py",
-            "third_party/caveman-v1.9.1/tools/helper.py",
+            "third_party/caveman-v2.2.0/tools/helper.py",
             ".agents/skills/caveman/SKILL.md",
             ".github/scripts/helper.py",
             "omeroweb_import/conftest.py",
