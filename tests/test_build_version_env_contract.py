@@ -584,6 +584,15 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
         self.assertIn("java-17-openjdk-headless", dockerfile_text)
         self.assertIn(
+            'BASE_JAVA="$(readlink -e "$(command -v java)")"',
+            dockerfile_text,
+        )
+        self.assertIn('alternatives --set java "${BASE_JAVA}"', dockerfile_text)
+        self.assertIn(
+            'java -version 2>&1 | grep -F \'1.8.0\' >/dev/null',
+            dockerfile_text,
+        )
+        self.assertIn(
             "COPY docker/bioformats2raw-launcher.sh /tmp/bioformats2raw-launcher.sh",
             dockerfile_text,
         )
