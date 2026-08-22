@@ -10,24 +10,27 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.1.1-main.1] - 2026-08-22
+
 ### Changed
 
-- Updated OMERO.web to 5.33.0 with its compatible Django and OMERO.py releases.
-- Refreshed PostgreSQL, monitoring, management, cache, local-AI, CI, and
-  developer toolchain versions after upstream compatibility review.
-- Disabled Alloy usage reporting to avoid unnecessary telemetry retries.
+- Updated OMERO.web to 5.33.0 with compatible Django and OMERO.py releases.
+- Refreshed supported service, CI, and developer toolchain versions.
+- Disabled unused Alloy telemetry.
 
 ### Fixed
 
-- Prevented stale generated Compose settings from selecting mismatched build
-  artifacts during upgrades.
-- Restored native Zarr conversion compatibility with the updated converter
-  runtime.
+- Prevented stale upgrade settings from selecting mismatched build artifacts.
+- Restored native Zarr conversion with an isolated supported Java runtime.
 
 ### Upgrade Notes
 
-- Rebuild the customized application images during deployment.
-- No OMERO.server database migration or storage-layout change is required.
+- Rebuild the customized application images.
+- No database migration or storage-layout change is required.
+
+### Verification
+
+- Passed automated CI, live deployment tests, and Docker image analysis.
 
 ## [1.1.0-main.1] - 2026-07-22
 
@@ -71,5 +74,6 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.0-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.1-main.1...HEAD
+[1.1.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.0-main.1...1.1.1-main.1
 [1.1.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.0.1-main.1...1.1.0-main.1
