@@ -437,7 +437,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             runbook_text,
         )
         self.assertIn(
-            "Last live GitHub code-scanning refresh: **2026-06-27**",
+            "Last live GitHub code-scanning refresh: **2026-08-22**",
             runbook_text,
         )
         self.assertIn("## Scanner Upgrade Compatibility Gate", runbook_text)

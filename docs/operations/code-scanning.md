@@ -262,7 +262,7 @@ runbook or tool concisely with regression coverage.
 
 ## Alert inventory
 
-Last live GitHub code-scanning refresh: **2026-06-27**.
+Last live GitHub code-scanning refresh: **2026-08-22**.
 
 GitHub reported **3 open alerts on the default branch (`main` at refresh time)** at the time of the live snapshot used for this runbook update. The current closed-alert total lives in `docs/reference/code-scanning-resolved-findings.md`.
 
@@ -321,13 +321,14 @@ defaults both images to their application users and keeps the required root
 bootstrap as an explicit Compose handoff for mounted runtime-path
 reconciliation.
 
-At the 2026-06-27 refresh after the successful default-branch security
-workflow, the 3 remaining GitHub alerts were repository-level Scorecard findings with
-no file location: `CodeReviewID`, `CIIBestPracticesID`, and
-`BranchProtectionID`. The earlier `MaintainedID` Scorecard alert was no longer
-open. The previous CodeQL file-level findings in
-`omero_imaris_connector/XTOmeroConnector.py` and the transient Semgrep transport findings from the
-first remediation push were no longer open.
+At the 2026-08-22 refresh after the successful default-branch security
+workflow for `be939d84fcc03ae6743449b632320ac4ea3a851c`, the 3 remaining GitHub
+alerts were repository-level Scorecard findings with no file location:
+`CodeReviewID`, `CIIBestPracticesID`, and `BranchProtectionID`. The scanner
+upgrade regression alerts were no longer open. The earlier `MaintainedID`
+Scorecard alert was no longer open. The previous CodeQL file-level findings in
+`omero_imaris_connector/XTOmeroConnector.py` and transient Semgrep transport
+findings were no longer open.
 
 The same 2026-04-27 DeepSource refresh confirmed the `SH-3015` shell
 portability finding in `scripts/omero-host-service-lib.sh` remained closed on
