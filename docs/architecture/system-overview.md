@@ -40,7 +40,7 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 
 ### PostgreSQL databases
 
-Two isolated PostgreSQL 16.14 instances:
+Two isolated PostgreSQL 16.15 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
 - **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, special method configurations, and the Tools enhanced-search index/saved queries for OMERO.web plugins.
@@ -94,7 +94,7 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 
 ### Maintenance sidecar (`pg-maintenance`)
 
-Custom image based on postgres:16.14 with cron:
+Custom image based on postgres:16.15 with cron:
 
 - VACUUM ANALYZE: weekly (Sunday 03:00).
 - REINDEX CONCURRENTLY: monthly (first Sunday 04:00).

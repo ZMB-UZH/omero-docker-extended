@@ -22,6 +22,12 @@ workflow verification step.
 
 The repository also includes a `security-delta` job inside `.github/workflows/security-code-scanning.yml`. That job fails when a default-branch security scan creates new open code-scanning alerts.
 
+Controllable SARIF producers also run `tools/sarif_result_guard.py` before the
+upload step. A non-empty or invalid report fails the producer job and skips its
+upload, preventing a scanner upgrade from populating the Security tab before
+the aggregate gate can react. The aggregate gate remains mandatory because
+CodeQL, OSV, and repository-level Scorecard processing are hosted boundaries.
+
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
 Do not narrow scanner scope to improve scores. New path filters, rule skips,
@@ -44,8 +50,8 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 344 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `344/377` CodeQL count means the implementation
+- Python: the current repo has 346 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `346/379` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
   are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
   the same meaning before tracked Python files such as `tools/regression_guard.py`
@@ -71,7 +77,7 @@ Run the locally reproducible workflow gates before committing or pushing changes
 python3 tools/run_local_workflow_gates.py --setup --profile ci
 ```
 
-This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates. Use `--profile all` when Docker is available and you also need the pinned Super-Linter container gate.
+This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates. Use `--profile all` when Docker is available and you also need the exact Hadolint engine and pinned Super-Linter container gates.
 
 Some GitHub-only behavior cannot be made fully identical on the host: SARIF
 upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks,
@@ -118,6 +124,36 @@ That is why the Codecov line total is smaller than the repository's full Python 
 Broaden the denominator only as a deliberate policy change, with
 matching `.coveragerc`, `codecov.yml`, component-status, and test updates.
 
+## Scanner Upgrade Compatibility Gate
+
+An action version is not a sufficient compatibility boundary. Before changing
+any scanner action pin:
+
+1. Read the action release notes and inspect its Dockerfile or runtime metadata
+   for the exact embedded scanner version and any unpinned transitive install.
+2. Run `python3 tools/run_local_workflow_gates.py --setup --profile all`; this
+   includes the exact compatible Hadolint engine as well as Super-Linter.
+3. Run the replacement scanner over the same complete scope as GitHub and pass
+   every controllable report through `python3 tools/sarif_result_guard.py`.
+4. After push, wait for the aggregate `Zero added alerts gate`, then query the
+   live default-branch inventory. Scanner subjobs that exit successfully are
+   not evidence of an empty result set.
+5. If an upstream release has a proven regression, keep the newest compatible
+   version pinned, document the upstream issue beside the pin and in
+   Dependabot, and re-evaluate only when a later release contains the fix.
+
+On 2026-08-22, upgrading `hadolint-action` from 3.3.0 to 3.4.0 changed its
+embedded engine from Hadolint 2.14.0 to 2.15.0. The newer engine's upstream
+shell-detection regression reported Bash Dockerfiles as POSIX sh. Two changed
+public checksum/commit fixtures also matched DevSkim's token heuristic. The
+aggregate delta job failed, but only after the reports had been uploaded. The
+durable corrections are the pre-upload SARIF guard, exact local Hadolint engine
+parity, segmented public hash fixtures in tests, and the compatibility hold on
+Hadolint 2.14.0 until the upstream regression is fixed. The same review found
+that the CodeQL 4.37.8 action had initially been pinned to its annotated tag
+object instead of the verified peeled commit; all CodeQL uses must use the
+peeled commit reported by `refs/tags/<tag>^{}`.
+
 ## Active scanners
 
 | Scanner        | Type                                 | Scope                                                 | Free |
@@ -126,7 +162,7 @@ matching `.coveragerc`, `codecov.yml`, component-status, and test updates.
 | Trivy          | Vuln/misconfig/secret/license scan   | Filesystem (dependencies, configs, secrets, licenses) | Yes  |
 | Semgrep        | SAST                                 | 1000+ rules (Django, shell, Python patterns)          | Yes  |
 | Bandit         | Python security                      | Hardcoded creds, injection, unsafe calls              | Yes  |
-| Hadolint       | Dockerfile lint                      | All 8 Dockerfiles (matrix strategy)                   | Yes  |
+| Hadolint       | Dockerfile lint                      | All 9 Dockerfiles (matrix strategy)                   | Yes  |
 | DevSkim        | Security patterns                    | Cross-language pattern matching (Microsoft)           | Yes  |
 | OSV Scanner    | Dependency vulns                     | Google OSV vulnerability database                     | Yes  |
 | OSSF Scorecard | Supply-chain                         | Branch protection, pinning, CI security               | Yes  |

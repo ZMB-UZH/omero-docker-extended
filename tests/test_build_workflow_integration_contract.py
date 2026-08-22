@@ -1516,6 +1516,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('--ref "$GITHUB_REF"', workflow_text)
         self.assertIn('--repository "$GITHUB_REPOSITORY"', workflow_text)
         self.assertIn('--run-id "$GITHUB_RUN_ID"', workflow_text)
+        self.assertEqual(3, workflow_text.count('--baseline-alert "Scorecard/'))
+        self.assertIn("Scorecard/BranchProtectionID", workflow_text)
+        self.assertIn("Scorecard/CIIBestPracticesID", workflow_text)
+        self.assertIn("Scorecard/CodeReviewID", workflow_text)
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", workflow_text)
 
     def test_standalone_security_delta_workflow_is_not_present(self) -> None:
@@ -1525,6 +1529,60 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         """
         self.assertFalse(
             (self.repo_root / ".github" / "workflows" / "security-delta.yml").exists()
+        )
+
+    def test_security_sarif_uploads_require_zero_result_guard(self) -> None:
+        """Verify controlled SARIF uploads require an empty-result guard.
+
+        Inputs: security workflow definition. Output: asserts every controlled upload is guarded.
+        """
+
+        import yaml  # noqa: F811  — available in CI
+
+        workflow_path = (
+            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
+        )
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        expected_steps = {
+            "trivy-filesystem": (
+                "Reject Trivy findings before upload",
+                "Upload Trivy scan results to GitHub Security tab",
+            ),
+            "semgrep": (
+                "Reject Semgrep findings before upload",
+                "Upload Semgrep results to GitHub Security tab",
+            ),
+            "hadolint": (
+                "Reject Hadolint findings before upload",
+                "Upload Hadolint results to GitHub Security tab",
+            ),
+            "devskim": (
+                "Reject DevSkim findings before upload",
+                "Upload DevSkim results to GitHub Security tab",
+            ),
+        }
+        for job_name, (guard_name, upload_name) in expected_steps.items():
+            steps = workflow["jobs"][job_name]["steps"]
+            names = [step.get("name") for step in steps]
+            self.assertLess(names.index(guard_name), names.index(upload_name))
+            upload_step = next(
+                step for step in steps if step.get("name") == upload_name
+            )
+            self.assertEqual("success()", upload_step["if"])
+
+        bandit_steps = workflow["jobs"]["bandit"]["steps"]
+        bandit_names = [step.get("name") for step in bandit_steps]
+        for scope in ("production", "test"):
+            self.assertLess(
+                bandit_names.index(f"Reject Bandit {scope} findings before upload"),
+                bandit_names.index(
+                    f"Upload Bandit {scope} results to GitHub Security tab"
+                ),
+            )
+
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        self.assertGreaterEqual(
+            workflow_text.count("python3 tools/sarif_result_guard.py"), 7
         )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:

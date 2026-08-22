@@ -21,6 +21,7 @@ CLI_TOOLS = (
     "mypy_check.py",
     "run_agent_skill_smoke.py",
     "run_local_workflow_gates.py",
+    "sarif_result_guard.py",
     "scanner_inventory.py",
     "security_delta_guard.py",
     "update_readme_badges.py",

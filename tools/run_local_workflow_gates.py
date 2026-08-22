@@ -22,6 +22,10 @@ from typing import Callable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ARTIFACT_DIR = REPO_ROOT / ".cache" / "local-workflow-gates"
+HADOLINT_IMAGE = (
+    "ghcr.io/hadolint/hadolint:v2.14.0-debian@"
+    "sha256:158cd0184dcaa18bd8ec20b61f4c1cabdf8b32a592d062f57bdcb8e4c1d312e2"
+)
 
 
 @dataclass(frozen=True)
@@ -608,6 +612,67 @@ def run_bandit(context: GateContext) -> None:
         raise GateError("\n".join(failures))
 
 
+def run_hadolint(context: GateContext) -> None:
+    """Run the exact Hadolint engine embedded by the compatible action pin.
+
+    Inputs: `context`. Output: None. Raises: GateError on scanner or finding output.
+    """
+
+    docker = _require_executable("docker", context)
+    dockerfiles = sorted((context.repo_root / "docker").glob("*.Dockerfile"))
+    if not dockerfiles:
+        raise GateError("No Dockerfiles were found for the Hadolint gate.")
+
+    context.artifact_dir.mkdir(parents=True, exist_ok=True)
+    findings: list[str] = []
+    for dockerfile in dockerfiles:
+        relative_path = dockerfile.relative_to(context.repo_root).as_posix()
+        command = (
+            docker,
+            "run",
+            "--rm",
+            "-i",
+            HADOLINT_IMAGE,
+            "hadolint",
+            "--format",
+            "sarif",
+            "--no-fail",
+            "--file-path-in-report",
+            relative_path,
+            "-",
+        )
+        print(f"\n==> hadolint: {relative_path}", flush=True)
+        print("+ " + " ".join(command), flush=True)
+        result = subprocess.run(
+            command,
+            cwd=context.repo_root,
+            check=False,
+            capture_output=True,
+            input=dockerfile.read_text(encoding="utf-8"),
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "no scanner diagnostic"
+            raise GateError(
+                f"Hadolint failed for {relative_path} with exit code "
+                f"{result.returncode}: {detail}"
+            )
+
+        output = context.artifact_dir / f"hadolint-{dockerfile.stem}.sarif"
+        output.write_text(result.stdout, encoding="utf-8")
+        try:
+            result_count = _sarif_result_count(output)
+        except (OSError, json.JSONDecodeError, TypeError, AttributeError) as exc:
+            raise GateError(
+                f"Hadolint produced invalid SARIF for {relative_path}."
+            ) from exc
+        if result_count:
+            findings.append(f"{relative_path}: {result_count} result(s)")
+
+    if findings:
+        raise GateError("Hadolint findings:\n" + "\n".join(findings))
+
+
 def run_super_linter(context: GateContext) -> None:
     """The pinned Super-Linter container locally.
 
@@ -689,6 +754,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
     "vulture": (run_vulture,),
     "tests": (run_tests,),
     "bandit": (run_bandit,),
+    "hadolint": (run_hadolint,),
     "regression-guard": (run_regression_guard,),
     "super-linter": (run_super_linter,),
     "python": (run_ruff, run_mypy, run_vulture),
@@ -709,6 +775,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
         run_vulture,
         run_tests,
         run_bandit,
+        run_hadolint,
         run_super_linter,
     ),
 }
@@ -728,7 +795,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default="ci",
         help=(
             "Gate profile to run. 'ci' mirrors docs, Ruff, Mypy, Vulture, tests, "
-            "and Bandit. 'all' also runs the Docker-backed Super-Linter."
+            "and Bandit. 'all' also runs the exact Hadolint engine and the "
+            "Docker-backed Super-Linter."
         ),
     )
     parser.add_argument(

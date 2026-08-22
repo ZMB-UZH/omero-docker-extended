@@ -325,6 +325,15 @@ Required rules:
   downloaded from the action repository's archive endpoint. Do not use the
   annotated tag object SHA as a `uses:` pin.
 - Pin base images to exact tags or digests; never use `:latest`.
+- Inspect the transitive scanner/tool version inside every workflow action update.
+  An immutable action SHA can still build or download a newer unpinned scanner.
+- Execute the exact replacement scanner against the full repository before
+  pushing. For Dockerfile or SARIF changes, run the Docker-backed local profile
+  and require `tools/sarif_result_guard.py` to report zero results before each
+  controllable upload.
+- Do not infer zero findings from a scanner process or subjob that exited zero.
+  Wait for the aggregate zero-delta job and re-query the live default-branch
+  alert inventory.
 - Run as a non-root user unless the runtime contract genuinely requires root. If root is required, document why inline.
 - Treat workflow expressions, artifact names, branch names, and pull-request metadata as untrusted input.
 - Do not put secrets into workflow YAML, checked-in example files, or generated docs.

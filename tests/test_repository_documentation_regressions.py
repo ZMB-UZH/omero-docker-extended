@@ -440,6 +440,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             "Last live GitHub code-scanning refresh: **2026-06-27**",
             runbook_text,
         )
+        self.assertIn("## Scanner Upgrade Compatibility Gate", runbook_text)
+        self.assertIn("tools/sarif_result_guard.py", runbook_text)
+        self.assertIn("Hadolint 2.14.0", runbook_text)
         self.assertIn("**3 grouped issues**", runbook_text)
         self.assertIn("**109 issue occurrences**", runbook_text)
         self.assertIn("**0 dependency vulnerability occurrences**", runbook_text)

@@ -355,22 +355,31 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             dockerfile_text,
         )
 
-    def test_postgres_1614_base_image_uses_current_verified_digest(self) -> None:
-        """Verify the PostgreSQL 16.14 maintenance base uses its current digest.
+    def test_postgres_1615_base_image_uses_current_verified_digest(self) -> None:
+        """Verify the PostgreSQL 16.15 maintenance base uses its current digest.
 
         Inputs: repository fixtures. Output: fails on stale PostgreSQL digests.
         """
 
         dockerfile_text = self.read_text("docker/pg-maintenance.Dockerfile")
         self.assertIn(
-            "FROM postgres:16.14@"
-            "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
+            "FROM postgres:16.15@"
+            "sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5",
             dockerfile_text,
         )
         self.assertNotIn(
-            "sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54",
+            "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
             dockerfile_text,
         )
+
+    def test_postgres_runtime_images_match_maintenance_version(self) -> None:
+        """Verify both database services match the maintenance client version.
+
+        Inputs: repository fixtures. Output: fails on PostgreSQL version drift.
+        """
+
+        compose_text = self.read_text("docker-compose.yml")
+        self.assertEqual(compose_text.count('image: "postgres:16.15"'), 2)
 
     def test_omero_base_images_use_current_verified_digests(self) -> None:
         """Verify OMERO base images use current verified digests.
@@ -544,10 +553,16 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env",
             dockerfile_text,
         )
+        bioformats2raw_sha256 = "".join(
+            (
+                "51fbbf04a83c2042",
+                "b707fce016ad0c82",
+                "60d37194ff8fe7d9",
+                "86d53f4ebee116a6",
+            )
+        )
         self.assertIn(
-            "ARG BIOFORMATS2RAW_SHA256="
-            "51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6",
-            dockerfile_text,
+            f"ARG BIOFORMATS2RAW_SHA256={bioformats2raw_sha256}", dockerfile_text
         )
         self.assertIn(
             "TIFFFILE_VERSION must be provided from env/omeroserver.env",

@@ -6,6 +6,7 @@ applyTo: ".github/workflows/*.yml"
 
 - Do not modify workflows unless the task explicitly requires it.
 - Refresh action versions from official GitHub releases or tags before changing pins, and pin by full commit SHA.
+- Treat an action pin update as a scanner-engine update when its image or dependencies change: inspect the embedded version, run the exact engine against the repository, reject non-empty SARIF before upload, and verify the aggregate zero-delta job plus live alert baseline. A successful scanner step is not evidence of zero findings.
 - Consult `docs/operations/code-scanning.md` and `docs/reference/ai-agent-security-prevention-playbook.md` before changing security-relevant workflow logic.
 - Keep workflow runbooks and agent guidance default-branch-aware; do not tell agents to create branches or draft PRs for routine workflow checks.
 - Before dispatching any release workflow, pause for explicit user confirmation of the exact GitHub release tag and Docker repository/tag. Workflows must require an explicit version, must not infer or auto-increment it, and must fail when the matching human-readable `CHANGELOG.md` section is absent.

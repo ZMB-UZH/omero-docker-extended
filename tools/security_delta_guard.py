@@ -86,6 +86,16 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Poll interval while waiting for the alert snapshot to stabilize.",
     )
+    parser.add_argument(
+        "--baseline-alert",
+        action="append",
+        default=[],
+        metavar="TOOL/RULE",
+        help=(
+            "Allowed open default-branch alert signature. Repeat for each "
+            "expected alert; duplicates represent an allowed duplicate count."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -262,6 +272,78 @@ def alert_tool(alert: dict[str, Any]) -> str:
     """
     tool = alert.get("tool") or {}
     return str(tool.get("name") or "<unknown>").strip()
+
+
+def parse_alert_signature(value: str) -> tuple[str, str]:
+    """Parse one TOOL/RULE baseline signature.
+
+    Inputs: baseline `value`. Output: normalized tool and rule tuple.
+    """
+
+    tool, separator, rule = str(value or "").partition("/")
+    if not separator or not tool.strip() or not rule.strip():
+        raise ValueError("baseline alerts must use non-empty TOOL/RULE format")
+    return tool.strip(), rule.strip()
+
+
+def alert_signature(alert: dict[str, Any]) -> tuple[str, str]:
+    """Extract the stable identity of one open alert.
+
+    Inputs: code-scanning `alert`. Output: tool and rule tuple.
+    """
+
+    return alert_tool(alert), alert_rule(alert)
+
+
+def evaluate_alert_baseline(
+    alerts: list[dict[str, Any]], expected: Counter[tuple[str, str]]
+) -> EvaluationResult:
+    """Compare the complete open-alert inventory with its declared baseline.
+
+    Inputs: open `alerts` and expected identities. Output: baseline evaluation.
+    """
+
+    actual = Counter(alert_signature(alert) for alert in alerts)
+    if actual == expected:
+        return EvaluationResult(
+            status="pass",
+            message=f"Open-alert baseline matches exactly ({sum(actual.values())}).",
+        )
+
+    unexpected = actual - expected
+    missing = expected - actual
+    details: list[str] = []
+    for (tool, rule), count in sorted(unexpected.items()):
+        details.append(f"unexpected {tool}/{rule} x{count}")
+    for (tool, rule), count in sorted(missing.items()):
+        details.append(f"missing {tool}/{rule} x{count}")
+    return EvaluationResult(
+        status="fail",
+        message="Open-alert baseline mismatch: " + "; ".join(details),
+        alerts=tuple(alerts),
+    )
+
+
+def wait_for_alert_baseline(
+    fetch_snapshot: Callable[[], list[dict[str, Any]]],
+    expected: Counter[tuple[str, str]],
+    *,
+    settle_timeout_seconds: int,
+    poll_interval_seconds: int,
+    monotonic: ClockFn = time.monotonic,
+    sleep: SleepFn = time.sleep,
+) -> EvaluationResult:
+    """Poll until asynchronous SARIF reconciliation reaches the exact baseline.
+
+    Inputs: snapshot callback, expected identities, and timing controls. Output: final baseline evaluation.
+    """
+
+    deadline = monotonic() + max(settle_timeout_seconds, 0)
+    while True:
+        result = evaluate_alert_baseline(fetch_snapshot(), expected)
+        if result.status == "pass" or monotonic() >= deadline:
+            return result
+        sleep(max(poll_interval_seconds, 0))
 
 
 def format_alert(alert: dict[str, Any]) -> str:
@@ -987,6 +1069,25 @@ def main() -> int:
                 resolve_default_branch=resolve_default_branch,
                 resolve_run_started_at=resolve_run_started_at,
             )
+        if result.status == "pass" and args.baseline_alert:
+            expected_baseline = Counter(
+                parse_alert_signature(value) for value in args.baseline_alert
+            )
+            baseline_result = wait_for_alert_baseline(
+                lambda: fetch_alerts(
+                    ref=_first_non_empty(args.ref, payload_ref(event_payload))
+                ),
+                expected_baseline,
+                settle_timeout_seconds=args.settle_timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+            if baseline_result.status == "fail":
+                result = baseline_result
+            else:
+                result = EvaluationResult(
+                    status="pass",
+                    message=f"{result.message} {baseline_result.message}",
+                )
     except Exception as exc:
         print(f"ERROR: security delta guard failed: {exc}", file=sys.stderr)
         return 2

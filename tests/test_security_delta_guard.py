@@ -69,6 +69,60 @@ def test_wait_for_stable_snapshot_rechecks_until_numbers_repeat() -> None:
     assert [alert["number"] for alert in result] == [11]
 
 
+def test_alert_baseline_requires_exact_tool_rule_multiset() -> None:
+    """Verify the alert baseline requires an exact tool/rule multiset.
+
+    Inputs: representative alert inventories. Output: asserts pass and mismatch evaluations.
+    """
+
+    expected = security_delta_guard.Counter(
+        {
+            ("Scorecard", "BranchProtectionID"): 1,
+            ("Scorecard", "CodeReviewID"): 1,
+        }
+    )
+    alerts = [
+        {
+            "tool": {"name": "Scorecard"},
+            "rule": {"id": "BranchProtectionID"},
+        },
+        {"tool": {"name": "Hadolint"}, "rule": {"id": "SC3040"}},
+    ]
+
+    result = security_delta_guard.evaluate_alert_baseline(alerts, expected)
+
+    assert result.status == "fail"
+    assert "unexpected Hadolint/SC3040 x1" in result.message
+    assert "missing Scorecard/CodeReviewID x1" in result.message
+
+
+def test_wait_for_alert_baseline_polls_until_sarif_reconciles() -> None:
+    """Verify the baseline gate waits for asynchronous SARIF reconciliation.
+
+    Inputs: sequenced alert snapshots and a simulated clock. Output: passing reconciled evaluation.
+    """
+
+    expected = security_delta_guard.Counter({("Scorecard", "CodeReviewID"): 1})
+    snapshots = iter(
+        (
+            [{"tool": {"name": "Hadolint"}, "rule": {"id": "SC3040"}}],
+            [{"tool": {"name": "Scorecard"}, "rule": {"id": "CodeReviewID"}}],
+        )
+    )
+
+    result = security_delta_guard.wait_for_alert_baseline(
+        lambda: next_or_fail(snapshots),
+        expected,
+        settle_timeout_seconds=30,
+        poll_interval_seconds=0,
+        monotonic=iter((0.0, 0.1, 0.2)).__next__,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result.status == "pass"
+    assert "matches exactly (1)" in result.message
+
+
 def test_github_api_get_json_uses_curl_config_stdin(monkeypatch) -> None:
     """Verify github API get JSON uses curl config stdin.
 
