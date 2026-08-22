@@ -40,6 +40,50 @@ class EnvSafetyGuardTests(unittest.TestCase):
 
         return d
 
+    def _write_compose_mirror(
+        self,
+        repo: Path,
+        *,
+        installation_root: Path | None = None,
+        compose_env_files: str | None = None,
+        source_overrides: dict[str, str] | None = None,
+        dot_overrides: dict[str, str] | None = None,
+        include_project_name: bool = True,
+    ) -> None:
+        """Write complete source and generated Compose mirror fixtures.
+
+        Inputs: fixture paths and optional value overrides. Output: fixture files.
+        """
+        declared_root = installation_root or repo
+        source_values = {
+            key: str(declared_root) if key == "OMERO_INSTALLATION_PATH" else "value"
+            for key in env_safety_guard.DOT_ENV_MIRRORED_KEYS
+        }
+        source_values.update(source_overrides or {})
+        (repo / "installation_paths.env").write_text(
+            "".join(f"{key}={value}\n" for key, value in source_values.items()),
+            encoding="utf-8",
+        )
+
+        dot_values = {
+            key: source_values.get(key, "value")
+            for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
+            if key != "COMPOSE_PROJECT_NAME"
+        }
+        dot_values["REDIS_SAVE_POLICY"] = ""
+        dot_values.update(dot_overrides or {})
+        env_files = compose_env_files or ",".join(
+            env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+        )
+        lines = [f"COMPOSE_ENV_FILES={env_files}"]
+        if include_project_name:
+            lines.append(
+                "COMPOSE_PROJECT_NAME="
+                f"{env_safety_guard.derive_compose_project_name(declared_root)}"
+            )
+        lines.extend(f"{key}={value}" for key, value in dot_values.items())
+        (repo / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     # ---- check command ----
 
     def test_check_passes_when_all_manifest_entries_exist(self):
@@ -161,21 +205,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "env/omero-celery.env": "QUEUE=value",
             },
         )
-        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
-        (repo / "installation_paths.env").write_text(
-            f"OMERO_INSTALLATION_PATH={repo}\n",
-            encoding="utf-8",
-        )
-        (repo / ".env").write_text(
-            "\n".join(
-                [
-                    f"COMPOSE_ENV_FILES={compose_env_files}",
-                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
+        self._write_compose_mirror(repo, compose_env_files=compose_env_files)
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
 
@@ -207,20 +237,10 @@ class EnvSafetyGuardTests(unittest.TestCase):
         self.addCleanup(
             lambda: __import__("shutil").rmtree(live_root, ignore_errors=True)
         )
-        compose_project_name = env_safety_guard.derive_compose_project_name(live_root)
-        (repo / "installation_paths.env").write_text(
-            f"OMERO_INSTALLATION_PATH={live_root}\n",
-            encoding="utf-8",
-        )
-        (repo / ".env").write_text(
-            "\n".join(
-                [
-                    f"COMPOSE_ENV_FILES={compose_env_files}",
-                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        self._write_compose_mirror(
+            repo,
+            installation_root=live_root,
+            compose_env_files=compose_env_files,
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
@@ -248,13 +268,89 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "env/omero-celery.env": "QUEUE=value",
             },
         )
-        (repo / "installation_paths.env").write_text(
-            f"OMERO_INSTALLATION_PATH={repo}\n",
+        self._write_compose_mirror(
+            repo,
+            compose_env_files="installation_paths.env",
+            include_project_name=False,
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_compose_guard_fails_when_dot_env_mirror_is_stale(self):
+        """Reject a stale generated build pin before Compose can consume it.
+
+        Inputs: temporary repository fixtures. Output: a failing guard result.
+        """
+        compose_env_files = ",".join(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES)
+        repo = self._make_repo(
+            [
+                "installation_paths.env",
+                "env/omeroweb.env",
+                "env/omeroserver.env",
+                "env/omero_secrets.env",
+                "env/grafana.env",
+                "env/omero-celery.env",
+            ],
+            {
+                "installation_paths.env": "",
+                "env/omeroweb.env": "CONFIG=value",
+                "env/omeroserver.env": "BIOFORMATS2RAW_VERSION=0.12.1",
+                "env/omero_secrets.env": "SECRET=value",
+                "env/grafana.env": "GF=value",
+                "env/omero-celery.env": "QUEUE=value",
+            },
+        )
+        self._write_compose_mirror(
+            repo,
+            compose_env_files=compose_env_files,
+            source_overrides={"BIOFORMATS2RAW_VERSION": "0.12.1"},
+            dot_overrides={"BIOFORMATS2RAW_VERSION": "0.11.0"},
+        )
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_compose_guard_fails_when_mirrored_source_key_is_missing(self):
+        """Reject generated values that no longer have a deployment source.
+
+        Inputs: complete fixtures with one removed source key. Output: failure.
+        """
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                relative_path: "CONFIG=value\n"
+                for relative_path in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        self._write_compose_mirror(repo)
+        source_path = repo / "installation_paths.env"
+        source_path.write_text(
+            "\n".join(
+                line
+                for line in source_path.read_text(encoding="utf-8").splitlines()
+                if not line.startswith("BIOFORMATS2RAW_SHA256=")
+            )
+            + "\n",
             encoding="utf-8",
         )
-        (repo / ".env").write_text(
-            "COMPOSE_ENV_FILES=installation_paths.env\n", encoding="utf-8"
+
+        self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_compose_guard_fails_when_source_assignments_are_duplicated(self):
+        """Reject ambiguous source env files before comparing generated values.
+
+        Inputs: complete fixtures with a duplicate assignment. Output: failure.
+        """
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                relative_path: "CONFIG=value\n"
+                for relative_path in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
         )
+        self._write_compose_mirror(repo)
+        source_path = repo / "installation_paths.env"
+        with source_path.open("a", encoding="utf-8") as source_file:
+            source_file.write("BIOFORMATS2RAW_SHA256=duplicate\n")
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
 
@@ -281,20 +377,11 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "env/omero-celery.env": "QUEUE=value",
             },
         )
-        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
-        (repo / "installation_paths.env").write_text(
-            f"OMERO_INSTALLATION_PATH={repo}\n",
-            encoding="utf-8",
-        )
-        (repo / ".env").write_text(
-            "\n".join(
-                [
-                    "COMPOSE_ENV_FILES=installation_paths.env,env/omero_secrets.env,env/omeroserver.env,env/omeroweb.env,env/omero-celery.env,env/grafana.env",
-                    f"COMPOSE_PROJECT_NAME={compose_project_name}",
-                    "",
-                ]
+        self._write_compose_mirror(
+            repo,
+            compose_env_files=",".join(
+                env_safety_guard.EXPECTED_COMPOSE_ENV_FILES[:-1]
             ),
-            encoding="utf-8",
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 0)
@@ -324,21 +411,7 @@ class EnvSafetyGuardTests(unittest.TestCase):
                 "env/omero-celery.env": "QUEUE=value",
             },
         )
-        compose_project_name = env_safety_guard.derive_compose_project_name(repo)
-        (repo / "installation_paths.env").write_text(
-            f"OMERO_INSTALLATION_PATH={repo}\n",
-            encoding="utf-8",
-        )
-        dot_env_lines = [
-            f"COMPOSE_ENV_FILES={compose_env_files}",
-            f"COMPOSE_PROJECT_NAME={compose_project_name}",
-        ]
-        dot_env_lines.extend(
-            f"{key}={'value' if key != 'REDIS_SAVE_POLICY' else ''}"
-            for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
-            if key != "COMPOSE_PROJECT_NAME"
-        )
-        (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
+        self._write_compose_mirror(repo, compose_env_files=compose_env_files)
 
         self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 0)
 
@@ -788,6 +861,18 @@ class EnvSafetyGuardTests(unittest.TestCase):
             f"{key}={valid_dot_env_value(key)}"
             for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
             if key != "COMPOSE_PROJECT_NAME"
+        )
+        source_values = {
+            key: valid_dot_env_value(key)
+            for key in env_safety_guard.DOT_ENV_MIRRORED_KEYS
+        }
+        for relative_path in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES:
+            env_path = repo / relative_path
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            env_path.write_text("CONFIG=value\n", encoding="utf-8")
+        (repo / "installation_paths.env").write_text(
+            "".join(f"{key}={value}\n" for key, value in source_values.items()),
+            encoding="utf-8",
         )
         (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
         self.assertEqual([], env_safety_guard.validate_dot_env_values(repo, {}))
