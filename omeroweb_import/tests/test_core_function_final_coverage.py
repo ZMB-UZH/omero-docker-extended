@@ -1323,7 +1323,10 @@ def test_probe_and_verification_helpers_cover_remaining_paths(
     monkeypatch.setattr(
         core_functions.omero,
         "rtypes",
-        types.SimpleNamespace(rstring=lambda value: value),
+        types.SimpleNamespace(
+            rstring=lambda value: value,
+            rlist=lambda values: SimpleNamespace(val=values),
+        ),
         raising=False,
     )
 

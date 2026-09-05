@@ -67,7 +67,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -76,7 +76,7 @@ jobs:
           queries: security-extended,security-and-quality
 
       - name: Analyze
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           category: /language:${{ matrix.language }}
 
@@ -115,6 +115,7 @@ jobs:
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.74.0
           scan-type: fs
           format: sarif
           output: trivy-results.sarif
@@ -127,7 +128,7 @@ jobs:
         run: python3 tools/sarif_result_guard.py trivy-results.sarif
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -142,7 +143,7 @@ jobs:
       contents: read
       security-events: write # Required to upload Semgrep results to code scanning.
     container:
-      image: semgrep/semgrep:1.170.0@sha256:c98f8829eea377274ee4b10656458b078b88232469b2ff913f091c2317347c9d
+      image: semgrep/semgrep:1.176.0@sha256:12672acdb0949e19f9f6a4c2b288edd0b404f268f0ca7738a2c06f372f50362e
 
     steps:
       - name: Checkout
@@ -176,7 +177,7 @@ jobs:
         run: python3 tools/sarif_result_guard.py semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -358,21 +359,21 @@ jobs:
         run: python3 tools/sarif_result_guard.py bandit-legacy-cleanup.sarif
 
       - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
         if: success() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
         if: success() && steps.discover.outputs.test_dirs != ''
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
@@ -430,8 +431,8 @@ jobs:
           echo "::endgroup::"
 
       - name: Run Hadolint
-        # v3.4.0 embeds Hadolint 2.15.0, whose upstream shell-detection
-        # regression reports Bash Dockerfiles as POSIX sh (hadolint#1240).
+        # Hadolint 2.15.1 still reports these Bash Dockerfiles as POSIX sh.
+        # Keep the tested engine; see the compatibility evidence in code-scanning.md.
         uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0, Hadolint v2.14.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
@@ -443,7 +444,7 @@ jobs:
         run: python3 tools/sarif_result_guard.py hadolint-results.sarif
 
       - name: Upload Hadolint results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -496,7 +497,7 @@ jobs:
         run: python3 tools/sarif_result_guard.py devskim-results.sarif
 
       - name: Upload DevSkim results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: devskim-results.sarif
           category: devskim
@@ -573,7 +574,7 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard

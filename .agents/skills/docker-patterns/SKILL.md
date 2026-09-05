@@ -39,3 +39,8 @@ Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic 
   that one object. Approval for a replacement, prior run, or same version does
   not carry forward.
 - For live runtime probing, follow the Loki-first and service-user rules in `AGENTS.md`.
+- Test installer changes against disposable Linux project copies with isolated
+  configuration and data roots. Keep the source checkout read-only in test
+  containers and never mount the live Docker socket into an installer harness.
+- Verify failure paths preserve existing configuration and persistent data;
+  a successful fresh installation alone does not prove upgrade safety.

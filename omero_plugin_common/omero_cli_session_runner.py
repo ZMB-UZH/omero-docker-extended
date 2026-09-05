@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     from omero.cli import CLI
 
     cli = CLI()
+    cli.loadplugins()
     cli_args = [
         "-k",
         session_key,

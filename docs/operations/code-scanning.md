@@ -156,6 +156,17 @@ peeled commit reported by `refs/tags/<tag>^{}`.
 
 ## Active scanners
 
+### Hadolint compatibility recheck
+
+On 2026-09-05, Hadolint 2.15.1 was executed against all tracked Dockerfiles.
+It still reported POSIX-shell diagnostics for instructions executed under an
+explicit Bash `SHELL`. Keep action 3.3.0 and engine 2.14.0 pinned; do not suppress
+these rules or upload the candidate report to make the upgrade appear green.
+Issue `hadolint/hadolint#1240` concerns named-user resolution, not shell
+detection, and must not be cited as evidence that the shell regression is fixed.
+Re-test a replacement engine against the actual Dockerfiles before changing
+both the workflow and local gate pins together.
+
 | Scanner        | Type                                 | Scope                                                 | Free |
 | -------------- | ------------------------------------ | ----------------------------------------------------- | ---- |
 | CodeQL         | SAST                                 | Python, JavaScript/TypeScript                         | Yes  |

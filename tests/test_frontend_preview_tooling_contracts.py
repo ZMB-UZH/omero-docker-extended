@@ -47,13 +47,13 @@ def test_frontend_preview_tooling_manifest_pins_expected_versions():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["name"] == "omero-agent-frontend-preview-tooling"
-    assert manifest["node_version"] == "24.19.0"
+    assert manifest["node_version"] == "24.20.0"
     assert manifest["dependencies"] == {
         "vite": "8.2.2",
-        "vitest": "4.1.11",
+        "vitest": "5.0.0",
         "jsdom": "30.0.1",
-        "@vitest/browser-playwright": "4.1.11",
-        "playwright": "1.62.1",
+        "@vitest/browser-playwright": "5.0.0",
+        "playwright": "1.63.0",
     }
 
 
@@ -87,7 +87,7 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
     Inputs: repository fixtures. Output: fails on regressions in frontend preview wrapper requires exact node version.
     """
     tooling = load_frontend_preview_tooling()
-    manifest = {"node_version": "24.19.0"}
+    manifest = {"node_version": "24.20.0"}
     completed = subprocess.CompletedProcess(
         args=["node", "--version"], returncode=0, stdout="v25.9.0\n"
     )
@@ -97,7 +97,7 @@ def test_frontend_preview_wrapper_requires_exact_node_version():
             tooling, "ensure_command_available", return_value="/usr/bin/node"
         ),
         mock.patch.object(tooling.subprocess, "run", return_value=completed),
-        pytest.raises(RuntimeError, match="need v24.19.0"),
+        pytest.raises(RuntimeError, match="need v24.20.0"),
     ):
         tooling.ensure_node_version(manifest)
 
@@ -130,19 +130,19 @@ def test_frontend_preview_node_release_path_allows_only_expected_artifacts():
     tooling = load_frontend_preview_tooling()
 
     assert (
-        tooling.node_release_path("24.19.0", "node-v24.19.0-linux-x64.tar.xz")
-        == "/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz"
+        tooling.node_release_path("24.20.0", "node-v24.20.0-linux-x64.tar.xz")
+        == "/dist/v24.20.0/node-v24.20.0-linux-x64.tar.xz"
     )
     assert (
-        tooling.node_release_path("24.19.0", "SHASUMS256.txt")
-        == "/dist/v24.19.0/SHASUMS256.txt"
+        tooling.node_release_path("24.20.0", "SHASUMS256.txt")
+        == "/dist/v24.20.0/SHASUMS256.txt"
     )
     with pytest.raises(RuntimeError, match="Invalid Node.js version"):
-        tooling.node_release_path("../24.19.0", "SHASUMS256.txt")
+        tooling.node_release_path("../24.20.0", "SHASUMS256.txt")
     with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
-        tooling.node_release_path("24.19.0", "node-v25.0.0-linux-x64.tar.xz")
+        tooling.node_release_path("24.20.0", "node-v25.0.0-linux-x64.tar.xz")
     with pytest.raises(RuntimeError, match="Unexpected Node.js release artifact"):
-        tooling.node_release_path("24.19.0", "node-v24.19.0-linux-../x64.tar.xz")
+        tooling.node_release_path("24.20.0", "node-v24.20.0-linux-../x64.tar.xz")
 
 
 def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_path):
@@ -170,7 +170,7 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(tooling.subprocess, "run", _fake_run)
 
-    tooling.download_node_release_file("24.19.0", "SHASUMS256.txt", tmp_path / "out")
+    tooling.download_node_release_file("24.20.0", "SHASUMS256.txt", tmp_path / "out")
 
     args, kwargs = calls[0]
     assert args[:2] == ["/bin/curl", "--fail"]
@@ -178,7 +178,7 @@ def test_frontend_preview_download_uses_validated_curl_args(monkeypatch, tmp_pat
     assert args[args.index("--proto") + 1] == "=https"
     tls_option_prefix = "-" * 2 + "tls"
     assert all(not arg.startswith(tls_option_prefix) for arg in args)
-    assert args[-1] == "https://nodejs.org/dist/v24.19.0/SHASUMS256.txt"
+    assert args[-1] == "https://nodejs.org/dist/v24.20.0/SHASUMS256.txt"
     assert kwargs["timeout"] == 60
     assert kwargs["check"] is False
 

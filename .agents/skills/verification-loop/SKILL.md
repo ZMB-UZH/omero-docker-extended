@@ -21,6 +21,9 @@ Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the ge
   result, and artifact under test.
 - Do not repeat a passing command until one of its inputs changes. A final
   repository-wide matrix supersedes earlier unchanged targeted runs.
+- Preserve the tested command's exit status when limiting output. Use the
+  repository gate runner or capture logs and check the original status; a
+  successful `head` or `tail` process is not a passing test result.
 - Run independent read-only checks in parallel when resources permit. Serialize
   image builds and live tests that mutate shared Docker, database, OMERO, or
   persistent-storage state.
@@ -72,7 +75,7 @@ Boundary helper change: rerun the helper's own suite plus every directly affecte
 ### 5. Live runtime checks
 
 For functional OMERO, installation, Compose, startup, plugin-behavior, or env-contract changes, live-test whenever it makes sense or the user explicitly requests it. Reconcile the canonical live root to the exact checkout first, preserve unrelated dirty work non-destructively, run env guards, rebuild/inject/restart affected containers, and test the changed mechanisms end to end.
-Do not treat stale or dirty live state as a reason to skip required live verification.
+Do not treat stale or dirty live state as a reason to skip required live verification. When changing CLI or query adapters, verify real command registration and typed parameter serialization; permissive test doubles do not prove protocol compatibility.
 
 ### 6. Diff review
 

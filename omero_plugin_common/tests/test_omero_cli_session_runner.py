@@ -8,6 +8,19 @@ import types
 from omero_plugin_common import omero_cli_session_runner
 
 
+class _PluginAwareCLI:
+    """Model the real CLI's explicit command-registration lifecycle."""
+
+    loaded = False
+
+    def loadplugins(self):
+        """Register commands before invocation.
+
+        Inputs: none. Output: marks the fake command registry as loaded.
+        """
+        self.loaded = True
+
+
 def test_runner_reads_session_key_from_stdin_and_invokes_cli(monkeypatch) -> None:
     """Verify the runner keeps the session key out of process argv.
 
@@ -16,7 +29,7 @@ def test_runner_reads_session_key_from_stdin_and_invokes_cli(monkeypatch) -> Non
     """
     captured = {}
 
-    class _FakeCLI:
+    class _FakeCLI(_PluginAwareCLI):
         """Minimal OMERO CLI fake."""
 
         rv = 0
@@ -26,6 +39,7 @@ def test_runner_reads_session_key_from_stdin_and_invokes_cli(monkeypatch) -> Non
 
             Inputs: CLI argument list. Output: None.
             """
+            assert self.loaded, "CLI commands must be registered before invocation"
             captured["args"] = list(args)
 
     omero_module = types.ModuleType("omero")
@@ -89,7 +103,7 @@ def test_runner_normalizes_cli_exit_paths(monkeypatch) -> None:
     Inputs: pytest monkeypatch fixture. Output: asserts normalized return codes.
     """
 
-    class _SystemExitCLI:
+    class _SystemExitCLI(_PluginAwareCLI):
         """OMERO CLI fake that raises SystemExit from invoke."""
 
         rv = 0
@@ -102,7 +116,7 @@ def test_runner_normalizes_cli_exit_paths(monkeypatch) -> None:
             """
             raise SystemExit("bad")
 
-    class _BadReturnCLI:
+    class _BadReturnCLI(_PluginAwareCLI):
         """OMERO CLI fake that reports an invalid return value."""
 
         rv = "bad"
@@ -142,7 +156,7 @@ def test_runner_module_entrypoint_invokes_main(monkeypatch) -> None:
     """
     captured = {}
 
-    class _FakeCLI:
+    class _FakeCLI(_PluginAwareCLI):
         """OMERO CLI fake for runpy execution."""
 
         rv = 0

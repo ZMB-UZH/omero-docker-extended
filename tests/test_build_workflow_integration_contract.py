@@ -1958,7 +1958,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.170.0@sha256:c98f8829eea377274ee4b10656458b078b88232469b2ff913f091c2317347c9d",
+            "semgrep/semgrep:1.176.0@sha256:12672acdb0949e19f9f6a4c2b288edd0b404f268f0ca7738a2c06f372f50362e",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -1970,6 +1970,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
             trivy_step["uses"],
         )
+        self.assertEqual("v0.74.0", trivy_step["with"]["version"])
 
         bandit_scope_step = next_or_fail(
             step

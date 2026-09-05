@@ -670,13 +670,16 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     monkeypatch.setattr(
         core_functions.omero,
         "rtypes",
-        SimpleNamespace(rstring=lambda value: f"wrapped:{value}"),
+        SimpleNamespace(
+            rstring=lambda value: ("RString", value),
+            rlist=lambda values: ("RList", values),
+        ),
         raising=False,
     )
     generic_calls = {}
     params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_string(params, "name", "value")
-    assert generic_calls == {"name": "wrapped:value"}
+    assert generic_calls == {"name": ("RString", "value")}
 
     dict_params = SimpleNamespace(values={})
     core_functions._params_add_string(dict_params, "name", "value")
@@ -689,14 +692,15 @@ def test_job_update_and_parameter_helpers_cover_generic_dict_and_error_paths(
     }
 
     generic_calls.clear()
+    monkeypatch.setattr(core_functions, "rlong", lambda value: ("RLong", value))
     long_params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_long(long_params, "count", 7)
-    assert generic_calls == {"count": 7}
+    assert generic_calls == {"count": ("RLong", 7)}
 
     generic_calls.clear()
     list_params = SimpleNamespace(add=generic_calls.setdefault)
     core_functions._params_add_string_list(list_params, "names", ["a", 2])
-    assert generic_calls == {"names": ["a", "2"]}
+    assert generic_calls == {"names": ("RList", [("RString", "a"), ("RString", "2")])}
 
     with pytest.raises(AttributeError):
         core_functions._params_add_string(SimpleNamespace(), "name", "value")

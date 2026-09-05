@@ -18,10 +18,14 @@ This document records the pinned upstream AI Agent material vendored into this r
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
-- Latest upstream observed and reviewed on 2026-08-22: `v2.1.0`. The 15
-  selected skill files are unchanged from the pinned `v2.0.0` snapshot, so
-  their content is current without importing the new Plan Canvas, harness,
-  hosted-compute, hook, or orchestration surfaces. The repo imports no ECC control pane, hooks,
+- Latest upstream observed and reviewed on 2026-09-05: `v2.2.0`. A complete
+  tree and per-file comparison found metadata changes across the selected
+  skills and body changes in five of them. The repo overlays adopt applicable
+  installer isolation, plan-input validation, and failure-preserving command
+  guidance. Keep the reproducible `v2.0.0` reference snapshot: generic MIME
+  allowlists would exclude supported scientific formats, and Zod examples
+  do not apply to this Python stack. Do not infer unchanged files from a
+  truncated GitHub comparison response. The repo imports no ECC control pane, hooks,
   commands, connectors, session adapters, MCP configuration, worktree service,
   or multi-agent orchestration; the repo's single-session, host-agnostic, and
   Linux-only workflow contracts remain authoritative.

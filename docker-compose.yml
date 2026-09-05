@@ -5,7 +5,7 @@
 services:
 
   portainer:
-    image: "portainer/portainer-ce:2.44.0-alpine"
+    image: "portainer/portainer-ce:2.45.0-alpine"
     container_name: portainer
     restart: unless-stopped
     init: true
@@ -38,7 +38,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.7.6"
+    image: "grafana/loki:3.7.7"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -60,7 +60,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.18.1"
+    image: "grafana/alloy:v1.19.2"
     restart: unless-stopped
     command:
       - "run"
@@ -280,7 +280,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.89.0-alpine"
+    image: "oliver006/redis_exporter:v1.90.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -301,7 +301,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.2.0"
+    image: "grafana/grafana:13.2.1"
     restart: unless-stopped
     networks:
       omero:
@@ -653,7 +653,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.32.15"
+    image: "ollama/ollama:0.33.3"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

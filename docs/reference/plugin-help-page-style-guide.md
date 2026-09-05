@@ -164,7 +164,7 @@ Minimum verification for help-page changes:
 
 ```bash
 python3 tools/lint_docs_structure.py
-npx --yes markdownlint-cli2@0.23.1 <changed markdown files>
+npx --yes markdownlint-cli2@0.23.2 <changed markdown files>
 ruff check <changed python tests>
 ruff format --check <changed python tests>
 python3 -m unittest -v tests/test_repository_documentation_regressions.py
