@@ -68,8 +68,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_SERVER_HOST_PORT=4064", env_text)
         self.assertIn("OMERO_JOB_SERVICE_HOST=localhost", env_text)
         self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
-        self.assertIn("OMERO_CLI_ZARR_VERSION=0.8.0", env_text)
-        self.assertIn("OME_ZARR_PY_VERSION=0.16.0", env_text)
+        self.assertIn("OMERO_CLI_ZARR_VERSION=0.9.0", env_text)
+        self.assertIn("OME_ZARR_PY_VERSION=0.18.0", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.12.1", env_text)
         self.assertIn(
             "BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6",
@@ -135,20 +135,20 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in compose pins monitoring and management image versions.
         """
         compose_text = self.read_text("docker-compose.yml")
-        self.assertIn('image: "portainer/portainer-ce:2.44.0-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.18.1"', compose_text)
+        self.assertIn('image: "portainer/portainer-ce:2.45.0-alpine"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.19.2"', compose_text)
         self.assertIn('image: "prom/prometheus:v3.14.0"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
         self.assertIn(
             'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
             compose_text,
         )
-        self.assertIn('image: "oliver006/redis_exporter:v1.89.0-alpine"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.90.0-alpine"', compose_text)
         self.assertIn('image: "redis:8.10.1-alpine"', compose_text)
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
-        self.assertIn('image: "grafana/loki:3.7.6"', compose_text)
-        self.assertIn('image: "grafana/grafana:13.2.0"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.32.15"', compose_text)
+        self.assertIn('image: "grafana/loki:3.7.7"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.2.1"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.33.3"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -374,7 +374,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/pg-maintenance.Dockerfile")
         self.assertIn(
             "FROM postgres:16.15@"
-            "sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5",
+            "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
             dockerfile_text,
         )
         self.assertNotIn(
@@ -431,7 +431,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "django==5.2.17",
             "matplotlib==3.11.1",
             "pytest==9.1.1",
-            "portalocker==4.2.0",
+            "portalocker==4.3.0",
             "psycopg2-binary==2.9.12",
             "celery==5.6.3",
             "redis==8.1.0",
@@ -464,7 +464,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "ARG PIP_VERSION=26.2.1",
             "ARG SETUPTOOLS_VERSION=80.10.2",
             "ARG WHEEL_VERSION=0.48.0",
-            "ARG CRYPTOGRAPHY_VERSION=50.0.0",
+            "ARG CRYPTOGRAPHY_VERSION=50.0.1",
             "ARG URLLIB3_VERSION=2.7.0",
             "ARG CERTIFI_VERSION=2026.7.22",
             "ARG IDNA_VERSION=3.19",

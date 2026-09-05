@@ -6,6 +6,34 @@ maintainer change history. Release automation applies automated disclosure
 validation and requires explicit human review before publishing any canonical
 entry.
 
+## 2026-09-05 Compatibility Review
+
+- Fixed shared session-based CLI execution to register OMERO command plugins
+  before invocation. Runtime import validation caught an initialization step
+  that the previous CLI test double did not model.
+- Corrected typed OMERO query parameters used when verifying imported images;
+  the generic parameter API requires OMERO values, not raw Python lists.
+- Refreshed monitoring services, compatible application dependencies, CodeQL,
+  Semgrep, Trivy, Ruff, coverage, and the Linux browser-preview toolchain after
+  reviewing upstream release and migration notes.
+- Rechecked OMERO.web's tagged upgrade instructions and the server upgrade
+  guide. OMERO.web 5.33.0, OMERO.server 5.6.18, Django 5.2.17, and OMERO.py
+  5.23.0 remain current within their supported runtime contracts.
+- Updated the shared OME-Zarr reader to 0.18.0 and CLI importer to 0.9.0.
+  Resolver checks on Python 3.11 accept 0.18.0 and reject 0.19.1; existing
+  installations need to align these two version keys before rebuilding.
+- Retained runtime Tifffile 2026.3.3 and Setuptools 80.10.2 for compatibility.
+  The separately pinned CI Tifffile is 2026.8.23.
+- Re-tested and retained Hadolint 2.14.0. The 2.15.1 candidate still reports
+  Bash instructions as POSIX shell; no new exclusions or alert dismissals
+  were introduced. Corrected the unrelated issue reference beside the pin.
+- Reviewed ECC 2.2.0 using complete trees and per-file comparisons. Updated
+  applicable local skill guidance without importing platform-specific or
+  multi-agent orchestration.
+- Corrected build-cache guidance: changed build arguments invalidate dependent
+  layers; full cache bypass is reserved for unchanged external inputs or a
+  demonstrated stale layer.
+
 ## 2026-08-22 Runtime and Dependency Refresh
 
 - Updated OMERO.web to `5.33.0-1` after reviewing the tagged release notes,

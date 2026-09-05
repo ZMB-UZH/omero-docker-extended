@@ -42,7 +42,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.48.0
-ARG CRYPTOGRAPHY_VERSION=50.0.0
+ARG CRYPTOGRAPHY_VERSION=50.0.1
 ARG URLLIB3_VERSION=2.7.0
 ARG CERTIFI_VERSION=2026.7.22
 ARG IDNA_VERSION=3.19
@@ -260,7 +260,7 @@ RUN set -euo pipefail; \
         django==5.2.17 \
         matplotlib==3.11.1 \
         pytest==9.1.1 \
-        portalocker==4.2.0 \
+        portalocker==4.3.0 \
         psycopg2-binary==2.9.12 \
         celery==5.6.3 \
         redis==8.1.0 \

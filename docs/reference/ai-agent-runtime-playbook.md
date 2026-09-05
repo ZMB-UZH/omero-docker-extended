@@ -65,8 +65,8 @@ Examples:
 
 ## Docker image rebuilds: cached vs no-cache
 
-- `docker compose build <service>` uses the layer cache. This is fast but will NOT pick up changes to build ARGs that are already baked into a cached layer. Use this for code-only changes (Python files, templates, static assets) where the COPY layers invalidate naturally.
-- `docker compose build --no-cache <service>` rebuilds every layer from scratch. Use this when changing build ARGs (package versions like `BIOFORMATS2RAW_VERSION`, `OME_ZARR_PY_VERSION`), base image digests, or OS-level package lists.
+- `docker compose build <service>` reuses unchanged layers. Changed build ARG values invalidate dependent instructions; changed base-image digests and COPY inputs also invalidate their dependent layers. Verify the resolved inputs and installed versions rather than assuming a cache hit means stale code.
+- `docker compose build --no-cache <service>` reruns every layer. Use it when refreshing externally resolved packages without a changed cache input, or when investigating a demonstrated stale layer, not automatically for every version change. See [Docker cache invalidation](https://docs.docker.com/build/cache/invalidation/).
 - If a live installation build starts transferring GBs of context, stop before
   `up` and inspect `.dockerignore`; generated runtime roots such as
   `omero_data/`, `omero_temp/`, `postgresdb/`, `node_modules/`, and
@@ -174,6 +174,8 @@ Examples:
   `omeroweb_omp_plugin/services/core.py` helpers `_job_path` and
   `_job_lock_path`.
 - Put OMERO auth flags before the subcommand.
+- Programmatic `omero.cli.CLI()` use requires `loadplugins()` before `invoke()`; constructing the object does not register commands. Verify a real command, not only a mocked invocation.
+- `ParametersI.add()` requires an OMERO `RType`. Wrap string lists as `rlist([rstring(value), ...])` and integers as `rlong(value)`; raw Python values can pass permissive mocks but fail Ice serialization.
 - Resolve the active virtualenv first. `OMERO_WEB_VENV` may be relative inside
   the container; do not assume an absolute `/opt/omero/web/venv-*` path.
   `startup/50-config.py` also accepts explicit `OMERO_WEB_OMERO_BIN`/`OMERO_BIN`,

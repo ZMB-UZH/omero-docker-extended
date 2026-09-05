@@ -72,7 +72,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.16.4", doc_text)
+        self.assertIn("0.16.6", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -131,7 +131,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.16.4", config["required-version"])
+        self.assertEqual("==0.16.6", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["third_party"], config["extend-exclude"])
         self.assertEqual(["F", "E7", "E9", "B904", "LOG014"], config["lint"]["select"])
@@ -146,7 +146,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(1, len(config["repos"]))
         repo = config["repos"][0]
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
-        expected_rev = "aab412d509121cb5f7533134" + "b7e67f9fab59c682"
+        expected_rev = "321478e58f4938179c6b86e4" + "ddfa923d1547a49b"
         self.assertEqual(expected_rev, repo["rev"])
         self.assertRegex(repo["rev"], r"^[0-9a-f]{40}$")
         hooks = {hook["id"]: hook for hook in repo["hooks"]}
@@ -191,7 +191,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.16.4", install_step["with"]["version"])
+        self.assertEqual("0.16.6", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

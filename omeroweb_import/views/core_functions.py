@@ -4490,7 +4490,7 @@ def _params_add_long(params, key, value):
 
     generic_add = getattr(params, "add", None)
     if callable(generic_add):
-        generic_add(key, value)
+        generic_add(key, rlong(value))
         return
 
     values = getattr(params, "values", None)
@@ -4516,7 +4516,12 @@ def _params_add_string_list(params, key, values):
 
     generic_add = getattr(params, "add", None)
     if callable(generic_add):
-        generic_add(key, normalized_values)
+        generic_add(
+            key,
+            omero.rtypes.rlist(
+                [omero.rtypes.rstring(value) for value in normalized_values]
+            ),
+        )
         return
 
     param_values = getattr(params, "values", None)

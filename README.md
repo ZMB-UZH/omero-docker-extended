@@ -208,19 +208,19 @@ The table below lists the long-running services available in the full profile se
 | `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.10.1-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.32.15 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `ollama` | ollama/ollama:0.33.3 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.44.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
+| `portainer` | portainer/portainer-ce:2.45.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.14.0 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.2.0 | Dashboards and visualization | 127.0.0.1:3000 |
-| `loki` | grafana/loki:3.7.6 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.18.1 | Log collection pipeline (file-based) | 12345 (internal) |
+| `grafana` | grafana/grafana:13.2.1 | Dashboards and visualization | 127.0.0.1:3000 |
+| `loki` | grafana/loki:3.7.7 | Log aggregation backend | 127.0.0.1:3100 |
+| `alloy` | grafana/alloy:v1.19.2 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.5 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.89.0-alpine | Redis metrics | 9121 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.90.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
