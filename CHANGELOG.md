@@ -10,6 +10,25 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.1.2-main.1] - 2026-09-05
+
+### Fixed
+
+- Fixed file-import startup and imported-image verification.
+
+### Changed
+
+- Updated compatible monitoring services, Zarr dependencies, and maintenance tooling.
+
+### Upgrade Notes
+
+- Rebuild application images; use OME-Zarr 0.18.0 and OMERO CLI Zarr 0.9.0.
+- No database migration or storage-layout change.
+
+### Verification
+
+- Automated tests and live import/monitoring checks passed.
+
 ## [1.1.1-main.1] - 2026-08-22
 
 ### Changed
@@ -74,6 +93,7 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.1-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.2-main.1...HEAD
+[1.1.2-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.1-main.1...1.1.2-main.1
 [1.1.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.0-main.1...1.1.1-main.1
 [1.1.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.0.1-main.1...1.1.0-main.1
