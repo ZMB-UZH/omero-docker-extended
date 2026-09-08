@@ -178,6 +178,28 @@ This checks analysis coverage, not vulnerability acceptance: reported findings
 still need review. The outer carrier's inventory does not describe packages
 inside its nested runtime archive.
 
+### Restore a missing historical carrier
+
+Use the manual `restore-prebuilt-carrier` workflow when the GitHub release and
+source tag still exist but the matching Docker Hub tag is missing. Supply the
+exact version and repository from that release's original manifest. Each run
+requires separate authorization for replacing its manifest and digest assets;
+dispatch the next recovery only after the previous run completes.
+
+Recovery builds the original tagged source with synthetic configuration on an
+isolated GitHub-hosted runner, analyzes the bundled runtime packages, and verifies
+the published archive before updating GitHub metadata. It preserves the release,
+source tag, source archives and original publication date. Existing Docker tags
+are never overwritten by this workflow. Previously published notes are reused.
+The tagged environment guard validates that release's own configuration contract;
+newer deployment keys are not added to historical source.
+
+A rebuild has a new digest and records its rebuild time; it is not a byte-for-byte
+restoration of the deleted artifact. Historical versions also retain their old
+application behavior. Use the updated digest asset when installing a recovered
+release. Avoid running large historical builds and package indexing on a live
+application host, where their disk and memory use can affect service availability.
+
 ## 3) Build Images
 
 ```bash
