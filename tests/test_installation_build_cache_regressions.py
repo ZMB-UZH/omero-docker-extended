@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import stat
+import os
 import subprocess
 import tempfile
 import textwrap
@@ -15,6 +16,65 @@ BASH_BIN = "/bin/bash"
 
 class InstallationBuildCacheRegressionTests(unittest.TestCase):
     """Exercise installer cache behavior in both compose and Buildx modes."""
+
+    def test_cleanup_refuses_storage_overlap_and_unrecognized_contents(self):
+        """Invalid cache configuration must fail before any destructive command.
+
+        Inputs: isolated overlapping paths. Output: asserts no cleanup command ran.
+        """
+        for case in (
+            "data-root",
+            "ancestor",
+            "inside-database",
+            "symlink",
+            "ordinary-files",
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                data = root / "data"
+                database = data / "database"
+                database.mkdir(parents=True)
+                cache = data / "cache"
+                cache.mkdir()
+                if case == "data-root":
+                    cache = data
+                elif case == "ancestor":
+                    cache = root
+                elif case == "inside-database":
+                    cache = database / "cache"
+                    cache.mkdir()
+                elif case == "symlink":
+                    link = root / "cache-link"
+                    link.symlink_to(cache, target_is_directory=True)
+                    cache = link
+                sentinel = cache / "do-not-delete.txt"
+                sentinel.write_text("persistent fixture", encoding="utf-8")
+                docker_log = root / "docker-called"
+                harness = (
+                    "set -euo pipefail\n"
+                    + self.cleanup_functions
+                    + '\ndocker() { touch "$DOCKER_TEST_LOG"; }\n'
+                    + "cleanup_local_build_cache_if_disabled\n"
+                )
+                env = dict(
+                    os.environ,
+                    USE_CACHE_BUILD="0",
+                    USE_BUILDX_COMPRESSED_BUILD="1",
+                    OMERO_DATA_PATH=str(data),
+                    OMERO_DATABASE_PATH=str(database),
+                    BUILDX_DATA_PATH=str(cache),
+                    DOCKER_TEST_LOG=str(docker_log),
+                )
+                result = subprocess.run(
+                    [BASH_BIN, "-c", harness],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(sentinel.read_text(), "persistent fixture")
+                self.assertFalse(docker_log.exists())
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -229,7 +289,12 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             docker_log_path = temp_path / "docker.log"
             buildx_cache_dir = temp_path / "data" / "buildx_cache"
             buildx_cache_dir.mkdir(parents=True, exist_ok=True)
-            (buildx_cache_dir / "marker.txt").write_text("cache", encoding="utf-8")
+            (buildx_cache_dir / "oci-layout").write_text(
+                '{"imageLayoutVersion":"1.0.0"}', encoding="utf-8"
+            )
+            (buildx_cache_dir / "index.json").write_text(
+                '{"schemaVersion":2,"manifests":[]}', encoding="utf-8"
+            )
 
             fake_docker_path = bin_dir / "docker"
             self._write_executable(
@@ -262,6 +327,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     USE_CACHE_BUILD=0
                     USE_BUILDX_COMPRESSED_BUILD=1
                     OMERO_DATA_PATH="{temp_path / "data"}"
+                    OMERO_TMP_PATH="{temp_path / "scratch"}"
                     cleanup_local_build_cache_if_disabled
                     """,
                 ),

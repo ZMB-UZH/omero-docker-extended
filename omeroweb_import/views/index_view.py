@@ -14,6 +14,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
 
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+from omero_plugin_common.tmp_cleanup import active_tmp_scope
 
 from ..strings import errors, messages
 from .core_functions import (
@@ -503,6 +504,7 @@ def _upload_start_group_context(conn, username):
     return current_group_id, current_group_name
 
 
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def _start_upload(request, conn):
     """Start the upload.
 
@@ -1421,6 +1423,7 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
     return _complete_chunk_upload_response(job_id, conn, entry, rel_path, saved_size)
 
 
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def _upload_files(request, job_id, conn):
     """Upload the files.
 
@@ -1622,6 +1625,7 @@ def import_step(request, job_id, conn=None, _url=None, **kwargs):
         return json_error(errors.unexpected_server_error_importing(), status=500)
 
 
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def _import_step(request, job_id, conn):
     """Import the step.
 
@@ -1667,6 +1671,7 @@ def _import_step(request, job_id, conn):
 
 @login_required()
 @require_non_root_user
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
     """Confirm the import.
 
@@ -1712,6 +1717,7 @@ def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
 
 @login_required()
 @require_non_root_user
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def prune_upload(request, job_id, conn=None, _url=None, **kwargs):
     """Return the prune upload.
 

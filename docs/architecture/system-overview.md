@@ -75,7 +75,7 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 - **Node exporter** (v1.12.1): host-level metrics.
 - **cAdvisor** (v0.60.5): container resource metrics.
 - **Postgres exporters** (v0.20.1, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.90.0): Redis metrics.
+- **Redis exporter** (v1.91.1): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
 - **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing mounted host
   syslog and SSH auth logs. The firewall bouncer auto-detects

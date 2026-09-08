@@ -25,6 +25,7 @@ RETENTION_FILE_MARKER_SUFFIX=".retain-until"
 declare -a RETAINED_DIRS=()
 declare -a RETAINED_FILES=()
 declare -a RETAINED_MARKERS=()
+declare -a LOCKED_SCOPES=()
 
 # Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
@@ -103,6 +104,10 @@ if ! is_non_negative_integer "${MAX_AGE_SECONDS}"; then
 fi
 
 MAX_AGE_MINUTES=$(( MAX_AGE_SECONDS / 60 ))
+if ! command -v flock >/dev/null 2>&1; then
+    echo "ERROR: flock is required to coordinate cleanup with active work." >&2
+    exit 3
+fi
 if [[ "${MAX_AGE_MINUTES}" -lt 1 ]]; then
     MAX_AGE_MINUTES=1
 fi
@@ -192,6 +197,23 @@ path_is_structural() {
 path_is_retained() {
     local path="$1"
     local retained_dir retained_file retained_marker
+    local relative scope locked=0
+
+    # Only sweep namespaces locked for this entire run. Busy namespaces and
+    # namespaces created after the lock inventory are deferred to the next run.
+    relative="${path#"${TMP_DIR}"/}"
+    if [[ "${relative}" = */* ]]; then
+        scope="${TMP_DIR}/${relative%%/*}"
+        for retained_dir in "${LOCKED_SCOPES[@]}"; do
+            if [[ "${scope}" = "${retained_dir}" ]]; then
+                locked=1
+                break
+            fi
+        done
+        if [[ "${locked}" = 0 ]]; then
+            return 0
+        fi
+    fi
 
     if path_is_structural "${path}"; then
         return 0
@@ -217,6 +239,17 @@ path_is_retained() {
 
     return 1
 }
+
+# Directory descriptors avoid persistent lock files and stale lease expiry.
+while IFS= read -r -d '' scope; do
+    if exec {scope_fd}< "${scope}"; then
+        if flock --exclusive --nonblock "${scope_fd}"; then
+            LOCKED_SCOPES+=("${scope}")
+        else
+            exec {scope_fd}<&-
+        fi
+    fi
+done < <(find -P "${TMP_DIR}" -mindepth 1 -maxdepth 1 -type d -print0)
 
 load_active_retention_markers
 

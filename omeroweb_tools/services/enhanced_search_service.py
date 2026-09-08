@@ -1511,7 +1511,8 @@ def _sync_scope(
         raise
     finally:
         with _SYNC_THREADS_LOCK:
-            _SYNC_THREADS.pop(scope.scope_key, None)
+            if _SYNC_THREADS.get(scope.scope_key) is threading.current_thread():
+                _SYNC_THREADS.pop(scope.scope_key, None)
 
 
 def _process_sync_batch(

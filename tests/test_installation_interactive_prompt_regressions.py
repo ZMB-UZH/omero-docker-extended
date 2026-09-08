@@ -359,7 +359,12 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             env_log_path = temp_path / "buildx-env.log"
             buildx_cache_dir = temp_path / "data" / "buildx_cache"
             buildx_cache_dir.mkdir(parents=True, exist_ok=True)
-            (buildx_cache_dir / "marker.txt").write_text("cache", encoding="utf-8")
+            (buildx_cache_dir / "oci-layout").write_text(
+                '{"imageLayoutVersion":"1.0.0"}', encoding="utf-8"
+            )
+            (buildx_cache_dir / "index.json").write_text(
+                '{"schemaVersion":2,"manifests":[]}', encoding="utf-8"
+            )
 
             fake_docker_path = bin_dir / "docker"
             self._write_executable(
@@ -425,6 +430,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2
                         OMERO_INSTALLATION_PATH="{temp_path}"
                         OMERO_DATA_PATH="{temp_path / "data"}"
+                        OMERO_TMP_PATH="{temp_path / "scratch"}"
                         COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                         BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
                         resolve_cache_build_choice

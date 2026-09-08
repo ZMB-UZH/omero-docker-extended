@@ -61,6 +61,7 @@ from omero_plugin_common.logging_utils import (
     summarize_process_output,
 )
 from omero_plugin_common.tmp_cleanup import (
+    active_tmp_scope,
     safe_mark_path_for_deferred_cleanup,
     safe_remove_job_data,
 )
@@ -6949,6 +6950,7 @@ def _check_import_compatibility(
     return response
 
 
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def _run_compatibility_check(job_id: str):
     """Run the compatibility check.
 
@@ -8055,7 +8057,7 @@ def _import_zarr_via_cli(
 
     # --- Detect created objects --------------------------------------------
     combined_output = stdout + "\n" + stderr
-    imported_objects = _extract_imported_object_ids(combined_output)
+    imported_objects = []
     api_verified_image_ids = []
     expected_lsid = None if native_plan.verify_lsid_prefix else str(managed_zarr)
     expected_lsid_prefix = str(managed_zarr) if native_plan.verify_lsid_prefix else None
@@ -8082,36 +8084,14 @@ def _import_zarr_via_cli(
                 sanitize_log_value(imported_objects[:5]),
             )
 
-    if not success and not imported_objects:
-        error_msg = _classify_import_failure(stdout.strip(), stderr.strip())
-        _cleanup_managed_zarr_path(
-            host,
-            port,
-            username=username,
-            group_name=group_name,
-            managed_path=managed_zarr,
-        )
-        job_error = _public_job_error_with_path(rel_path, error_msg)
-        return {
-            "cleanup_staged_paths": cleanup_staged_paths,
-            "covered_indexes": covered_indexes,
-            "covered_relative_paths": covered_relative_paths,
-            "index": entry.get("index"),
-            "status": "error",
-            "entry_error": error_msg,
-            "job_error": job_error,
-            "job_message": job_error,
-        }
-
     if not imported_objects:
-        error_msg = errors.import_no_objects_created()
-        _cleanup_managed_zarr_path(
-            host,
-            port,
-            username=username,
-            group_name=group_name,
-            managed_path=managed_zarr,
+        error_msg = (
+            errors.import_no_objects_created()
+            if success
+            else _classify_import_failure(stdout.strip(), stderr.strip())
         )
+        # A client result cannot prove that an in-flight server transaction
+        # stopped. Persistent handoffs need reconciliation, not file rollback.
         job_error = _public_job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -8119,6 +8099,7 @@ def _import_zarr_via_cli(
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
+            "reconciliation_required": True,
             "entry_error": error_msg,
             "job_error": job_error,
             "job_message": job_error,
@@ -8134,14 +8115,6 @@ def _import_zarr_via_cli(
         group_name=group_name,
     )
     if not metadata_ok:
-        _cleanup_imported_images(host, port, imported_objects)
-        _cleanup_managed_zarr_path(
-            host,
-            port,
-            username=username,
-            group_name=group_name,
-            managed_path=managed_zarr,
-        )
         error_msg = "Native Zarr import failed metadata finalization: " + "; ".join(
             str(error) for error in metadata_errors[:3]
         )
@@ -8152,6 +8125,7 @@ def _import_zarr_via_cli(
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
+            "reconciliation_required": True,
             "entry_error": error_msg,
             "job_error": job_error,
             "job_message": job_error,
@@ -8168,14 +8142,6 @@ def _import_zarr_via_cli(
         group_name=group_name,
     )
     if not render_ok:
-        _cleanup_imported_images(host, port, imported_objects)
-        _cleanup_managed_zarr_path(
-            host,
-            port,
-            username=username,
-            group_name=group_name,
-            managed_path=managed_zarr,
-        )
         error_msg = (
             "Native Zarr import failed post-import render verification: "
             + "; ".join(str(error) for error in render_errors[:3])
@@ -8187,6 +8153,7 @@ def _import_zarr_via_cli(
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
+            "reconciliation_required": True,
             "entry_error": error_msg,
             "job_error": job_error,
             "job_message": job_error,
@@ -8264,7 +8231,7 @@ def _verify_zarr_import_via_api(
 
     Prefer an ``externalInfo.lsid`` match so duplicate image names do not cause
     false positives. Fall back to the legacy name-based lookup only when an
-    expected native Zarr LSID match is unavailable.
+    expected native Zarr LSID was not supplied.
     """
     if not username:
         return []
@@ -8295,15 +8262,23 @@ def _verify_zarr_import_via_api(
                 params.add("lsid", omero.rtypes.rstring(str(expected_lsid)))
                 where_parts.append("i.details.externalInfo.lsid = :lsid")
             elif expected_lsid_prefix:
-                prefix_value = str(expected_lsid_prefix).rstrip("/") + "/%"
+                prefix_value = (
+                    str(expected_lsid_prefix)
+                    .rstrip("/")
+                    .replace("!", "!!")
+                    .replace("%", "!%")
+                    .replace("_", "!_")
+                    + "/%"
+                )
                 params.add("lsid_prefix", omero.rtypes.rstring(prefix_value))
-                where_parts.append("i.details.externalInfo.lsid like :lsid_prefix")
+                where_parts.append(
+                    "i.details.externalInfo.lsid like :lsid_prefix escape '!'"
+                )
             query_parts.append("WHERE " + " AND ".join(where_parts))
             query_parts.append("ORDER BY i.id")
             rows = qs.projection(" ".join(query_parts), params, conn.SERVICE_OPTS)
             exact_ids = [str(row[0].val) for row in rows] if rows else []
-            if exact_ids:
-                return exact_ids
+            return exact_ids
 
         if dataset_id is not None:
             return _verify_import_via_api(
@@ -9045,6 +9020,7 @@ def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
     return False
 
 
+@active_tmp_scope(lambda: _get_upload_root().parent)
 def _process_import_job(job_id: str):
     """Process the import job.
 
@@ -9447,8 +9423,16 @@ def _process_import_job(job_id: str):
 
                     if result.get("status") == "error":
                         entry_error = result.get("entry_error")
+                        if result.get("reconciliation_required"):
+                            _append_job_message(
+                                job,
+                                "Native Zarr data was retained for administrator reconciliation. "
+                                "Do not retry this entry until its server-side result is checked.",
+                            )
                         for entry in covered_entries:
                             entry["status"] = "error"
+                            if result.get("reconciliation_required"):
+                                entry["reconciliation_required"] = True
                             if entry_error:
                                 entry.setdefault("errors", []).append(entry_error)
                         if result.get("job_error"):

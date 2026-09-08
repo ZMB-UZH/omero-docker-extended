@@ -100,11 +100,15 @@ Three separator modes are supported:
 - The client polls `/progress/<str:job_id>/` repeatedly.
 - Each poll processes a configurable batch of images (default chunk size: 5, user-adjustable 1–100).
 - A portalocker file lock prevents concurrent poll requests from processing the same batch.
+- After acquiring the lock, the poll reloads job state and rechecks ownership before processing a batch.
 - Job state (index, totals, logs) is persisted to JSON between polls.
 
 ### 7. Annotation creation
 
 - For write jobs: filenames are parsed with the configured separator, variables are mapped to key-value pairs, and a single `MapAnnotation` is created per image with namespace `openmicroscopy.org/omero/client/mapAnnotation`.
+- Replacement writes snapshot the selected old annotations, confirm the new annotation was saved, and only then remove the snapshot's image links. Failed writes preserve existing metadata; concurrent new annotations are outside that snapshot. Incomplete old-annotation cleanup is reported without removing the replacement.
+- If OMERO removes an orphaned annotation while deleting its last link, cleanup
+  confirms its absence and counts the completed operation without deleting it again.
 - Each annotation includes a plugin ownership hash (`omp_hash` key with `omphash_v1:` prefix) computed from the annotation content using an optional HMAC secret (`FMP_HASH_SECRET`).
 - Duplicate variable names are auto-suffixed (e.g. `Var1`, `Var1_2`).
 - The reserved `omp_hash` marker is never used for user metadata; colliding

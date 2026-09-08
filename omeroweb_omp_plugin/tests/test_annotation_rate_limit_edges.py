@@ -2,9 +2,17 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from omeroweb_omp_plugin.constants import HASH_KEY
 from omeroweb_omp_plugin.services import rate_limit
 from omeroweb_omp_plugin.services.omero import annotation_service
+
+
+def test_replacement_snapshot_rejects_unknown_modes_before_reading_metadata():
+    """Inputs: invalid replacement mode. Output: rejects it without touching an image."""
+    with pytest.raises(ValueError, match="Unsupported annotation replacement mode"):
+        annotation_service.collect_annotation_ids(None, None, "unrecognized")
 
 
 class _Value:
@@ -405,6 +413,56 @@ def test_delete_existing_annotations_handles_sparse_annotations_and_cleanup_fail
         ("ImageAnnotationLink", 701, True),
         ("Annotation", 14, True),
     ]
+
+
+def test_annotation_cleanup_accepts_confirmed_link_delete_cascade(monkeypatch):
+    """Count a confirmed server cascade without deleting an absent annotation twice.
+
+    Inputs: pytest monkeypatch fixture. Output: assertions on cleanup and delete calls.
+    """
+    monkeypatch.setattr(annotation_service, "ParametersI", _Params)
+    monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
+    monkeypatch.setattr(annotation_service, "get_id", lambda obj: obj.id)
+    deleted_links = set()
+    calls = []
+
+    def find_links(_conn, aid, image_id=None):
+        """Model the link's disappearance after a server graph deletion.
+
+        Inputs: connection, annotation and optional image IDs. Output: remaining IDs.
+        """
+        assert aid == 17
+        return [] if 31 in deleted_links else [31]
+
+    def projection(hql, params, service_opts=None):
+        """Expose the annotation's confirmed absence after the cascade.
+
+        Inputs: query, typed parameters and service options. Output: projection rows.
+        """
+        assert "select a.id from MapAnnotation" in hql
+        assert params.values["aid"] == 17
+        return [] if 31 in deleted_links else [[17]]
+
+    def delete_objects(kind, ids, wait):
+        """Record graph deletion and reject a redundant annotation deletion.
+
+        Inputs: object type, IDs and wait flag. Output: updates recorded deletions.
+        """
+        calls.append((kind, ids, wait))
+        assert kind == "ImageAnnotationLink"
+        deleted_links.update(ids)
+
+    monkeypatch.setattr(annotation_service, "find_annotation_link_ids", find_links)
+    conn = SimpleNamespace(
+        getQueryService=lambda: SimpleNamespace(projection=projection),
+        getObject=lambda *_args: None,
+        deleteObjects=delete_objects,
+    )
+    result = annotation_service.delete_existing_annotations(
+        conn, SimpleNamespace(), SimpleNamespace(id=41), [], "all", target_ids={17}
+    )
+    assert result == (1, 0, 1)
+    assert calls == [("ImageAnnotationLink", [31], True)]
 
 
 def test_rate_limit_covers_dummy_cache_cleanup_and_blocked_state(monkeypatch):

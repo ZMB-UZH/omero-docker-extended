@@ -1,6 +1,8 @@
 """Host-agnostic temporary artifact cleanup helpers."""
 
 import os
+import fcntl
+from contextlib import contextmanager
 import shutil
 import tempfile
 import time
@@ -9,6 +11,23 @@ from pathlib import Path
 
 RETENTION_DIR_MARKER_NAME = ".omero-retain-until"
 RETENTION_FILE_MARKER_SUFFIX = ".retain-until"
+
+
+@contextmanager
+def active_tmp_scope(scope_factory):
+    """Hold a shared directory lease against the host cleaner for active work.
+
+    The callable resolves the configured plugin namespace at entry, after runtime
+    initialization. Kernel-owned locks are released on exceptions or process exit.
+    Inputs: namespace path factory. Output: context yielding while the lease is held.
+    """
+    scope = Path(scope_factory())
+    descriptor = os.open(scope, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_SH)
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def _resolve_existing(path: Path) -> Path | None:

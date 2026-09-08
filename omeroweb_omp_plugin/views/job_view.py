@@ -29,6 +29,10 @@ from ..services.core import (
     extract_acquisition_metadata,
 )
 from ..services.parsing.filename_parser import is_supported_separator_pattern
+from ..services.omero.annotation_service import (
+    collect_annotation_ids,
+    delete_existing_annotations as delete_annotation_snapshot,
+)
 from ..services.rate_limit import (
     build_rate_limit_message,
     check_major_action_rate_limit,
@@ -634,6 +638,13 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                 }
             )
 
+        # A competing request may have committed after our optimistic read.
+        job = load_job(job_id)
+        if job is None or not _job_owned_by_request(job, request, conn):
+            return JsonResponse(
+                {"error": error_messages.unknown_job(), "finished": True}, status=404
+            )
+
         total = job["total"]
         idx = job["index"]
         var_names = job["var_names"]
@@ -815,16 +826,26 @@ def job_progress(request, job_id, conn=None, _url=None, **kwargs):
                     mapping[key] = str(part)
                 annotation_mapping = _with_plugin_hash(mapping)
 
-                # DELETE FIRST
-                delete_existing_annotations(conn, update, img, var_names, delete_mode)
-
                 # Write one annotation containing user keys plus the plugin marker.
                 if annotation_mapping:
+                    old_annotation_ids = collect_annotation_ids(conn, img, delete_mode)
                     saved = _save_image_map_annotation(update, img, annotation_mapping)
                     if saved:
+                        deleted, _, attempted = delete_annotation_snapshot(
+                            conn,
+                            update,
+                            img,
+                            var_names,
+                            delete_mode,
+                            target_ids=old_annotation_ids,
+                        )
                         batch_logs.append(
                             f"Image {iid} ({filename}): saved {len(mapping)}+1 variables."
                         )
+                        if deleted < attempted:
+                            batch_logs.append(
+                                f"Image {iid}: replacement saved; some previous annotations remain."
+                            )
                     else:
                         batch_logs.append(
                             f"Image {iid} ({filename}): ERROR confirming variable save."

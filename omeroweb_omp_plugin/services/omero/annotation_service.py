@@ -355,18 +355,68 @@ def find_map_annotation_ids(conn, image_id):
         return []
 
 
-def delete_existing_annotations(conn, _update, img, var_names, mode):
-    """Delete the existing annotations.
+def collect_annotation_ids(conn, img, mode):
+    """Snapshot replacement candidates before a new annotation is saved.
 
-    Inputs: `conn` OMERO gateway connection, `_update`, `img`, `var_names`, `mode`.
-    Output: `bool`.
+    Inputs: connection, image, replacement mode. Output: selected annotation IDs.
+    """
+    if mode == "keep":
+        return set()
+    if mode not in {"all", "plugin"}:
+        raise ValueError("Unsupported annotation replacement mode.")
+
+    annotations = list(img.listAnnotations())
+    qs = conn.getQueryService()
+    service_opts = getattr(conn, "SERVICE_OPTS", None)
+    target_ids = set()
+    for ann in annotations:
+        try:
+            obj = getattr(ann, "_obj", ann)
+            ann_id = get_id(ann)
+            if ann_id is None or not hasattr(obj, "getMapValue"):
+                continue
+            if mode == "all":
+                target_ids.add(ann_id)
+            else:
+                ns_obj = ann.getNs() if hasattr(ann, "getNs") else obj.getNs()
+                ns = ns_obj.getValue() if ns_obj else None
+                if ns == MAP_NS and is_plugin_annotation(
+                    obj, qs=qs, service_opts=service_opts
+                ):
+                    target_ids.add(ann_id)
+        except Exception:
+            logger.warning("Unable to identify an annotation on image %s", get_id(img))
+    try:
+        if mode == "all":
+            target_ids.update(find_map_annotation_ids(conn, get_id(img)))
+        else:
+            target_ids.update(
+                find_plugin_annotation_ids(conn, get_id(img), allow_legacy=False)
+            )
+    except Exception:
+        logger.warning(
+            "Unable to query additional annotations on image %s", get_id(img)
+        )
+    return target_ids
+
+
+def delete_existing_annotations(
+    conn, _update, img, var_names, mode, *, target_ids=None
+):
+    """Delete image-scoped annotations, optionally restricted to an earlier snapshot.
+
+    Inputs: connection, image, mode and optional target IDs. Output: deletion counts.
     """
     _ = var_names
     if mode == "keep":
         return 0, 0, 0
 
     try:
-        annotations = list(img.listAnnotations())
+        target_ids = (
+            collect_annotation_ids(conn, img, mode)
+            if target_ids is None
+            else set(target_ids)
+        )
     except Exception as e:
         logger.warning(
             "Cannot list annotations for image %s: %s",
@@ -460,6 +510,10 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
             )
             return True
 
+        # OMERO's link-delete graph can also remove an orphaned MapAnnotation.
+        if not _annotation_exists(aid):
+            return True
+
         try:
             conn.deleteObjects("Annotation", [int(aid)], wait=True)
         except Exception as e:  # pragma: no cover - OMERO gateway failure guard
@@ -489,64 +543,6 @@ def delete_existing_annotations(conn, _update, img, var_names, mode):
             return False
 
         return not _annotation_exists(aid)
-
-    target_ids = set()
-
-    for ann in annotations:
-        try:
-            obj = getattr(ann, "_obj", ann)
-            if not hasattr(obj, "getMapValue"):
-                continue
-
-            ann_id = get_id(ann)
-            if ann_id is None:
-                continue
-
-            # Best-effort namespace check
-            ns = None
-            try:
-                ns_obj = ann.getNs() if hasattr(ann, "getNs") else obj.getNs()
-                ns = ns_obj.getValue() if ns_obj else None
-            except Exception as exc:
-                logger.debug(
-                    "Suppressed non-fatal exception in annotation_service.py",
-                    exc_info=exc,
-                )
-
-            if mode == "all":
-                target_ids.add(ann_id)
-                continue
-
-            if mode == "plugin":
-                if ns != MAP_NS:
-                    continue
-                if is_plugin_annotation(obj, qs=qs, service_opts=service_opts):
-                    target_ids.add(ann_id)
-                continue
-
-        except Exception as e:
-            logger.warning(
-                "Error deleting annotation on image %s: %s",
-                get_id(img),
-                e,
-            )
-            continue
-
-    if mode == "all":
-        try:
-            target_ids.update(find_map_annotation_ids(conn, get_id(img)))
-        except Exception:
-            logger.warning("Failed to delete map annotations for image %s", get_id(img))
-
-    if mode == "plugin":
-        try:
-            target_ids.update(
-                find_plugin_annotation_ids(conn, get_id(img), allow_legacy=False)
-            )
-        except Exception:
-            logger.warning(
-                "Failed to delete plugin annotations for image %s", get_id(img)
-            )
 
     deleted_sets = 0
     deleted_pairs = 0

@@ -528,15 +528,37 @@ def test_verify_import_helpers_and_dataset_creation(monkeypatch):
     monkeypatch.setattr(
         core_functions, "_open_admin_connection", lambda host, port: admin_conn
     )
-    assert core_functions._verify_zarr_import_via_api(
-        "alice",
-        "omeroserver",
-        4064,
-        "imported.zarr",
-        "image.zarr",
-        expected_lsid_prefix="/managed/root/image.zarr",
-        dataset_id=9,
-    ) == ["fallback-id"]
+    assert (
+        core_functions._verify_zarr_import_via_api(
+            "alice",
+            "omeroserver",
+            4064,
+            "imported.zarr",
+            "image.zarr",
+            expected_lsid_prefix="/managed/root/image.zarr",
+            dataset_id=9,
+        )
+        == []
+    )
+
+    for legacy_dataset, expected_ids in ((9, ["fallback-id"]), (None, [])):
+        conn = _Conn()
+        admin_conn = _AdminConn(conn)
+        monkeypatch.setattr(
+            core_functions, "_open_admin_connection", lambda host, port: admin_conn
+        )
+        assert (
+            core_functions._verify_zarr_import_via_api(
+                "alice",
+                "omeroserver",
+                4064,
+                "imported.zarr",
+                "image.zarr",
+                dataset_id=legacy_dataset,
+            )
+            == expected_ids
+        )
+        assert conn.closed and admin_conn.closed
 
     class _CreatedDataset:
         """Test double for created dataset behavior in this module."""
@@ -1123,6 +1145,7 @@ def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
             "status": "error",
             "covered_indexes": [0],
             "entry_error": "bad import",
+            "reconciliation_required": True,
             "job_error": "job failed",
             "job_message": "job failed",
         },
@@ -1132,6 +1155,10 @@ def test_process_import_job_covers_lock_timeout_success_and_failure_cleanup(
 
     assert failure_state["job"]["status"] == "error"
     assert "job failed" in failure_state["job"]["errors"]
+    assert failure_state["job"]["files"][0]["reconciliation_required"] is True
+    assert any(
+        "reconciliation" in message for message in failure_state["job"]["messages"]
+    )
     assert deferred_jobs == [job_id]
 
 

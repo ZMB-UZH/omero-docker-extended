@@ -170,6 +170,14 @@ build and archive steps so the full required image set fits on the runner. The
 value must be a docker hub access token with write access to the carrier
 repository; do not use a docker hub account password.
 
+Before archiving runtime images, the workflow analyzes each distinct runtime
+image ID with Scout and verifies that every required image has a nonempty
+software inventory and a completed vulnerability report. Detailed reports stay
+in the runner's private temporary directory, separate from source-code SARIF.
+This checks analysis coverage, not vulnerability acceptance: reported findings
+still need review. The outer carrier's inventory does not describe packages
+inside its nested runtime archive.
+
 ## 3) Build Images
 
 ```bash
@@ -251,6 +259,9 @@ Notes:
   - when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`),
   - and, for that Buildx run, forces Buildx local cache export off in addition to disabling docker layer cache and Buildx inline cache.
   This keeps "no cache" runs consistent with operator expectations while avoiding unnecessary Buildx cache deletion when Buildx is disabled.
+  Before pruning, the installer rejects a local cache path that overlaps
+  configured persistent storage, resolves through a symlink, or contains
+  unexpected files. A populated local cache must have the expected OCI layout.
 
 ```bash
 bash installation/installation_script.sh

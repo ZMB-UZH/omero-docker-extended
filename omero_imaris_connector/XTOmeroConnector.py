@@ -6290,7 +6290,9 @@ def _download_path_for_policy(download_dir, filename, duplicate_policy=None):
 
 
 @contextlib.contextmanager
-def _open_download_target(download_dir, filename, duplicate_policy=None):
+def _open_download_target(
+    download_dir, filename, duplicate_policy=None, *, validator=None, cancel_event=None
+):
     """Open a connector download target according to duplicate naming policy.
 
     Inputs: target folder, desired filename, duplicate policy. Output: yields
@@ -6305,13 +6307,15 @@ def _open_download_target(download_dir, filename, duplicate_policy=None):
 
     descriptor: Optional[int] = None
     local_path: Optional[str] = None
+    owned_path: Optional[str] = None
+    completed = False
     try:
         if not use_unique:
             local_path = os.path.join(download_dir, safe_filename)
-            descriptor = os.open(
-                os.fspath(local_path),
-                flags | os.O_TRUNC,
-                PRIVATE_FILE_MODE,
+            descriptor, owned_path = tempfile.mkstemp(
+                prefix=".omero-download-",
+                suffix=".partial",
+                dir=download_dir,
             )
         else:
             for candidate in _unique_download_candidates(
@@ -6328,15 +6332,26 @@ def _open_download_target(download_dir, filename, duplicate_policy=None):
                 except FileExistsError:
                     continue
                 local_path = candidate
+                owned_path = candidate
                 break
-            if descriptor is None or local_path is None:
-                raise RuntimeError("Could not allocate a unique download filename.")
+        if descriptor is None or local_path is None or owned_path is None:
+            raise RuntimeError("Could not allocate a download file.")
 
         with os.fdopen(descriptor, "wb") as handle:
             descriptor = None
             yield local_path, handle
+            handle.flush()
+            os.fsync(handle.fileno())
+        _raise_if_cancelled(cancel_event, "Image download")
+        if validator is not None and not validator(owned_path):
+            raise RuntimeError("Downloaded file failed format validation.")
+        if not use_unique:
+            os.replace(owned_path, local_path)
+        completed = True
     finally:
         _close_file_descriptor_suppressing_os_error(descriptor)
+        if not completed:
+            _safe_remove_partial_download(owned_path)
 
 
 def _raise_if_cancelled(cancel_event, context="Operation"):
@@ -6496,7 +6511,9 @@ class _CancellableHTTPResponse:
         try:
             self._remaining = int(content_length) if content_length else None
         except (TypeError, ValueError):
-            self._remaining = None
+            raise http.client.HTTPException("Invalid HTTP Content-Length.") from None
+        if self._remaining is not None and self._remaining < 0:
+            raise http.client.HTTPException("Invalid HTTP Content-Length.")
 
     def __enter__(self):
         """Enter response context.
@@ -6551,7 +6568,7 @@ class _CancellableHTTPResponse:
         return data
 
     def _read_wire_exact(self, size):
-        """Read exactly size undecoded bytes unless EOF occurs.
+        """Read exactly size undecoded bytes, rejecting premature EOF.
 
         Inputs: byte count. Output: bytes.
         """
@@ -6560,7 +6577,7 @@ class _CancellableHTTPResponse:
         while remaining > 0:
             chunk = self._read_wire(remaining)
             if not chunk:
-                break
+                raise http.client.HTTPException("Incomplete HTTP response body.")
             chunks.append(chunk)
             remaining -= len(chunk)
         return b"".join(chunks)
@@ -6582,7 +6599,7 @@ class _CancellableHTTPResponse:
                 self._buffer.clear()
             chunk = self._read_wire(1)
             if not chunk:
-                return bytes(line)
+                raise http.client.HTTPException("Incomplete HTTP response framing.")
             line.extend(chunk)
             if chunk == b"\n":
                 return bytes(line)
@@ -6614,6 +6631,8 @@ class _CancellableHTTPResponse:
             return b""
         data = self._read_wire(read_size)
         if self._remaining is not None:
+            if not data:
+                raise http.client.HTTPException("Incomplete HTTP response body.")
             self._remaining = max(0, self._remaining - len(data))
         return data
 
@@ -6624,8 +6643,10 @@ class _CancellableHTTPResponse:
         """
         while True:
             line = self._read_wire_line()
-            if line in {b"", b"\r\n", b"\n"}:
+            if line == b"\r\n":
                 return
+            if not line.endswith(b"\r\n") or b":" not in line:
+                raise http.client.HTTPException("Invalid HTTP response trailer.")
 
     def _read_chunked(self, size):
         """Read a chunked response body and return decoded bytes.
@@ -6650,10 +6671,11 @@ class _CancellableHTTPResponse:
         while len(output) < wanted and not self._chunk_done:
             if self._chunk_remaining <= 0:
                 line = self._read_wire_line()
-                if not line:
-                    self._chunk_done = True
-                    break
                 chunk_size_text = line.split(b";", 1)[0].strip()
+                if not line.endswith(b"\r\n") or not re.fullmatch(
+                    rb"[0-9a-fA-F]+", chunk_size_text
+                ):
+                    raise http.client.HTTPException("Invalid HTTP chunk size.")
                 try:
                     self._chunk_remaining = int(chunk_size_text, 16)
                 except ValueError as chunk_size_error:
@@ -6667,13 +6689,11 @@ class _CancellableHTTPResponse:
 
             next_size = min(wanted - len(output), self._chunk_remaining)
             chunk = self._read_wire_exact(next_size)
-            if not chunk:
-                self._chunk_done = True
-                break
             output.extend(chunk)
             self._chunk_remaining -= len(chunk)
             if self._chunk_remaining == 0:
-                self._read_wire_exact(2)
+                if self._read_wire_exact(2) != b"\r\n":
+                    raise http.client.HTTPException("Invalid HTTP chunk terminator.")
         return bytes(output)
 
     def read(self, size=-1):
@@ -8420,6 +8440,8 @@ class OMEROWebClient:
         target_filename=None,
         duplicate_policy=None,
         cancel_event=None,
+        *,
+        _reauth_attempted=False,
     ):
         """Download an Imaris .ims export for a given image_id.
 
@@ -8475,7 +8497,9 @@ class OMEROWebClient:
                 if self._check_login_redirect(
                     response, "OMERO converter IMS export request"
                 ):
-                    if not self._attempt_reauth("OMERO converter IMS export request"):
+                    if _reauth_attempted or not self._attempt_reauth(
+                        "OMERO converter IMS export request"
+                    ):
                         raise RuntimeError(
                             "Not authenticated to OMERO.web (redirected to login). "
                             "Please login again."
@@ -8487,6 +8511,7 @@ class OMEROWebClient:
                         target_filename=target_filename,
                         duplicate_policy=duplicate_policy,
                         cancel_event=cancel_event,
+                        _reauth_attempted=True,
                     )
 
                 raw_body = response.read().decode("utf-8", errors="replace")
@@ -8655,6 +8680,8 @@ class OMEROWebClient:
                     download_dir,
                     safe_filename,
                     duplicate_policy,
+                    validator=is_ims_file,
+                    cancel_event=cancel_event,
                 ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
@@ -8670,7 +8697,6 @@ class OMEROWebClient:
 
                 progress.finish(downloaded)
 
-            _raise_if_cancelled(cancel_event, "OMERO converter IMS export download")
             if not os.path.exists(local_path):
                 raise RuntimeError(
                     f"Download completed but file not found at {local_path}"
@@ -8687,7 +8713,6 @@ class OMEROWebClient:
 
         except _ConnectorOperationCancelled:
             self.cancel_ims_export(status_url)
-            _safe_remove_partial_download(local_path)
             raise
         except urllib.error.HTTPError as e:
             try:
@@ -8849,6 +8874,8 @@ class OMEROWebClient:
                     download_dir,
                     safe_filename,
                     duplicate_policy,
+                    validator=is_tiff_file,
+                    cancel_event=cancel_event,
                 ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
@@ -8876,7 +8903,6 @@ class OMEROWebClient:
             return local_path
         except _ConnectorOperationCancelled:
             self.cancel_ims_export(status_url)
-            _safe_remove_partial_download(local_path)
             raise
         finally:
             self._forget_active_ims_export(status_url)
@@ -8992,6 +9018,8 @@ class OMEROWebClient:
                     download_dir,
                     safe_filename,
                     duplicate_policy,
+                    validator=is_tiff_file,
+                    cancel_event=cancel_event,
                 ) as (local_path, f):
                     while True:
                         _raise_if_cancelled(
@@ -9007,9 +9035,6 @@ class OMEROWebClient:
 
                 progress.finish(downloaded)
 
-            _raise_if_cancelled(
-                cancel_event, "Imaris converter selected Image download"
-            )
             if not os.path.exists(local_path):
                 raise RuntimeError(
                     f"Download completed but file not found at {local_path}"
@@ -9024,7 +9049,6 @@ class OMEROWebClient:
             _xt_debug("Imaris converter: selected Image OME-TIFF export downloaded OK")
             return local_path
         except _ConnectorOperationCancelled:
-            _safe_remove_partial_download(local_path)
             raise
         except urllib.error.HTTPError as e:
             try:

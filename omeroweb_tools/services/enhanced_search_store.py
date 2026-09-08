@@ -980,12 +980,21 @@ def prune_scope_membership(conn, scope_type: str, scope_id: int, run_token: str)
         cur.execute(
             _safe_query(
                 """
-                DELETE FROM {}
-                WHERE scope_type = %s AND scope_id = %s AND run_token <> %s
+                WITH active_run AS (
+                    SELECT scope_type, scope_id FROM {}
+                    WHERE scope_type = %s AND scope_id = %s
+                        AND run_token = %s AND status = 'running'
+                    FOR UPDATE
+                )
+                DELETE FROM {} AS items USING active_run
+                WHERE items.scope_type = active_run.scope_type
+                    AND items.scope_id = active_run.scope_id
+                    AND items.run_token <> %s
                 """,
+                TABLE_SYNC_STATE,
                 TABLE_SCOPE_ITEM,
             ),
-            (scope_type, scope_id, run_token),
+            (scope_type, scope_id, run_token, run_token),
         )
         deleted = cur.rowcount or 0
     conn.commit()

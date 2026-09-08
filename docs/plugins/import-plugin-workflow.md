@@ -106,7 +106,7 @@ flowchart TD
 ### 8. Post-import validation
 
 - Import success is not inferred solely from the CLI exit code.
-- The plugin extracts created object IDs from CLI output, validates the imported image/store relationship, and exercises thumbnail/render behavior before reporting success.
+- The plugin resolves created image IDs through the OMERO API using the exact staged store identity, then exercises thumbnail/render behavior before reporting success. A supplied store identity never falls back to an image-name match.
 - If validation fails, the job is reported as failed even if the transaction created OMERO objects.
 
 ## Design rules
@@ -117,6 +117,7 @@ flowchart TD
 - Mutate only the disposable native-import copy when the current runtime requires it.
 - Never route non-Zarr imports through the native Zarr branch.
 - Keep timeouts environment-driven.
+- Upload requests and import workers hold a shared lease on their tmp namespace. The periodic cleaner skips a busy namespace and rechecks it on a later run; other idle namespaces remain eligible for normal age-based cleanup.
 - Never reopen the live browser OMERO.web session in background import work.
 - Never assume `job-service.suConn()` can safely impersonate the importing user for Dataset creation or file-attachment follow-up work.
 
@@ -127,6 +128,8 @@ flowchart TD
 - **Managed-repository handoff failure**: import aborts before `omero zarr import`.
 - **Metadata finalization failure**: import is treated as failed because created images are incomplete.
 - **Render/thumbnail validation failure**: import is treated as failed because the created object is not operational in OMERO.web.
+- **Uncertain native import**: after the persistent handoff, failures retain the managed store and any created objects. The job requests administrator reconciliation rather than automatic rollback or retry.
+  Check the server-side import result and store references before deciding whether to complete, repair, or remove those objects; a CLI timeout or an empty query alone is not proof that server processing stopped.
 
 ## Related docs
 

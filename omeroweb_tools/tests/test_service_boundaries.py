@@ -1057,13 +1057,19 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         ),
     )
     sync_run_a = "sync-run-a"
-    service._SYNC_THREADS[scope.scope_key] = object()
+    service._SYNC_THREADS[scope.scope_key] = service.threading.current_thread()
     assert service._sync_scope(scope, sync_run_a) == {
         "status": "idle",
         "indexed_image_count": 0,
     }
     assert sync_events[0] == ("prune_scope", "user", 9, sync_run_a)
     assert scope.scope_key not in service._SYNC_THREADS
+
+    replacement_thread = object()
+    service._SYNC_THREADS[scope.scope_key] = replacement_thread
+    service._sync_scope(scope, sync_run_a)
+    assert service._SYNC_THREADS[scope.scope_key] is replacement_thread
+    service._SYNC_THREADS.pop(scope.scope_key)
 
     error_calls = []
 
@@ -1093,7 +1099,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         ),
     )
     sync_run_b = "sync-run-b"
-    service._SYNC_THREADS[scope.scope_key] = object()
+    service._SYNC_THREADS[scope.scope_key] = service.threading.current_thread()
     with pytest.raises(RuntimeError, match="boom"):
         service._sync_scope(scope, sync_run_b)
     assert error_calls[0][0:2] == ("user", 9)
@@ -1132,7 +1138,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         ),
     )
     sync_run_c = "sync-run-c"
-    service._SYNC_THREADS[scope.scope_key] = object()
+    service._SYNC_THREADS[scope.scope_key] = service.threading.current_thread()
     assert service._sync_scope(scope, sync_run_c) == {
         "status": "idle",
         "indexed_image_count": 3,
@@ -1147,7 +1153,7 @@ def test_sync_scope_request_dispatch_and_saved_query_wrappers(monkeypatch):
         ),
     )
     sync_run_d = "sync-run-d"
-    service._SYNC_THREADS[scope.scope_key] = object()
+    service._SYNC_THREADS[scope.scope_key] = service.threading.current_thread()
     assert service._sync_scope(scope, sync_run_d) == {
         "status": "idle",
         "indexed_image_count": 0,

@@ -19,6 +19,60 @@ from omero_plugin_common import tmp_cleanup
 class TmpCleanupRegressionTests(TestCase):
     """Test cases for tmp cleanup regression tests."""
 
+    def test_active_scope_survives_sweep_and_unrelated_scope_is_cleaned(self):
+        """Real cross-process directory leases protect old active input, then expire.
+
+        Inputs: old files in isolated namespaces. Output: asserts selective cleanup.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            active = root / "import-fixture"
+            inactive = root / "idle-fixture"
+            for scope in (active, inactive):
+                scope.mkdir()
+                payload = scope / "payload.tif"
+                payload.write_bytes(b"fixture")
+                old = time.time() - 2 * 86400
+                os.utime(payload, (old, old))
+            command = [
+                BASH_BIN,
+                str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                "--tmp-dir",
+                str(root),
+            ]
+            with tmp_cleanup.active_tmp_scope(lambda: active):
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                self.assertTrue((active / "payload.tif").exists())
+                self.assertFalse((inactive / "payload.tif").exists())
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            self.assertFalse((active / "payload.tif").exists())
+
+    def test_scope_lease_releases_after_exception_and_rejects_symlink(self):
+        """Exceptions must not leak leases, and a scope must be a real directory.
+
+        Inputs: directory and symlink fixtures. Output: asserts lease safety.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scope = root / "scope"
+            scope.mkdir()
+            link = root / "link"
+            link.symlink_to(scope, target_is_directory=True)
+            with self.assertRaises(OSError), tmp_cleanup.active_tmp_scope(lambda: link):
+                self.fail("Symlink lease unexpectedly acquired")
+            with (
+                self.assertRaises(RuntimeError),
+                tmp_cleanup.active_tmp_scope(lambda: scope),
+            ):
+                raise RuntimeError("Injected failure")
+            descriptor = os.open(scope, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                tmp_cleanup.fcntl.flock(
+                    descriptor, tmp_cleanup.fcntl.LOCK_EX | tmp_cleanup.fcntl.LOCK_NB
+                )
+            finally:
+                os.close(descriptor)
+
     def test_safe_mark_path_for_deferred_cleanup_marks_directory_root(self):
         """Check safe mark path for deferred cleanup marks directory root cleanup behavior.
 

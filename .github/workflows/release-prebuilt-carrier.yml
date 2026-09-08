@@ -406,6 +406,9 @@ jobs:
               docker pull "${image_ref}"
             fi
           done
+          python3 tools/scan_prebuilt_runtime_images.py \
+            --required-images-file dist/prebuilt-required-images.txt \
+            --output-dir "${RUNNER_TEMP}/runtime-image-analysis"
           write_runtime_archive() {
             docker save "${compose_images[@]}" \
               | python3 tools/write_prebuilt_runtime_archive.py \
@@ -807,7 +810,7 @@ jobs:
               raise SystemExit("Docker Scout SBOM output is not a JSON object.")
           if not sbom:
               raise SystemExit("Docker Scout SBOM output is empty.")
-          print("Docker Scout SBOM output verified.")
+          print("Outer carrier SBOM verified; runtime package coverage was checked separately before bundling.")
           PY
 
       - name: Publish GitHub release
