@@ -95,6 +95,15 @@ To apply the canonical formatting baseline locally:
 ruff format .
 ```
 
+## CI dependency locks
+
+Regenerate `.github/requirements/*.txt` from their matching `.in` files with
+the Python minor version used by CI. Use an isolated compiler environment;
+the verified compiler pair is `pip-tools==7.6.1` with `pip==26.2.1`.
+Older pip-tools versions can fail against changed pip internals. Follow each
+input file's hash-generation command, review the complete lockfile diff,
+and run the local CI profile before pushing dependency changes.
+
 ## Lint scope
 
 - Ruff formatting applies repo-wide to tracked Python files.
