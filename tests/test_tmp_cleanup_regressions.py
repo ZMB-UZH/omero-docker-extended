@@ -60,11 +60,16 @@ class TmpCleanupRegressionTests(TestCase):
             link.symlink_to(scope, target_is_directory=True)
             with self.assertRaises(OSError), tmp_cleanup.active_tmp_scope(lambda: link):
                 self.fail("Symlink lease unexpectedly acquired")
-            with (
-                self.assertRaises(RuntimeError),
-                tmp_cleanup.active_tmp_scope(lambda: scope),
-            ):
-                raise RuntimeError("Injected failure")
+
+            def fail_inside_lease():
+                """Exercise exceptional exit while the directory lease is held.
+
+                Inputs: enclosing directory fixture. Output: raises RuntimeError.
+                """
+                with tmp_cleanup.active_tmp_scope(lambda: scope):
+                    raise RuntimeError("Injected failure")
+
+            self.assertRaises(RuntimeError, fail_inside_lease)
             descriptor = os.open(scope, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 tmp_cleanup.fcntl.flock(
