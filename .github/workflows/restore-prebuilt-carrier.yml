@@ -1,0 +1,145 @@
+name: restore-prebuilt-carrier
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact existing GitHub release whose missing Docker tag will be rebuilt."
+        required: true
+        type: string
+      docker_repository:
+        description: "Docker repository already recorded in the original manifest."
+        required: true
+        type: string
+      authorize_replace_manifest:
+        description: "Authorize replacing only this release's prebuilt-manifest.json asset."
+        required: true
+        default: false
+        type: boolean
+      authorize_replace_digest:
+        description: "Authorize replacing only this release's prebuilt-carrier-digest.txt asset."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-carrier-recovery
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout recovery tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate recovery authorization
+        env:
+          AUTHORIZE_MANIFEST: ${{ inputs.authorize_replace_manifest }}
+          AUTHORIZE_DIGEST: ${{ inputs.authorize_replace_digest }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
+        run: |
+          set -euo pipefail
+          if [ "${AUTHORIZE_MANIFEST}" != true ] || [ "${AUTHORIZE_DIGEST}" != true ]; then
+            echo "Both exact metadata replacements require authorization." >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os
+          from tools.restore_prebuilt_carrier import require_missing_tag
+          require_missing_tag(os.environ["DOCKER_REPOSITORY"], os.environ["RELEASE_VERSION"])
+          PY
+
+      - name: Use the hosted runner build disk
+        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          target_root="/mnt/docker-data"
+          [ -d /mnt ]
+          sudo mkdir -p "${target_root}"
+          sudo systemctl stop docker
+          sudo env DOCKER_DATA_ROOT="${target_root}" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path("/etc/docker/daemon.json")
+          data = json.loads(path.read_text()) if path.exists() and path.read_text().strip() else {}
+          data["data-root"] = os.environ["DOCKER_DATA_ROOT"]
+          path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+          PY
+          sudo systemctl start docker
+          [ "$(docker info -f '{{.DockerRootDir}}')" = "${target_root}" ]
+          df -h / /mnt
+
+      - name: Authenticate to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] GitHub Actions environments create deployment records.
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
+            echo "Docker Hub credentials are required." >&2
+            exit 1
+          fi
+          printf '%s' "${DOCKERHUB_TOKEN}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Install verified Docker Scout CLI
+        env:
+          SCOUT_VERSION: "1.24.0"
+          SCOUT_SHA256: f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/docker-scout.tar.gz"
+          curl -fsSL "https://github.com/docker/scout-cli/releases/download/v${SCOUT_VERSION}/docker-scout_${SCOUT_VERSION}_linux_amd64.tar.gz" -o "${archive}"
+          printf '%s  %s\n' "${SCOUT_SHA256}" "${archive}" | sha256sum -c -
+          tar -xzf "${archive}" -C "${RUNNER_TEMP}" docker-scout
+          mkdir -p "${HOME}/.docker/cli-plugins"
+          install -m 0755 "${RUNNER_TEMP}/docker-scout" "${HOME}/.docker/cli-plugins/docker-scout"
+
+      - name: Verify automatic repository analysis
+        env:
+          DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from tools.prebuilt_release_metadata import validate_docker_repository
+          from tools.restore_prebuilt_carrier import output, run
+          repository = validate_docker_repository(os.environ["DOCKER_REPOSITORY"])
+          organization = repository.split("/")[0]
+          command = ["docker", "scout", "repo", "list", "--org", organization,
+                     "--only-enabled", "--filter", repository]
+          if repository not in output(command).split():
+              run(["docker", "scout", "repo", "enable", repository, "--org", organization])
+          if repository not in output(command).split():
+              raise SystemExit("Docker Scout automatic repository analysis is not enabled.")
+          PY
+
+      - name: Restore and verify historical carrier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          DOCKER_REPOSITORY: ${{ inputs.docker_repository }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          python3 tools/restore_prebuilt_carrier.py \
+            --release-version "${RELEASE_VERSION}" \
+            --docker-repository "${DOCKER_REPOSITORY}" \
+            --authorize-replace-manifest \
+            --authorize-replace-digest
+
+      - name: Remove runner Docker credentials
+        if: always()
+        run: docker logout
