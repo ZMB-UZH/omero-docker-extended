@@ -8485,7 +8485,6 @@ class OMEROWebClient:
         )
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         status_url = None
-        local_path = None
 
         try:
             _raise_if_cancelled(cancel_event, "OMERO converter IMS export")
@@ -8766,7 +8765,6 @@ class OMEROWebClient:
             f"endpoint={_safe_url_for_log(export_url)}"
         )
         status_url = None
-        local_path = None
         try:
             req = self._create_request_with_cookies(
                 export_url,
@@ -8951,7 +8949,6 @@ class OMEROWebClient:
             f"{_safe_url_for_log(export_url)}"
         )
         req = self._create_request_with_cookies(export_url)
-        local_path = None
 
         try:
             _raise_if_cancelled(cancel_event, "Imaris converter selected Image export")
