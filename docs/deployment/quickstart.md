@@ -262,6 +262,8 @@ Notes:
   Before pruning, the installer rejects a local cache path that overlaps
   configured persistent storage, resolves through a symlink, or contains
   unexpected files. A populated local cache must have the expected OCI layout.
+  Cleanup also requires a readable mount inventory and rejects mountpoints
+  anywhere inside the cache, including same-filesystem bind mounts.
 
 ```bash
 bash installation/installation_script.sh

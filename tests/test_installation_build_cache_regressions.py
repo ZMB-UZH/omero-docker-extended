@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import stat
 import os
+import json
 import subprocess
 import tempfile
 import textwrap
@@ -73,6 +74,69 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(sentinel.read_text(), "persistent fixture")
+                self.assertFalse(docker_log.exists())
+
+    def test_cleanup_refuses_nested_mounts_and_invalid_mount_inventory(self):
+        """Mounted cache children and unreadable mount state must prevent deletion.
+
+        Inputs: isolated OCI cache and findmnt fixtures. Output: asserts preserved data.
+        """
+        for case in ("nested", "invalid", "empty"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                cache = root / "cache with spaces"
+                blobs = cache / "blobs"
+                blobs.mkdir(parents=True)
+                sentinel = blobs / "keep.txt"
+                sentinel.write_text("persistent fixture")
+                (cache / "oci-layout").write_text(
+                    json.dumps({"imageLayoutVersion": "1.0.0"})
+                )
+                (cache / "index.json").write_text(
+                    json.dumps({"schemaVersion": 2, "manifests": []})
+                )
+                tools = root / "bin"
+                tools.mkdir()
+                output = {
+                    "nested": json.dumps(
+                        {"filesystems": [{"target": "/"}, {"target": str(blobs)}]}
+                    ),
+                    "invalid": "invalid JSON",
+                    "empty": json.dumps({"filesystems": []}),
+                }[case]
+                findmnt = tools / "findmnt"
+                findmnt.write_text(
+                    "#!/usr/bin/env python3\nprint(" + repr(output) + ")\n"
+                )
+                findmnt.chmod(0o700)
+                docker_log = root / "docker-called"
+                harness = (
+                    "set -euo pipefail\n"
+                    + self.cleanup_functions
+                    + '\ndocker() { touch "$DOCKER_TEST_LOG"; }\n'
+                    + "cleanup_local_build_cache_if_disabled\n"
+                )
+                result = subprocess.run(
+                    [BASH_BIN, "-c", harness],
+                    env=dict(
+                        {
+                            key: value
+                            for key, value in os.environ.items()
+                            if not key.endswith("_PATH") or key == "LD_LIBRARY_PATH"
+                        },
+                        PATH=str(tools) + os.pathsep + os.environ["PATH"],
+                        USE_CACHE_BUILD="0",
+                        USE_BUILDX_COMPRESSED_BUILD="1",
+                        BUILDX_DATA_PATH=str(cache),
+                        DOCKER_TEST_LOG=str(docker_log),
+                    ),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("mount", result.stderr)
                 self.assertEqual(sentinel.read_text(), "persistent fixture")
                 self.assertFalse(docker_log.exists())
 

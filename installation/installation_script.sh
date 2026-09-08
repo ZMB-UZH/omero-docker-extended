@@ -878,10 +878,29 @@ validate_buildx_cache_cleanup_target() {
     # A populated cache must actually be a local OCI cache, not arbitrary data.
     python3 - "${canonical}" <<'PY'
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+findmnt = shutil.which("findmnt")
+if not findmnt:
+    raise SystemExit("ERROR: Cannot validate cache mounts without findmnt.")
+try:
+    inventory = json.loads(subprocess.check_output(
+        [findmnt, "--json", "--list", "--output", "TARGET"], text=True, timeout=10
+    ))["filesystems"]
+    if not isinstance(inventory, list) or not inventory:
+        raise ValueError("Invalid mount inventory")
+    for entry in inventory:
+        mount = Path(entry["target"])
+        if not mount.is_absolute():
+            raise ValueError("Invalid mount target")
+        if mount == root or root in mount.parents:
+            raise SystemExit("ERROR: Buildx cache contains mounted descendants.")
+except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+    raise SystemExit("ERROR: Cannot verify the Buildx cache mount inventory.") from None
 entries = {entry.name for entry in root.iterdir()}
 if entries:
     if not entries <= {"blobs", "index.json", "oci-layout"}:
