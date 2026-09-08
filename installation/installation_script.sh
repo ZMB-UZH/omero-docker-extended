@@ -841,12 +841,76 @@ resolve_buildx_local_cache_dir() {
     return 1
 }
 
-# Cleanup local build cache if disabled. Inputs: shell arguments and environment. Output: command status and side effects.
+# Validate a dedicated OCI cache. Inputs: target and configured paths. Output: status; no deletion.
+validate_buildx_cache_cleanup_target() {
+    local target="$1" canonical lexical key protected
+    canonical="$(realpath -e -- "${target}")" || return 1
+    lexical="$(realpath -ms -- "${target}")" || return 1
+    if [ "${canonical}" = / ] || [ "${canonical}" != "${lexical}" ] || mountpoint -q -- "${canonical}"; then
+        echo "ERROR: Buildx cleanup requires a non-symlink, non-mounted cache directory." >&2
+        return 1
+    fi
+
+    # Installation/data roots may contain the dedicated cache, but must never
+    # themselves be removed. Other configured storage paths must be disjoint.
+    while IFS= read -r key; do
+        case "${key}" in
+            BUILDX_DATA_PATH) continue ;;
+            *_PATH|HOME) ;;
+            *) continue ;;
+        esac
+        protected="${!key}"
+        [[ "${protected}" = /* ]] || continue
+        protected="$(realpath -m -- "${protected}")" || return 1
+        if [[ "${protected}" = "${canonical}" || "${protected}" = "${canonical}"/* ]]; then
+            echo "ERROR: Buildx cache cleanup overlaps a protected installation path (${key})." >&2
+            return 1
+        fi
+        case "${key}" in
+            OMERO_DATA_PATH|OMERO_INSTALLATION_PATH|HOME) continue ;;
+        esac
+        if [[ "${canonical}" = "${protected}"/* ]]; then
+            echo "ERROR: Buildx cache cleanup is inside protected storage (${key})." >&2
+            return 1
+        fi
+    done < <(compgen -A variable)
+
+    # A populated cache must actually be a local OCI cache, not arbitrary data.
+    python3 - "${canonical}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+entries = {entry.name for entry in root.iterdir()}
+if entries:
+    if not entries <= {"blobs", "index.json", "oci-layout"}:
+        raise SystemExit("ERROR: Refusing to delete non-cache files in the Buildx directory.")
+    try:
+        layout = json.loads((root / "oci-layout").read_text())
+        index = json.loads((root / "index.json").read_text())
+    except (OSError, ValueError):
+        raise SystemExit("ERROR: Buildx directory is not a complete OCI cache.") from None
+    if (not isinstance(layout, dict) or layout.get("imageLayoutVersion") != "1.0.0"
+            or not isinstance(index, dict) or index.get("schemaVersion") != 2
+            or not isinstance(index.get("manifests"), list)):
+        raise SystemExit("ERROR: Buildx directory has an invalid OCI cache layout.")
+PY
+}
+
+# Clear an explicitly disabled build cache. Inputs: cache settings. Output: status and cache removal.
 cleanup_local_build_cache_if_disabled() {
     local buildx_local_cache_dir=""
 
     if [ "${USE_CACHE_BUILD}" != "0" ]; then
         return 0
+    fi
+
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "1" ]; then
+        buildx_local_cache_dir="$(resolve_buildx_local_cache_dir)" || return 1
+        if [ -d "${buildx_local_cache_dir}" ]; then
+            validate_buildx_cache_cleanup_target "${buildx_local_cache_dir}" || return 1
+        fi
     fi
 
     echo "Build cache is disabled; cleaning local build cache before rebuild..."
@@ -868,7 +932,8 @@ cleanup_local_build_cache_if_disabled() {
         fi
 
         if [ -d "${buildx_local_cache_dir}" ]; then
-            if ! rm -rf "${buildx_local_cache_dir}"; then
+            validate_buildx_cache_cleanup_target "${buildx_local_cache_dir}" || return 1
+            if ! rm -rf --one-file-system -- "${buildx_local_cache_dir}"; then
                 echo "ERROR: Failed to remove Buildx local cache directory: ${buildx_local_cache_dir}" >&2
                 return 1
             fi

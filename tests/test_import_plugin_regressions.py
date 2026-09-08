@@ -1263,10 +1263,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(2, run_mock.call_count)
         sleep_mock.assert_called_once_with(1)
 
-    def test_import_zarr_via_cli_cleans_managed_path_when_no_objects_are_created(self):
-        """Verify the import Zarr via CLI cleans managed path when no objects are created execution contract.
+    def test_import_zarr_via_cli_retains_unconfirmed_managed_handoff(self):
+        """Keep the managed store when an import has no confirmed API result.
 
-        Inputs: repository fixtures. Output: fails on regressions when import Zarr via CLI cleans managed path when no objects are created accepts unsafe input.
+        Inputs: staged import fixtures. Output: asserts no persistent cleanup occurs.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1344,18 +1344,13 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("error", result["status"])
         self.assertIn("no images were created", result["entry_error"].lower())
         cleanup_transfer_mock.assert_called_once_with(shared_parent)
-        cleanup_mock.assert_called_once_with(
-            "omeroserver",
-            4064,
-            username="test",
-            group_name="users_private",
-            managed_path=managed_path,
-        )
+        cleanup_mock.assert_not_called()
+        self.assertTrue(result["reconciliation_required"])
 
-    def test_import_zarr_via_cli_rolls_back_when_render_verification_fails(self):
-        """Confirm import Zarr via CLI rolls back when render verification fails exposes the expected failure.
+    def test_import_zarr_via_cli_retains_objects_when_render_verification_fails(self):
+        """Retain imported objects and their store after a rendering failure.
 
-        Inputs: repository fixtures. Output: fails on regressions in import Zarr via CLI rolls back when render verification fails.
+        Inputs: failed render fixture. Output: asserts administrator reconciliation.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1446,19 +1441,14 @@ class ImportPluginRegressionTests(TestCase):
 
         self.assertEqual("error", result["status"])
         self.assertIn("render verification", result["entry_error"].lower())
-        cleanup_images_mock.assert_called_once_with("omeroserver", 4064, ["51"])
-        cleanup_managed_mock.assert_called_once_with(
-            "omeroserver",
-            4064,
-            username="test",
-            group_name="users_private",
-            managed_path=managed_path,
-        )
+        cleanup_images_mock.assert_not_called()
+        cleanup_managed_mock.assert_not_called()
+        self.assertTrue(result["reconciliation_required"])
 
-    def test_import_zarr_via_cli_rolls_back_when_metadata_finalization_fails(self):
-        """Confirm import Zarr via CLI rolls back when metadata finalization fails exposes the expected failure.
+    def test_import_zarr_via_cli_retains_objects_when_metadata_finalization_fails(self):
+        """Retain imported objects when metadata finalization is unconfirmed.
 
-        Inputs: repository fixtures. Output: fails on regressions in import Zarr via CLI rolls back when metadata finalization fails.
+        Inputs: failed metadata fixture. Output: asserts non-destructive failure.
         """
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
@@ -1548,14 +1538,9 @@ class ImportPluginRegressionTests(TestCase):
 
         self.assertEqual("error", result["status"])
         self.assertIn("metadata finalization", result["entry_error"].lower())
-        cleanup_images_mock.assert_called_once_with("omeroserver", 4064, ["61"])
-        cleanup_managed_mock.assert_called_once_with(
-            "omeroserver",
-            4064,
-            username="test",
-            group_name="users_private",
-            managed_path=managed_path,
-        )
+        cleanup_images_mock.assert_not_called()
+        cleanup_managed_mock.assert_not_called()
+        self.assertTrue(result["reconciliation_required"])
         render_verify_mock.assert_not_called()
 
     def test_import_zarr_via_cli_accepts_only_renderable_images(self):

@@ -6,12 +6,135 @@ import inspect
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from django.conf import settings
 from django.test import RequestFactory
 
 from omeroweb_omp_plugin.views import job_view
 
 TEST_AUTH_INPUT = "fixture-auth-input"
+
+
+@pytest.mark.parametrize(
+    "save_outcome", ["success", "unconfirmed", "exception", "partial_cleanup"]
+)
+def test_metadata_replacement_preserves_originals_until_save_confirmed(
+    monkeypatch, tmp_path, save_outcome
+):
+    """Cleanup is restricted to the pre-save snapshot and follows confirmed save.
+
+    Inputs: failure mode and isolated job fixtures. Output: asserts preserved metadata.
+    """
+    job = dict(
+        job_id="a" * 32,
+        username="alice",
+        type="parse",
+        index=0,
+        total=1,
+        var_names=["Channel"],
+        delete_mode="plugin",
+        separator="_",
+        image_ids=[22],
+        started=1.0,
+    )
+    events = []
+    annotations = {17}
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: dict(job))
+    monkeypatch.setattr(job_view, "save_job", lambda *_args: True)
+    monkeypatch.setattr(
+        job_view, "_job_lock_path", lambda *_args: str(tmp_path / "job.lock")
+    )
+    monkeypatch.setattr(
+        job_view, "fetch_images_by_ids", lambda *_args: {22: _Image(22, "a.tif")}
+    )
+
+    def snapshot(*_args):
+        """Inputs: ignored API arguments. Output: a copy of current annotation IDs."""
+        events.append("snapshot")
+        return set(annotations)
+
+    def save(*_args):
+        """Inputs: ignored API arguments. Output: simulated save result or exception."""
+        events.append("save")
+        if save_outcome == "exception":
+            raise RuntimeError("Injected save failure")
+        if save_outcome == "unconfirmed":
+            return False
+        annotations.update(
+            {18, 19}
+        )  # Replacement and an independent concurrent addition.
+        return True
+
+    def cleanup(*_args, target_ids):
+        """Inputs: snapshot IDs. Output: deletion counts after scoped fixture removal."""
+        events.append("cleanup")
+        assert target_ids == {17}
+        if save_outcome == "partial_cleanup":
+            return 0, 0, 1
+        annotations.difference_update(target_ids)
+        return 1, 1, 1
+
+    monkeypatch.setattr(job_view, "collect_annotation_ids", snapshot)
+    monkeypatch.setattr(job_view, "_save_image_map_annotation", save)
+    monkeypatch.setattr(job_view, "delete_annotation_snapshot", cleanup)
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+    response = inspect.unwrap(job_view.job_progress)(request, "a" * 32, conn=_Conn())
+    if save_outcome in {"exception", "unconfirmed"}:
+        assert events == ["snapshot", "save"]
+        assert annotations == {17}
+        assert "ERROR" in _json_payload(response)["last_log"]
+    else:
+        assert events == ["snapshot", "save", "cleanup"]
+        assert {18, 19} <= annotations
+        if save_outcome == "partial_cleanup":
+            assert 17 in annotations
+            assert "previous annotations remain" in _json_payload(response)["last_log"]
+        else:
+            assert 17 not in annotations
+
+
+@pytest.mark.parametrize("locked_state", ["finished", "missing", "foreign"])
+def test_job_progress_reloads_authoritative_state_under_lock(
+    monkeypatch, tmp_path, locked_state
+):
+    """A stale pre-lock snapshot must never repeat a completed batch.
+
+    Inputs: changed locked state and fixtures. Output: asserts no repeated work.
+    """
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+    job = dict(
+        job_id="a" * 32,
+        username="alice",
+        index=0,
+        total=1,
+        var_names=[],
+        delete_mode="keep",
+        separator="_",
+        image_ids=[1],
+        started=1.0,
+    )
+    states = [
+        job,
+        None
+        if locked_state == "missing"
+        else dict(
+            job, index=1, username="bob" if locked_state == "foreign" else "alice"
+        ),
+    ]
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: states.pop(0))
+    monkeypatch.setattr(
+        job_view, "_job_lock_path", lambda *_args: str(tmp_path / "job.lock")
+    )
+    monkeypatch.setattr(
+        job_view, "fetch_images_by_ids", lambda *_args: pytest.fail("Repeated batch")
+    )
+    response = inspect.unwrap(job_view.job_progress)(request, "a" * 32, conn=_Conn())
+    assert response.status_code == (200 if locked_state == "finished" else 404)
+    assert _json_payload(response)["finished"] is True
+    assert not states
 
 
 class _Value:
@@ -983,6 +1106,12 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
         "delete_existing_annotations",
         lambda *_args: delete_calls.append(_args[4]) or (1, 2, 1),
     )
+    monkeypatch.setattr(job_view, "collect_annotation_ids", lambda *_args: {17})
+    monkeypatch.setattr(
+        job_view,
+        "delete_annotation_snapshot",
+        lambda *_args, **_kwargs: delete_calls.append(_args[4]) or (1, 2, 1),
+    )
     monkeypatch.setattr(
         job_view,
         "_save_annotation_link",
@@ -1432,6 +1561,7 @@ def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
         "delete_existing_annotations",
         _delete_existing_annotations,
     )
+    monkeypatch.setattr(job_view, "collect_annotation_ids", lambda *_args: {17})
     monkeypatch.setattr(
         job_view,
         "extract_acquisition_metadata",

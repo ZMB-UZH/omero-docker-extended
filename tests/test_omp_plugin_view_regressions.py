@@ -273,6 +273,13 @@ def _install_omp_dependency_stubs() -> None:
     core_module.extract_acquisition_metadata = lambda *args, **kwargs: {}
     sys.modules["omeroweb_omp_plugin.services.core"] = core_module
 
+    annotation_module = types.ModuleType(
+        "omeroweb_omp_plugin.services.omero.annotation_service"
+    )
+    annotation_module.collect_annotation_ids = lambda *args, **kwargs: set()
+    annotation_module.delete_existing_annotations = lambda *args, **kwargs: (0, 0, 0)
+    sys.modules[annotation_module.__name__] = annotation_module
+
     ai_assist_module = types.ModuleType("omeroweb_omp_plugin.services.ai_assist")
 
     class AiAssistError(Exception):

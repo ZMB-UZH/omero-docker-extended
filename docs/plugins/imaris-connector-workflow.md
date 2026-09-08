@@ -289,6 +289,13 @@ selected-image names, every selected file with that repeated filename gets a
 timestamped unique name, including the first occurrence, so one selected image
 cannot overwrite another during the batch.
 
+Replacement downloads are written to a private temporary file in the destination
+directory. Only a complete, format-validated transfer replaces the existing file
+atomically. Cancellation, truncated HTTP bodies, and validation failures retain
+the previous file and remove only the failed transfer's own partial output.
+The initial IMS export request permits one login-refresh retry; repeated login
+redirects require the user to log in again.
+
 ## Multi-image loading
 
 Multi-image loading uses the same converter-specific preparation as single-image

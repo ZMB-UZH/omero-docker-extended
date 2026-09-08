@@ -390,7 +390,8 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
     assert (
         no_objects["entry_error"] == core_functions.errors.import_no_objects_created()
     )
-    assert cleanup_calls[-1] == ("managed", managed_zarr)
+    assert not any(kind == "managed" for kind, _ in cleanup_calls)
+    assert no_objects["reconciliation_required"] is True
     assert imported_image_cleanup_calls == []
     assert "stdout_lines=1 stderr_lines=1" in caplog.text
     assert "secret zarr stdout" not in caplog.text
@@ -400,27 +401,29 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         returncode=0,
         stdout="Image:101",
         stderr="",
-        api_ids=[],
+        api_ids=["101"],
         finalize_result=(False, ["size mismatch"]),
         render_result=(True, []),
     )
     assert metadata_failure["status"] == "error"
     assert "metadata finalization" in metadata_failure["entry_error"]
-    assert imported_image_cleanup_calls == [["101"]]
-    assert cleanup_calls[-1] == ("managed", managed_zarr)
+    assert imported_image_cleanup_calls == []
+    assert not any(kind == "managed" for kind, _ in cleanup_calls)
+    assert metadata_failure["reconciliation_required"] is True
 
     render_failure = run_case(
         returncode=0,
         stdout="Image:101",
         stderr="",
-        api_ids=[],
+        api_ids=["101"],
         finalize_result=(True, []),
         render_result=(False, ["thumbnail failed"]),
     )
     assert render_failure["status"] == "error"
     assert "render verification" in render_failure["entry_error"]
-    assert imported_image_cleanup_calls == [["101"]]
-    assert cleanup_calls[-1] == ("managed", managed_zarr)
+    assert imported_image_cleanup_calls == []
+    assert not any(kind == "managed" for kind, _ in cleanup_calls)
+    assert render_failure["reconciliation_required"] is True
 
     caplog.clear()
     with caplog.at_level(logging.INFO, logger=core_functions.logger.name):
@@ -452,6 +455,21 @@ def test_import_zarr_via_cli_handles_no_objects_metadata_and_render_failures(
         ),
     )
     assert timeout_failure["status"] == "error"
+    assert timeout_failure["reconciliation_required"] is True
+    assert not any(kind == "managed" for kind, _ in cleanup_calls)
+    assert imported_image_cleanup_calls == []
+
+    unverified_stdout = run_case(
+        returncode=0,
+        stdout="Image:101",
+        stderr="",
+        api_ids=[],
+        finalize_result=(True, []),
+        render_result=(True, []),
+    )
+    assert unverified_stdout["status"] == "error"
+    assert unverified_stdout["reconciliation_required"] is True
+    assert imported_image_cleanup_calls == []
 
 
 def test_import_zarr_via_cli_uses_api_verified_image_ids_for_name_normalization(
@@ -631,7 +649,8 @@ def test_import_zarr_via_cli_handles_unexpected_cli_runner_exceptions(
 
     assert result["status"] == "error"
     assert result["entry_error"] == core_functions.errors.import_failed()
-    assert cleanup_calls == [managed_zarr]
+    assert cleanup_calls == []
+    assert result["reconciliation_required"] is True
 
 
 def test_finalize_imported_zarr_image_metadata_records_reload_failures(

@@ -143,7 +143,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
             compose_text,
         )
-        self.assertIn('image: "oliver006/redis_exporter:v1.90.0-alpine"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.91.1-alpine"', compose_text)
         self.assertIn('image: "redis:8.10.1-alpine"', compose_text)
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.7"', compose_text)

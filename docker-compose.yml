@@ -51,7 +51,7 @@ services:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
     healthcheck:
-      test: ["CMD", "loki", "-version"]
+      test: ["CMD", "/usr/bin/loki", "-health"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -82,7 +82,17 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "alloy", "--help"]
+      test:
+        - CMD
+        - /usr/bin/timeout
+        - "7"
+        - /usr/bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/12345;
+          printf 'GET /-/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          IFS= read -r -t 5 status <&3;
+          [[ "$${status}" == HTTP/1.?\ 200\ * ]]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -280,7 +290,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.90.0-alpine"
+    image: "oliver006/redis_exporter:v1.91.1-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"

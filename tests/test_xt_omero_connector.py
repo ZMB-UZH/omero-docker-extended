@@ -3,12 +3,14 @@ from __future__ import annotations
 import ast
 import base64
 import builtins
+import email.message
 import hashlib
 import importlib.util
 import inspect
 import json
 import ntpath
 import os
+import socket
 import stat
 import subprocess
 import sys
@@ -17,6 +19,69 @@ import urllib.parse
 from pathlib import Path, PureWindowsPath
 
 import pytest
+
+
+@pytest.mark.parametrize(
+    ("headers", "body", "expected"),
+    [
+        ({"Content-Length": "3"}, b"abc", b"abc"),
+        ({"Content-Length": "0"}, b"", b""),
+        ({}, b"abc", b"abc"),
+        ({"Content-Length": "4"}, b"abc", None),
+        ({"Content-Length": "4"}, b"", None),
+        ({"Content-Length": "-1"}, b"", None),
+        ({"Content-Length": "bad"}, b"", None),
+        ({"Transfer-Encoding": "chunked"}, b"3\r\nabc\r\n0\r\n\r\n", b"abc"),
+        (
+            {"Transfer-Encoding": "chunked"},
+            b"1;x=y\r\na\r\n0\r\nX-Test: yes\r\n\r\n",
+            b"a",
+        ),
+        ({"Transfer-Encoding": "chunked"}, b"3\r\nab", None),
+        ({"Transfer-Encoding": "chunked"}, b"3\r\nabcXX0\r\n\r\n", None),
+        ({"Transfer-Encoding": "chunked"}, b"3\r\nabc\r\n", None),
+        ({"Transfer-Encoding": "chunked"}, b"0\r\n", None),
+        ({"Transfer-Encoding": "chunked"}, b"0\r\nbad\r\n\r\n", None),
+        ({"Transfer-Encoding": "chunked"}, b"-1\r\n", None),
+        ({"Transfer-Encoding": "chunked"}, b"3\nabc\r\n0\r\n\r\n", None),
+    ],
+)
+@pytest.mark.parametrize("read_size", [-1, 1, 4])
+def test_http_body_reader_rejects_truncation_and_invalid_framing(
+    headers, body, expected, read_size
+):
+    """Exercise actual socket EOF and framing, not permissive response doubles.
+
+    Inputs: wire bytes, headers and read size. Output: asserts data or framing failure.
+    """
+    module = _load_xt_module()
+    message = email.message.Message()
+    for name, value in headers.items():
+        message[name] = value
+    reader, writer = socket.socketpair()
+    try:
+        writer.sendall(body)
+        writer.close()
+
+        def receive():
+            """Inputs: socket fixture. Output: all body bytes, or a framing exception."""
+            with module._CancellableHTTPResponse(
+                reader, "https://omero.example.org/", 200, "OK", message, b"", None, 5
+            ) as response:
+                chunks = []
+                while chunk := response.read(read_size):
+                    chunks.append(chunk)
+                return b"".join(chunks)
+
+        if expected is None:
+            with pytest.raises(module.http.client.HTTPException):
+                receive()
+        else:
+            assert receive() == expected
+    finally:
+        reader.close()
+        writer.close()
+
 
 _XT_SCRIPT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -1060,6 +1125,34 @@ def test_client_can_log_custom_omero_converter_probe_when_requested(monkeypatch)
     ]
 
 
+def test_ims_start_reauthentication_is_bounded(tmp_path, monkeypatch):
+    """A persistent login redirect must not recursively resubmit forever.
+
+    Inputs: isolated client fixture. Output: asserts one authentication retry.
+    """
+    module = _load_xt_module()
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
+    client.session_id = "session-123"
+    attempts = []
+    reauths = []
+
+    def open_response(*args, **kwargs):
+        """Inputs: request arguments. Output: an empty response counted as an attempt."""
+        attempts.append(1)
+        return _FakeHTTPResponse(b"")
+
+    monkeypatch.setattr(client, "_open_request_response", open_response)
+    monkeypatch.setattr(client, "_check_login_redirect", lambda *args: True)
+    monkeypatch.setattr(
+        client, "_attempt_reauth", lambda *args: reauths.append(1) or True
+    )
+    with pytest.raises(RuntimeError, match="Not authenticated"):
+        client.download_ims_export(1, tmp_path)
+    assert len(attempts) == 2
+    assert len(reauths) == 1
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_client_download_ims_export_uses_custom_endpoint_and_validates_ims(tmp_path):
     """Verify OMERO converter downloads a valid IMS from the custom endpoint.
 
@@ -1195,7 +1288,7 @@ def test_client_download_ims_export_rejects_non_ims_download(tmp_path):
 
     client.opener = _FakeOpener()
 
-    with pytest.raises(RuntimeError, match="not a valid IMS"):
+    with pytest.raises(RuntimeError, match="format validation"):
         client.download_ims_export(64, tmp_path)
 
 
@@ -8843,6 +8936,46 @@ def test_open_download_target_reserves_timestamped_unique_names_atomically(tmp_p
     assert first != second
     assert first.read_bytes() == b"first"
     assert second.read_bytes() == b"second"
+
+
+@pytest.mark.parametrize("failure", ["read", "validation", "cancel", None])
+def test_replacement_download_commits_only_valid_complete_content(tmp_path, failure):
+    """An interrupted replacement preserves the previous file and removes staging.
+
+    Inputs: destination fixture and failure mode. Output: asserts atomic replacement.
+    """
+    module = _load_xt_module()
+    target = tmp_path / "image.ims"
+    target.write_bytes(b"original image")
+    cancelled = module.threading.Event()
+
+    def download():
+        """Inputs: captured failure mode. Output: staged write or injected exception."""
+        with module._open_download_target(
+            tmp_path,
+            target.name,
+            module.DUPLICATE_DOWNLOAD_POLICY_REPLACE,
+            validator=lambda path: (
+                failure != "validation" and Path(path).read_bytes() == b"replacement"
+            ),
+            cancel_event=cancelled,
+        ) as (path, handle):
+            assert Path(path) == target
+            assert target.read_bytes() == b"original image"
+            handle.write(b"replacement")
+            if failure == "read":
+                raise OSError("Interrupted download")
+            if failure == "cancel":
+                cancelled.set()
+
+    if failure is None:
+        download()
+        assert target.read_bytes() == b"replacement"
+    else:
+        with pytest.raises((OSError, RuntimeError)):
+            download()
+        assert target.read_bytes() == b"original image"
+    assert list(tmp_path.iterdir()) == [target]
 
 
 def test_open_download_target_closes_descriptor_when_fdopen_fails(

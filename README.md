@@ -220,7 +220,7 @@ The table below lists the long-running services available in the full profile se
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.5 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.90.0-alpine | Redis metrics | 9121 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.91.1-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
