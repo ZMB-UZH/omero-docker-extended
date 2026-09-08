@@ -55,26 +55,30 @@ def test_original_identity_and_inventory():
 def test_only_confirmed_missing_tag_is_accepted():
     """Inputs: Hub status/body fixtures. Output: only confirmed absence permits recovery."""
     arguments = ("example/carrier", "1.2.3-main.1")
-    with patch.object(recovery.http.client, "HTTPSConnection") as factory:
-        connection = factory.return_value
-        response = connection.getresponse.return_value.__enter__.return_value
-        response.status = 404
+    with patch.object(recovery, "output", return_value="{}\n404") as request:
         recovery.require_missing_tag(*arguments)
-        factory.assert_called_with("hub.docker.com", timeout=30)
-        connection.close.assert_called_once()
-        response.status = 503
+        command = request.call_args.args[0]
+        assert (
+            command[-1]
+            == "https://hub.docker.com/v2/repositories/example/carrier/tags/1.2.3-main.1/"
+        )
+        assert command[command.index("--proto") + 1] == "=https"
+        assert "--tlsv1.2" in command
+        assert command[command.index("--max-time") + 1] == "30"
+        assert command[command.index("--max-filesize") + 1] == str(1024**2)
+        assert not {"--insecure", "--location", "-k", "-L"}.intersection(command)
+        request.return_value = "{}\n503"
         with pytest.raises(RuntimeError):
             recovery.require_missing_tag(*arguments)
-        connection.request.side_effect = TimeoutError("fixture timeout")
-        with pytest.raises(TimeoutError):
+        request.side_effect = subprocess.CalledProcessError(28, command)
+        with pytest.raises(subprocess.CalledProcessError):
             recovery.require_missing_tag(*arguments)
-        connection.request.side_effect = None
-        response.status = 200
-        response.read.return_value = b"{}"
+        request.side_effect = None
+        request.return_value = "{}\n200"
         with pytest.raises(ValueError, match="existing"):
             recovery.require_missing_tag(*arguments)
-        for content in (b"[]", b"invalid", b"x" * (1024**2 + 1)):
-            response.read.return_value = content
+        for content in ("[]", "invalid", "x" * (1024**2 + 1)):
+            request.return_value = content + "\n200"
             with pytest.raises(ValueError):
                 recovery.docker_tag(*arguments)
 
@@ -156,6 +160,13 @@ def test_legacy_public_notes_do_not_keep_obsolete_digest(tmp_path):
     result = recovery.release_notes({"body": body}, {}, tmp_path)
     assert b"@sha256:" not in result
     assert b"example/carrier:1.2.3-main.1" in result
+
+
+def test_legacy_standalone_digest_points_to_verified_asset(tmp_path):
+    """Inputs: standalone old digest. Output: notes refer to the refreshed digest asset."""
+    body = "Expected carrier digest:\n\nsha256:" + "a" * 64 + "\n"
+    result = recovery.release_notes({"body": body}, {}, tmp_path)
+    assert result == b"Expected carrier digest:\n\nprebuilt-carrier-digest.txt\n"
 
 
 def test_synthetic_configuration_overrides_build_only_settings(tmp_path):

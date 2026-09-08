@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
 import json
 import os
 from pathlib import Path
@@ -68,27 +67,36 @@ def docker_tag(repository: str, version: str) -> dict | None:
     """
     validate_docker_repository(repository)
     validate_release_version(version)
-    connection = http.client.HTTPSConnection("hub.docker.com", timeout=30)
-    try:
-        connection.request(
-            "GET",
-            f"/v2/repositories/{repository}/tags/{version}/",
-            headers={"Accept": "application/json"},
-        )
-        with connection.getresponse() as response:
-            if response.status == 404:
-                return None
-            if response.status != 200:
-                raise RuntimeError("Docker Hub tag lookup failed.")
-            body = response.read(1024**2 + 1)
-            if len(body) > 1024**2:
-                raise ValueError("Docker Hub tag response exceeds the metadata limit.")
-            document = json.loads(body)
-            if not isinstance(document, dict):
-                raise ValueError("Docker Hub tag metadata is not an object.")
-            return document
-    finally:
-        connection.close()
+    response = output(
+        [
+            "curl",
+            "--proto",
+            "=https",
+            "--tlsv1.2",
+            "--max-time",
+            "30",
+            "--max-filesize",
+            str(1024**2),
+            "--silent",
+            "--show-error",
+            "--header",
+            "Accept: application/json",
+            "--write-out",
+            "\n%{http_code}",
+            f"https://hub.docker.com/v2/repositories/{repository}/tags/{version}/",
+        ]
+    )
+    body, _, status = response.rpartition("\n")
+    if status == "404":
+        return None
+    if status != "200":
+        raise RuntimeError("Docker Hub tag lookup failed.")
+    if len(body.encode("utf-8")) > 1024**2:
+        raise ValueError("Docker Hub tag response exceeds the metadata limit.")
+    document = json.loads(body)
+    if not isinstance(document, dict):
+        raise ValueError("Docker Hub tag metadata is not an object.")
+    return document
 
 
 def require_missing_tag(repository: str, version: str) -> None:
@@ -144,8 +152,10 @@ def release_notes(release: dict, manifest: dict, dist: Path) -> bytes:
         if hashlib.sha256(notes).hexdigest() != manifest.get("release_notes_sha256"):
             raise ValueError("Historical public notes checksum mismatch.")
     else:
+        body = re.sub(r"@sha256:[a-f0-9]{64}", "", release["body"])
         notes = (
-            re.sub(r"@sha256:[a-f0-9]{64}", "", release["body"]).rstrip() + "\n"
+            re.sub(r"sha256:[a-f0-9]{64}", "prebuilt-carrier-digest.txt", body).rstrip()
+            + "\n"
         ).encode("utf-8")
     validate_public_release_text(notes.decode("utf-8"), "Historical release notes")
     path.write_bytes(notes)
@@ -316,7 +326,7 @@ def restore(version: str, docker_repository: str) -> None:
         raise ValueError(
             "Recovery requires an existing mutable release with source assets."
         )
-    references = re.findall(r"@sha256:[a-f0-9]{64}", release["body"])
+    references = sorted(set(re.findall(r"sha256:[a-f0-9]{64}", release["body"])))
     if len(references) > 1:
         raise ValueError("Ambiguous historical public digest references.")
     work = Path(os.environ["RUNNER_TEMP"]) / "historical-carrier-recovery"
@@ -554,7 +564,7 @@ def restore(version: str, docker_repository: str) -> None:
         ]
     )
     if references:
-        body = release["body"].replace(references[0], "@" + digest)
+        body = release["body"].replace(references[0], digest)
         body_path = work / "public-body.md"
         body_path.write_text(body, encoding="utf-8")
         run(
