@@ -55,30 +55,32 @@ def test_original_identity_and_inventory():
 def test_only_confirmed_missing_tag_is_accepted():
     """Inputs: Hub status/body fixtures. Output: only confirmed absence permits recovery."""
     arguments = ("example/carrier", "1.2.3-main.1")
-    with patch.object(recovery, "output", return_value="{}\n404") as request:
+    with patch.object(recovery.requests, "get") as request:
+        response = request.return_value.__enter__.return_value
+        response.status_code = 404
         recovery.require_missing_tag(*arguments)
-        command = request.call_args.args[0]
-        assert (
-            command[-1]
-            == "https://hub.docker.com/v2/repositories/example/carrier/tags/1.2.3-main.1/"
+        request.assert_called_with(
+            "https://hub.docker.com/v2/repositories/example/carrier/tags/1.2.3-main.1/",
+            headers={"Accept": "application/json"},
+            timeout=30,
+            allow_redirects=False,
+            verify=True,
+            stream=True,
         )
-        assert command[command.index("--proto") + 1] == "=https"
-        assert "--tlsv1.2" in command
-        assert command[command.index("--max-time") + 1] == "30"
-        assert command[command.index("--max-filesize") + 1] == str(1024**2)
-        assert not {"--insecure", "--location", "-k", "-L"}.intersection(command)
-        request.return_value = "{}\n503"
+        request.return_value.__exit__.assert_called_once()
+        response.status_code = 503
         with pytest.raises(RuntimeError):
             recovery.require_missing_tag(*arguments)
-        request.side_effect = subprocess.CalledProcessError(28, command)
-        with pytest.raises(subprocess.CalledProcessError):
+        request.side_effect = recovery.requests.exceptions.Timeout()
+        with pytest.raises(recovery.requests.exceptions.Timeout):
             recovery.require_missing_tag(*arguments)
         request.side_effect = None
-        request.return_value = "{}\n200"
+        response.status_code = 200
+        response.iter_content.return_value = [b"{}"]
         with pytest.raises(ValueError, match="existing"):
             recovery.require_missing_tag(*arguments)
-        for content in ("[]", "invalid", "x" * (1024**2 + 1)):
-            request.return_value = content + "\n200"
+        for content in (b"[]", b"invalid", b"x" * (1024**2 + 1)):
+            response.iter_content.return_value = [content]
             with pytest.raises(ValueError):
                 recovery.docker_tag(*arguments)
 

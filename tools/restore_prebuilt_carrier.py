@@ -16,6 +16,8 @@ import tarfile
 from datetime import datetime, timezone
 from typing import BinaryIO, cast
 
+import requests
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -67,32 +69,23 @@ def docker_tag(repository: str, version: str) -> dict | None:
     """
     validate_docker_repository(repository)
     validate_release_version(version)
-    response = output(
-        [
-            "curl",
-            "--proto",
-            "=https",
-            "--tlsv1.2",
-            "--max-time",
-            "30",
-            "--max-filesize",
-            str(1024**2),
-            "--silent",
-            "--show-error",
-            "--header",
-            "Accept: application/json",
-            "--write-out",
-            "\n%{http_code}",
-            f"https://hub.docker.com/v2/repositories/{repository}/tags/{version}/",
-        ]
-    )
-    body, _, status = response.rpartition("\n")
-    if status == "404":
-        return None
-    if status != "200":
-        raise RuntimeError("Docker Hub tag lookup failed.")
-    if len(body.encode("utf-8")) > 1024**2:
-        raise ValueError("Docker Hub tag response exceeds the metadata limit.")
+    with requests.get(
+        f"https://hub.docker.com/v2/repositories/{repository}/tags/{version}/",
+        headers={"Accept": "application/json"},
+        timeout=30,
+        allow_redirects=False,
+        verify=True,
+        stream=True,
+    ) as response:
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise RuntimeError("Docker Hub tag lookup failed.")
+        body = bytearray()
+        for chunk in response.iter_content(chunk_size=65536):
+            body.extend(chunk)
+            if len(body) > 1024**2:
+                raise ValueError("Docker Hub tag response exceeds the metadata limit.")
     document = json.loads(body)
     if not isinstance(document, dict):
         raise ValueError("Docker Hub tag metadata is not an object.")

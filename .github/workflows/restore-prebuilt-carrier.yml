@@ -43,6 +43,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Install isolated recovery dependencies
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/recovery-venv"
+          "${RUNNER_TEMP}/recovery-venv/bin/python" -m pip install --require-hashes -r .github/requirements/recovery-ci.txt
+          printf '%s\n' "${RUNNER_TEMP}/recovery-venv/bin" >> "${GITHUB_PATH}"
+
       - name: Validate recovery authorization
         env:
           AUTHORIZE_MANIFEST: ${{ inputs.authorize_replace_manifest }}
