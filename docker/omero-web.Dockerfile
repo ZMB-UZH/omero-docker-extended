@@ -476,7 +476,7 @@ RUN set -euo pipefail; \
         exit 0; \
     fi; \
     echo "=== Final security hardening: OS packages (dnf) ==="; \
-    dnf -y upgrade --refresh || echo "WARNING: dnf upgrade failed (non-fatal for hardening)."; \
+    dnf -y --refresh --setopt=timeout=20 --setopt=retries=2 upgrade; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
@@ -488,11 +488,12 @@ RUN set -euo pipefail; \
     echo "=== Final security hardening: Python packages (pip) ==="; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "WARNING: Could not find valid OMERO.web venv; skipping Python hardening." >&2; \
-        exit 0; \
+        echo "ERROR: Could not find valid OMERO.web venv for hardening verification." >&2; \
+        exit 1; \
     fi; \
     echo "Skipping blanket OMERO.web venv upgrades to preserve pinned/plugin-dependent packages."; \
-    echo "Only curated compatibility-safe Python tooling updates are applied in this image."
+    echo "Only curated compatibility-safe Python tooling updates are applied in this image."; \
+    "${VENV_DIR}/bin/python" -m pip check
 
 # Configure supervisord to run OMERO.web and plugin background workers
 # -------------------------------------------------------------------

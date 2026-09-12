@@ -8,6 +8,21 @@ fail() {
     exit 1
 }
 
+# Resolve the selected JDK before build side effects. Inputs: JAVA_HOME/PATH. Output: validated JDK root.
+resolve_java_build_home() {
+    local java_home="${JAVA_HOME:-}"
+    local javac_bin
+    if [[ -z "${java_home}" ]]; then
+        javac_bin="$(command -v javac)" || fail "A JDK is required to build ImarisConvertBioformats"
+        java_home="$(dirname "$(dirname "$(readlink -f "${javac_bin}")")")"
+    fi
+    if [[ ! -x "${java_home}/bin/java" || ! -x "${java_home}/bin/javac" \
+        || ! -r "${java_home}/include/jni.h" || ! -r "${java_home}/lib/server/libjvm.so" ]]; then
+        fail "The selected JAVA_HOME does not contain a complete JDK with JNI support"
+    fi
+    printf '%s\n' "${java_home}"
+}
+
 INSTALL_MODE="verify"
 case "${1:-}" in
     verify|--install-build-time)
@@ -274,6 +289,7 @@ if [[ "${INSTALLED_VERSION}" = "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisC
     fi
 fi
 
+JAVA_BUILD_HOME="$(resolve_java_build_home)"
 echo "Installing ImarisConvertBioformats ${TARGET_VERSION}..."
 mkdir -p "${INSTALL_DIR}"
 
@@ -351,8 +367,8 @@ fi
 if ! cmake .. \
     "${NINJA_GENERATOR[@]}" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
-    -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk \
+    -DJAVA_HOME="${JAVA_BUILD_HOME}" \
+    -DJRE_HOME="${JAVA_BUILD_HOME}" \
     -DFreeImage_ROOT=/usr \
     -DFreeImage_LIBRARIES="${FREEIMAGE_LIB}" \
     "${CCACHE_LAUNCHER[@]}"; then

@@ -354,7 +354,12 @@ RUN set -euo pipefail; \
         gcc \
         gcc-c++ \
         make \
-        java-11-openjdk-devel \
+        fontconfig \
+        libX11 \
+        libXext \
+        libXi \
+        libXrender \
+        libXtst \
         boost-devel \
         hdf5-devel \
         zlib-devel \
@@ -362,6 +367,35 @@ RUN set -euo pipefail; \
         freeimage-devel; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true
+
+# Install the maintained JDK before compiling JNI-dependent tools. Retain the
+# OS-managed trust store and libraries while removing only obsolete Java RPMs.
+# This is the same verified Linux binary used by Adoptium's UBI 9 container.
+ARG TEMURIN_JDK_VERSION=11.0.32.1_1
+ARG TEMURIN_JDK_SHA256=5c3f68887c325d36d852ba534303e1f5f1f5cae7d6cc1e951d73e0d8e98a058d
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+RUN set -euo pipefail; \
+    if [[ "$(uname -m)" != "x86_64" ]]; then \
+        echo "ERROR: The pinned OMERO.server base and JDK require linux/amd64." >&2; \
+        exit 1; \
+    fi; \
+    archive="$(mktemp)"; \
+    curl --fail --location --retry 3 --connect-timeout 20 --max-time 600 \
+        --proto '=https' --tlsv1.2 \
+        "https://github.com/adoptium/temurin11-binaries/releases/download/jdk-${TEMURIN_JDK_VERSION/_/%2B}/OpenJDK11U-jdk_x64_linux_hotspot_${TEMURIN_JDK_VERSION}.tar.gz" \
+        --output "${archive}"; \
+    printf '%s  %s\n' "${TEMURIN_JDK_SHA256}" "${archive}" | sha256sum --check --strict; \
+    mkdir -p "${JAVA_HOME}"; \
+    tar --extract --gzip --file "${archive}" --directory "${JAVA_HOME}" \
+        --strip-components 1 --no-same-owner; \
+    rm -f "${archive}"; \
+    test -s /etc/pki/java/cacerts; \
+    ln -sfn /etc/pki/java/cacerts "${JAVA_HOME}/lib/security/cacerts"; \
+    dnf -y --disablerepo='*' --setopt=clean_requirements_on_remove=False \
+        remove java-11-openjdk java-11-openjdk-devel java-11-openjdk-headless; \
+    java -version; \
+    javac -version
 
 # Prepare writable paths for startup-installed tools
 # --------------------------------------------------
@@ -688,12 +722,12 @@ RUN set -euo pipefail; \
         local attempt=1; \
         while true; do \
             if dnf -y --refresh --setopt=timeout=20 --setopt=retries=2 "$@"; then return 0; fi; \
-            if [[ "${attempt}" -ge 3 ]]; then echo "WARNING: dnf hardening update failed after 3 attempts (non-fatal)." >&2; return 0; fi; \
+            if [[ "${attempt}" -ge 3 ]]; then echo "ERROR: dnf hardening update failed after 3 attempts." >&2; return 1; fi; \
             attempt=$((attempt + 1)); \
             sleep 1; \
         done; \
     }; \
-    dnf_retry upgrade --refresh || true; \
+    dnf_retry upgrade --refresh; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
     dnf -y remove --noautoremove \
         vim-minimal \
@@ -714,9 +748,9 @@ RUN set -euo pipefail; \
             "idna==${IDNA_VERSION}" \
             "requests==${REQUESTS_VERSION}" \
             "jinja2==${JINJA2_VERSION}" \
-            "pyopenssl==${PYOPENSSL_VERSION}" || \
-            echo "WARNING: Some curated Python hardening updates failed (non-fatal)."; \
-        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
+            "pyopenssl==${PYOPENSSL_VERSION}"; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}"; \
+        "${VENV_DIR}/bin/python" -m pip check; \
         echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \
         find "${VENV_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true; \
         find "${VENV_DIR}" -type d \( -name "tests" -o -name "test" -o -name "testing" \) \

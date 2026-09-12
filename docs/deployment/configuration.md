@@ -4,6 +4,17 @@
 
 This repository uses environment variables as the primary configuration surface.
 
+The server image pins Eclipse Temurin 11.0.32.1+1 by archive checksum because
+Rocky's Java 11 packages no longer receive updates. It stays on the OMERO-supported
+Java 11 major version and uses the OS-managed CA trust store. Imaris JNI libraries
+are rebuilt against the selected JDK; rebuild the full server image when changing
+the JDK. This does not change the web image's separate Java runtimes or require
+deployment env edits. See the [Temurin release notes](https://adoptium.net/news/2026/09/eclipse-temurin-8u504-110321-170201-210121-25041-26021-available).
+
+When build-time hardening is enabled, failed OS or curated Python updates stop
+the build. Both application images check Python dependency consistency instead
+of publishing a successful build after a failed update.
+
 Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
 
 For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth:
