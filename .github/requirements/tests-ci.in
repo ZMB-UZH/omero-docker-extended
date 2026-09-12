@@ -10,10 +10,10 @@ django==5.2.17
 cryptography==50.0.1
 pyyaml==6.0.3
 portalocker==4.3.0
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
 numpy==2.5.3
 numcodecs==0.16.5
-matplotlib==3.11.1
+matplotlib==3.11.2
 ome-zarr==0.18.0
 zarr==3.3.0
-tifffile==2026.8.23
+tifffile==2026.9.9

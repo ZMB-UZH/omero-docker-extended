@@ -4,8 +4,8 @@ Reference notes for AI Agent workflows.
 
 Service topology (docker-compose.yml):
 
-- 21 Compose services total on a single "omero" bridge network: 20 long-running runtime containers by default, 21 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
-- All services have explicit healthcheck: blocks. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
+- 21 Compose services total on a single "omero" bridge network: 19 long-running runtime containers by default, 20 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
+- All long-running services have explicit healthcheck: blocks; the one-shot redis-sysctl-init helper does not. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
 - All images use pinned version tags. Never use :latest.
@@ -17,7 +17,7 @@ Core services:
 - database (port 5432): PostgreSQL 16.15, OMERO core database.
 - database_plugin (port 5433): PostgreSQL 16.15, OMERO plugin database.
 - redis (port 6379): Redis 8.10.1-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
-- ollama (port 11434 internal): Ollama 0.33.3 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
+- ollama (port 11434 internal): Ollama 0.34.0 local AI inference for OMP's Local provider, model data under OLLAMA_DATA_PATH or /disks/omero_temp/ollama.
 
 Supporting services:
 

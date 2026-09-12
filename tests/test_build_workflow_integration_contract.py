@@ -1544,6 +1544,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         expected_steps = {
+            "codeql": (
+                "Reject CodeQL findings before upload",
+                "Upload CodeQL results to GitHub Security tab",
+            ),
             "trivy-filesystem": (
                 "Reject Trivy findings before upload",
                 "Upload Trivy scan results to GitHub Security tab",
@@ -1582,7 +1586,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         workflow_text = workflow_path.read_text(encoding="utf-8")
         self.assertGreaterEqual(
-            workflow_text.count("python3 tools/sarif_result_guard.py"), 7
+            workflow_text.count("python3 tools/sarif_result_guard.py"), 8
         )
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
@@ -1773,6 +1777,35 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertEqual(
             "./.github/codeql/codeql-config.yml", init_step["with"]["config-file"]
         )
+        analyze_step = next_or_fail(
+            step for step in steps if step.get("name") == "Analyze"
+        )
+        guard_step = next_or_fail(
+            step
+            for step in steps
+            if step.get("name") == "Reject CodeQL findings before upload"
+        )
+        upload_step = next_or_fail(
+            step
+            for step in steps
+            if step.get("name") == "Upload CodeQL results to GitHub Security tab"
+        )
+        self.assertEqual("never", analyze_step["with"]["upload"])
+        self.assertEqual(
+            "${{ runner.temp }}/codeql-results", analyze_step["with"]["output"]
+        )
+        self.assertEqual(
+            analyze_step["with"]["output"], guard_step["env"]["CODEQL_RESULTS"]
+        )
+        self.assertEqual(
+            analyze_step["with"]["output"], upload_step["with"]["sarif_file"]
+        )
+        self.assertEqual(
+            analyze_step["with"]["category"], upload_step["with"]["category"]
+        )
+        self.assertLess(steps.index(analyze_step), steps.index(guard_step))
+        self.assertNotIn("continue-on-error", analyze_step)
+        self.assertNotIn("continue-on-error", guard_step)
         codeql_config = yaml.safe_load(
             (self.repo_root / ".github" / "codeql" / "codeql-config.yml").read_text(
                 encoding="utf-8"

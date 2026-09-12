@@ -47,9 +47,9 @@ def test_frontend_preview_tooling_manifest_pins_expected_versions():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["name"] == "omero-agent-frontend-preview-tooling"
-    assert manifest["node_version"] == "24.20.0"
+    assert manifest["node_version"] == "24.21.0"
     assert manifest["dependencies"] == {
-        "vite": "8.2.2",
+        "vite": "8.3.0",
         "vitest": "5.0.0",
         "jsdom": "30.0.1",
         "@vitest/browser-playwright": "5.0.0",

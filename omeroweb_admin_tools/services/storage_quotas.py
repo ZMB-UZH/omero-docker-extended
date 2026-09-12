@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import csv
+import fcntl
 import grp
 import io
 import json
-import logging
+import math
 import os
 import pwd
 import stat
+import tempfile
 import threading
-import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,8 +34,6 @@ def getgrgid(gid: int) -> Any:
     """
     return grp.getgrgid(gid)
 
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
 DEFAULT_ENFORCER_MARKER_PATH = "/OMERO/.admin-tools/quota-enforcer-installed"
@@ -120,7 +121,7 @@ def _parse_quota_env(name: str) -> float:
         raise QuotaError(
             f"Invalid {name} value; expected a numeric value in GB."
         ) from exc
-    if parsed <= 0:
+    if not math.isfinite(parsed) or round(parsed, 3) <= 0:
         raise QuotaError(f"{name} must be greater than 0.")
     return round(parsed, 3)
 
@@ -333,17 +334,48 @@ def _assert_quota_state_path_safe(path: Path) -> None:
     Inputs: `path`. Output: None. Raises: QuotaError on unsafe paths.
     """
     parent = path.parent
+    _assert_not_symlink(parent, "Quota state directory")
+    _assert_not_symlink(path, "Quota state file")
     if parent.exists():
-        _assert_not_symlink(parent, "Quota state directory")
         if not parent.is_dir():
             raise QuotaError(f"Quota state parent is not a directory: {parent}")
         _assert_not_world_writable(parent, "Quota state directory")
 
     if path.exists():
-        _assert_not_symlink(path, "Quota state file")
         if not path.is_file():
             raise QuotaError(f"Quota state path is not a regular file: {path}")
         _assert_not_world_writable(path, "Quota state file")
+
+
+@contextmanager
+def _locked_state(path: Path) -> Iterator[None]:
+    """Serialize quota read-modify-write transactions across runtime processes.
+
+    Inputs: `path`, the configured state file. Output: locked context. Raises:
+    QuotaError when lock validation, acquisition, or storage I/O fails.
+    """
+    with _RECONCILE_LOCK:
+        _ensure_parent(path)
+        lock_path = path.with_suffix(f"{path.suffix}.lock")
+        try:
+            descriptor = os.open(
+                lock_path,
+                os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                0o600,
+            )
+            with os.fdopen(descriptor, "r+") as handle:
+                metadata = os.fstat(handle.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    raise QuotaError("Quota state lock must be a single regular file.")
+                if stat.S_IMODE(metadata.st_mode) != 0o600:
+                    raise QuotaError("Quota state lock permissions must be 0600.")
+                # Never unlink this sidecar: all writers must lock the same inode.
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                yield
+        except OSError as exc:
+            raise QuotaError(
+                "Quota state storage is unavailable; existing state was retained."
+            ) from exc
 
 
 def _fresh_state() -> Dict[str, object]:
@@ -369,32 +401,31 @@ def _load_state(path: Path) -> Dict[str, object]:
         return _fresh_state()
     raw = path.read_text(encoding="utf-8")
     if not raw.strip():
-        logger.warning("Quota state file %s is empty; initialising fresh state", path)
-        return _fresh_state()
+        raise QuotaError(
+            "Quota state is empty; restore or explicitly initialize it before updating quotas."
+        )
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning(
-            "Quota state file %s contains invalid JSON; initialising fresh state",
-            path,
-        )
-        return _fresh_state()
+    except json.JSONDecodeError as exc:
+        raise QuotaError(
+            "Quota state contains invalid JSON; existing state was retained."
+        ) from exc
     if not isinstance(data, dict):
-        logger.warning(
-            "Quota state file %s does not contain a JSON object; "
-            "initialising fresh state",
-            path,
+        raise QuotaError(
+            "Quota state must contain a JSON object; existing state was retained."
         )
-        return _fresh_state()
     schema_version = data.get(STATE_SCHEMA_VERSION_KEY)
     if schema_version is None:
         data[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
-    elif schema_version != STATE_SCHEMA_VERSION:
+    elif type(schema_version) is not int or schema_version != STATE_SCHEMA_VERSION:
         raise QuotaError(
             "Unsupported quota state schema version "
             f"{schema_version!r}; expected {STATE_SCHEMA_VERSION}."
         )
-    data.setdefault("quotas_gb", {})
+    if "quotas_gb" not in data:
+        raise QuotaError(
+            "Quota state is missing quotas_gb; existing state was retained."
+        )
     data.setdefault("logs", [])
     return data
 
@@ -407,52 +438,35 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     """
     state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
-    serialized = json.dumps(state, indent=2, sort_keys=True)
-
-    # We use a unique randomized suffix instead of a fixed .tmp to avoid ANY
-    # chance of colliding with a locked or root-owned file from a previous
-    # process or host-side tool.
-    random_suffix = uuid.uuid4().hex[:8]
-    temp_path = path.with_suffix(f"{path.suffix}.tmp_{random_suffix}")
-
+    serialized = json.dumps(state, indent=2, sort_keys=True, allow_nan=False)
+    temp_path = None
     try:
-        temp_path.write_text(serialized, encoding="utf-8")
-
-        # The temporary file can contain quota and operator metadata, so keep it
-        # private until the atomic replace completes.
-        os.chmod(temp_path, 0o600)
-
-        # os.replace is atomic on POSIX
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temp_path, path)
-    except PermissionError as exc:
-        # Fallback if replacing fails (e.g., sticky bit preventing rename)
-        if temp_path.exists():
-            temp_path.unlink(missing_ok=True)
-
-        if not path.exists() or not os.access(path, os.W_OK):
-            raise QuotaError(
-                f"Quota state path is not replaceable/writable: {path}. "
-                "Ensure /OMERO/.admin-tools is not world-writable, is writable "
-                "by the omeroweb runtime group, and the state file is owned by "
-                "the omeroweb runtime user."
-            ) from exc
-
-        # Last resort fallback: direct write to existing file
-        path.write_text(serialized, encoding="utf-8")
-        os.chmod(path, 0o600)
-    finally:
-        # Clean up any unique random tmp files we created if something went terribly wrong
-        if temp_path.exists():
-            temp_path.unlink(missing_ok=True)
-
-        # Optional: Attempt to clean up the legacy fixed .tmp file to prevent future confusion
-        legacy_tmp = path.with_suffix(f"{path.suffix}.tmp")
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            legacy_tmp.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.debug(
-                "Suppressed non-fatal exception in storage_quotas.py", exc_info=exc
-            )
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as exc:
+        raise QuotaError(
+            "Quota state could not be persisted atomically. Check runtime ownership "
+            "and write permissions on the state file and its directory."
+        ) from exc
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
@@ -550,12 +564,14 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
         return None
     if isinstance(value, str) and not value.strip():
         return None
-    if not isinstance(value, (str, int, float)):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         raise QuotaError(f"Invalid quota value: {value!r}")
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
         raise QuotaError(f"Invalid quota value: {value!r}") from exc
+    if not math.isfinite(number):
+        raise QuotaError("Invalid quota value: expected a finite number.")
     if number < minimum_quota_gb:
         raise QuotaError(f"Quota value must be at least {minimum_quota_gb:.2f} GB")
     return round(number, 3)
@@ -642,43 +658,44 @@ def upsert_quotas(
     object]`. Raises: TypeError when validation or the called operation fails.
     """
     path = quota_state_path()
-    state = _load_state(path)
-    quotas = state.setdefault("quotas_gb", {})
-    if not isinstance(quotas, dict):
-        raise TypeError(
-            f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}"
-        )
-    changed = False
+    with _locked_state(path):
+        state = _load_state(path)
+        quotas = state.setdefault("quotas_gb", {})
+        if not isinstance(quotas, dict):
+            raise TypeError(
+                f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}"
+            )
+        changed = False
 
-    for raw_group, raw_quota in updates:
-        group_name = _normalize_group(raw_group)
-        quota_gb = _normalize_quota_gb(raw_quota)
-        if quota_gb is None:
-            if group_name in quotas:
-                del quotas[group_name]
-                changed = True
-                _append_log(
-                    state,
-                    "info",
-                    f"Deleted quota for group '{group_name}' (source={source}).",
-                )
-            continue
+        for raw_group, raw_quota in updates:
+            group_name = _normalize_group(raw_group)
+            quota_gb = _normalize_quota_gb(raw_quota)
+            if quota_gb is None:
+                if group_name in quotas:
+                    del quotas[group_name]
+                    changed = True
+                    _append_log(
+                        state,
+                        "info",
+                        f"Deleted quota for group '{group_name}' (source={source}).",
+                    )
+                continue
 
-        existing_quota = quotas.get(group_name)
-        if existing_quota == quota_gb:
-            continue
+            existing_quota = quotas.get(group_name)
+            if existing_quota == quota_gb:
+                continue
 
-        quotas[group_name] = quota_gb
-        changed = True
-        _append_log(
-            state,
-            "info",
-            f"Updated quota for group '{group_name}' to {quota_gb:.3f} GB (source={source}).",
-        )
+            quotas[group_name] = quota_gb
+            changed = True
+            _append_log(
+                state,
+                "info",
+                f"Updated quota for group '{group_name}' to {quota_gb:.3f} GB (source={source}).",
+            )
 
-    if changed:
-        _write_state(path, state)
-    return state
+        if changed:
+            _write_state(path, state)
+        return state
 
 
 def import_quotas_csv(content: str) -> Dict[str, object]:
@@ -753,8 +770,8 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
     Inputs: `known_groups` (Sequence[str]). Output: `Dict[str, object]`. Raises:
     QuotaError, TypeError when validation or the called operation fails.
     """
-    with _RECONCILE_LOCK:
-        path = quota_state_path()
+    path = quota_state_path()
+    with _locked_state(path):
         state = _load_state(path)
         quotas = state.setdefault("quotas_gb", {})
         if not isinstance(quotas, dict):
@@ -905,16 +922,7 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             )
 
         _prune_reconcile_event_cache(state, reconcile_event_keys)
-        try:
-            _write_state(path, state)
-        except OSError:
-            logger.warning(
-                "Could not persist quota state to %s; "
-                "reconciliation result is still valid but changes will not "
-                "be saved until the directory is writable",
-                path,
-                exc_info=True,
-            )
+        _write_state(path, state)
         return {
             "filesystem": {
                 "type": filesystem.fs_type,

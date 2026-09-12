@@ -303,7 +303,7 @@ try:
     min_gb = decimal.Decimal(str(sys.argv[2]))
 except decimal.InvalidOperation as exc:
     raise SystemExit(f"MIN_QUOTA_GB is invalid: {sys.argv[2]!r}") from exc
-if min_gb <= 0:
+if not min_gb.is_finite() or min_gb <= 0:
     raise SystemExit("MIN_QUOTA_GB must be greater than 0")
 
 try:
@@ -311,7 +311,12 @@ try:
 except Exception as exc:
     raise SystemExit(f"Unable to read quota state JSON: {exc}") from exc
 
-quotas = state.get("quotas_gb", {})
+if not isinstance(state, dict):
+    raise SystemExit("quota state must be an object")
+schema_version = state.get("state_schema_version", 1)
+if type(schema_version) is not int or schema_version != 1:
+    raise SystemExit("unsupported quota state schema version")
+quotas = state.get("quotas_gb")
 if not isinstance(quotas, dict):
     raise SystemExit("quota state field 'quotas_gb' must be an object")
 

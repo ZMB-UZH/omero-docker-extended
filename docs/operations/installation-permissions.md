@@ -418,6 +418,8 @@ Behavior:
 
 - quota state directories must not be world-writable,
 - quota state files must not be world-writable,
+- quota transaction sidecars use `0600` and must remain owned by the web runtime
+  user; do not remove a sidecar while quota writers are running,
 - the host enforcer refuses symlinked or world-writable quota control paths
   before it reads quota JSON or rewrites ext4 mapping files.
 - quota enforcement parses quota JSON once per run, rewrites mapping files by

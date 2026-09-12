@@ -25,8 +25,18 @@ The repository also includes a `security-delta` job inside `.github/workflows/se
 Controllable SARIF producers also run `tools/sarif_result_guard.py` before the
 upload step. A non-empty or invalid report fails the producer job and skips its
 upload, preventing a scanner upgrade from populating the Security tab before
-the aggregate gate can react. The aggregate gate remains mandatory because
-CodeQL, OSV, and repository-level Scorecard processing are hosted boundaries.
+the aggregate gate can react. CodeQL analysis explicitly uses `upload: never`,
+then validates every generated SARIF file before a separate success-only upload.
+Missing or malformed output also blocks publication; findings are never filtered
+or rewritten to pass the gate. The aggregate gate remains mandatory for hosted
+OSV/Scorecard processing and reconciliation with the live alert inventory.
+
+Treat hosted execution and upload control as separate concerns. CodeQL runs on
+GitHub, but its local report is controllable: relying on the later aggregate job
+while leaving automatic upload enabled allows findings to reach the Security tab
+before rejection. Workflow contracts exercise the actual Bash guard with clean,
+non-empty, missing, and malformed reports and require analysis before validation
+before upload.
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
@@ -50,8 +60,8 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 351 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `351/384` CodeQL count means the implementation
+- Python: the current repo has 353 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `353/386` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
   are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
   the same meaning before tracked Python files such as `tools/regression_guard.py`

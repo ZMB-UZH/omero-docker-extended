@@ -178,7 +178,13 @@ Quota values are validated with a minimum accepted value configured by `ADMIN_TO
 When `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA=true`, reconciliation automatically writes a quota entry for each newly detected OMERO group using `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB`; this persisted state is then consumed by the host `omero-quota-enforcer` systemd service on its normal timer cycle.
 
 Quota state persistence is versioned via a `state_schema_version` field in `group-quotas.json`. The service accepts only supported schema versions and fails loudly on unknown future versions to avoid silently misapplying quotas after upgrades.
-Quota state writes are atomic by default and include a compatibility fallback for sticky-bit legacy directories: if atomic replace is blocked but the existing state file remains writable, the state is updated in place; otherwise reconciliation fails with an explicit permission error describing required `.admin-tools` permissions.
+Quota edits and reconciliation share a cross-process transaction lock. Writes
+use a private temporary file, synchronize it, and atomically replace the state;
+there is no in-place write fallback. Failed writes, malformed state, and missing
+quota fields produce an explicit error instead of resetting configured quotas.
+Fix ownership or permissions before retrying. Preserve a damaged or empty legacy
+file for recovery and restore it from a verified backup, or explicitly initialize
+a new configuration only after confirming that no existing quotas need recovery.
 
 ## Operator checklist
 

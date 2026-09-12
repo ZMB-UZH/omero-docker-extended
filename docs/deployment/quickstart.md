@@ -194,6 +194,12 @@ are never overwritten by this workflow. Previously published notes are reused.
 The tagged environment guard validates that release's own configuration contract;
 newer deployment keys are not added to historical source.
 
+If a historical recipe clones a moving branch before checking a recorded commit,
+recovery may correct only its reviewed, hash-bound retrieval instruction to fetch
+that same commit directly. The manifest records the original and rebuilt recipe
+hashes, the complete reversible correction, and the recovery-tool commit. Unknown
+recipes and unrelated source changes stop recovery; dependency pins are retained.
+
 A rebuild has a new digest and records its rebuild time; it is not a byte-for-byte
 restoration of the deleted artifact. Historical versions also retain their old
 application behavior. Use the updated digest asset when installing a recovered

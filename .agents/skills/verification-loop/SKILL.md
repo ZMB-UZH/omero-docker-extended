@@ -19,6 +19,9 @@ Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the ge
 
 - Keep a verification ledger containing the exact command, relevant tree state,
   result, and artifact under test.
+- Before validating a source copy, compare its complete intended file inventory
+  and content hashes with the candidate, including intended new files. A clean
+  scanner result from a tracked-only copy that omitted new source is incomplete.
 - Do not repeat a passing command until one of its inputs changes. A final
   repository-wide matrix supersedes earlier unchanged targeted runs.
 - Preserve the tested command's exit status when limiting output. Use the

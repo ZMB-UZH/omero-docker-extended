@@ -16,19 +16,50 @@
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
 <!-- END GENERATED BADGES -->
 
-Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
+An integrated OMERO platform for microscopy facilities, combining OMERO.server
+and OMERO.web with browser-based imports, searchable acquisition metadata,
+Imaris workflows, and day-to-day administration in a Linux Docker deployment.
 
 <details open>
 <summary><h2>What this repository delivers</h2></summary>
 
-This repository packages the complete runtime for the OMERO microscopy data
-storage & management platform, extending it with five purpose-built OMERO.web
-plugins (with several subroutines each), a shared utility library, an
-observability stack, automated database maintenance, and deployment/update
-tooling. Every service runs in separate docker containers with explicit health
-checks, pinned image versions, and environment variable driven configuration.
+Stock OMERO provides microscopy data storage, access control, image viewing and
+client APIs. This repository builds on that foundation with an integrated set
+of research workflows and operating tools that would otherwise need to be
+assembled, configured and maintained separately:
 
-> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility and behavior must be verified by the system administrator.
+- **Import from the browser.** Upload files and folders, transfer large files
+  in chunks, track background imports, and handle supported directory-backed
+  formats and SEM-EDX data. [Import workflow](docs/plugins/import-plugin.md)
+- **Turn filenames into useful metadata.** Preview structured values, reuse
+  parsing templates and write OMERO annotations, with optional local or external
+  AI assistance. [OMP metadata tools](docs/plugins/omp-plugin.md)
+- **Search acquisition metadata.** Combine OMERO's built-in search with an
+  opt-in, per-user index of instrument, channel, objective, detector and other
+  metadata, with OMERO permission checks on results.
+  [Enhanced search](docs/plugins/tools-plugin.md)
+- **Connect analysis and viewing workflows.** Export images for Imaris 11 and
+  use the accompanying XT connector; access supported OME-Zarr data through
+  authenticated web endpoints and Vizarr.
+  [Imaris integration](docs/plugins/imaris-connector-plugin.md) |
+  [OME-Zarr integration](docs/plugins/omero-web-zarr-plugin.md)
+- **Operate the whole stack.** Use Admin Tools, provisioned Grafana dashboards,
+  Prometheus metrics and Loki logs to inspect services, databases and storage.
+  Group quotas are available on supported, configured filesystems.
+  [Administration](docs/plugins/admin-tools-plugin.md)
+- **Deploy and maintain a versioned system.** Use pinned images, configurable
+  persistent paths, service health checks, PostgreSQL maintenance, and release
+  bundles with matching source and installation tooling.
+  [Deployment guide](docs/deployment/quickstart.md)
+
+The Docker Hub tags contain prebuilt release bundles, not a standalone OMERO
+service image. Use the matching release's installer to deploy the Compose
+stack. OMERO.web plugins and their workers share the web container; databases,
+monitoring and other infrastructure run as separate services.
+
+> Before installation or upgrade, validate persistent storage, permissions,
+> port mappings and coexistence with other workloads in your environment.
+> Preserve backups and test the formats and integrations your facility uses.
 
 For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
@@ -37,22 +68,26 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details open>
 <summary><h2>Current development state</h2></summary>
 
-## ✅ Works great
+## Core workflows
 
-- All official OMERO software components
-- All base installation and orchestration layers
-- Official and third-party scripts included in this repository
+- OMERO.server and OMERO.web deployment
+- Installation and orchestration tooling
+- Bundled official and third-party scripts
 - Import plugin (`omeroweb_import`)
 - Tools plugin (`omeroweb_tools`) / Enhanced search
 - Admin tools (`omeroweb_admin_tools`)
 
-## 🛠️ Works partially / under active development
+## Active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
-## 🐢 Not working yet / progressing slowly / planned
+OMP and Imaris workflows require installation-specific acceptance testing;
+their inclusion is not a claim that every instrument format or analysis setup
+has been validated.
+
+## Planned
 
 - Additional Tools entries beyond Enhanced search
 
@@ -193,8 +228,8 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <summary><h2>Service topology</h2></summary>
 
 `docker-compose.yml` declares **21 Compose services total** on a single docker
-bridge network (`omero`): **20 long-running runtime containers by default**,
-**21 when the profile-gated `crowdsec` service is enabled**. The one-shot
+bridge network (`omero`): **19 long-running runtime containers by default**,
+**20 when the profile-gated `crowdsec` service is enabled**. The one-shot
 `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists `vm.overcommit_memory=1` on the host so it is not
 needed during normal `docker compose up` cycles.
@@ -203,12 +238,12 @@ The table below lists the long-running services available in the full profile se
 
 | Service | Image | Purpose | Port |
 | --- | --- | --- | --- |
-| `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
-| `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
+| `omeroserver` | Custom OMERO image | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
+| `omeroweb` | Custom OMERO image | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.10.1-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.33.3 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `ollama` | ollama/ollama:0.34.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.45.0-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.14.0 | Metrics scraping and storage | 127.0.0.1:9090 |

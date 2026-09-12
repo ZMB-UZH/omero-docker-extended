@@ -641,10 +641,10 @@ class _Image:
         return datetime(2026, 4, 12, 10, 30, 0)
 
     @staticmethod
-    def getChannels():
+    def getChannels(noRE=False):
         """Return the channels for `_Image`.
 
-        Inputs: none. Output: `list`.
+        Inputs: upstream `noRE` flag. Output: `list`.
         """
         return [
             _Channel(0, "DAPI", _Value("405"), _Value("450")),
@@ -852,3 +852,30 @@ def test_extract_search_document_builds_canonical_fields_and_metadata_attributes
         "project_id": 200,
         "project_name": "Cell Cycle",
     }
+
+
+def test_metadata_uses_one_non_rendering_channel_snapshot():
+    """Extract identical channel metadata with one request-local channel lookup.
+
+    Inputs: deterministic image fixture with counted channel requests. Output:
+    complete document parity and exactly one metadata-only lookup per extraction.
+    """
+    calls = []
+
+    class CountedImage(_Image):
+        """Record upstream channel flags without changing the fixture metadata."""
+
+        def getChannels(self, noRE=False):
+            """Return the fixture channels and record the rendering flag.
+
+            Inputs: upstream `noRE` flag. Output: deterministic channel wrappers.
+            """
+            calls.append(noRE)
+            return super().getChannels()
+
+    expected = extract_search_document(_Image())
+    image = CountedImage()
+    assert extract_search_document(image) == expected
+    assert calls == [True]
+    assert extract_search_document(image) == expected
+    assert calls == [True, True]

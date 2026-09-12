@@ -3,7 +3,6 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import json
-import logging
 import sys
 from http.client import HTTPMessage
 from pathlib import Path
@@ -180,13 +179,11 @@ def test_admin_config_and_root_user_decorator_cover_remaining_validation_edges(
 def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
     monkeypatch,
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
 ):
-    """Check storage quota and cache helpers cover cleanup and type guard edges cleanup behavior.
+    """Verify private quota writes, invalid state handling and cache replacement.
 
     Inputs: `monkeypatch` pytest monkeypatch fixture, `tmp_path` (Path) temporary path
-    fixture, `caplog` (pytest.LogCaptureFixture) pytest log capture fixture. Output:
-    `real_unlink` result. Raises: OSError when validation or the called operation fails.
+    fixture. Output: persisted quota data and cache accounting retain their contracts.
     """
     monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, "0.10")
     monkeypatch.setenv(storage_quotas.DEFAULT_GROUP_QUOTA_ENV, "0.25")
@@ -194,31 +191,12 @@ def test_storage_quota_and_cache_helpers_cover_cleanup_and_type_guard_edges(
 
     path = tmp_path / "state.json"
     legacy_tmp = path.with_suffix(f"{path.suffix}.tmp")
-    real_unlink = Path.unlink
-
-    def _patched_unlink(self, missing_ok=False):
-        """Return the patched unlink.
-
-        Inputs: `missing_ok`. Output: `real_unlink` result. Raises: OSError when validation or the called operation fails.
-        """
-        if self == legacy_tmp:
-            raise OSError("legacy cleanup blocked")
-        return real_unlink(self, missing_ok=missing_ok)
-
-    monkeypatch.setattr(Path, "unlink", _patched_unlink, raising=False)
-    monkeypatch.setattr(
-        storage_quotas.os,
-        "chmod",
-        lambda target, mode: (_ for _ in ()).throw(RuntimeError("chmod failed")),
-    )
-    caplog.set_level(logging.DEBUG, logger=storage_quotas.logger.name)
-    with pytest.raises(RuntimeError, match="chmod failed"):
-        storage_quotas._write_state(path, {"quotas_gb": {}, "logs": []})
+    legacy_tmp.write_text("operator recovery data", encoding="utf-8")
+    storage_quotas._write_state(path, {"quotas_gb": {}, "logs": []})
+    assert json.loads(path.read_text(encoding="utf-8"))["quotas_gb"] == {}
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert legacy_tmp.read_text(encoding="utf-8") == "operator recovery data"
     assert list(tmp_path.glob("state.json.tmp_*")) == []
-    assert any(
-        record.levelname == "DEBUG" and "storage_quotas.py" in record.message
-        for record in caplog.records
-    )
 
     state_path = tmp_path / "quotas.json"
     state_path.write_text(

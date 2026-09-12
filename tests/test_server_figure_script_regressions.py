@@ -1,11 +1,100 @@
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_DOCKERFILE = REPO_ROOT / "docker" / "omero-server.Dockerfile"
 SERVER_BOOTSTRAP = REPO_ROOT / "startup" / "10-server-bootstrap.sh"
+BASH_BIN = shutil.which("bash") or "/bin/bash"
+GIT_BIN = shutil.which("git") or "/usr/bin/git"
+
+
+def _biop_fetch_commands() -> str:
+    """Inputs: repository Dockerfile. Output: its actual dependency-fetch commands."""
+    section = SERVER_DOCKERFILE.read_text(encoding="utf-8").split(
+        "# Install BIOP OMERO script:", 1
+    )[1]
+    commands = section.split("RUN ", 1)[1].split("SCRIPT_SRC=", 1)[0]
+    assert 'BIOP_SOURCE="$(mktemp -d)"' in commands
+    return commands.replace("\\\n", "")
+
+
+def _git(arguments, directory):
+    """Inputs: Git arguments and fixture directory. Output: checked command stdout."""
+    return subprocess.check_output(
+        [GIT_BIN, "-c", "user.name=AI Agent", "-c", "user.email=", *arguments],
+        cwd=directory,
+        text=True,
+    ).strip()
+
+
+@pytest.fixture
+def advanced_upstream(tmp_path):
+    """Inputs: pytest temporary directory. Output: a real branch beyond its pinned commit."""
+    source = tmp_path / "upstream"
+    source.mkdir()
+    _git(["init", "--initial-branch=main"], source)
+    fixture = source / "fixture.txt"
+    fixture.write_text("reviewed content\n", encoding="utf-8")
+    _git(["add", "fixture.txt"], source)
+    _git(["commit", "-m", "Reviewed fixture"], source)
+    pinned = _git(["rev-parse", "HEAD"], source)
+    fixture.write_text("new unreviewed content\n", encoding="utf-8")
+    _git(["commit", "-am", "Advance fixture branch"], source)
+    return source, pinned
+
+
+def test_biop_fetch_preserves_pin_after_upstream_branch_advances(
+    tmp_path, advanced_upstream
+):
+    """Inputs: a real advanced upstream. Output: exact pinned content, without branch fallback."""
+    source, pinned = advanced_upstream
+    commands = (
+        _biop_fetch_commands() + '\n git -C "${BIOP_SOURCE}" show HEAD:fixture.txt\n'
+    )
+    result = subprocess.run(
+        [BASH_BIN, "-c", commands],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "TMPDIR": str(tmp_path),
+            "BIOP_OMERO_SCRIPTS_REPO": source.as_uri(),
+            "BIOP_OMERO_SCRIPTS_COMMIT": pinned,
+            "BIOP_OMERO_SCRIPTS_REF": "nonexistent-reference",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.endswith("reviewed content\n")
+    assert "new unreviewed content" not in result.stdout
+
+
+@pytest.mark.parametrize("pin", ["", "main", "--upload-pack=invalid", "a" * 40])
+def test_biop_fetch_rejects_invalid_or_missing_pin(tmp_path, advanced_upstream, pin):
+    """Inputs: invalid or absent commit. Output: closed failure without fetching a branch."""
+    source, _ = advanced_upstream
+    result = subprocess.run(
+        [BASH_BIN, "-c", _biop_fetch_commands()],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "TMPDIR": str(tmp_path),
+            "BIOP_OMERO_SCRIPTS_REPO": source.as_uri(),
+            "BIOP_OMERO_SCRIPTS_COMMIT": pin,
+            "BIOP_OMERO_SCRIPTS_REF": "main",
+        },
+    )
+    assert result.returncode != 0
+    assert not any(path.name == "fixture.txt" for path in tmp_path.glob("tmp.*/**/*"))
 
 
 class ServerFigureScriptRegressionTests(unittest.TestCase):

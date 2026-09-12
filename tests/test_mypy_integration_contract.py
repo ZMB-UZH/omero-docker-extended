@@ -79,9 +79,10 @@ class MypyIntegrationContractTests(TestCase):
         self.assertIn("django==5.2.17", compiled)
         self.assertIn("django-stubs==6.1.0", compiled)
         self.assertIn("django-stubs-ext==6.1.0", compiled)
-        self.assertIn("types-requests==2.33.0.20260712", compiled)
+        self.assertIn("requests==2.34.2", compiled)
+        self.assertNotIn("types-requests==", compiled)
         self.assertIn("types-atheris==3.1.0.20260630", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20260724", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20260911", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 

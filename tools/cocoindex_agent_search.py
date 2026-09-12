@@ -7,7 +7,6 @@ import argparse
 from collections.abc import Mapping
 import fcntl
 import hashlib
-import importlib
 import json
 import logging
 import os
@@ -906,22 +905,6 @@ def ensure_mcp_launcher(context: CocoIndexContext) -> Path:
     return launcher
 
 
-@contextmanager
-def patched_process_env(env: dict[str, str]) -> Any:
-    """Temporarily replace process env for imported CocoIndex helpers.
-
-    Inputs: `env`. Output: `Any`.
-    """
-    original = os.environ.copy()
-    os.environ.clear()
-    os.environ.update(env)
-    try:
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(original)
-
-
 def resolve_context(
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
     repo_root: Path | None = None,
@@ -1199,23 +1182,32 @@ def ensure_project_settings_match_mirror(context: CocoIndexContext) -> bool:
 
     Inputs: `context`. Output: `bool`.
     """
-    prepend_venv_site_package_paths(context)
-    settings_module = importlib.import_module("cocoindex_code.settings")
-    project_settings = settings_module.load_project_settings(context.mirror_repo)
-    changed = False
-
-    include_patterns = list(MIRROR_INCLUDE_PATTERNS)
-    exclude_patterns = list(MIRROR_EXCLUDE_PATTERNS)
-    if project_settings.include_patterns != include_patterns:
-        project_settings.include_patterns = include_patterns
-        changed = True
-    if project_settings.exclude_patterns != exclude_patterns:
-        project_settings.exclude_patterns = exclude_patterns
-        changed = True
-
-    if changed:
-        settings_module.save_project_settings(context.mirror_repo, project_settings)
-    return changed
+    script = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "from cocoindex_code import settings\n"
+        "root = Path(sys.argv[1])\n"
+        "project = settings.load_project_settings(root)\n"
+        "patterns = json.loads(sys.argv[2])\n"
+        "changed = any(getattr(project, key) != value for key, value in patterns.items())\n"
+        "if changed:\n"
+        "    for key, value in patterns.items():\n"
+        "        setattr(project, key, value)\n"
+        "    settings.save_project_settings(root, project)\n"
+        "print(json.dumps(changed))\n"
+    )
+    result = run_runtime_python(
+        context,
+        script,
+        str(context.mirror_repo),
+        json.dumps(
+            {
+                "include_patterns": list(MIRROR_INCLUDE_PATTERNS),
+                "exclude_patterns": list(MIRROR_EXCLUDE_PATTERNS),
+            }
+        ),
+    )
+    return parse_runtime_boolean(result)
 
 
 def probe_embedding_devices(context: CocoIndexContext) -> dict[str, bool]:
@@ -1268,14 +1260,16 @@ def configure_embedding_device(
                 "is unavailable in the installed Linux runtime."
             )
 
-    prepend_venv_site_package_paths(context)
-    with patched_process_env(ccc_env(context)):
-        settings_module = importlib.import_module("cocoindex_code.settings")
-        user_settings = settings_module.load_user_settings()
-        target_device = None if normalized == "auto" else normalized
-        if user_settings.embedding.device != target_device:
-            user_settings.embedding.device = target_device
-            settings_module.save_user_settings(user_settings)
+    script = (
+        "import sys\n"
+        "from cocoindex_code import settings\n"
+        "user = settings.load_user_settings()\n"
+        "target = None if sys.argv[1] == 'auto' else sys.argv[1]\n"
+        "if user.embedding.device != target:\n"
+        "    user.embedding.device = target\n"
+        "    settings.save_user_settings(user)\n"
+    )
+    run_runtime_python(context, script, normalized)
     return normalized
 
 
@@ -2203,27 +2197,38 @@ def command_mcp(_args: argparse.Namespace) -> None:
     run_lightweight_mcp_server()
 
 
-def venv_site_package_paths(context: CocoIndexContext) -> list[Path]:
-    """Return import paths for the pinned venv packages.
+def run_runtime_python(
+    context: CocoIndexContext,
+    script: str,
+    *arguments: str,
+    timeout_key: str = "verify_install",
+) -> str:
+    """Run package APIs with the interpreter that owns their compiled extensions.
 
-    Inputs: `context` (CocoIndexContext). Output: `list[Path]`. Raises: RuntimeError
-    when validation or the called operation fails.
+    Inputs: `context`, trusted `script`, separate arguments, and timeout key.
+    Output: subprocess stdout. Runtime packages never enter the host's sys.path.
     """
-    site_packages = sorted((context.venv_dir / "lib").glob("python*/site-packages"))
-    if not site_packages:
-        raise RuntimeError(f"Could not find site-packages under {context.venv_dir}")
-    return site_packages
+    result = checked_command(
+        [str(context.venv_dir / "bin" / "python"), "-I", "-c", script, *arguments],
+        cwd=context.repo_root,
+        env=ccc_env(context),
+        timeout=timeout_seconds(timeout_key),
+    )
+    return result.stdout.strip()
 
 
-def prepend_venv_site_package_paths(context: CocoIndexContext) -> None:
-    """Make pinned venv packages importable without duplicating sys.path.
+def parse_runtime_boolean(output: str) -> bool:
+    """Validate a boolean response from an isolated runtime probe.
 
-    Inputs: `context`. Output: None.
+    Inputs: `output`, JSON text. Output: bool. Raises: RuntimeError for invalid output.
     """
-    for site_package_path in reversed(venv_site_package_paths(context)):
-        site_path = str(site_package_path)
-        if site_path not in sys.path:
-            sys.path.insert(0, site_path)
+    try:
+        result = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("CocoIndex runtime probe returned invalid JSON.") from exc
+    if not isinstance(result, bool):
+        raise RuntimeError("CocoIndex runtime probe returned a non-boolean result.")
+    return result
 
 
 def daemon_log_path(context: CocoIndexContext) -> Path:
@@ -2250,32 +2255,29 @@ def daemon_handshake_succeeds(context: CocoIndexContext) -> bool:
 
     Inputs: `context`. Output: `bool`.
     """
-    prepend_venv_site_package_paths(context)
-    with patched_process_env(ccc_env(context)):
-        cocoindex_module = importlib.import_module("cocoindex_code")
-        client_module = importlib.import_module("cocoindex_code.client")
-        try:
-            socket_path = cast(Any, client_module).daemon_socket_path()
-            if sys.platform != "win32" and not os.path.exists(socket_path):
-                return False
-            conn = cast(Any, client_module).Client(
-                socket_path,
-                family=cast(Any, client_module).connection_family(),
-            )
-            try:
-                request = cast(Any, client_module).HandshakeRequest(
-                    version=cast(Any, cocoindex_module).__version__
-                )
-                conn.send_bytes(cast(Any, client_module).encode_request(request))
-                response = cast(Any, client_module).decode_response(conn.recv_bytes())
-            finally:
-                conn.close()
-        except (EOFError, OSError, RuntimeError):
-            return False
-    return (
-        isinstance(response, cast(Any, client_module).HandshakeResponse)
-        and response.ok
-        and response.daemon_version == cast(Any, cocoindex_module).__version__
+    script = (
+        "import json, os\n"
+        "import cocoindex_code\n"
+        "from cocoindex_code import client\n"
+        "valid = False\n"
+        "try:\n"
+        "    socket_path = client.daemon_socket_path()\n"
+        "    if os.path.exists(socket_path):\n"
+        "        conn = client.Client(socket_path, family=client.connection_family())\n"
+        "        try:\n"
+        "            request = client.HandshakeRequest(version=cocoindex_code.__version__)\n"
+        "            conn.send_bytes(client.encode_request(request))\n"
+        "            response = client.decode_response(conn.recv_bytes())\n"
+        "            valid = (isinstance(response, client.HandshakeResponse) and\n"
+        "                     response.ok and response.daemon_version == cocoindex_code.__version__)\n"
+        "        finally:\n"
+        "            conn.close()\n"
+        "except (EOFError, OSError, RuntimeError):\n"
+        "    valid = False\n"
+        "print(json.dumps(bool(valid)))\n"
+    )
+    return parse_runtime_boolean(
+        run_runtime_python(context, script, timeout_key="mcp_smoke")
     )
 
 
@@ -2374,10 +2376,11 @@ def stop_owned_daemon(context: CocoIndexContext, proc: subprocess.Popen[bytes]) 
         reap_started_daemon_process(proc, terminate_first=True)
         return
     try:
-        prepend_venv_site_package_paths(context)
-        client_module = importlib.import_module("cocoindex_code.client")
-        with patched_process_env(ccc_env(context)):
-            cast(Any, client_module).stop_daemon()
+        run_runtime_python(
+            context,
+            "from cocoindex_code.client import stop_daemon\nstop_daemon()\n",
+            timeout_key="daemon_stop",
+        )
         if daemon_handshake_succeeds(context):
             raise RuntimeError("CocoIndex daemon still accepts handshakes after stop.")
     finally:
@@ -2700,7 +2703,6 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
     context = resolve_mcp_handshake_context()
     codex = resolve_required_executable("codex")
     config_path = codex_config_path()
-    ensure_mcp_launcher(context)
     expected = expected_codex_mcp_server(context)
     existing = run_command(
         [codex, "mcp", "get", MCP_SERVER_NAME], cwd=context.repo_root
@@ -2708,16 +2710,34 @@ def command_mcp_install(_args: argparse.Namespace) -> None:
     if existing.returncode == 0:
         config = load_codex_config(config_path)
         if codex_mcp_server_matches_expected(config, expected):
+            ensure_mcp_launcher(context)
             print(f"MCP server already configured: {MCP_SERVER_NAME}")
             return
-        checked_command(
-            [codex, "mcp", "remove", MCP_SERVER_NAME],
-            cwd=context.repo_root,
+        server = config.get("mcp_servers", {}).get(MCP_SERVER_NAME)
+        server_env = server.get("env") if isinstance(server, dict) else None
+        bound_repo = (
+            server_env.get(REPO_ROOT_ENV) if isinstance(server_env, dict) else None
         )
+        if (
+            not isinstance(bound_repo, str)
+            or not Path(bound_repo).is_absolute()
+            or Path(bound_repo).resolve() != context.repo_root.resolve()
+        ):
+            raise RuntimeError(
+                "Existing CocoIndex MCP registration does not target this repository; "
+                "configuration and launcher were not changed. Use repository-scoped "
+                "CLI search or explicitly configure the intended workspace."
+            )
     else:
         combined_output = f"{existing.stdout}\n{existing.stderr}"
         if f"No MCP server named '{MCP_SERVER_NAME}' found" not in combined_output:
             raise RuntimeError(combined_output.strip())
+    ensure_mcp_launcher(context)
+    if existing.returncode == 0:
+        checked_command(
+            [codex, "mcp", "remove", MCP_SERVER_NAME],
+            cwd=context.repo_root,
+        )
     checked_command(
         [
             codex,

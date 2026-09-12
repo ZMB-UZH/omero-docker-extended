@@ -67,14 +67,12 @@ Related docs:
   env-driven build args loaded from `env/omeroserver.env`
   (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`,
   `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and
-  upgrades remain deliberate. The tracked example env keeps `ome-zarr` pinned
-  to `0.16.0` after reviewing the 0.17.0 and 0.18.0 upstream release notes:
-  those releases raise the Python floor above Python 3.11 and add newer image
-  and multiscales metadata behavior, but the Python 3.14 CI resolver currently
-  needs the prerelease `ome-zarr-models==1.8.0rc0` transitive dependency for
-  `ome-zarr==0.18.0`. The native normalization write path stays repo-local, so
-  the upgrade remains a compatibility hold instead of a lockfile downgrade in
-  release quality.
+  upgrades remain deliberate. The tracked example pins `ome-zarr==0.18.0`,
+  `omero-cli-zarr==0.9.0` and `bioformats2raw==0.12.1`. This combination supports
+  the shared Python 3.11 runtime and resolves stable dependencies. The newer
+  `ome-zarr` 0.19 line requires Python 3.12 or newer and is not a drop-in update
+  for this deployment. Existing installations retain their operator-owned
+  version settings; reconcile intended upgrades before rebuilding the images.
 - **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run
   (`omero import -f`) is still used for all non-zarr imports and for `.zarr`
   compatibility planning. When that dry-run says the staged `.zarr` is

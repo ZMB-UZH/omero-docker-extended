@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -36,6 +37,62 @@ from tools.prepare_ci_compose_environment import (
 )
 from tools.scan_prebuilt_runtime_images import scan_images
 from tools.write_prebuilt_runtime_archive import write_archive
+
+REVIEWED_BIOP_RECIPES = frozenset(
+    (
+        "035d5f2ddfaf0ae6d7f6f63becef10ba33bd2ee1b19ec142dcd1d9d5155de23e",
+        "e1f56c095de00770078202fa62b6a6c430ebd8202e7df3073d1bff22c42f44d8",
+        "ff62e9b99b36e8a9a84530753c6492f6609da31bb4f9ab028ab99f837eec0c99",
+        "74506ed00b3c8bf2fcf4db82f6628e7038d4fcfe514b190855652411edb9da7c",
+    )
+)
+LEGACY_BIOP_CLONE = (
+    '    git clone --depth 1 --branch "${BIOP_OMERO_SCRIPTS_REF}" '
+    '"${BIOP_OMERO_SCRIPTS_REPO}" /tmp/biop-omero-scripts; \\\n'
+)
+PINNED_BIOP_FETCH = (
+    "    git init --quiet /tmp/biop-omero-scripts; \\\n"
+    '    git -C /tmp/biop-omero-scripts remote add origin "${BIOP_OMERO_SCRIPTS_REPO}"; \\\n'
+    '    git -C /tmp/biop-omero-scripts fetch --depth 1 --no-tags origin "${BIOP_OMERO_SCRIPTS_COMMIT}"; \\\n'
+    "    git -C /tmp/biop-omero-scripts checkout --detach FETCH_HEAD; \\\n"
+)
+
+
+def correct_historical_fetch(source: Path) -> dict[str, str] | None:
+    """Repair only reviewed build recipes, retaining their dependency pins.
+
+    Inputs: isolated historical worktree. Output: complete auditable correction or None.
+    """
+    relative_path = "docker/omero-server.Dockerfile"
+    path = source / relative_path
+    if path.is_symlink() or not path.resolve().is_relative_to(source.resolve()):
+        raise ValueError("Historical Dockerfile must stay inside its source worktree.")
+    original = path.read_bytes()
+    text = original.decode("utf-8")
+    if "ARG BIOP_OMERO_SCRIPTS_COMMIT=" not in text or LEGACY_BIOP_CLONE not in text:
+        return None
+    digest = hashlib.sha256(original).hexdigest()
+    if digest not in REVIEWED_BIOP_RECIPES or text.count(LEGACY_BIOP_CLONE) != 1:
+        raise ValueError(
+            "Historical dependency retrieval recipe has not been reviewed."
+        )
+    corrected = text.replace(LEGACY_BIOP_CLONE, PINNED_BIOP_FETCH, 1)
+    correction = {
+        "path": relative_path,
+        "reason": "Fetch the original recorded BIOP commit directly, independent of branch movement.",
+        "original_sha256": digest,
+        "rebuilt_sha256": hashlib.sha256(corrected.encode("utf-8")).hexdigest(),
+        "patch": "".join(
+            difflib.unified_diff(
+                text.splitlines(keepends=True),
+                corrected.splitlines(keepends=True),
+                fromfile=f"a/{relative_path}",
+                tofile=f"b/{relative_path}",
+            )
+        ),
+    }
+    path.write_text(corrected, encoding="utf-8", newline="\n")
+    return correction
 
 
 def executable(name: str) -> str:
@@ -351,6 +408,7 @@ def restore(version: str, docker_repository: str) -> None:
     notes = release_notes(release, manifest, dist)
     source = work / "source"
     run(["git", "worktree", "add", "--detach", str(source), sha], cwd=REPO_ROOT)
+    correction = correct_historical_fetch(source)
     env = configure_build(source, work)
     for operation in ("check", "compose-guard"):
         run(
@@ -373,6 +431,18 @@ def restore(version: str, docker_repository: str) -> None:
     if actual != required:
         raise ValueError("Historical source and release runtime inventories differ.")
     run(["bash", "installation/docker_buildx_compressed_push.sh"], cwd=source, env=env)
+    changed_paths = output(
+        ["git", "diff", "--name-only", "HEAD"], cwd=source
+    ).splitlines()
+    if changed_paths != ([correction["path"]] if correction else []):
+        raise ValueError(
+            "Historical source changed outside the recorded build correction."
+        )
+    if (
+        correction
+        and file_digest(source / correction["path"]) != correction["rebuilt_sha256"]
+    ):
+        raise ValueError("Historical build correction changed during the rebuild.")
     required_file = dist / "prebuilt-required-images.txt"
     required_file.write_text("\n".join(required) + "\n", encoding="utf-8")
     run(
@@ -420,6 +490,8 @@ def restore(version: str, docker_repository: str) -> None:
         release_notes="release-notes.md",
         release_notes_sha256=hashlib.sha256(notes).hexdigest(),
         rebuild_timestamp=created,
+        rebuild_recipe_corrections=[correction] if correction else [],
+        recovery_tool_commit=output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT),
     )
     (dist / "prebuilt-manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -430,7 +502,7 @@ def restore(version: str, docker_repository: str) -> None:
     require_missing_tag(docker_repository, version)
     labels = {
         "org.opencontainers.image.title": "OMERO Docker Extended prebuilt carrier",
-        "org.opencontainers.image.description": "Historical runtime bundle rebuilt from its original source tag",
+        "org.opencontainers.image.description": "Historical runtime bundle with recorded source and build provenance",
         "org.opencontainers.image.version": version,
         "org.opencontainers.image.revision": sha,
         "org.opencontainers.image.source": f"https://github.com/{repository}",

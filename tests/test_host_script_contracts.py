@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -604,6 +605,82 @@ def test_quota_path_boundaries_and_mapping_files_are_strict(tmp_path: Path) -> N
 
     assert result.returncode == 0, result.stderr
     assert "Refusing to use non-regular file" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        "",
+        "{}",
+        "[]",
+        '{"quotas_gb":null}',
+        '{"quotas_gb":{},"state_schema_version":2}',
+        '{"quotas_gb":{},"state_schema_version":true}',
+    ],
+)
+def test_quota_parser_rejects_invalid_state_before_stale_mapping_cleanup(
+    tmp_path: Path, document: str
+) -> None:
+    """Invalid state must not become an empty desired quota set.
+
+    Inputs: disposable state path and malformed or unsupported document.
+    Output: the actual host parser fails without emitting actionable records.
+    """
+    state_file = tmp_path / "state.json"
+    records_file = tmp_path / "records.tsv"
+    state_file.write_text(document, encoding="utf-8")
+    result = _run_bash(f"""
+        set -euo pipefail
+        source {_sh(SCRIPT_DIR / "omero-quota-enforcer.sh")}
+        QUOTA_STATE_FILE={_sh(state_file)}
+        MIN_QUOTA_GB=0.10
+        load_quota_records {_sh(records_file)}
+    """)
+    assert result.returncode != 0
+    assert records_file.read_text() == ""
+    assert state_file.read_text() == document
+
+
+def test_quota_installer_initializes_valid_state_without_resetting_existing_data(
+    tmp_path: Path,
+) -> None:
+    """Prove fresh installation and repeat installation preserve quota identity.
+
+    Inputs: disposable data directory. Output: valid initial state, preserved
+    existing bytes, and refusal to chmod or overwrite an unrelated symlink target.
+    """
+    data = tmp_path / "data"
+    data.mkdir()
+    prefix = f"""
+        set -euo pipefail
+        source {_sh(SCRIPT_DIR / "install-quota-enforcer.sh")}
+        OMERO_DATA_DIR={_sh(data)}
+        prepare_admin_tools_dir
+    """
+    result = _run_bash(prefix)
+    assert result.returncode == 0, result.stderr
+    state = data / ".admin-tools" / "group-quotas.json"
+    assert json.loads(state.read_text()) == {
+        "state_schema_version": 1,
+        "quotas_gb": {},
+        "logs": [],
+    }
+    assert state.stat().st_mode & 0o777 == 0o600
+    existing = '{"quotas_gb":{"fixture":3},"logs":[]}'
+    state.write_text(existing)
+    result = _run_bash(prefix)
+    assert result.returncode == 0, result.stderr
+    assert state.read_text() == existing
+    state.unlink()
+    unrelated = tmp_path / "unrelated.json"
+    unrelated.write_text("preserve")
+    unrelated.chmod(0o640)
+    state.symlink_to(unrelated)
+    result = _run_bash(prefix)
+    assert result.returncode != 0
+    assert "must be a regular file" in result.stderr
+    assert unrelated.read_text() == "preserve"
+    assert unrelated.stat().st_mode & 0o777 == 0o640
 
 
 def test_quota_control_paths_reject_world_writable_modes(tmp_path: Path) -> None:

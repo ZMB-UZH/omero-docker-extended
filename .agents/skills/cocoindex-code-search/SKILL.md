@@ -6,6 +6,12 @@ origin: repo-local skill based on verified cocoindex-code 0.2.41 behavior
 
 # CocoIndex Code Search
 
+The wrapper runs CocoIndex package APIs with the cached runtime's own isolated
+Python interpreter. Do not add that environment's `site-packages` to the agent's
+Python path: compiled extensions may target a different Python minor version.
+After changing runtime integration, test CLI search and MCP smoke with both a
+matching and a different supported host Python version.
+
 Use this skill for broad repo navigation when semantic routing can reduce
 context before exact `rg`, file reads, and tests.
 
@@ -14,10 +20,11 @@ context before exact `rg`, file reads, and tests.
 1. For broad repo navigation, this skill is mandatory. Check for an already
    configured MCP server or tool named `cocoindex-code` before reading
    installation instructions. If this Codex session does not expose the tool,
-   inspect `codex mcp get cocoindex-code`; a stale command or
-   `AGENT_COCOINDEX_REPO` path must be repaired with
-   `python3 tools/cocoindex_agent_search.py mcp-install` and then verified with
-   `mcp-smoke` before relying on MCP.
+   inspect `codex mcp get cocoindex-code` and verify its `AGENT_COCOINDEX_REPO`
+   matches the target checkout. A registration for another repository is not
+   stale: do not overwrite it or trust its search results for this task. Use
+   repository-scoped CLI search or an explicitly configured workspace instead.
+   Repair a stale command for this same repository with `mcp-install`.
 2. Keep `rg` as the exact search and validation tool.
 3. Use `python3 tools/cocoindex_agent_search.py mcp-install` for Codex, or
    `python3 tools/cocoindex_agent_search.py mcp-config` for other MCP clients,
@@ -25,7 +32,9 @@ context before exact `rg`, file reads, and tests.
 4. After installing, changing, or debugging the MCP path, run
    `python3 tools/cocoindex_agent_search.py mcp-smoke`; registration alone is
    not proof until stdio `initialize`, raw JSON-RPC protocol probes,
-   and `list_tools` succeed. `mcp-smoke --include-search` may only use an
+   and `list_tools` succeed. This smoke test launches the repository wrapper;
+   inspect the client's registration separately to prove it targets that wrapper.
+   `mcp-smoke --include-search` may only use an
    already-recorded active index and must refuse to build or refresh one.
 5. Before relying on MCP search for current local edits or just-changed docs,
    refresh explicitly with
@@ -119,15 +128,17 @@ context before exact `rg`, file reads, and tests.
 - Codex: run `python3 tools/cocoindex_agent_search.py mcp-install`. It registers
   one MCP server named `cocoindex-code` with a host-stable launcher under
   `AGENT_COCOINDEX_HOME`, pins the current checkout through
-  `AGENT_COCOINDEX_REPO`, repairs stale same-name entries instead of adding
-  duplicates, and writes explicit per-server startup/tool timeouts. The MCP
+  `AGENT_COCOINDEX_REPO`, repairs stale same-repository entries instead of adding
+  duplicates, and refuses to overwrite a different or unproven repository binding
+  before any launcher or configuration write. It sets explicit startup/tool
+  timeouts. The MCP
   server must answer
   initialize and tool-list requests without installing, mirroring, launching the
   daemon, or indexing; MCP search may only query an existing active index.
   Refresh current local edits with the CLI first; MCP search itself must stay
   read-only and must not refresh the active index.
   Then run `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target
-  repo root to prove the configured server completes the MCP handshake. Use
+  repo root to prove the repository wrapper completes the MCP handshake. Use
   `mcp-smoke --include-search` only for an explicit end-to-end search smoke
   against an existing active index; it must refuse to build or refresh one.
 
