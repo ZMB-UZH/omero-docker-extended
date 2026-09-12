@@ -104,6 +104,13 @@ Older pip-tools versions can fail against changed pip internals. Follow each
 input file's hash-generation command, review the complete lockfile diff,
 and run the local CI profile before pushing dependency changes.
 
+CI tests OME-Zarr 0.19.1 on Python 3.14. Its upstream minimum is Python 3.12;
+the deployed Python 3.11 web image therefore retains OME-Zarr 0.18.0.
+Keep the production example pin unchanged until a compatible web base is
+validated. NGFF changes need both the newer CI tests and real checks against
+the deployed runtime, not an assumption that the two dependency graphs match.
+See the [upstream release notes](https://github.com/ome/ome-zarr-py/releases/tag/v0.19.1).
+
 ## Lint scope
 
 - Ruff formatting applies repo-wide to tracked Python files.
