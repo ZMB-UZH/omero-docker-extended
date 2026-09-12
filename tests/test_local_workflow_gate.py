@@ -138,7 +138,11 @@ class LocalWorkflowGateTests(unittest.TestCase):
         )
         self.assertEqual(
             self.tool.PROFILES["ci"]
-            + (self.tool.run_hadolint, self.tool.run_super_linter),
+            + (
+                self.tool.run_hadolint,
+                self.tool.run_devskim,
+                self.tool.run_super_linter,
+            ),
             self.tool.PROFILES["all"],
         )
 

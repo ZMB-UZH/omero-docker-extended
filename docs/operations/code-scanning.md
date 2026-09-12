@@ -60,8 +60,8 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 353 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `353/386` CodeQL count means the implementation
+- Python: the current repo has 355 tracked `.py` implementation files and 33
+  tracked `.pyi` type stubs. A `355/388` CodeQL count means the implementation
   files were included and type stubs were not counted as Python source; stubs
   are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
   the same meaning before tracked Python files such as `tools/regression_guard.py`
@@ -87,7 +87,8 @@ Run the locally reproducible workflow gates before committing or pushing changes
 python3 tools/run_local_workflow_gates.py --setup --profile ci
 ```
 
-This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates. Use `--profile all` when Docker is available and you also need the exact Hadolint engine and pinned Super-Linter container gates.
+This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates.
+Use `--profile all` when Docker is available to also run the exact Hadolint, DevSkim, and Super-Linter gates. `--profile devskim` runs only the shared DevSkim gate during focused iteration.
 
 Some GitHub-only behavior cannot be made fully identical on the host: SARIF
 upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks,
@@ -142,7 +143,7 @@ any scanner action pin:
 1. Read the action release notes and inspect its Dockerfile or runtime metadata
    for the exact embedded scanner version and any unpinned transitive install.
 2. Run `python3 tools/run_local_workflow_gates.py --setup --profile all`; this
-   includes the exact compatible Hadolint engine as well as Super-Linter.
+   includes the exact compatible Hadolint, DevSkim, and Super-Linter engines.
 3. Run the replacement scanner over the same complete scope as GitHub and pass
    every controllable report through `python3 tools/sarif_result_guard.py`.
 4. After push, wait for the aggregate `Zero added alerts gate`, then query the
@@ -157,14 +158,53 @@ embedded engine from Hadolint 2.14.0 to 2.15.0. The newer engine's upstream
 shell-detection regression reported Bash Dockerfiles as POSIX sh. Two changed
 public checksum/commit fixtures also matched DevSkim's token heuristic. The
 aggregate delta job failed, but only after the reports had been uploaded. The
-durable corrections are the pre-upload SARIF guard, exact local Hadolint engine
-parity, segmented public hash fixtures in tests, and the compatibility hold on
+durable corrections are the pre-upload SARIF guard, exact local scanner engine
+parity, documented false-positive triage, and the compatibility hold on
 Hadolint 2.14.0 until the upstream regression is fixed. The same review found
 that the CodeQL 4.37.8 action had initially been pinned to its annotated tag
 object instead of the verified peeled commit; all CodeQL uses must use the
 peeled commit reported by `refs/tags/<tag>^{}`.
+The historical split checksum fixtures are not a pattern to repeat: do not
+split, encode, or move a value merely to avoid a scanner's matching rule.
 
 ## Active scanners
+
+### DevSkim engine parity and public fingerprints
+
+`tools/devskim_gate.py` is the shared local and GitHub runner. Its reviewed
+`tools/devskim_tooling.ini` pins the DevSkim 1.0.90 NuGet package by full SHA-256
+and the .NET SDK 8.0.425 runtime image by digest. A pinned action alone was not
+reproducible: DevSkim action 1.0.16 installed whichever CLI NuGet supplied at
+build time. Both environments now run identical verified engine bytes over
+Git-selected candidate files, including intended new files but not ignored
+deployment state. The container has no network or write access to source.
+The raw SARIF is retained as a workflow artifact even when the guard fails.
+
+Six `DS173237` detections on 2026-09-12 were public SHA-256 values, not secrets.
+The rule heuristically matches quoted long hexadecimal strings. Each value
+remains complete and unchanged in source, with a native, line-specific
+[DevSkim annotation](https://github.com/microsoft/DevSkim/wiki/Suppressions).
+No rule-wide exclusion, source-file exclusion, or SARIF rewriting was added.
+The proof retained the original six-result report and recomputed these values:
+
+- `docker/patch_omeroweb_webgateway.py`: the hash of the
+  [original v5.33.1 source](https://github.com/ome/omero-web/blob/v5.33.1/omeroweb/webgateway/views.py)
+  and the deterministic output of the reviewed `patch_source()` function.
+- `tools/restore_prebuilt_carrier.py`: the complete public
+  `docker/omero-server.Dockerfile` at tags `1.1.2-main.1`, `1.1.1-main.1`,
+  `1.1.0-main.1`, and `1.0.1-main.1`, in that order.
+
+An actual-engine sentinel test confirmed that the same value without its
+annotation still produces a finding. Native annotations affect scanner output;
+a clean report therefore means no **unsuppressed** findings, not no heuristics
+or proof of vulnerability absence. Never classify these annotations as fixes
+for leaked credentials.
+
+DevSkim also classifies `omero-web.config` as XML by extension, although OMERO
+uses a properties-format file. An isolated scan reproduces its XML parse warning;
+an injected sentinel in a disposable copy proves generic rules still scan the
+file. Keep the warning visible and do not rename or exclude the runtime config
+to conceal this scanner limitation. XML-specific rules do not apply to that file.
 
 ### Hadolint compatibility recheck
 
@@ -174,6 +214,12 @@ explicit Bash `SHELL`. Keep action 3.3.0 and engine 2.14.0 pinned; do not suppre
 these rules or upload the candidate report to make the upgrade appear green.
 Issue `hadolint/hadolint#1240` concerns named-user resolution, not shell
 detection, and must not be cited as evidence that the shell regression is fixed.
+As of 2026-09-12, [upstream #1241](https://github.com/hadolint/hadolint/issues/1241)
+and [#1252](https://github.com/hadolint/hadolint/issues/1252) document the actual
+cause: `ENV` and `ARG` reset the scanner's selected shell. The released engine
+is still 2.15.1. Dependabot excludes only the affected action versions 3.4.0 and
+3.5.0; later versions remain eligible for review. Compatibility holds must name
+specific versions or update types, never silently disable all future updates.
 Re-test a replacement engine against the actual Dockerfiles before changing
 both the workflow and local gate pins together.
 

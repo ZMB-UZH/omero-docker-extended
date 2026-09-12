@@ -38,12 +38,14 @@ from tools.prepare_ci_compose_environment import (
 from tools.scan_prebuilt_runtime_images import scan_images
 from tools.write_prebuilt_runtime_archive import write_archive
 
+# Whole-file SHA-256 values of public release Dockerfiles, not credentials.
+# The release mapping and source verification are in docs/operations/code-scanning.md.
 REVIEWED_BIOP_RECIPES = frozenset(
     (
-        "035d5f2ddfaf0ae6d7f6f63becef10ba33bd2ee1b19ec142dcd1d9d5155de23e",
-        "e1f56c095de00770078202fa62b6a6c430ebd8202e7df3073d1bff22c42f44d8",
-        "ff62e9b99b36e8a9a84530753c6492f6609da31bb4f9ab028ab99f837eec0c99",
-        "74506ed00b3c8bf2fcf4db82f6628e7038d4fcfe514b190855652411edb9da7c",
+        "035d5f2ddfaf0ae6d7f6f63becef10ba33bd2ee1b19ec142dcd1d9d5155de23e",  # DevSkim: ignore DS173237 -- 1.1.2-main.1 Dockerfile SHA-256
+        "e1f56c095de00770078202fa62b6a6c430ebd8202e7df3073d1bff22c42f44d8",  # DevSkim: ignore DS173237 -- 1.1.1-main.1 Dockerfile SHA-256
+        "ff62e9b99b36e8a9a84530753c6492f6609da31bb4f9ab028ab99f837eec0c99",  # DevSkim: ignore DS173237 -- 1.1.0-main.1 Dockerfile SHA-256
+        "74506ed00b3c8bf2fcf4db82f6628e7038d4fcfe514b190855652411edb9da7c",  # DevSkim: ignore DS173237 -- 1.0.1-main.1 Dockerfile SHA-256
     )
 )
 LEGACY_BIOP_CLONE = (

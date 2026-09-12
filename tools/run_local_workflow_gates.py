@@ -673,6 +673,23 @@ def run_hadolint(context: GateContext) -> None:
         raise GateError("Hadolint findings:\n" + "\n".join(findings))
 
 
+def run_devskim(context: GateContext) -> None:
+    """Run the same pinned engine, candidate snapshot, and result gate as GitHub.
+
+    Inputs: gate context. Output: None, or a failed scanner/result gate.
+    """
+    _run(
+        (
+            context.python,
+            "tools/devskim_gate.py",
+            "--artifact-dir",
+            str(context.artifact_dir / "devskim"),
+        ),
+        cwd=context.repo_root,
+        label="DevSkim shared local/hosted gate",
+    )
+
+
 def run_super_linter(context: GateContext) -> None:
     """The pinned Super-Linter container locally.
 
@@ -755,6 +772,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
     "tests": (run_tests,),
     "bandit": (run_bandit,),
     "hadolint": (run_hadolint,),
+    "devskim": (run_devskim,),
     "regression-guard": (run_regression_guard,),
     "super-linter": (run_super_linter,),
     "python": (run_ruff, run_mypy, run_vulture),
@@ -776,6 +794,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
         run_tests,
         run_bandit,
         run_hadolint,
+        run_devskim,
         run_super_linter,
     ),
 }
@@ -795,7 +814,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         default="ci",
         help=(
             "Gate profile to run. 'ci' mirrors docs, Ruff, Mypy, Vulture, tests, "
-            "and Bandit. 'all' also runs the exact Hadolint engine and the "
+            "and Bandit. 'all' also runs pinned Hadolint and DevSkim engines and the "
             "Docker-backed Super-Linter."
         ),
     )

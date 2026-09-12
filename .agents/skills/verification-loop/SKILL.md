@@ -31,7 +31,7 @@ Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the ge
   image builds and live tests that mutate shared Docker, database, OMERO, or
   persistent-storage state.
 - During iteration, select tests from the changed ownership boundary. Run the
-  complete required matrix once against the final tree and before release.
+  complete required matrix once against the final tree and before release. Scanner changes require `--profile all`, including DevSkim; `--profile ci` omits container engines. Verify transitive engine pins, not only action wrappers, and preserve failed raw reports.
 
 ### 1. Documentation structure
 
