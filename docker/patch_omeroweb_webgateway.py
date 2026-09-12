@@ -11,8 +11,9 @@ from pathlib import Path
 
 # Exact upstream v5.33.1 file and the reviewed response/lookup corrections.
 # A future base-image update must review or remove this compatibility correction.
-SOURCE_SHA256 = "834e059f3b8b9892e899cbf5e8ee57232903010cf7e99f3fc880a72698a8adb9"
-PATCHED_SHA256 = "423f500164d2ff2466d7db76e7718592573db4bb7905600a65ca79127ef2ea87"
+# Public content hashes, not credentials; provenance: docs/operations/code-scanning.md.
+SOURCE_SHA256 = "834e059f3b8b9892e899cbf5e8ee57232903010cf7e99f3fc880a72698a8adb9"  # DevSkim: ignore DS173237 -- public upstream file SHA-256
+PATCHED_SHA256 = "423f500164d2ff2466d7db76e7718592573db4bb7905600a65ca79127ef2ea87"  # DevSkim: ignore DS173237 -- corrected file SHA-256
 REPLACEMENTS = {
     "save_image_rdef_json": (
         ('json_data = "false"', "json_data = False"),

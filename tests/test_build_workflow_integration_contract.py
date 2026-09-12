@@ -1573,6 +1573,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 step for step in steps if step.get("name") == upload_name
             )
             self.assertEqual("success()", upload_step["if"])
+            guard_step = next(step for step in steps if step.get("name") == guard_name)
+            expected_guard = (
+                "tools/devskim_gate.py"
+                if job_name == "devskim"
+                else "tools/sarif_result_guard.py"
+            )
+            self.assertIn(expected_guard, guard_step["run"])
 
         bandit_steps = workflow["jobs"]["bandit"]["steps"]
         bandit_names = [step.get("name") for step in bandit_steps]
@@ -1584,10 +1591,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 ),
             )
 
-        workflow_text = workflow_path.read_text(encoding="utf-8")
-        self.assertGreaterEqual(
-            workflow_text.count("python3 tools/sarif_result_guard.py"), 8
-        )
+        for guard_name in (
+            "Reject Bandit production findings before upload",
+            "Reject Bandit test findings before upload",
+            "Validate empty legacy Bandit cleanup report",
+        ):
+            guard_step = next(
+                step for step in bandit_steps if step.get("name") == guard_name
+            )
+            self.assertIn("tools/sarif_result_guard.py", guard_step["run"])
 
     def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
         """Verify codecov yml has component for each source directory.
@@ -2158,16 +2170,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )["run"]
         self.assertIn('--skip "B101,B106,B603,B404"', bandit_test)
 
-        devskim_with = next_or_fail(
+        devskim_gate = next_or_fail(
             step
             for step in security_jobs["devskim"]["steps"]
-            if step.get("name") == "Run DevSkim scan"
-        )["with"]
+            if step.get("name") == "Reject DevSkim findings before upload"
+        )["run"]
+        self.assertIn("tools/devskim_gate.py", devskim_gate)
+        from tools.devskim_gate import IGNORE_GLOBS
+
         self.assertEqual(
             "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**,**/third_party/**",
-            devskim_with["ignore-globs"],
+            IGNORE_GLOBS,
         )
-        self.assertEqual("DS162092", devskim_with["exclude-rules"])
 
         docs_text = (
             self.repo_root / "docs" / "operations" / "code-scanning.md"
@@ -2260,6 +2274,25 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         for update in config["updates"]:
             self.assertIn("cooldown", update)
             self.assertGreaterEqual(update["cooldown"]["default-days"], 7)
+
+    def test_dependabot_compatibility_holds_are_bounded(self) -> None:
+        """Keep incompatible versions from disabling all future dependency updates.
+
+        Inputs: Dependabot YAML. Output: asserts every hold has an explicit scope.
+        """
+        import yaml
+
+        dependabot_path = self.repo_root / ".github" / "dependabot.yml"
+        config = yaml.safe_load(dependabot_path.read_text(encoding="utf-8"))
+        for update in config["updates"]:
+            for rule in update.get("ignore", []):
+                with self.subTest(
+                    ecosystem=update["package-ecosystem"],
+                    directory=update["directory"],
+                    dependency=rule["dependency-name"],
+                ):
+                    self.assertTrue(rule.get("versions") or rule.get("update-types"))
+                    self.assertNotIn("*", rule.get("versions", []))
 
     def test_dependabot_covers_supported_dockerfile_location(self) -> None:
         """Verify Docker dependency updates cover the supported manifest location.

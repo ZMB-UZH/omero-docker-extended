@@ -11,12 +11,13 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     ignore:
-      # hadolint-action 3.4.0 embeds Hadolint 2.15.0, whose upstream #1240
-      # regression misclassifies Bash Dockerfile RUN instructions as POSIX sh.
-      # Re-evaluate this hold when a later action embeds the upstream fix.
+      # Actions 3.4.0/3.5.0 embed Hadolint 2.15.0/2.15.1. Upstream issues
+      # hadolint/hadolint#1241 and #1252 reproduce ENV/ARG resetting its Bash
+      # detection. Keep future versions eligible for compatibility review.
       - dependency-name: "hadolint/hadolint-action"
         versions:
           - "3.4.0"
+          - "3.5.0"
     commit-message:
       prefix: "deps(actions)"
 
@@ -31,10 +32,6 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     ignore:
-      # ome-zarr 0.18 requires ome-zarr-models, whose stable releases currently
-      # require Python <3.14. Keep the Python 3.14 CI graph on the newest line
-      # with a stable, fully compatible resolver result.
-      - dependency-name: "ome-zarr"
       # OMERO.web 5.33.x requires Django >=5.2.9,<5.3. Keep CI typing aligned
       # with the deployed runtime while continuing to receive 5.2.x updates.
       - dependency-name: "django"
