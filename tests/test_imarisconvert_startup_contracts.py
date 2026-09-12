@@ -7,11 +7,129 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "startup" / "51-install-imarisconvert.sh"
 BASH_BIN = shutil.which("bash") or "/bin/bash"
 SHA256SUM_BIN = shutil.which("sha256sum") or "/usr/bin/sha256sum"
+
+
+def _prepare_java_home(tmp_path: Path) -> Path:
+    """Create a JDK layout for shell boundary checks.
+
+    Inputs: `tmp_path` temporary directory. Output: fake JDK root.
+    """
+    java_home = tmp_path / "selected jdk"
+    for name in ("java", "javac"):
+        executable = java_home / "bin" / name
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        _write_executable(executable)
+    for relative in ("include/jni.h", "lib/server/libjvm.so"):
+        target = java_home / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("fixture", encoding="utf-8")
+    return java_home
+
+
+def _resolve_java_home(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    """Run the actual shell resolver without installer side effects.
+
+    Inputs: `env` process environment. Output: resolver process result.
+    """
+    functions = SCRIPT_PATH.read_text(encoding="utf-8").split(
+        'INSTALL_MODE="verify"', 1
+    )[0]
+    return subprocess.run(
+        [BASH_BIN, "-c", functions + "\nresolve_java_build_home\n"],
+        check=False,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+
+def test_imaris_build_honors_explicit_java_home_with_spaces(tmp_path):
+    """Keep explicit JDK selection independent of distribution paths.
+
+    Inputs: `tmp_path` temporary directory. Output: fails on JDK path changes.
+    """
+    java_home = _prepare_java_home(tmp_path)
+    result = _resolve_java_home({**os.environ, "JAVA_HOME": str(java_home)})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(java_home)
+
+
+def test_imaris_build_discovers_jdk_from_symlinked_compiler(tmp_path):
+    """Resolve the compiler target instead of assuming vendor directories.
+
+    Inputs: `tmp_path` temporary directory. Output: fails on discovery regressions.
+    """
+    java_home = _prepare_java_home(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "javac").symlink_to(java_home / "bin" / "javac")
+    result = _resolve_java_home(
+        {
+            **os.environ,
+            "JAVA_HOME": "",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        }
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(java_home)
+
+
+@pytest.mark.parametrize(
+    "missing", ["bin/java", "bin/javac", "include/jni.h", "lib/server/libjvm.so"]
+)
+def test_imaris_build_rejects_incomplete_explicit_jdk(tmp_path, missing):
+    """Do not fall back silently from an invalid explicit JDK selection.
+
+    Inputs: temporary directory and missing component. Output: requires failure.
+    """
+    java_home = _prepare_java_home(tmp_path)
+    (java_home / missing).unlink()
+    result = _resolve_java_home({**os.environ, "JAVA_HOME": str(java_home)})
+    assert result.returncode != 0
+    assert "complete JDK with JNI support" in result.stderr
+
+
+def test_imaris_build_reports_missing_compiler(tmp_path):
+    """Fail before build side effects when no JDK can be selected.
+
+    Inputs: `tmp_path` empty executable search directory. Output: requires failure.
+    """
+    result = _resolve_java_home({**os.environ, "JAVA_HOME": "", "PATH": str(tmp_path)})
+    assert result.returncode != 0
+    assert "A JDK is required" in result.stderr
+
+
+def test_imaris_cmake_uses_selected_jdk_for_java_and_jni():
+    """Keep CMake and the maintained server runtime on the same JDK.
+
+    Inputs: tracked build recipes. Output: fails on provider-specific paths.
+    """
+    script = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert '-DJAVA_HOME="${JAVA_BUILD_HOME}"' in script
+    assert '-DJRE_HOME="${JAVA_BUILD_HOME}"' in script
+    assert "/usr/lib/jvm/java-11-openjdk" not in script
+    assert script.index('JAVA_BUILD_HOME="$(resolve_java_build_home)"') < script.index(
+        'rm -rf "${BUILD_ROOT}"'
+    )
+    dockerfile = (REPO_ROOT / "docker" / "omero-server.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert "ENV JAVA_HOME=/opt/java/openjdk" in dockerfile
+    assert (
+        'ln -sfn /etc/pki/java/cacerts "${JAVA_HOME}/lib/security/cacerts"'
+        in dockerfile
+    )
+    assert "--setopt=clean_requirements_on_remove=False" in dockerfile
+    assert dockerfile.index('"${TEMURIN_JDK_SHA256}"') < dockerfile.index(
+        'tar --extract --gzip --file "${archive}"'
+    )
 
 
 def _write_executable(path: Path, content: str = "#!/bin/sh\nexit 0\n") -> None:

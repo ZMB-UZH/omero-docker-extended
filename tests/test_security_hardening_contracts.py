@@ -1,4 +1,8 @@
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,6 +25,96 @@ class SecurityHardeningContractTests(unittest.TestCase):
         cls.server_dockerfile = SERVER_DOCKERFILE.read_text(encoding="utf-8")
         cls.web_dockerfile = WEB_DOCKERFILE.read_text(encoding="utf-8")
         cls.installation_script = INSTALLATION_SCRIPT.read_text(encoding="utf-8")
+
+    def test_failed_os_package_updates_stop_hardened_builds(self):
+        """Execute the package-update boundary with a failing package manager.
+
+        Inputs: actual Dockerfile RUN prefixes. Output: requires fatal failures.
+        """
+        for name, dockerfile, expected_attempts in (
+            ("server", self.server_dockerfile, 3),
+            ("web", self.web_dockerfile, 1),
+        ):
+            with self.subTest(image=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                calls = root / "dnf-calls"
+                for command, body in (
+                    ("dnf", '#!/bin/sh\nprintf "called\\n" >> "$DNF_CALLS"\nexit 67\n'),
+                    ("sleep", "#!/bin/sh\nexit 0\n"),
+                ):
+                    executable = root / command
+                    executable.write_text(body, encoding="utf-8")
+                    executable.chmod(0o700)
+                hardening = dockerfile.split("# Final security hardening pass", 1)[1]
+                prefix = hardening.split("RUN ", 1)[1]
+                prefix = prefix.split("dnf clean all", 1)[0]
+                prefix = prefix.split(
+                    'echo "=== Final security hardening: removing unnecessary packages ==="',
+                    1,
+                )[0]
+                result = subprocess.run(
+                    [
+                        shutil.which("bash") or "/bin/bash",
+                        "-c",
+                        prefix.replace("\\\n", ""),
+                    ],
+                    env={
+                        **os.environ,
+                        "PATH": str(root),
+                        "DNF_CALLS": str(calls),
+                        "APPLY_SECURITY_HARDENING": "1",
+                    },
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertEqual(
+                    len(calls.read_text(encoding="utf-8").splitlines()),
+                    expected_attempts,
+                )
+
+    def test_failed_curated_python_update_stops_server_build(self):
+        """Execute the actual curated pip update with a failing interpreter.
+
+        Inputs: Dockerfile update commands. Output: requires fatal failure.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "bin").mkdir()
+            executable = root / "bin" / "python"
+            executable.write_text("#!/bin/sh\nexit 67\n", encoding="utf-8")
+            executable.chmod(0o700)
+            boundary = self.server_dockerfile.split(
+                'echo "Applying curated compatibility-safe Python security updates', 1
+            )[1]
+            commands = boundary.split('"${VENV_DIR}/bin/python"', 1)[1]
+            commands = (
+                '"${VENV_DIR}/bin/python"'
+                + commands.split('echo "Stripping test directories', 1)[0]
+            )
+            env = {**os.environ, "VENV_DIR": str(root)}
+            env.update(
+                dict(
+                    re.findall(
+                        r"^ARG ([A-Z0-9_]+_VERSION)=([^\s]+)$",
+                        self.server_dockerfile,
+                        re.M,
+                    )
+                )
+            )
+            result = subprocess.run(
+                [
+                    shutil.which("bash") or "/bin/bash",
+                    "-c",
+                    "set -euo pipefail; " + commands.replace("\\\n", ""),
+                ],
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 67, result.stdout + result.stderr)
 
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
         """Verify locale data is preserved while other hardening stays enabled.
