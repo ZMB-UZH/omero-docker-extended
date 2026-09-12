@@ -121,10 +121,10 @@ class _LegacyPixelImage:
         )
 
     @staticmethod
-    def getChannels():
+    def getChannels(noRE=False):
         """Return the channels for `_LegacyPixelImage`.
 
-        Inputs: none. Output: `list`.
+        Inputs: upstream `noRE` flag. Output: `list`.
         """
         return [_BrokenChannel()]
 
@@ -501,7 +501,7 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
         """Test double for image with broken raw channels behavior in this module."""
 
         @staticmethod
-        def getChannels():
+        def getChannels(noRE=False):
             """Return the channels for `_ImageWithBrokenRawChannels`.
 
             Inputs: caller provides no extra arguments. Output: returns the fake value described above.
@@ -513,6 +513,7 @@ def test_metadata_helpers_cover_malformed_omero_scalar_annotation_and_iterable_e
             _ImageWithBrokenRawChannels(),
             (),
             {"dataset_name": "", "project_name": ""},
+            metadata._load_metadata_channels(_ImageWithBrokenRawChannels()),
         )
         == ()
     )
@@ -841,7 +842,7 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
             return self._payload
 
         @staticmethod
-        def getChannels():
+        def getChannels(noRE=False):
             """Return the channels for `_WeirdMetadataImage`.
 
             Inputs: caller provides no extra arguments. Output: returns the fake value described above.
@@ -886,10 +887,9 @@ def test_metadata_collection_helpers_tolerate_broken_omero_objects():
         _WeirdMetadataImage((None, _BrokenSection(), _BrokenSection()))
     )
     assert broken_sections == {}
-    assert metadata._collect_channels(_WeirdMetadataImage()) == ()
-    assert metadata._collect_channels(
-        SimpleNamespace(getChannels=lambda: [_BadChannelIndex()])
-    ) == (
+    assert metadata._load_metadata_channels(_WeirdMetadataImage()) == ()
+    assert metadata._collect_channels(()) == ()
+    assert metadata._collect_channels([_BadChannelIndex()]) == (
         metadata.SearchChannel(
             channel_index=0,
             label="GFP",

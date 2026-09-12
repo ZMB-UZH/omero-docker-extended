@@ -343,18 +343,24 @@ def _collect_original_metadata(image) -> dict[str, str]:
     return metadata
 
 
-def _collect_channels(image) -> tuple[SearchChannel, ...]:
-    """Collect the channels.
+def _load_metadata_channels(image) -> tuple:
+    """Load channel metadata without creating or consulting a rendering engine.
 
-    Inputs: `image`. Output: `tuple[SearchChannel, ...]`.
+    Inputs: OMERO image wrapper. Output: request-local channel wrapper snapshot.
     """
-    channels: list[SearchChannel] = []
     try:
-        raw_channels = list(image.getChannels())
+        return tuple(image.getChannels(noRE=True) or ())
     except Exception:
         logger.debug("Channel collection failed.", exc_info=True)
-        raw_channels = []
+        return ()
 
+
+def _collect_channels(raw_channels: Iterable) -> tuple[SearchChannel, ...]:
+    """Normalize a previously loaded channel snapshot.
+
+    Inputs: `raw_channels`, ordered OMERO channel wrappers. Output: search channels.
+    """
+    channels: list[SearchChannel] = []
     for index, channel in enumerate(raw_channels):
         raw_idx = _safe_channel_value(channel, "getIndex")
         try:
@@ -853,11 +859,13 @@ def _collect_universal_metadata_attributes(
     image,
     channels: tuple[SearchChannel, ...],
     context: dict[str, int | str | None],
+    raw_channels: Iterable,
 ) -> tuple[SearchAttribute, ...]:
     """Collect the universal metadata attributes.
 
     Inputs: `image`, `channels` (tuple[SearchChannel, ...]), `context` (dict[str, int |
-    str | None]). Output: `tuple[SearchAttribute, ...]`.
+    str | None]), `raw_channels`, the shared channel snapshot. Output:
+    `tuple[SearchAttribute, ...]`.
     """
     bucket: dict[str, SearchAttribute] = {}
     _append_text_attribute(bucket, "image_name", _safe_details_value(image, "getName"))
@@ -1015,10 +1023,6 @@ def _collect_universal_metadata_attributes(
             ):
                 _append_named_fields(bucket, f"{name}_{index + 1}", obj, fields)
 
-    try:
-        raw_channels = list(image.getChannels())
-    except Exception:
-        raw_channels = []
     for channel_position, raw_channel in enumerate(raw_channels):
         channel_index = (
             channels[channel_position].channel_index
@@ -1288,7 +1292,8 @@ def extract_search_document(
     """
     original_metadata = _collect_original_metadata(image)
     metadata_pairs = tuple(original_metadata.items())
-    channels = _collect_channels(image)
+    raw_channels = _load_metadata_channels(image)
+    channels = _collect_channels(raw_channels)
 
     acquisition_date = None
     try:
@@ -1415,6 +1420,7 @@ def extract_search_document(
         image,
         channels,
         scope_context,
+        raw_channels,
     ):
         _append_attribute(attribute_map, attribute)
     for attribute in _collect_all_plane_info_attributes(image, channels):

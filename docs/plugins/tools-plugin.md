@@ -131,7 +131,9 @@ background thread inside the `omeroweb` process.
    gateway session and extracts normalized image, project/dataset, channel,
    instrument, objective, detector, PlaneInfo, annotation, original-metadata,
    and original-file-name attributes. PlaneInfo is read in bulk when supported
-   by the installed OMERO gateway. Private file paths are not indexed.
+   by the installed OMERO gateway. Channel metadata is loaded once per image
+   extraction without starting a rendering engine; the snapshot is never shared
+   across requests or users. Private file paths are not indexed.
 4. The worker writes only to the plugin database tables for indexed documents,
    scope membership, sync state, and saved queries.
 5. Search queries combine OMERO-index matches with plugin-database metadata

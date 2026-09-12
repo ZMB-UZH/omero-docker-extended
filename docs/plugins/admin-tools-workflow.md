@@ -103,6 +103,13 @@ flowchart TD
 
 - Quotas are defined per OMERO group in gigabytes, with a configurable minimum (`ADMIN_TOOLS_MIN_QUOTA_GB`).
 - Quota state is persisted to `group-quotas.json` with a `state_schema_version` field for forward compatibility.
+- UI edits, CSV imports, and the reconciliation process serialize complete
+  read-modify-write transactions using a stable private sidecar lock. Readers see
+  complete JSON snapshots; failed writes never fall back to truncating the state.
+  Do not remove the lock file while writers are running.
+- Empty, malformed, incomplete, or unsupported stored documents stop processing
+  instead of becoming an empty quota set. New installations create a valid empty
+  document. Legacy empty files require explicit operator recovery or initialization.
 - State writes are atomic by default with a fallback for sticky-bit legacy directories.
 - When `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA=true`, reconciliation auto-creates quota entries for newly detected OMERO groups using `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB`.
 

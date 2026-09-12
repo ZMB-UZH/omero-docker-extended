@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import fcntl
+import multiprocessing
+import os
 from pathlib import Path
 
 import pytest
@@ -211,6 +214,7 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
     )
 
     monkeypatch.setattr(Path, "exists", real_exists)
+    real_read_text = Path.read_text
     monkeypatch.setattr(
         Path,
         "read_text",
@@ -221,6 +225,7 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
         mount_point="",
         source="",
     )
+    monkeypatch.setattr(Path, "read_text", real_read_text)
 
     state_path = tmp_path / "state.json"
     state_path.write_text(
@@ -239,11 +244,11 @@ def test_storage_quota_csv_filesystem_and_state_helpers_cover_edge_cases(
     assert state["logs"] == []
 
 
-def test_reconcile_quotas_covers_invalid_state_entries_and_persist_warnings(
+def test_reconcile_quotas_covers_invalid_state_entries_and_persist_failure(
     monkeypatch,
     tmp_path,
 ):
-    """Verify reconcile quotas covers invalid state entries and persist warnings.
+    """Do not report successful reconciliation after a persistence failure.
 
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in reconcile quotas covers invalid state entries and persist warnings.
     """
@@ -310,11 +315,159 @@ def test_reconcile_quotas_covers_invalid_state_entries_and_persist_warnings(
         lambda path, state: (_ for _ in ()).throw(OSError("readonly")),
     )
 
-    result = storage_quotas.reconcile_quotas([])
+    with pytest.raises(storage_quotas.QuotaError, match="storage is unavailable"):
+        storage_quotas.reconcile_quotas([])
 
-    assert result["applied_groups"] == []
-    assert result["pending_groups"] == []
-    assert any(
-        "Invalid stored quota for group 'group-a'" in entry["message"]
-        for entry in result["logs"]
+
+@pytest.mark.parametrize("second_writer", ["upsert", "reconcile"])
+def test_quota_transactions_coordinate_separate_processes(
+    tmp_path, monkeypatch, second_writer
+):
+    """Exercise real process locks around both quota mutation entry points.
+
+    Inputs: temporary state, configured environment, and second writer type.
+    Output: neither independent process loses the other process's quota.
+    """
+    state_path = tmp_path / "state.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("OMERO_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(tmp_path / "managed"))
+    context = multiprocessing.get_context("fork")
+    writing = context.Event()
+    release = context.Event()
+    second_started = context.Event()
+    real_write = storage_quotas._write_state
+
+    def paused_write(path, state):
+        """Pause the first transaction at its commit boundary.
+
+        Inputs: state path and new document. Output: committed state after release.
+        """
+        if multiprocessing.current_process().name == "quota-first-writer":
+            writing.set()
+            if not release.wait(20):
+                raise RuntimeError("Quota test did not release the first transaction")
+        real_write(path, state)
+
+    def write_second():
+        """Attempt an independent update while the first transaction is open.
+
+        Inputs: closed-over fixture and writer mode. Output: persisted second quota.
+        """
+        second_started.set()
+        if second_writer == "reconcile":
+            os.environ[storage_quotas.AUTO_GROUP_QUOTA_ENV] = "true"
+            storage_quotas.reconcile_quotas(["fixture-second"])
+        else:
+            storage_quotas.upsert_quotas([("fixture-second", 0.25)])
+
+    monkeypatch.setattr(storage_quotas, "_write_state", paused_write)
+    first = context.Process(
+        name="quota-first-writer",
+        target=storage_quotas.upsert_quotas,
+        args=([("fixture-first", 1.0)],),
     )
+    second = context.Process(target=write_second)
+    try:
+        first.start()
+        assert writing.wait(10)
+        second.start()
+        assert second_started.wait(10)
+        with state_path.with_suffix(".json.lock").open("r+") as handle:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        release.set()
+        for process in (first, second):
+            if process.pid is not None:
+                process.join(20)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(5)
+    assert first.exitcode == second.exitcode == 0
+    assert json.loads(state_path.read_text())["quotas_gb"] == {
+        "fixture-first": 1.0,
+        "fixture-second": 0.25,
+    }
+
+
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "public"])
+def test_quota_lock_rejects_unsafe_existing_objects(tmp_path, monkeypatch, kind):
+    """Reject sidecar substitution without altering the referenced object.
+
+    Inputs: temporary storage, configured state path and unsafe lock kind.
+    Output: the update fails and the unrelated object's content is unchanged.
+    """
+    path = tmp_path / "state.json"
+    lock = path.with_suffix(".json.lock")
+    target = tmp_path / "unrelated.txt"
+    target.write_text("preserve")
+    target.chmod(0o600)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(path))
+    if kind == "symlink":
+        lock.symlink_to(target)
+    elif kind == "hardlink":
+        os.link(target, lock)
+    elif kind == "directory":
+        lock.mkdir()
+    elif kind == "fifo":
+        os.mkfifo(lock, 0o600)
+    else:
+        lock.touch(mode=0o644)
+    with pytest.raises(storage_quotas.QuotaError):
+        storage_quotas.upsert_quotas([("fixture", 1)])
+    assert target.read_text() == "preserve"
+    assert not path.exists()
+
+
+def test_atomic_quota_write_retains_state_on_sync_failure(tmp_path, monkeypatch):
+    """Never replace existing state when the temporary file cannot be synced.
+
+    Inputs: temporary files and an injected fsync failure. Output: original state
+    and unrelated legacy temporary data survive, with no new temporary remnants.
+    """
+    path = tmp_path / "state.json"
+    path.write_text('{"quotas_gb":{"fixture":1},"logs":[]}')
+    original = path.read_bytes()
+    legacy = path.with_suffix(".json.tmp")
+    legacy.write_text("operator-owned-recovery-data")
+
+    def fail_sync(_descriptor):
+        """Model a failed durability operation. Inputs: descriptor. Output: error."""
+        raise OSError("durability failure")
+
+    monkeypatch.setattr(storage_quotas.os, "fsync", fail_sync)
+    with pytest.raises(storage_quotas.QuotaError, match="persisted atomically"):
+        storage_quotas._write_state(path, {"quotas_gb": {"other": 2}, "logs": []})
+    assert path.read_bytes() == original
+    assert legacy.read_text() == "operator-owned-recovery-data"
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", True, False])
+def test_quota_update_rejects_nonfinite_and_boolean_values(
+    tmp_path, monkeypatch, value
+):
+    """Reject values that cannot represent a real quota before persisting them.
+
+    Inputs: temporary state, configured environment and invalid numeric input.
+    Output: a validation error with the existing document unchanged.
+    """
+    path = tmp_path / "state.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(path))
+    storage_quotas.upsert_quotas([("fixture", 1)])
+    original = path.read_bytes()
+    with pytest.raises(storage_quotas.QuotaError, match="Invalid quota value"):
+        storage_quotas.upsert_quotas([("fixture", value)])
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "0.00001"])
+def test_quota_environment_requires_finite_positive_precision(monkeypatch, value):
+    """Reject nonfinite limits and values rounded down to zero.
+
+    Inputs: patched minimum and invalid value. Output: explicit validation error.
+    """
+    monkeypatch.setenv(storage_quotas.MIN_GROUP_QUOTA_ENV, value)
+    with pytest.raises(storage_quotas.QuotaError, match="greater than 0"):
+        storage_quotas.min_quota_gb()

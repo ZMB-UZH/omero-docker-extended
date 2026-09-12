@@ -663,7 +663,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.33.3"
+    image: "ollama/ollama:0.34.0"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

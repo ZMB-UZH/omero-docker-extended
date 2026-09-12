@@ -169,10 +169,10 @@ def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None
         reconcile_quotas(["group-a"])
 
 
-def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
+def test_upsert_preserves_state_when_atomic_replace_is_not_permitted(
     tmp_path, monkeypatch
 ) -> None:
-    """Verify upsert falls back when atomic replace is not permitted.
+    """Reject a failed atomic replacement without truncating existing quotas.
 
     Inputs: `tmp_path` temporary path fixture, `monkeypatch` pytest monkeypatch fixture.
     Output: None. Raises: PermissionError when validation or the called operation fails.
@@ -201,11 +201,12 @@ def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
         "omeroweb_admin_tools.services.storage_quotas.os.replace", _deny_replace
     )
 
-    upsert_quotas([("group-b", 2.0)])
+    original = state_path.read_bytes()
+    with pytest.raises(QuotaError, match="persisted atomically"):
+        upsert_quotas([("group-b", 2.0)])
 
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["quotas_gb"]["group-a"] == 1.0
-    assert payload["quotas_gb"]["group-b"] == 2.0
+    assert state_path.read_bytes() == original
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
@@ -244,7 +245,7 @@ def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
         lambda _path, _mode: False,
     )
 
-    with pytest.raises(QuotaError, match="not replaceable/writable"):
+    with pytest.raises(QuotaError, match="persisted atomically"):
         upsert_quotas([("group-b", 2.0)])
 
 
@@ -644,49 +645,24 @@ def test_storage_quota_update_endpoint_treats_missing_form_updates_as_noop(
     assert captured == {"updates": [], "source": "ui-edit"}
 
 
-def test_upsert_recovers_from_empty_state_file(tmp_path, monkeypatch) -> None:
-    """Verify upsert recovers from empty state file.
+@pytest.mark.parametrize("content", ["", "{corrupt", "[1, 2, 3]", "{}"])
+@pytest.mark.parametrize("operation", [upsert_quotas, reconcile_quotas])
+def test_quota_writers_preserve_invalid_existing_state(
+    tmp_path, monkeypatch, content, operation
+) -> None:
+    """Keep malformed stored configuration intact instead of resetting quotas.
 
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in upsert recovers from empty state file.
+    Inputs: temporary storage, environment patch, corrupt content and writer.
+    Output: both writer paths fail without changing the original bytes.
     """
     state_path = tmp_path / "quotas.json"
-    state_path.write_text("", encoding="utf-8")
+    state_path.write_text(content, encoding="utf-8")
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
-    upsert_quotas([("group-a", 10)])
+    with pytest.raises(QuotaError, match="Quota state"):
+        operation([])
 
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["quotas_gb"]["group-a"] == 10.0
-
-
-def test_upsert_recovers_from_corrupted_state_file(tmp_path, monkeypatch) -> None:
-    """Verify upsert recovers from corrupted state file.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in upsert recovers from corrupted state file.
-    """
-    state_path = tmp_path / "quotas.json"
-    state_path.write_text("{corrupt", encoding="utf-8")
-    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-
-    upsert_quotas([("group-a", 5)])
-
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["quotas_gb"]["group-a"] == 5.0
-
-
-def test_upsert_recovers_from_non_object_state_file(tmp_path, monkeypatch) -> None:
-    """Verify upsert recovers from non object state file.
-
-    Inputs: pytest provides `tmp_path`, `monkeypatch`. Output: fails on regressions in upsert recovers from non object state file.
-    """
-    state_path = tmp_path / "quotas.json"
-    state_path.write_text("[1, 2, 3]", encoding="utf-8")
-    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-
-    upsert_quotas([("group-a", 5)])
-
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    assert payload["quotas_gb"]["group-a"] == 5.0
+    assert state_path.read_text(encoding="utf-8") == content
 
 
 def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> None:

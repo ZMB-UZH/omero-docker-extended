@@ -446,23 +446,31 @@ RUN set -euo pipefail; \
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
 ARG BIOP_OMERO_SCRIPTS_REF="main"
 ARG BIOP_OMERO_SCRIPTS_COMMIT="3dd78c7420f42bca427575dfdc3acf9192d4f12d"
+# The commit selects the source; the ref is descriptive and may advance upstream.
 RUN set -euo pipefail; \
-    echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_REF}"; \
-    rm -rf /tmp/biop-omero-scripts; \
-    git clone --depth 1 --branch "${BIOP_OMERO_SCRIPTS_REF}" "${BIOP_OMERO_SCRIPTS_REPO}" /tmp/biop-omero-scripts; \
-    actual_commit="$(git -C /tmp/biop-omero-scripts rev-parse HEAD)"; \
+    echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_COMMIT} (${BIOP_OMERO_SCRIPTS_REF})"; \
+    if [[ ! "${BIOP_OMERO_SCRIPTS_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then \
+        echo "ERROR: BIOP_OMERO_SCRIPTS_COMMIT must be a full Git commit identifier." >&2; \
+        exit 1; \
+    fi; \
+    BIOP_SOURCE="$(mktemp -d)"; \
+    git init --quiet "${BIOP_SOURCE}"; \
+    git -C "${BIOP_SOURCE}" remote add origin "${BIOP_OMERO_SCRIPTS_REPO}"; \
+    git -C "${BIOP_SOURCE}" fetch --depth 1 --no-tags origin "${BIOP_OMERO_SCRIPTS_COMMIT}"; \
+    git -C "${BIOP_SOURCE}" checkout --detach FETCH_HEAD; \
+    actual_commit="$(git -C "${BIOP_SOURCE}" rev-parse HEAD)"; \
     if [[ "${actual_commit}" != "${BIOP_OMERO_SCRIPTS_COMMIT}" ]]; then \
         echo "ERROR: BIOP OMERO-scripts commit mismatch: expected=${BIOP_OMERO_SCRIPTS_COMMIT} actual=${actual_commit}" >&2; \
         exit 1; \
     fi; \
     \
-    SCRIPT_SRC="$(find /tmp/biop-omero-scripts -type f -name 'Export_CellProfiler_IDs.py' -print -quit)"; \
+    SCRIPT_SRC="$(find "${BIOP_SOURCE}" -type f -name 'Export_CellProfiler_IDs.py' -print -quit)"; \
     if [[ -z "${SCRIPT_SRC}" ]]; then \
         echo "ERROR: Export_CellProfiler_IDs.py not found anywhere in the cloned BIOP repo." >&2; \
         echo "Repo top-level layout is (FYI):" >&2; \
-        find /tmp/biop-omero-scripts -maxdepth 2 -type d -print >&2 || true; \
+        find "${BIOP_SOURCE}" -maxdepth 2 -type d -print >&2 || true; \
         echo "Nearest matches (filenames containing 'CellProfiler'):" >&2; \
-        find /tmp/biop-omero-scripts -type f -iname '*cellprofiler*' -print >&2 || true; \
+        find "${BIOP_SOURCE}" -type f -iname '*cellprofiler*' -print >&2 || true; \
         exit 1; \
     fi; \
     \
@@ -472,7 +480,7 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts && \
     find /opt/omero/server/OMERO.server/lib/scripts -type d -exec chmod 0755 {} \; && \
     find /opt/omero/server/OMERO.server/lib/scripts -type f -exec chmod 0644 {} \; && \
-    rm -rf /tmp/biop-omero-scripts
+    rm -rf "${BIOP_SOURCE}"
 
 # Consolidated OMERO.server startup flow
 # --------------------------------------

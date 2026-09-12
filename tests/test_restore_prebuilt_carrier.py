@@ -26,6 +26,92 @@ def original():
     }
 
 
+@pytest.fixture
+def historical_recipe(tmp_path):
+    """Inputs: temporary worktree. Output: a synthetic pinned legacy Dockerfile."""
+    path = tmp_path / "docker" / "omero-server.Dockerfile"
+    path.parent.mkdir()
+    pin = "a" * 40
+    content = (
+        f'ARG BIOP_OMERO_SCRIPTS_COMMIT="{pin}"\n'
+        + "RUN set -euo pipefail; \\\n"
+        + recovery.LEGACY_BIOP_CLONE
+        + '    test "${actual_commit}" = "${BIOP_OMERO_SCRIPTS_COMMIT}"\n'
+    )
+    path.write_text(content, encoding="utf-8")
+    return path, content
+
+
+def test_historical_fetch_correction_is_reviewed_and_reversible(
+    tmp_path, historical_recipe, monkeypatch
+):
+    """Inputs: reviewed recipe fixture. Output: exact reversible change with bound hashes."""
+    path, content = historical_recipe
+    original_hash = hashlib.sha256(content.encode()).hexdigest()
+    monkeypatch.setattr(recovery, "REVIEWED_BIOP_RECIPES", frozenset({original_hash}))
+    correction = recovery.correct_historical_fetch(tmp_path)
+    assert correction is not None
+    assert correction["original_sha256"] == original_hash
+    assert correction["rebuilt_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert path.read_text(encoding="utf-8") == content.replace(
+        recovery.LEGACY_BIOP_CLONE, recovery.PINNED_BIOP_FETCH
+    )
+    assert path.read_text(encoding="utf-8").splitlines()[0] == content.splitlines()[0]
+    git = recovery.executable("git")
+    subprocess.run([git, "init", "--quiet", str(tmp_path)], check=True)
+    subprocess.run(
+        [git, "apply", "--reverse", "-"],
+        cwd=tmp_path,
+        input=correction["patch"],
+        text=True,
+        check=True,
+    )
+    assert path.read_bytes() == content.encode()
+
+
+def test_historical_fetch_rejects_unreviewed_or_ambiguous_recipe(
+    tmp_path, historical_recipe, monkeypatch
+):
+    """Inputs: changed or duplicate fetch instructions. Output: no unreviewed rewrite."""
+    path, content = historical_recipe
+    for candidate in (content, content + recovery.LEGACY_BIOP_CLONE):
+        path.write_text(candidate, encoding="utf-8")
+        if candidate != content:
+            monkeypatch.setattr(
+                recovery,
+                "REVIEWED_BIOP_RECIPES",
+                frozenset({hashlib.sha256(candidate.encode()).hexdigest()}),
+            )
+        with pytest.raises(ValueError, match="not been reviewed"):
+            recovery.correct_historical_fetch(tmp_path)
+        assert path.read_bytes() == candidate.encode()
+
+
+def test_historical_fetch_does_not_invent_pins_or_rewrite_current_recipe(
+    tmp_path, historical_recipe
+):
+    """Inputs: unpinned or already corrected source. Output: byte-preserved source."""
+    path, content = historical_recipe
+    for candidate in (
+        content.split("\n", 1)[1],
+        content.replace(recovery.LEGACY_BIOP_CLONE, recovery.PINNED_BIOP_FETCH),
+    ):
+        path.write_text(candidate, encoding="utf-8")
+        assert recovery.correct_historical_fetch(tmp_path) is None
+        assert path.read_bytes() == candidate.encode()
+
+
+def test_historical_fetch_rejects_source_symlinks(tmp_path, historical_recipe):
+    """Inputs: redirected Dockerfile. Output: rejection without modifying its target."""
+    path, content = historical_recipe
+    target = tmp_path / "original.Dockerfile"
+    path.rename(target)
+    path.symlink_to(target)
+    with pytest.raises(ValueError, match="source worktree"):
+        recovery.correct_historical_fetch(tmp_path)
+    assert target.read_bytes() == content.encode()
+
+
 def test_original_identity_and_inventory():
     """Inputs: varied manifests. Output: only exact identity and pinned inventory pass."""
     manifest = original()

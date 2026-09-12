@@ -8,6 +8,7 @@ mypy==2.3.1
 django==5.2.17
 django-stubs==6.1.0
 django-stubs-ext==6.1.0
-types-requests==2.33.0.20260712
+# Requests includes inline type information from 2.34; do not shadow it with stubs.
+requests==2.34.2
 types-atheris==3.1.0.20260630
-types-psycopg2==2.9.21.20260724
+types-psycopg2==2.9.21.20260911

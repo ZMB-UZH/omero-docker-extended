@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import venv
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from unittest import mock
@@ -14,6 +15,48 @@ from unittest import mock
 import pytest
 
 from tools import cocoindex_agent_search
+
+
+@pytest.fixture
+def isolated_coco_runtime(tmp_path):
+    """Provide an actual isolated interpreter with a small settings API fixture.
+
+    Inputs: temporary directory. Output: external runtime context whose package
+    imports cannot be satisfied by the caller's sys.path or PYTHONPATH.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
+        mirror_digest="abc",
+    )
+    venv.EnvBuilder(with_pip=False).create(context.venv_dir)
+    context.mirror_repo.mkdir(parents=True)
+    context.settings_dir.mkdir(parents=True)
+    package = (
+        context.venv_dir
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+        / "cocoindex_code"
+    )
+    package.mkdir()
+    (package / "__init__.py").write_text('__version__ = "0.2.41"\n')
+    (package / "settings.py").write_text(
+        "import json, os\nfrom pathlib import Path\nfrom types import SimpleNamespace\n"
+        "def load_project_settings(root):\n"
+        "    return SimpleNamespace(**json.loads((root / 'settings.json').read_text()))\n"
+        "def save_project_settings(root, value):\n"
+        "    (root / 'settings.json').write_text(json.dumps(vars(value)))\n"
+        "def load_user_settings():\n"
+        "    root = Path(os.environ['COCOINDEX_CODE_DIR'])\n"
+        "    data = json.loads((root / 'user.json').read_text())\n"
+        "    return SimpleNamespace(embedding=SimpleNamespace(**data['embedding']))\n"
+        "def save_user_settings(value):\n"
+        "    root = Path(os.environ['COCOINDEX_CODE_DIR'])\n"
+        "    (root / 'user.json').write_text(json.dumps({'embedding': vars(value.embedding)}))\n"
+    )
+    return context
 
 
 def test_package_pin_and_hashes_are_exact() -> None:
@@ -43,68 +86,114 @@ def test_device_selector_accepts_supported_accelerators() -> None:
 
 
 def test_configure_embedding_device_persists_cpu_and_auto(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, isolated_coco_runtime
 ) -> None:
     """Verify explicit CPU and automatic selection stay in external settings.
 
     Inputs: pytest fixtures. Output: asserts isolated settings persistence.
     """
-    context = cocoindex_agent_search.CocoIndexContext(
-        repo_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
-        mirror_digest="abc",
+    context = isolated_coco_runtime
+    settings = context.settings_dir / "user.json"
+    settings.write_text('{"embedding":{"device":null}}')
+    (context.repo_root / "cocoindex_code.py").write_text(
+        'raise RuntimeError("Caller packages must not enter the pinned runtime")\n'
     )
-    settings = SimpleNamespace(embedding=SimpleNamespace(device=None))
-    saved: list[object] = []
-    settings_dirs: list[str | None] = []
-
-    def load_user_settings() -> SimpleNamespace:
-        """Return the test-controlled CocoIndex settings.
-
-        Inputs: none. Output: `SimpleNamespace` settings.
-        """
-        settings_dirs.append(os.environ.get("COCOINDEX_CODE_DIR"))
-        return settings
-
-    def save_user_settings(value: object) -> None:
-        """Record one test-controlled CocoIndex settings write.
-
-        Inputs: `value`. Output: None.
-        """
-        settings_dirs.append(os.environ.get("COCOINDEX_CODE_DIR"))
-        saved.append(value)
-
-    settings_module = SimpleNamespace(
-        load_user_settings=load_user_settings,
-        save_user_settings=save_user_settings,
-    )
+    monkeypatch.setenv("PYTHONPATH", str(context.repo_root))
+    old_sys_path = list(sys.path)
     monkeypatch.setenv("COCOINDEX_TEST_SENTINEL", "preserved")
     monkeypatch.delenv("COCOINDEX_CODE_DIR", raising=False)
-    monkeypatch.setattr(
-        cocoindex_agent_search, "prepend_venv_site_package_paths", lambda _context: None
-    )
-    monkeypatch.setattr(
-        cocoindex_agent_search.importlib,
-        "import_module",
-        lambda name: (
-            settings_module if name == "cocoindex_code.settings" else pytest.fail(name)
-        ),
-    )
-
     assert cocoindex_agent_search.configure_embedding_device(context, "cpu") == "cpu"
-    assert settings.embedding.device == "cpu"
-    assert saved == [settings]
-    assert settings_dirs == [str(context.settings_dir), str(context.settings_dir)]
+    assert json.loads(settings.read_text())["embedding"]["device"] == "cpu"
     assert os.environ["COCOINDEX_TEST_SENTINEL"] == "preserved"
     assert "COCOINDEX_CODE_DIR" not in os.environ
 
     assert cocoindex_agent_search.configure_embedding_device(context, "auto") == "auto"
-    assert settings.embedding.device is None
-    assert saved == [settings, settings]
-    assert settings_dirs == [str(context.settings_dir)] * 4
+    assert json.loads(settings.read_text())["embedding"]["device"] is None
+    unchanged = settings.stat().st_mtime_ns
+    cocoindex_agent_search.configure_embedding_device(context, "auto")
+    assert settings.stat().st_mtime_ns == unchanged
+    assert sys.path == old_sys_path
     assert os.environ["COCOINDEX_TEST_SENTINEL"] == "preserved"
     assert "COCOINDEX_CODE_DIR" not in os.environ
+
+
+@pytest.mark.parametrize("output", ["", "not-json", "0", '"false"', "null", "[]"])
+def test_runtime_boolean_rejects_invalid_probe_output(output):
+    """Refuse malformed probe output rather than treating it as daemon absence.
+
+    Inputs: invalid probe stdout. Output: explicit runtime error.
+    """
+    with pytest.raises(RuntimeError, match="runtime probe returned"):
+        cocoindex_agent_search.parse_runtime_boolean(output)
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "valid",
+        "absent",
+        "wrong-version",
+        "rejected",
+        "invalid-response",
+        "connect-error",
+        "read-error",
+    ],
+)
+def test_daemon_handshake_executes_inside_the_pinned_runtime(
+    isolated_coco_runtime,
+    monkeypatch,
+    mode,
+):
+    """Exercise the actual isolated handshake script and connection cleanup.
+
+    Inputs: real temporary interpreter, package fixture and protocol response mode.
+    Output: only the expected version is accepted, with opened connections closed.
+    """
+    context = isolated_coco_runtime
+    package = next(
+        (context.venv_dir / "lib").glob("python*/site-packages/cocoindex_code")
+    )
+    (package / "client.py").write_text(
+        "import os\nfrom pathlib import Path\n"
+        "mode = os.environ['COCOINDEX_FIXTURE_MODE']\n"
+        "def daemon_socket_path():\n"
+        "    return Path(os.environ['COCOINDEX_CODE_RUNTIME_DIR']) / 'fixture.sock'\n"
+        "def connection_family():\n"
+        "    return 'AF_UNIX'\n"
+        "class HandshakeRequest:\n"
+        "    def __init__(self, version):\n"
+        "        self.version = version\n"
+        "class HandshakeResponse:\n"
+        "    ok = mode != 'rejected'\n"
+        "    daemon_version = 'other' if mode == 'wrong-version' else '0.2.41'\n"
+        "def encode_request(request):\n"
+        "    return request.version.encode()\n"
+        "def decode_response(data):\n"
+        "    return object() if mode == 'invalid-response' else HandshakeResponse()\n"
+        "class Client:\n"
+        "    def __init__(self, path, family):\n"
+        "        if mode == 'connect-error':\n"
+        "            raise OSError('fixture connect failure')\n"
+        "    def send_bytes(self, data):\n"
+        "        if data != b'0.2.41':\n"
+        "            raise RuntimeError('wrong requested version')\n"
+        "    def recv_bytes(self):\n"
+        "        if mode == 'read-error':\n"
+        "            raise EOFError('fixture read failure')\n"
+        "        return b'response'\n"
+        "    def close(self):\n"
+        "        daemon_socket_path().with_suffix('.closed').touch()\n"
+    )
+    context.runtime_dir.mkdir(parents=True)
+    if mode != "absent":
+        (context.runtime_dir / "fixture.sock").touch()
+    monkeypatch.setenv("COCOINDEX_FIXTURE_MODE", mode)
+    assert cocoindex_agent_search.daemon_handshake_succeeds(context) == (
+        mode == "valid"
+    )
+    assert (context.runtime_dir / "fixture.closed").exists() == (
+        mode not in {"absent", "connect-error"}
+    )
 
 
 def test_configure_embedding_device_rejects_unavailable_cuda(
@@ -543,89 +632,66 @@ def test_verify_install_executes_console_entrypoint(tmp_path: Path) -> None:
 
 
 def test_project_settings_match_generic_mirror_policy(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    isolated_coco_runtime,
 ) -> None:
     """Verify project settings match generic mirror policy.
 
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in project settings match generic mirror policy.
     """
-    context = cocoindex_agent_search.CocoIndexContext(
-        repo_root=tmp_path / "repo",
-        artifact_root=tmp_path / "artifacts",
-        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
-        mirror_digest="abc",
-    )
-    project_settings = SimpleNamespace(
-        include_patterns=["**/*.py"],
-        exclude_patterns=["**/.*"],
-        language_overrides=[],
-        chunkers=[],
-    )
-    settings_module = SimpleNamespace(
-        load_project_settings=mock.Mock(return_value=project_settings),
-        save_project_settings=mock.Mock(),
-    )
-
-    monkeypatch.setattr(
-        cocoindex_agent_search, "prepend_venv_site_package_paths", mock.Mock()
-    )
-    monkeypatch.setattr(
-        cocoindex_agent_search.importlib,
-        "import_module",
-        mock.Mock(return_value=settings_module),
+    context = isolated_coco_runtime
+    settings_path = context.mirror_repo / "settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "include_patterns": ["**/*.py"],
+                "exclude_patterns": ["**/.*"],
+                "language_overrides": [],
+                "chunkers": [],
+            }
+        )
     )
 
     changed = cocoindex_agent_search.ensure_project_settings_match_mirror(context)
 
     assert changed
-    assert project_settings.include_patterns == list(
+    project_settings = json.loads(settings_path.read_text())
+    assert project_settings["include_patterns"] == list(
         cocoindex_agent_search.MIRROR_INCLUDE_PATTERNS
     )
-    assert project_settings.exclude_patterns == list(
+    assert project_settings["exclude_patterns"] == list(
         cocoindex_agent_search.MIRROR_EXCLUDE_PATTERNS
     )
-    assert project_settings.language_overrides == []
-    assert project_settings.chunkers == []
-    settings_module.save_project_settings.assert_called_once_with(
-        context.mirror_repo, project_settings
-    )
+    assert project_settings["language_overrides"] == []
+    assert project_settings["chunkers"] == []
 
 
 def test_project_settings_match_mirror_policy_idempotently(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    isolated_coco_runtime,
 ) -> None:
     """Verify project settings match mirror policy idempotently.
 
     Inputs: pytest provides `monkeypatch`, `tmp_path`. Output: fails on regressions in project settings match mirror policy idempotently.
     """
-    context = cocoindex_agent_search.CocoIndexContext(
-        repo_root=tmp_path / "repo",
-        artifact_root=tmp_path / "artifacts",
-        mirror_repo=tmp_path / "artifacts" / "mirrors" / "abc" / "repo",
-        mirror_digest="abc",
+    context = isolated_coco_runtime
+    settings_path = context.mirror_repo / "settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "include_patterns": list(
+                    cocoindex_agent_search.MIRROR_INCLUDE_PATTERNS
+                ),
+                "exclude_patterns": list(
+                    cocoindex_agent_search.MIRROR_EXCLUDE_PATTERNS
+                ),
+            }
+        )
     )
-    project_settings = SimpleNamespace(
-        include_patterns=list(cocoindex_agent_search.MIRROR_INCLUDE_PATTERNS),
-        exclude_patterns=list(cocoindex_agent_search.MIRROR_EXCLUDE_PATTERNS),
-    )
-    settings_module = SimpleNamespace(
-        load_project_settings=mock.Mock(return_value=project_settings),
-        save_project_settings=mock.Mock(),
-    )
-
-    monkeypatch.setattr(
-        cocoindex_agent_search, "prepend_venv_site_package_paths", mock.Mock()
-    )
-    monkeypatch.setattr(
-        cocoindex_agent_search.importlib,
-        "import_module",
-        mock.Mock(return_value=settings_module),
-    )
+    unchanged = settings_path.stat().st_mtime_ns
 
     changed = cocoindex_agent_search.ensure_project_settings_match_mirror(context)
 
     assert not changed
-    settings_module.save_project_settings.assert_not_called()
+    assert settings_path.stat().st_mtime_ns == unchanged
 
 
 def test_require_clean_index_target_rejects_dirty_worktree(
@@ -1084,7 +1150,13 @@ def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None
         ),
         mock.patch(
             "tools.cocoindex_agent_search.load_codex_config",
-            return_value={"mcp_servers": {}},
+            return_value={
+                "mcp_servers": {
+                    "cocoindex-code": {
+                        "env": {"AGENT_COCOINDEX_REPO": str(context.repo_root)}
+                    }
+                }
+            },
         ),
         mock.patch(
             "tools.cocoindex_agent_search.codex_mcp_server_matches_expected",
@@ -1102,6 +1174,61 @@ def test_mcp_install_repairs_stale_existing_codex_server(tmp_path: Path) -> None
         "mcp",
         "add",
     ]
+
+
+@pytest.mark.parametrize(
+    "binding", ["other-repo", "missing", "relative", "invalid-env"]
+)
+def test_mcp_install_preserves_unrelated_or_unproven_registration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, binding: str
+) -> None:
+    """Refuse to retarget another workspace before any configuration or launcher write.
+
+    Inputs: temporary context and existing binding kind. Output: asserts no mutating calls.
+    """
+    context = cocoindex_agent_search.CocoIndexContext(
+        repo_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        mirror_repo=tmp_path / "mirror",
+        mirror_digest="abc",
+    )
+    env = {"AGENT_COCOINDEX_REPO": str(tmp_path / "other-repo")}
+    if binding == "missing":
+        env = {}
+    elif binding == "relative":
+        env = {"AGENT_COCOINDEX_REPO": "."}
+    elif binding == "invalid-env":
+        env = None
+    monkeypatch.setattr(
+        cocoindex_agent_search, "resolve_mcp_handshake_context", lambda: context
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search, "resolve_required_executable", lambda _: "codex"
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "run_command",
+        mock.Mock(return_value=subprocess.CompletedProcess([], 0)),
+    )
+    monkeypatch.setattr(
+        cocoindex_agent_search,
+        "load_codex_config",
+        lambda _: {"mcp_servers": {"cocoindex-code": {"env": env}}},
+    )
+    mutations = {
+        name: mock.Mock()
+        for name in (
+            "ensure_mcp_launcher",
+            "checked_command",
+            "ensure_codex_mcp_timeouts",
+        )
+    }
+    for name, operation in mutations.items():
+        monkeypatch.setattr(cocoindex_agent_search, name, operation)
+    with pytest.raises(RuntimeError, match="does not target this repository"):
+        cocoindex_agent_search.command_mcp_install(mock.Mock())
+    for operation in mutations.values():
+        operation.assert_not_called()
 
 
 def test_mcp_install_uses_host_stable_codex_launcher(
@@ -1815,23 +1942,12 @@ def test_stop_owned_daemon_waits_for_started_process(
         wait=mock.Mock(return_value=None),
         kill=mock.Mock(),
     )
-    stop_daemon = mock.Mock()
+    runtime_call = mock.Mock(return_value="")
 
     monkeypatch.setattr(
         cocoindex_agent_search, "daemon_pid", mock.Mock(return_value=12345)
     )
-    monkeypatch.setattr(
-        cocoindex_agent_search, "prepend_venv_site_package_paths", mock.Mock()
-    )
-    monkeypatch.setattr(
-        cocoindex_agent_search,
-        "importlib",
-        SimpleNamespace(
-            import_module=mock.Mock(
-                return_value=SimpleNamespace(stop_daemon=stop_daemon)
-            )
-        ),
-    )
+    monkeypatch.setattr(cocoindex_agent_search, "run_runtime_python", runtime_call)
     monkeypatch.setattr(
         cocoindex_agent_search,
         "daemon_handshake_succeeds",
@@ -1840,7 +1956,11 @@ def test_stop_owned_daemon_waits_for_started_process(
 
     cocoindex_agent_search.stop_owned_daemon(context, proc)
 
-    stop_daemon.assert_called_once_with()
+    runtime_call.assert_called_once_with(
+        context,
+        "from cocoindex_code.client import stop_daemon\nstop_daemon()\n",
+        timeout_key="daemon_stop",
+    )
     proc.wait.assert_called_once_with(
         timeout=cocoindex_agent_search.timeout_seconds("daemon_stop")
     )

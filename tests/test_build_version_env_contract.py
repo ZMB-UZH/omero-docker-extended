@@ -148,7 +148,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.7"', compose_text)
         self.assertIn('image: "grafana/grafana:13.2.1"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.33.3"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.34.0"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -402,8 +402,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 "sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f"
             ),
             "docker/omero-web.Dockerfile": (
-                "FROM openmicroscopy/omero-web-standalone:5.33.0-1@"
-                "sha256:fac13ff1f14ee29c610091b1e0a8c717583a43c4256efadedae5685c4f4eedb4"
+                "FROM openmicroscopy/omero-web-standalone:5.33.1@"
+                "sha256:d50ce7a8cf150313813a4cffc5da5d80a4a2913a435e0346a8ab30fb05439d7a"
             ),
         }
         for relative_path, expected_from in expected_from_by_path.items():
@@ -429,10 +429,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn(expected_pin, server_dockerfile_text)
         for package_pin in (
             "django==5.2.17",
-            "matplotlib==3.11.1",
+            "matplotlib==3.11.2",
             "pytest==9.1.1",
             "portalocker==4.3.0",
-            "psycopg2-binary==2.9.12",
+            "psycopg2-binary==2.9.13",
             "celery==5.6.3",
             "redis==8.1.0",
             "django-redis==7.0.0",

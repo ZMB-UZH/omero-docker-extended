@@ -6,6 +6,30 @@ maintainer change history. Release automation applies automated disclosure
 validation and requires explicit human review before publishing any canonical
 entry.
 
+## 2026-09-12 Compatibility Review
+
+- Updated the OMERO.web base to the official digest-pinned `5.33.1` image after
+  reviewing its release notes, tagged upgrade guide, and source changes.
+  Corrected an upstream response-type regression so rendering-setting saves
+  return JSON booleans and compatible-image queries return JSON lists. The
+  lookup also returns an empty list for images without a project instead of
+  failing while traversing a missing parent. The build verifies the complete
+  upstream and corrected source digests; existing
+  authentication, request validation, and callback handling remain unchanged.
+  Future image upgrades must review or remove this narrowly scoped correction.
+- Made quota-state transactions process-safe and durable, and retained existing
+  configuration on malformed input or write failure. Fresh installations create
+  complete versioned state; legacy empty state needs explicit operator recovery.
+- Updated compatible application, CI and browser tooling dependencies; retained
+  dependency constraints where current upstream packages require them. Updated
+  Ollama to `0.34.0` and verified inference with an existing model.
+- Reduced metadata-extraction RPCs by using one request-local, metadata-only
+  channel snapshot. Channel labels, units, acquisition attributes, ordering and
+  permission checks are retained; no cross-request cache was introduced.
+- Isolated CocoIndex package calls in its pinned runtime interpreter so compiled
+  dependencies remain compatible when the calling agent uses another Python
+  version. Existing MCP registrations for other repositories are preserved.
+
 ## 2026-09-05 Compatibility Review
 
 - Fixed shared session-based CLI execution to register OMERO command plugins

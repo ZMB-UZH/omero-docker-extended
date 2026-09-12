@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.33.0-1@sha256:fac13ff1f14ee29c610091b1e0a8c717583a43c4256efadedae5685c4f4eedb4
+FROM openmicroscopy/omero-web-standalone:5.33.1@sha256:d50ce7a8cf150313813a4cffc5da5d80a4a2913a435e0346a8ab30fb05439d7a
 
 # Run image build steps as root
 # -----------------------------
@@ -205,6 +205,7 @@ COPY third_party /tmp/third_party
 COPY docs/help /tmp/omero_plugin_help_docs
 COPY docker/patch_omeroweb_api_servers.py /tmp/patch_omeroweb_api_servers.py
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
+COPY docker/patch_omeroweb_webgateway.py /tmp/patch_omeroweb_webgateway.py
 COPY docker/bioformats2raw-launcher.sh /tmp/bioformats2raw-launcher.sh
 
 COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_fallback.py
@@ -258,10 +259,10 @@ RUN set -euo pipefail; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         django==5.2.17 \
-        matplotlib==3.11.1 \
+        matplotlib==3.11.2 \
         pytest==9.1.1 \
         portalocker==4.3.0 \
-        psycopg2-binary==2.9.12 \
+        psycopg2-binary==2.9.13 \
         celery==5.6.3 \
         redis==8.1.0 \
         django-redis==7.0.0 \
@@ -326,8 +327,12 @@ RUN set -euo pipefail; \
     DECORATORS_PY="${SITE_PACKAGES}/omeroweb/webclient/decorators.py"; \
     "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_logo_context.py "${DECORATORS_PY}"; \
     chown omero-web:omero-web "${DECORATORS_PY}"; \
+    WEBGATEWAY_PY="${SITE_PACKAGES}/omeroweb/webgateway/views.py"; \
+    "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_webgateway.py "${WEBGATEWAY_PY}"; \
+    chown omero-web:omero-web "${WEBGATEWAY_PY}"; \
     rm -f /tmp/patch_omeroweb_api_servers.py; \
-    rm -f /tmp/patch_omeroweb_logo_context.py
+    rm -f /tmp/patch_omeroweb_logo_context.py; \
+    rm -f /tmp/patch_omeroweb_webgateway.py
 
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
 # --------------------------------------------------------------------------------------------

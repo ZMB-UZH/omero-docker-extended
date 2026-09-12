@@ -156,10 +156,21 @@ prepare_admin_tools_dir() {
     # The host installer only guarantees that quota paths are never
     # world-writable while still remaining readable by the root enforcer.
     state_file="${OMERO_DATA_DIR}/.admin-tools/group-quotas.json"
-    if [[ -f "${state_file}" ]]; then
+    if [[ -e "${state_file}" || -L "${state_file}" ]]; then
+        [[ -f "${state_file}" && ! -L "${state_file}" ]] || omero_die "Quota state must be a regular file."
         chmod 0600 "${state_file}"
     else
-        install -m 0600 /dev/null "${state_file}"
+        python3 - "${state_file}" <<'PY'
+import json
+import os
+import sys
+
+descriptor = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump({"state_schema_version": 1, "quotas_gb": {}, "logs": []}, handle)
+    handle.flush()
+    os.fsync(handle.fileno())
+PY
     fi
 
     echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 0750)"

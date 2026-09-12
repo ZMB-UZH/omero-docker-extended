@@ -642,7 +642,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.33.3"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.34.0"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -659,10 +659,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.33.3",
+            "README.md": "ollama/ollama:0.34.0",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.33.3",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.34.0",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():
@@ -1326,10 +1326,18 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("portainer", self.services)
         self.assertNotIn("profiles", self.services["portainer"])
 
+        runtime_services = {
+            name: spec
+            for name, spec in self.services.items()
+            if str(spec.get("restart")) != "no"
+        }
+        default_runtime_count = sum(
+            not spec.get("profiles") for spec in runtime_services.values()
+        )
         expected_phrases = [
-            "21 Compose services",
-            "20 long-running runtime containers by default",
-            "21 when the profile-gated",
+            f"{len(self.services)} Compose services",
+            f"{default_runtime_count} long-running runtime containers by default",
+            f"{len(runtime_services)} when the profile-gated",
             "crowdsec",
             "redis-sysctl-init",
         ]

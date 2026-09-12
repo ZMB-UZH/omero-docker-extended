@@ -34,6 +34,9 @@ Use this skill whenever code changes alter behavior, operating assumptions, or u
 ## Drift to watch for
 
 - stale service counts
+- numeric claims checked only against another document; derive topology and
+  version assertions from Compose and dependency contracts so tests cannot
+  preserve the same mistaken count across several instruction surfaces
 - stale plugin names
 - single-env `docker compose` examples missing `env/omero_secrets.env`
 - root docs contradicting deep docs

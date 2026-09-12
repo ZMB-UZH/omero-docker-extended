@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
+import yaml
 
 from tools import sarif_result_guard
 
@@ -112,3 +118,48 @@ def test_main_fails_closed_on_invalid_report(
 
     assert sarif_result_guard.main() == 2
     assert "cannot read valid JSON" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "scenario, expected", [("empty", 0), ("finding", 1), ("missing", 2), ("invalid", 2)]
+)
+def test_codeql_workflow_guard_executes_fail_closed(
+    tmp_path: Path, scenario: str, expected: int
+) -> None:
+    """Execute the committed workflow command with real Bash and SARIF files.
+
+    Inputs: temporary report directory and scanner outcome. Output: asserts exit status and unmodified reports.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load(
+        (repo / ".github/workflows/security-code-scanning.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    step = next(
+        item
+        for item in workflow["jobs"]["codeql"]["steps"]
+        if item.get("name") == "Reject CodeQL findings before upload"
+    )
+    reports = tmp_path / "scan results"
+    reports.mkdir()
+    if scenario != "missing":
+        write_sarif(reports / "clean.sarif", [{"results": []}])
+    if scenario == "finding":
+        write_sarif(reports / "findings.sarif", [{"results": [{"ruleId": "EXAMPLE"}]}])
+    elif scenario == "invalid":
+        (reports / "invalid.sarif").write_text("not-json", encoding="utf-8")
+    before = {path.name: path.read_bytes() for path in reports.iterdir()}
+    bash = shutil.which("bash")
+    assert bash is not None, "The workflow verification lane requires Bash"
+    result = subprocess.run(
+        [bash, "--noprofile", "--norc", "-euo", "pipefail", "-c", step["run"]],
+        cwd=repo,
+        env={**os.environ, "CODEQL_RESULTS": str(reports)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == expected, result.stderr
+    assert {path.name: path.read_bytes() for path in reports.iterdir()} == before
