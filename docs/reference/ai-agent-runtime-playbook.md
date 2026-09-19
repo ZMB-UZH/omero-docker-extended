@@ -150,6 +150,11 @@ the retained tags, digests, and complete reference graph again after cleanup.
   public-safety review are also mandatory. Public notes must reject credentials,
   personal or host-specific information, private infrastructure, findings,
   vulnerability mechanics, and exploit-enabling detail.
+- Validate the actual repository changelog with the shared release-note renderer
+  before dispatch, not only synthetic test fixtures. Every dated release section
+  needs its matching previous-tag comparison link, and the `Unreleased` link
+  must start at the newest release. The prebuilt carrier contract suite checks
+  every committed release section for these publication prerequisites.
 - Same-version replacement requires `replace_existing=true`, but that flag is
   not deletion authorization. Pause and obtain three fresh, separate approvals
   for the exact GitHub release, Git tag, and Docker tag before enabling the
