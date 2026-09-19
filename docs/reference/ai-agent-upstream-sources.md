@@ -18,8 +18,9 @@ This document records the pinned upstream AI Agent material vendored into this r
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
-- Latest upstream observed and reviewed on 2026-09-05: `v2.2.0`. A complete
-  tree and per-file comparison found metadata changes across the selected
+- Latest upstream observed and reviewed on 2026-09-19: `v2.2.1`. All 16 selected
+  skill/reference blobs are unchanged from `v2.2.0`, verified against complete
+  recursive trees. The earlier `v2.0.0` to `v2.2.0` comparison found metadata changes across the selected
   skills and body changes in five of them. The repo overlays adopt applicable
   installer isolation, plan-input validation, and failure-preserving command
   guidance. Keep the reproducible `v2.0.0` reference snapshot: generic MIME
@@ -88,13 +89,15 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 
 - Repository: `JuliusBrussee/caveman`
 - Reviewed release notes: `v1.5.1` through `v1.9.1`, `v2.0.0`, `v2.1.0`, and
-  `v2.2.0`.
+  `v2.2.0`; the latest review also covers `v2.7.0`.
 - caveman release tag: `v2.2.0`
 - caveman release commit: `9aa63945a349bef17206540650db48c30fafbdf2`
-- Latest upstream observed and reviewed on 2026-08-22: `v2.2.0`. The selected
-  prompt reference is current while installer, hook, natural-language
-  activation, compression-tool, MCP, stats, and cavecrew surfaces remain
-  disabled.
+- Latest upstream observed and reviewed on 2026-09-19: `v2.7.0`. The overlay
+  adopts explicit reply-language precedence and removes unmeasured savings
+  claims. The `v2.2.0` vendor snapshot remains a reproducible historical
+  reference, not a claim of the latest installed runtime. Installer, hook,
+  natural-language activation, compression-tool, MCP, proxy, credential-routing,
+  stats, and cavecrew surfaces remain disabled.
 - caveman vendor path: `third_party/caveman-v2.2.0/`
 - License: MIT (`third_party/caveman-v2.2.0/LICENSE`); the upstream license
   scope note keeps engine-linked components under BSL-1.1, and none are vendored.

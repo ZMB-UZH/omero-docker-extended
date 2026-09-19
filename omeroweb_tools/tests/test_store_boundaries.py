@@ -415,9 +415,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in prune helpers search rows without filters and non dict settings row.
     """
     monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
-    cursor = _RecordingCursor(
-        fetchone_rows=[(2,), ("not-a-dict",)], fetchall_rows=[[()]]
-    )
+    cursor = _RecordingCursor(fetchone_rows=[("not-a-dict",)], fetchall_rows=[[()]])
     conn = _RecordingConn(cursor)
 
     def _execute(sql, params=None):
@@ -450,7 +448,7 @@ def test_prune_helpers_search_rows_without_filters_and_non_dict_settings_row(
     assert pruned_scope == 3
     assert pruned_docs == 3
     assert rows == [{}]
-    assert total == 2
+    assert total == len(rows) == 1
     assert payload == {"default": True}
 
 

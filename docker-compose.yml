@@ -5,7 +5,7 @@
 services:
 
   portainer:
-    image: "portainer/portainer-ce:2.45.0-alpine"
+    image: "portainer/portainer-ce:2.45.1-alpine"
     container_name: portainer
     restart: unless-stopped
     init: true
@@ -38,7 +38,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.7.7"
+    image: "grafana/loki:3.7.8"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -204,7 +204,7 @@ services:
       - no-new-privileges:true
 
   cadvisor:
-    image: "ghcr.io/google/cadvisor:0.60.5"
+    image: "ghcr.io/google/cadvisor:0.60.6"
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
@@ -311,7 +311,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.2.1"
+    image: "grafana/grafana:13.2.2"
     restart: unless-stopped
     networks:
       omero:
@@ -663,7 +663,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.34.0"
+    image: "ollama/ollama:0.34.2"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

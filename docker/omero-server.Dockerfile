@@ -33,9 +33,9 @@ ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.1
-ARG URLLIB3_VERSION=2.7.0
+ARG URLLIB3_VERSION=2.8.0
 ARG CERTIFI_VERSION=2026.7.22
-ARG IDNA_VERSION=3.19
+ARG IDNA_VERSION=3.20
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 ARG PYOPENSSL_VERSION=26.4.0
@@ -72,11 +72,11 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------------------
 # The base image ships OMEZarrReader 0.3.1 (Mar 2023) and JZarr 0.3.4 (Aug 2021).
 # These are too old to handle many zarr layouts produced by modern tools.
-# Update to OMEZarrReader 0.6.0 (Jan 2025) + JZarr 0.4.2 (Oct 2023).
+# Keep the reader artifacts aligned with the OMERO.web CLI cache.
 ARG OMEZARR_READER_VERSION=0.6.0
-ARG JZARR_VERSION=0.4.2
+ARG JZARR_VERSION=0.5.0
 ARG OMEZARR_READER_SHA256=26e5b2e99a64abd1ba83ee52eeb5fcbd560190fed1097afb404c38bf24579e55
-ARG JZARR_SHA256=43f265b26dc8de384802853a2df34e18f0d836eae8bf4538f6c61c479b366cd8
+ARG JZARR_SHA256=5426e3b4bdde0474907e1cf32453ce3d69e71f1b32ff4773a43d366e1f5aef9d
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
@@ -109,7 +109,7 @@ RUN set -euo pipefail; \
 # plugin, zarr-imported images have no accessible pixel data.
 ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.6.1
 ARG OMERO_ZARR_PIXEL_BUFFER_SHA256=9cb3d1ed491ef866bc1703415b809097693fda13eb4818dc0eb6959f8fe94f97
-ARG CAFFEINE_3_1_8_SHA256=7dd15f9df1be238ffaa367ce6f556737a88031de4294dad18eef57c474ddf1d3
+ARG CAFFEINE_3_2_4_SHA256=9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
 ARG AWS_JAVA_SDK_S3_1_12_659_SHA256=44ed3a329a14c486a3f1c3b46eb47d26db4d93426a630790d2eefe542983dfa9
 ARG AWS_JAVA_SDK_CORE_1_12_659_SHA256=f7713aa96c49f3e9f8c2a67b2d9b2d431d746fbfa9a73083be67f914043d23eb
 ARG AWS_JAVA_SDK_KMS_1_12_659_SHA256=828c441cb154326f9dec238c498eeb346ea2a19f60e36f5910cccc7570b9bd10
@@ -126,9 +126,9 @@ RUN set -euo pipefail; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${PIXEL_BUFFER_URL}"; \
     printf '%s  %s\n' "${OMERO_ZARR_PIXEL_BUFFER_SHA256}" "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" | sha256sum -c -; \
     echo "Downloading omero-zarr-pixel-buffer runtime dependencies"; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" \
-        "https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar"; \
-    printf '%s  %s\n' "${CAFFEINE_3_1_8_SHA256}" "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.2.4.jar" \
+        "https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.2.4/caffeine-3.2.4.jar"; \
+    printf '%s  %s\n' "${CAFFEINE_3_2_4_SHA256}" "${SERVER_DIR}/lib/server/caffeine-3.2.4.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" \
         "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.659/aws-java-sdk-s3-1.12.659.jar"; \
     printf '%s  %s\n' "${AWS_JAVA_SDK_S3_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" | sha256sum -c -; \
@@ -712,6 +712,8 @@ HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
 # Runs AFTER all dnf installs and pip installs are complete, so that every
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
+ARG PILLOW_VERSION=12.3.0
+ARG MSGPACK_VERSION=1.2.2
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
         echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
@@ -748,6 +750,8 @@ RUN set -euo pipefail; \
             "idna==${IDNA_VERSION}" \
             "requests==${REQUESTS_VERSION}" \
             "jinja2==${JINJA2_VERSION}" \
+            "pillow==${PILLOW_VERSION}" \
+            "msgpack==${MSGPACK_VERSION}" \
             "pyopenssl==${PYOPENSSL_VERSION}"; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}"; \
         "${VENV_DIR}/bin/python" -m pip check; \

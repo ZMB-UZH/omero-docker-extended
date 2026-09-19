@@ -336,6 +336,88 @@ def test_staged_upload_file_helpers_enforce_server_side_byte_limit(
     assert staged_file.read_bytes() == b"1234"
 
 
+@pytest.mark.parametrize("operation", ["save", "update"])
+@pytest.mark.parametrize("failure", ["directory_sync", "lock_release"])
+def test_committed_job_write_is_never_replayed(
+    monkeypatch, tmp_path, operation, failure
+):
+    """Keep finalization failures from replaying committed import mutations.
+
+    Inputs: isolated job and a directory-sync or lock-release failure. Output:
+    one committed change and the existing failure result, without retries.
+    """
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(core_functions.time, "sleep", lambda _duration: None)
+    job_id = "a" * 32
+    initial = {"job_id": job_id, "count": 0}
+    seeded = core_functions._write_job_file(job_id, initial)
+    assert seeded is True
+    original_write = core_functions._write_job_file
+    writes = []
+
+    def record_write(identifier, job):
+        """Count attempts before invoking the real atomic writer.
+
+        Inputs: job identifier and state. Output: underlying write result.
+        """
+        writes.append(True)
+        return original_write(identifier, job)
+
+    monkeypatch.setattr(core_functions, "_write_job_file", record_write)
+    if failure == "directory_sync":
+
+        def fail_sync():
+            """Inject a failure after atomic replacement.
+
+            Inputs: none. Output: raises a directory synchronization error.
+            """
+            raise OSError("directory synchronization failed")
+
+        monkeypatch.setattr(core_functions, "_fsync_jobs_directory", fail_sync)
+    else:
+        original_lock = core_functions.portalocker.Lock
+
+        class ExitFailureLock:
+            """Real process lock that reports an error after releasing ownership."""
+
+            def __init__(self, *args, **kwargs):
+                """Prepare the real lock.
+
+                Inputs: lock arguments. Output: an unopened lock wrapper.
+                """
+                self.lock = original_lock(*args, **kwargs)
+
+            def __enter__(self):
+                """Acquire the underlying lock.
+
+                Inputs: none. Output: the acquired lock's file handle.
+                """
+                return self.lock.__enter__()
+
+            def __exit__(self, *args):
+                """Release ownership before injecting finalization failure.
+
+                Inputs: context exception details. Output: raises OSError.
+                """
+                self.lock.__exit__(*args)
+                raise OSError("lock release failed")
+
+        monkeypatch.setattr(core_functions.portalocker, "Lock", ExitFailureLock)
+
+    if operation == "save":
+        result = core_functions._save_job({**initial, "count": 1}, retries=3)
+        assert result is False
+    else:
+        result = core_functions._robust_update_job(
+            job_id, lambda job: {**job, "count": job["count"] + 1}, retries=3
+        )
+        assert result is None
+    assert len(writes) == 1
+    assert core_functions._read_job_file(job_id)["count"] == 1
+
+
 def test_write_read_job_file_and_apply_upload_updates(monkeypatch, tmp_path) -> None:
     """Verify write read job file and apply upload updates.
 

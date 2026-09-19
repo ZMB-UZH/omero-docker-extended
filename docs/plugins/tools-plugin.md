@@ -138,7 +138,9 @@ background thread inside the `omeroweb` process.
    scope membership, sync state, and saved queries.
 5. Search queries combine OMERO-index matches with plugin-database metadata
    matches from the current user's own scope according to the selected indexed
-   source. In `All searchable sources`, the two source lookups run concurrently.
+   source. In `All searchable sources`, the two source lookups run concurrently;
+   the complete metadata result supplies its own count without a second database
+   query. Metadata-only pagination retains its separate total-count query.
 6. Matching image IDs are rehydrated through OMERO and filtered again by actual
    OMERO visibility before the UI renders the results.
 7. The `Clear` control resets the search text, date filters, and rendered

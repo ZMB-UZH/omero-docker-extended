@@ -14,6 +14,10 @@ deployment env edits. See the [Temurin release notes](https://adoptium.net/news/
 When build-time hardening is enabled, failed OS or curated Python updates stop
 the build. Both application images check Python dependency consistency instead
 of publishing a successful build after a failed update.
+The server's final curated update also pins Pillow 12.3.0 and MessagePack 1.2.2
+after plugin installation. These versions support its Python 3.11 runtime;
+see the [Pillow notes](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html)
+and [MessagePack notes](https://github.com/msgpack/msgpack-python/releases/tag/v1.2.2).
 
 Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
 
@@ -195,6 +199,12 @@ This repository expresses those OMERO properties in env files with the existing 
   `PixelsService` handles pyramid regeneration. Reset to `0` after one
   successful cleanup cycle.
 - `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (in `env/omeroserver.env`) controls whether the `omero-zarr-pixel-buffer` server-side plugin is active. When `false`, the plugin JAR is moved out of the classpath so the standard OMERO `PixelsService` handles all pixel buffer requests (including automatic pyramid regeneration). Must be `true` when alternative zarr import or rendering mechanisms are in use.
+
+The server image and web CLI cache use OMEZarrReader 0.6.0 with JZarr 0.5.0.
+Both Dockerfiles pin and verify the artifact checksums; rebuild both application
+images to update them. Compose does not forward the example reader-version
+variables as build arguments, so changing those variables alone does not change
+the installed JARs or require rewriting an existing deployment's env files.
 
 ## Required Hardening Before Deployment
 

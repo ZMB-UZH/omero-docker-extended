@@ -1,6 +1,4 @@
-## ATTENTION!! Using the tag "latest" might be tempting but is extremely risky in production environments!
-## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
-# when the OMERO developers update the container
+# Keep the upstream image pinned; validate virtualenv discovery when upgrading it.
 
 # Pull image
 # ----------
@@ -43,9 +41,9 @@ ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.1
-ARG URLLIB3_VERSION=2.7.0
+ARG URLLIB3_VERSION=2.8.0
 ARG CERTIFI_VERSION=2026.7.22
-ARG IDNA_VERSION=3.19
+ARG IDNA_VERSION=3.20
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 ARG PYOPENSSL_VERSION=26.4.0
@@ -261,7 +259,7 @@ RUN set -euo pipefail; \
         django==5.2.17 \
         matplotlib==3.11.2 \
         pytest==9.1.1 \
-        portalocker==4.3.0 \
+        portalocker==4.3.2 \
         psycopg2-binary==2.9.13 \
         celery==5.6.3 \
         redis==8.1.0 \
@@ -422,15 +420,19 @@ RUN cp -a /opt/omero/web/OMERO.web/var/static /opt/omero/web/static_backup
 # modern OME-NGFF zarrs.  Stage the updated JARs here; the bootstrap script
 # (10-web-bootstrap.sh) copies them into the cache at container start.
 ARG OMEZARR_READER_VERSION=0.6.0
-ARG JZARR_VERSION=0.4.2
+ARG JZARR_VERSION=0.5.0
+ARG OMEZARR_READER_SHA256=26e5b2e99a64abd1ba83ee52eeb5fcbd560190fed1097afb404c38bf24579e55
+ARG JZARR_SHA256=5426e3b4bdde0474907e1cf32453ce3d69e71f1b32ff4773a43d366e1f5aef9d
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/zarr-jar-upgrade; \
     OMEZARR_URL="https://artifacts.openmicroscopy.org/artifactory/ome.releases/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
     JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
     echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION}"; \
     curl -fsSL -o /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar "${OMEZARR_URL}"; \
+    printf '%s  %s\n' "${OMEZARR_READER_SHA256}" /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar | sha256sum -c -; \
     echo "Downloading JZarr ${JZARR_VERSION}"; \
     curl -fsSL -o /opt/omero/web/zarr-jar-upgrade/jzarr.jar "${JZARR_URL}"; \
+    printf '%s  %s\n' "${JZARR_SHA256}" /opt/omero/web/zarr-jar-upgrade/jzarr.jar | sha256sum -c -; \
     chown -R omero-web:omero-web /opt/omero/web/zarr-jar-upgrade; \
     echo "Staged OMEZarrReader ${OMEZARR_READER_VERSION} + JZarr ${JZARR_VERSION} for runtime upgrade"
 

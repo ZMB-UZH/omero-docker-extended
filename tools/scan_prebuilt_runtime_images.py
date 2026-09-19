@@ -17,23 +17,27 @@ import tempfile
 def package_count(document: dict) -> int:
     """Reject empty/file-only inventories rather than treating them as clean.
 
-    Inputs: SPDX document. Output: package count; raises ValueError for invalid input.
+    Inputs: native Scout document. Output: package count; rejects invalid input.
     """
-    if not isinstance(document, dict) or document.get("spdxVersion") != "SPDX-2.3":
-        raise ValueError("Runtime analysis did not produce an SPDX 2.3 document.")
-    packages = document.get("packages")
+    if (
+        not isinstance(document, dict)
+        or not isinstance(document.get("descriptor"), dict)
+        or document["descriptor"].get("name") != "docker-scout"
+    ):
+        raise ValueError("Runtime analysis did not produce a native Scout document.")
+    packages = document.get("artifacts")
     if not isinstance(packages, list) or not packages:
         raise ValueError("Runtime analysis found no packages.")
     if not all(
-        isinstance(package, dict) and package.get("SPDXID") for package in packages
+        isinstance(package, dict)
+        and isinstance(package.get("name"), str)
+        and package["name"]
+        for package in packages
     ):
         raise ValueError("Runtime package inventory is malformed.")
     if not any(
-        isinstance(reference, dict)
-        and reference.get("referenceType") == "purl"
-        and str(reference.get("referenceLocator", "")).startswith("pkg:")
+        isinstance(package.get("purl"), str) and package["purl"].startswith("pkg:")
         for package in packages
-        for reference in package.get("externalRefs", [])
     ):
         raise ValueError(
             "Runtime inventory contains no identifiable software packages."
@@ -83,6 +87,9 @@ def _run(docker: str, arguments: list[str], *, env: dict, log: Path) -> str:
                 check=True,
             )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        if exc.stdout:
+            with log.open("ab") as errors:
+                errors.write(exc.stdout)
         raise RuntimeError(
             "Runtime image analysis failed; inspect the private scan log."
         ) from exc
@@ -120,7 +127,7 @@ def scan_images(images: list[str], output_dir: Path) -> dict:
         if image_id in records:
             continue
         name = image_id.split(":", 1)[1]
-        sbom = output_dir / f"{name}.spdx.json"
+        sbom = output_dir / f"{name}.scout.json"
         report = output_dir / f"{name}.sarif.json"
         # Scout temporary layers can be large. Reclaim only this invocation's
         # scratch space after each image, without pruning Docker or shared caches.
@@ -137,7 +144,7 @@ def scan_images(images: list[str], output_dir: Path) -> dict:
                     "scout",
                     "sbom",
                     "--format",
-                    "spdx",
+                    "json",
                     "--output",
                     str(sbom),
                     f"local://{image_id}",

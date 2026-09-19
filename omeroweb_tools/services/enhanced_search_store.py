@@ -1187,18 +1187,22 @@ def search_index_rows(
         filters.get("acquisition_date_to"),
         filters.get("acquisition_date_to"),
     ]
-    count_sql = _search_count_sql()
     paged_rows_sql = _search_rows_sql(paged=limit is not None)
     paged_params = list(base_params)
     if limit is not None:
         paged_params.extend([limit, offset])
 
     with conn.cursor() as cur:
-        cur.execute(count_sql, base_params)
-        count_row = cur.fetchone()
-        total_count = int(count_row[0]) if count_row and count_row[0] is not None else 0
+        if limit is not None:
+            cur.execute(_search_count_sql(), base_params)
+            count_row = cur.fetchone()
+            total_count = (
+                int(count_row[0]) if count_row and count_row[0] is not None else 0
+            )
         cur.execute(paged_rows_sql, paged_params)
         rows = cur.fetchall()
+        if limit is None:
+            total_count = len(rows)
 
     columns = (
         "image_id",

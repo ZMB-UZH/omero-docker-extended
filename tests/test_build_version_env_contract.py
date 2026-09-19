@@ -135,7 +135,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in compose pins monitoring and management image versions.
         """
         compose_text = self.read_text("docker-compose.yml")
-        self.assertIn('image: "portainer/portainer-ce:2.45.0-alpine"', compose_text)
+        self.assertIn('image: "portainer/portainer-ce:2.45.1-alpine"', compose_text)
         self.assertIn('image: "grafana/alloy:v1.19.2"', compose_text)
         self.assertIn('image: "prom/prometheus:v3.14.0"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
@@ -145,10 +145,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn('image: "oliver006/redis_exporter:v1.91.1-alpine"', compose_text)
         self.assertIn('image: "redis:8.10.1-alpine"', compose_text)
-        self.assertIn('image: "ghcr.io/google/cadvisor:0.60.5"', compose_text)
-        self.assertIn('image: "grafana/loki:3.7.7"', compose_text)
-        self.assertIn('image: "grafana/grafana:13.2.1"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.34.0"', compose_text)
+        self.assertIn('image: "ghcr.io/google/cadvisor:0.60.6"', compose_text)
+        self.assertIn('image: "grafana/loki:3.7.8"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.2.2"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.34.2"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -282,6 +282,50 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn(
             'chown_tree_or_die "${PORTAINER_DATA_PATH}" "Portainer data directory" "${PORTAINER_UID}" "${PORTAINER_GID}"',
             script_text,
+        )
+
+    def test_zarr_reader_artifacts_match_and_verify_before_installation(self) -> None:
+        """Require identical, checksum-verified Zarr readers in both images.
+
+        Inputs: Dockerfiles and the example version contract. Output: rejects
+        divergent pins or downloads installed without integrity verification.
+        """
+        pins = []
+        for service, directory in (
+            ("server", "/tmp"),  # nosec B108 -- Dockerfile text fixture; no I/O at this path.
+            ("web", "/opt/omero/web/zarr-jar-upgrade"),
+        ):
+            text = self.read_text(f"docker/omero-{service}.Dockerfile")
+            args = dict(re.findall(r"^ARG (\w+)=(\S+)$", text, re.M))
+            pins.append(
+                {
+                    key: args[key]
+                    for key in (
+                        "OMEZARR_READER_VERSION",
+                        "OMEZARR_READER_SHA256",
+                        "JZARR_VERSION",
+                        "JZARR_SHA256",
+                    )
+                }
+            )
+            for artifact, checksum in (
+                ("OMEZarrReader.jar", "OMEZARR_READER_SHA256"),
+                ("jzarr.jar", "JZARR_SHA256"),
+            ):
+                with self.subTest(service=service, artifact=artifact):
+                    self.assertRegex(args[checksum], r"^[a-f0-9]{64}$")
+                    download = f"curl -fsSL -o {directory}/{artifact}"
+                    verify = (
+                        f"printf '%s  %s\\n' \"${{{checksum}}}\" "
+                        f"{directory}/{artifact} | sha256sum -c -;"
+                    )
+                    self.assertIn(download, text)
+                    self.assertIn(verify, text)
+                    self.assertLess(text.index(download), text.index(verify))
+        self.assertEqual(pins[0], pins[1])
+        self.assertIn(
+            f"JZARR_VERSION={pins[0]['JZARR_VERSION']}\n",
+            self.read_text("env/omeroserver_example.env"),
         )
 
     def test_compose_images_are_explicitly_tagged_and_never_floating(self) -> None:
@@ -431,7 +475,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "django==5.2.17",
             "matplotlib==3.11.2",
             "pytest==9.1.1",
-            "portalocker==4.3.0",
+            "portalocker==4.3.2",
             "psycopg2-binary==2.9.13",
             "celery==5.6.3",
             "redis==8.1.0",
@@ -465,9 +509,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "ARG SETUPTOOLS_VERSION=80.10.2",
             "ARG WHEEL_VERSION=0.48.0",
             "ARG CRYPTOGRAPHY_VERSION=50.0.1",
-            "ARG URLLIB3_VERSION=2.7.0",
+            "ARG URLLIB3_VERSION=2.8.0",
             "ARG CERTIFI_VERSION=2026.7.22",
-            "ARG IDNA_VERSION=3.19",
+            "ARG IDNA_VERSION=3.20",
             "ARG REQUESTS_VERSION=2.34.2",
             "ARG JINJA2_VERSION=3.1.6",
         )

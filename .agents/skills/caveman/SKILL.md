@@ -20,7 +20,7 @@ Use this skill only when the user explicitly asks for lower-token replies, terse
 - Compression never outranks correctness, safety, or precise dates. Start at lite compression; use heavier compression only when requested.
 - Never remove `not`, `never`, `no`, `only`, or `except`; preserve numbers and units exactly. Do not add words, damage grammar, or switch languages to imitate terseness; use normal prose when it is not shorter and clearer.
 - Keep code, commands, file references, exact errors, and verification results normal and lossless; never abbreviate code symbols, function names, API names, paths, URLs, Typst, or LaTeX.
-- Preserve the user's dominant language; compress the style, not the language. Do not invent prose abbreviations or causal arrows.
+- Follow an explicit reply-language instruction first; otherwise preserve the user's dominant language. Compress the style, not the language. Do not invent prose abbreviations or causal arrows.
 - Do not narrate the mode, refer to the agent or style, add decorative tables or emoji, or dump long raw logs unless the user asks for them.
 - Required progress updates and host-application collaboration rules remain in force; output compression cannot suppress them.
 - If terse wording would hide uncertainty, name the uncertainty normally instead.

@@ -86,15 +86,13 @@ Compression stays opt-in and quality-first:
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
 - keep routing, tool use, verification scope, and uncertainty handling identical to normal mode
 
-Upstream `caveman` `v2.2.0` preserves the measured 65% average output-token
-reduction baseline, adds negation, number, unit, grammar, persisted-prose, and
-destructive-command clarity guards, rejects invented abbreviations and causal
-arrows that do not save tokens, and forbids self-referential mode narration.
-It also includes hooks, stats, installers,
-`caveman-shrink`, `caveman-init`, and cavecrew orchestration. This repo imports
-only the prompt-reference clarity lessons; activation, hook, installer, MCP,
-subagent, statusline, stats, configuration, and context-rewrite surfaces remain
-disabled.
+The local overlay preserves negation, numbers, units, code symbols, and normal
+persisted prose. It follows explicit reply-language instructions before the
+conversation's dominant language, as clarified upstream in `v2.7.0`.
+Token savings depend on the task; this repository makes no measured percentage
+claim. Only applicable prompt-level guidance is adopted. Upstream activation,
+hooks, installers, MCP, subagents, statusline, stats, credential routing, and
+context rewriting remain disabled.
 
 The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, smart installer, cavecrew subagents, `caveman-shrink`, stats/statusline scripts, and compression-tool context rewriting are not activated in this repo.
 

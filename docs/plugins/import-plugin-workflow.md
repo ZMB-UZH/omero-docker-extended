@@ -4,6 +4,12 @@ This document describes the end-to-end control flow for `omeroweb_import`, with 
 
 ## Workflow diagram
 
+Job records are committed by atomic replacement under a separate per-job lock,
+so readers never need to consume partially written JSON. The compatibility
+storage API uses the same write strategy: failed serialization or pre-commit
+I/O preserves the previous record. A directory-sync failure after replacement
+is reported to the caller without replaying an already committed mutation.
+
 ```mermaid
 flowchart TD
     A[Browser selects files or folders] --> B[OMERO.web Import plugin creates job and staged upload tree]

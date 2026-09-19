@@ -1050,6 +1050,7 @@ def _save_job(
         return False
     job_dict["updated"] = time.time()
     for attempt in range(retries):
+        committed = False
         if attempt:
             time.sleep(
                 random.uniform(  # nosec B311
@@ -1059,8 +1060,15 @@ def _save_job(
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 _write_job_file(job_id, job_dict)
-            return True
+                committed = True
         except (portalocker.exceptions.LockException, OSError) as exc:
+            if committed or isinstance(exc, _JobWriteCommittedError):
+                logger.error(
+                    "Job file %s was committed, but finalization failed; not retrying: %s",
+                    sanitize_log_value(path),
+                    sanitize_log_value(exc),
+                )
+                return False
             logger.warning(
                 "Unable to lock job file %s for writing (attempt %s/%s): %s",
                 sanitize_log_value(path),
@@ -1068,6 +1076,8 @@ def _save_job(
                 retries,
                 sanitize_log_value(exc),
             )
+        if committed:
+            return True
     logger.error(
         "Failed to lock job file %s for writing after %s attempts.",
         sanitize_log_value(path),
@@ -1097,6 +1107,7 @@ def _robust_update_job(
     if path is None or lock_path is None:
         return None
     for attempt in range(retries):
+        committed = False
         if attempt:
             time.sleep(
                 random.uniform(  # nosec B311
@@ -1113,7 +1124,7 @@ def _robust_update_job(
                 job_dict = _read_job_file(job_id)
                 job_dict = update_fn(job_dict)
                 _write_job_file(job_id, job_dict)
-            return job_dict
+                committed = True
         except json.JSONDecodeError as exc:
             logger.error(
                 "Job file %s is corrupt: %s",
@@ -1122,6 +1133,13 @@ def _robust_update_job(
             )
             return None
         except (portalocker.exceptions.LockException, OSError) as exc:
+            if committed or isinstance(exc, _JobWriteCommittedError):
+                logger.error(
+                    "Job file %s was committed, but finalization failed; not retrying: %s",
+                    sanitize_log_value(path),
+                    sanitize_log_value(exc),
+                )
+                return None
             logger.warning(
                 "Unable to lock job file %s for update (attempt %s/%s): %s",
                 sanitize_log_value(path),
@@ -1129,6 +1147,8 @@ def _robust_update_job(
                 retries,
                 sanitize_log_value(exc),
             )
+        if committed:
+            return job_dict
     logger.error(
         "Failed to lock job file %s for update after %s attempts.",
         sanitize_log_value(path),
@@ -5946,12 +5966,10 @@ def _resolve_managed_directory_path(path: Path) -> Path:
 def _fsync_directory(path: Path):
     """Flush directory metadata after atomic filesystem updates.
 
-    Inputs: `path` (Path) path. Output: None.
+    Inputs: `path` (Path) path. Output: None. Raises: OSError when directory
+    metadata cannot be synchronized on the supported Linux filesystem.
     """
-    try:
-        dir_fd = os.open(path, os.O_DIRECTORY)
-    except (AttributeError, OSError):
-        return
+    dir_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(dir_fd)
     finally:
@@ -5976,10 +5994,16 @@ def _read_job_file(job_id: str):
         return json.load(handle)
 
 
+class _JobWriteCommittedError(OSError):
+    """The job was replaced, but directory durability could not be confirmed."""
+
+
 def _write_job_file(job_id: str, job_dict):
     """Write the job file.
 
-    Inputs: `job_id` (str), `job_dict`. Output: `bool`.
+    Inputs: `job_id` (str), `job_dict`. Output: `bool`. Raises:
+    `_JobWriteCommittedError` after replacement when directory sync fails;
+    callers must not replay the committed mutation.
     """
     path = _job_path(job_id)
     tmp_path = None
@@ -5997,8 +6021,13 @@ def _write_job_file(job_id: str, job_dict):
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
-        _fsync_jobs_directory()
         tmp_path = None
+        try:
+            _fsync_jobs_directory()
+        except OSError as exc:
+            raise _JobWriteCommittedError(
+                "Job record committed but directory synchronization failed."
+            ) from exc
         return True
     finally:
         if tmp_path and tmp_path.exists():

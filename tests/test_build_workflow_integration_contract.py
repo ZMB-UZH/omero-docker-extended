@@ -7,6 +7,7 @@ from iter_test_helpers import next_or_fail
 import unittest
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 
@@ -1768,6 +1769,35 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                     setup_step["with"]["cache-dependency-path"].splitlines(),
                 )
 
+    def test_osv_explicitly_scans_every_ci_lockfile(self) -> None:
+        """Include renamed requirements files without narrowing recursive coverage.
+
+        Inputs: workflow arguments and CI requirement sources. Output: asserts
+        every source has a lockfile passed to OSV with the requirements parser.
+        """
+        import yaml
+
+        workflow = yaml.safe_load(
+            (self.repo_root / ".github/workflows/security-code-scanning.yml").read_text(
+                encoding="utf-8"
+            )
+        )
+        args = shlex.split(workflow["jobs"]["osv-scanner"]["with"]["scan-args"])
+        expected = set()
+        for source in (self.repo_root / ".github/requirements").glob("*.in"):
+            lockfile = source.with_suffix(".txt")
+            self.assertTrue(lockfile.is_file(), f"Missing lockfile for {source.name}")
+            expected.add(
+                "--lockfile=requirements.txt:"
+                + lockfile.relative_to(self.repo_root).as_posix()
+            )
+        self.assertTrue(expected)
+        self.assertEqual(
+            expected, {arg for arg in args if arg.startswith("--lockfile")}
+        )
+        self.assertIn("--recursive", args)
+        self.assertEqual("./", args[-1])
+
     def test_security_codeql_uses_build_free_interpreted_language_mode(self) -> None:
         """Verify the security codeql uses build free interpreted language mode safety boundary.
 
@@ -1973,7 +2003,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f",
+            "codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5",
             upload_step["uses"],
         )
         self.assertEqual(

@@ -541,6 +541,8 @@ jobs:
             -o -name 'pnpm-lock.yaml' -o -name 'go.sum' -o -name 'go.mod' \
             -o -name 'Gemfile.lock' -o -name 'pom.xml' -o -name 'gradle.lockfile' \) \
             -not -path './.git/*' -not -path './node_modules/*' | sort
+          echo "--- Explicit CI requirements lockfiles ---"
+          find .github/requirements -maxdepth 1 -type f -name '*.txt' | sort
           echo "::endgroup::"
 
   osv-scanner:
@@ -550,10 +552,15 @@ jobs:
       contents: read
       security-events: write # Required to upload OSV results to code scanning.
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
     with:
       scan-args: |-
         --recursive
+        --lockfile=requirements.txt:.github/requirements/mypy-ci.txt
+        --lockfile=requirements.txt:.github/requirements/recovery-ci.txt
+        --lockfile=requirements.txt:.github/requirements/security-code-scanning.txt
+        --lockfile=requirements.txt:.github/requirements/tests-ci.txt
+        --lockfile=requirements.txt:.github/requirements/vulture-ci.txt
         ./
 
   scorecard:

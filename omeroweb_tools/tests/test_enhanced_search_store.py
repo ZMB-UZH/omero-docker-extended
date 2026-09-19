@@ -359,6 +359,54 @@ def test_search_index_rows_builds_permission_and_date_aware_sql(monkeypatch):
     assert rows_call["raw_sql"].__class__.__name__ != "str"
 
 
+def test_unpaged_search_uses_result_count_without_repeating_query(monkeypatch):
+    """Full-result searches return a consistent total with one filtered query.
+
+    Inputs: recording connection and permission filters. Output: verifies one
+    query, unchanged access predicates, and totals for populated and empty results.
+    """
+    monkeypatch.setattr(store, "ensure_schema", lambda conn: None)
+    conn = _SearchConn()
+
+    def unexpected_count():
+        """Reject a redundant count query.
+
+        Inputs: none. Output: raises if unpaged search requests a separate count.
+        """
+        raise AssertionError("Unpaged search must not run a separate count query")
+
+    monkeypatch.setattr(conn.cursor_obj, "fetchone", unexpected_count)
+    rows, total = store.search_index_rows(
+        conn,
+        visible_group_ids=[5],
+        current_user_id=21,
+        scope_type="user",
+        scope_id=21,
+        query_text="zeiss",
+        filters={},
+    )
+
+    assert total == len(rows) == 1
+    assert rows[0]["image_id"] == 17
+    assert len(conn.cursor_obj.executed) == 1
+    call = conn.cursor_obj.executed[0]
+    assert "SELECT DISTINCT" in call["sql_text"]
+    assert "LIMIT %s" not in call["sql_text"]
+    assert "images.group_id = ANY(%s::bigint[])" in call["sql_text"]
+    assert call["params"][:9] == ["user", "user", 21, 21, [5], [5], 21, 21, 21]
+
+    monkeypatch.setattr(conn.cursor_obj, "fetchall", lambda: [])
+    rows, total = store.search_index_rows(
+        conn,
+        visible_group_ids=[5],
+        current_user_id=21,
+        query_text="absent",
+        filters={},
+    )
+    assert rows == []
+    assert total == 0
+
+
 def test_load_user_settings_merges_defaults(monkeypatch):
     """Verify load user settings merges defaults.
 
