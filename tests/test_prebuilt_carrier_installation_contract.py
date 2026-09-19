@@ -1158,6 +1158,37 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             )
         self.assertEqual(0, exit_context.exception.code)
 
+    def test_repository_changelog_is_ready_for_release_rendering(self) -> None:
+        """Validate real release sections and the current unreleased comparison.
+
+        Inputs: tracked changelog. Output: valid notes and comparison links.
+        """
+        changelog = self.read_text("CHANGELOG.md")
+        heading_pattern = prebuilt_release_metadata.CHANGELOG_RELEASE_HEADING_PATTERN
+        versions = [
+            match.group("version")
+            for line in changelog.splitlines()
+            if (match := heading_pattern.fullmatch(line))
+        ]
+        self.assertTrue(versions)
+        for version in versions:
+            with self.subTest(version=version):
+                notes = prebuilt_release_metadata.render_release_notes(
+                    changelog, version
+                )
+                prebuilt_release_metadata.validate_public_release_text(
+                    notes, "Rendered repository changelog"
+                )
+        reference_pattern = prebuilt_release_metadata.CHANGELOG_REFERENCE_PATTERN
+        unreleased = [
+            match.group("url")
+            for line in changelog.splitlines()
+            if (match := reference_pattern.fullmatch(line))
+            and match.group("label") == "Unreleased"
+        ]
+        self.assertEqual(len(unreleased), 1)
+        self.assertTrue(unreleased[0].endswith(f"/compare/{versions[0]}...HEAD"))
+
     def test_release_metadata_changelog_contract_is_professional(self) -> None:
         """Verify canonical categories, comparison, and release rendering.
 

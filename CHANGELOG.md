@@ -110,7 +110,8 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.2-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.0-main.1...HEAD
+[1.2.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.2-main.1...1.2.0-main.1
 [1.1.2-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.1-main.1...1.1.2-main.1
 [1.1.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.0-main.1...1.1.1-main.1
 [1.1.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.0.1-main.1...1.1.0-main.1
