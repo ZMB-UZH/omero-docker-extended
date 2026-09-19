@@ -411,6 +411,6 @@ bash installation/cleanup_build_containers.sh
 
 ## External Reverse Proxy setup (IT-managed)
 
-1. Configure your external reverse proxy (for example, nginx managed via Ansible) to forward traffic to `omeroweb` on `CONFIG_omero_web_application__server_port`.
-2. Keep direct local HTTP access available on `OMERO_WEB_HOST_PORT` for troubleshooting when needed.
-3. Manage TLS certificates in your external proxy stack.
+1. Follow the [reverse-proxy configuration guide](configuration.md#reverse-proxy-managed-externally). Use `omeroweb` on `CONFIG_omero_web_application__server_port` only when the proxy shares the Docker network; otherwise use the deployment's published host binding.
+2. Restrict direct HTTP access on `OMERO_WEB_HOST_PORT` to trusted proxy or administration networks.
+3. Configure a trusted TLS certificate for the public hostname; do not disable certificate verification. Operators must align `CONFIG_omero_web_csrf__trusted__origins` with the public HTTPS origins and verify login, upload, and embedded monitoring without disabling CSRF protection.

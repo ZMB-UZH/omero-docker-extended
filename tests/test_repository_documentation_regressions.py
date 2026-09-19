@@ -116,6 +116,22 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertNotIn("unless there is a documented, reviewed reason", section)
         self.assertNotIn("When a CSRF exemption remains necessary", section)
 
+    def test_deployment_docs_require_env_verification_and_trusted_tls(self) -> None:
+        """Inputs: deployment guidance. Output: no implicit env or weak TLS advice."""
+        readme = self.read_text("README.md")
+        self.assertNotIn("always assume the corresponding non-example", readme)
+        self.assertIn("verify runtime files", readme)
+        self.assertIn("never regenerate or normalize operator-owned values", readme)
+        self.assertNotIn("without strong certificate verification", readme)
+        configuration = self.read_text("docs/deployment/configuration.md")
+        quickstart = self.read_text("docs/deployment/quickstart.md")
+        for text in (configuration, quickstart):
+            self.assertIn("trusted TLS certificate", text)
+            self.assertIn("do not disable certificate verification", text)
+            self.assertIn("CONFIG_omero_web_csrf__trusted__origins", text)
+        self.assertIn("same Docker network", configuration)
+        self.assertIn("published host binding", configuration)
+
     def test_cleanup_guidance_preserves_deployment_data_and_scopes_evidence(
         self,
     ) -> None:
@@ -124,6 +140,15 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         skill = self.read_text(".agents/skills/verification-loop/SKILL.md")
         self.assertIn("A fresh-install image inventory is not a data reset.", playbook)
         self.assertIn("separate approval for each pre-existing object", playbook)
+        self.assertIn(
+            "count release tags separately from OCI manifest objects", playbook
+        )
+        self.assertIn(
+            "untagged child referenced by a retained index is not stale", playbook
+        )
+        self.assertIn(
+            "Never use the registry UI's object count as a deletion target", playbook
+        )
         self.assertIn("unchanged persistent mounts/configuration", playbook)
         self.assertIn("immutable image ID and build inputs", skill)
 

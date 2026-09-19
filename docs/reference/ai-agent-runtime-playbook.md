@@ -108,6 +108,13 @@ temporary roots, permissions, and unrelated workloads. Remove only reviewed
 superseded images and owned verification artifacts. Finish with a second image
 inventory, unchanged persistent mounts/configuration, and healthy services.
 
+For registry cleanup, count release tags separately from OCI manifest objects.
+Inspect each retained tag's index and its child image and provenance manifests;
+an untagged child referenced by a retained index is not stale. Preserve the full
+manifest graph and delete only independently verified orphans with the required
+approval. Never use the registry UI's object count as a deletion target. Verify
+the retained tags, digests, and complete reference graph again after cleanup.
+
 ## Prebuilt carrier and easy installation
 
 - The standard installer and `installation/easy_installation_script.sh` must

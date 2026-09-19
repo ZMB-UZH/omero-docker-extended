@@ -765,6 +765,50 @@ RUN set -euo pipefail; \
     echo "=== Final security hardening: preserving shared libraries ==="; \
     echo "Skipping blanket shared-library stripping because it can corrupt critical runtime libraries."
 
+# Keep the PostgreSQL driver on its maintained Java 8+ line. The upstream
+# distribution retains the Java 7 driver; the server image runs Java 11.
+ARG POSTGRESQL_JDBC_VERSION=42.7.13
+ARG POSTGRESQL_JDBC_SHA256=6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93
+RUN set -euo pipefail; \
+    mapfile -t SERVER_DIRS < <(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*'); \
+    if [[ "${#SERVER_DIRS[@]}" -ne 1 ]]; then \
+        echo "ERROR: Expected exactly one OMERO.server distribution." >&2; \
+        exit 1; \
+    fi; \
+    SERVER_DIR="${SERVER_DIRS[0]}"; \
+    curl -fsSL "https://repo.maven.apache.org/maven2/org/postgresql/postgresql/${POSTGRESQL_JDBC_VERSION}/postgresql-${POSTGRESQL_JDBC_VERSION}.jar" -o /tmp/postgresql.jar; \
+    printf '%s  %s\n' "${POSTGRESQL_JDBC_SHA256}" /tmp/postgresql.jar | sha256sum -c -; \
+    unzip -p /tmp/postgresql.jar META-INF/MANIFEST.MF | tr -d '\r' | grep -Fx "Implementation-Version: ${POSTGRESQL_JDBC_VERSION}"; \
+    for subdir in lib/client lib/server; do \
+        test -f "${SERVER_DIR}/${subdir}/postgresql.jar"; \
+        install -o omero-server -g omero-server -m 0644 /tmp/postgresql.jar "${SERVER_DIR}/${subdir}/postgresql.jar"; \
+    done; \
+    rm -f /tmp/postgresql.jar; \
+    rm -f "${SERVER_DIR}.zip"
+
+# OMERO's PDF text parser uses the 2.x API. Keep PDFBox and FontBox aligned.
+ARG PDFBOX_VERSION=2.0.37
+ARG PDFBOX_SHA256=fcb04e6dac53f8681108bb66d5ac2ca72987b6c6795b14a8071636fc49a5d703
+ARG FONTBOX_SHA256=992e14d5e903f69517903a1a817040ed7bf1288e768870e0a27bf9090bb34ec3
+RUN set -euo pipefail; \
+    SERVER_DIR="$(readlink -f /opt/omero/server/OMERO.server)"; \
+    test -d "${SERVER_DIR}/lib/server"; \
+    for artifact in pdfbox fontbox; do \
+        if [[ "${artifact}" == "pdfbox" ]]; then expected="${PDFBOX_SHA256}"; else expected="${FONTBOX_SHA256}"; fi; \
+        curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/pdfbox/${artifact}/${PDFBOX_VERSION}/${artifact}-${PDFBOX_VERSION}.jar" -o "/tmp/${artifact}.jar"; \
+        printf '%s  %s\n' "${expected}" "/tmp/${artifact}.jar" | sha256sum -c -; \
+        unzip -p "/tmp/${artifact}.jar" META-INF/MANIFEST.MF | tr -d '\r' | grep -Fx "Implementation-Version: ${PDFBOX_VERSION}"; \
+        for subdir in lib/client lib/server; do \
+            test -f "${SERVER_DIR}/${subdir}/${artifact}.jar"; \
+            install -o omero-server -g omero-server -m 0644 "/tmp/${artifact}.jar" "${SERVER_DIR}/${subdir}/${artifact}.jar"; \
+        done; \
+        rm -f "/tmp/${artifact}.jar"; \
+    done
+
+# Remove inherited build-only OS dependencies without touching application venvs.
+COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh
+RUN /bin/bash /tmp/remove-build-dependencies.sh && rm -f /tmp/remove-build-dependencies.sh
+
 # Default the image to the application user. Compose explicitly requests root
 # only for managed startup bootstrap, then the entrypoint drops privileges.
 USER omero-server

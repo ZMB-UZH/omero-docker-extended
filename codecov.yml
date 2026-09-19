@@ -1,9 +1,9 @@
 # Codecov configuration for omero-docker-extended
 # https://docs.codecov.io/docs/codecov-yaml
 
-# Files and directories excluded from coverage analysis entirely.
-# These contain no testable Python source code (shell scripts, configs,
-# Dockerfiles, documentation, templates, static assets).
+# Codecov measures the server-side runtime packages configured in .coveragerc.
+# Tooling and host-side Python below remain tested, but outside that denominator.
+# See docs/operations/code-scanning.md#codecov-coverage-scope.
 ignore:
   - "conftest.py"
   - "startup/"

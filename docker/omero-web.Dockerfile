@@ -560,6 +560,10 @@ RUN set -euo pipefail; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
 
+# Remove inherited build-only OS dependencies without touching application venvs.
+COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh
+RUN /bin/bash /tmp/remove-build-dependencies.sh && rm -f /tmp/remove-build-dependencies.sh
+
 # Default the image to the application user. Compose explicitly requests root
 # only for managed startup bootstrap, then the entrypoint drops privileges.
 USER omero-web

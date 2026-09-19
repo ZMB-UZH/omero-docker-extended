@@ -10,6 +10,23 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.2.0-main.1] - 2026-09-19
+
+### Changed
+
+- Updated compatible OMERO, monitoring, and maintenance dependencies.
+- Improved import reliability, storage handling, search efficiency, and monitoring accuracy.
+- Refined installation, recovery, and operator documentation.
+
+### Upgrade Notes
+
+- Rebuild application images and refresh services, retaining existing configuration and data.
+- No database migration or storage-layout change.
+
+### Verification
+
+- Linux automated tests and live import, rendering, export, and monitoring checks passed.
+
 ## [1.1.2-main.1] - 2026-09-05
 
 ### Fixed
