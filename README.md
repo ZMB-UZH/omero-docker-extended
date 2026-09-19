@@ -529,7 +529,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 ### Example templates and runtime files
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
-- For AI-assisted analysis and maintenance, AI Agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
+- During maintenance, verify runtime files against the tracked example contracts with the env guards; never regenerate or normalize operator-owned values. Missing files or template drift require review, not assumptions or automatic replacement.
 - This split exists so update flows (including `installation/github_pull_project_bash`) can pull repository changes without replacing site-local runtime files, configured runtime paths, Buildx cache paths, or `.env_backups/` that admins manage outside git.
 - The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
@@ -602,7 +602,13 @@ writes; privileged host-root writes can bypass quota accounting.
 
 ### Reverse proxy
 
-This is currently disabled, but easy to enable, at least without strong certificate verification. Reverse proxy and TLS termination can be managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
+This repository does not deploy a public reverse proxy. Production OMERO.web
+access requires an externally managed TLS endpoint with a trusted certificate.
+Use the configured container port when the proxy shares the Docker network, or
+the deployment's published host binding otherwise. Restrict direct HTTP access
+to trusted networks and configure the public CSRF origins without disabling
+certificate verification or CSRF protection. See the
+[reverse-proxy configuration guide](docs/deployment/configuration.md#reverse-proxy-managed-externally).
 
 </details>
 
@@ -706,7 +712,7 @@ editing.
 
 This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
 
-To the best of the maintainer's knowledge, all software dependencies and components used or referenced referenced in this repository are sourced from publicly available channels and are used under their respective published terms and conditions. No paid or proprietary software packages are intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
+To the best of the maintainer's knowledge, all software dependencies and components used or referenced in this repository are sourced from publicly available channels and are used under their respective published terms and conditions. No paid or proprietary software packages are intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
 
 If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact by opening an issue and describe the concern so it can be reviewed and addressed promptly.
 

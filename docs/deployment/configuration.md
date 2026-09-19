@@ -215,6 +215,22 @@ the installed JARs or require rewriting an existing deployment's env files.
 5. Restrict external access to monitoring services.
 6. Confirm that deployment-local secret files remain untracked and mode-restricted.
 
+## Runtime Image Dependencies
+
+Application packages and their pip tooling live in the OMERO virtual environments.
+Finished images remove inherited Ansible and unused system-level pip and cryptography
+packages only after the RPM dependency transaction check succeeds; unrelated OS
+packages and application virtual environments remain intact. A newly required
+dependency stops the build instead of being removed automatically.
+
+The server image pins PostgreSQL JDBC `42.7.13` for its Java 11 runtime and verifies
+the artifact checksum before installing the same driver in both OMERO classpaths.
+This does not change database configuration or migrate the database. Dependency
+updates still require real import, query, rendering, and export verification.
+PDF text indexing uses the matching PDFBox and FontBox `2.0.37` libraries, verified
+by checksum in both classpaths. The 2.x API is retained because OMERO's parser is
+not compatible with the PDFBox 3 loading API.
+
 ## Plugin Registration
 
 Plugins are registered in `CONFIG_omero_web_apps` and top-link entries in `CONFIG_omero_web_ui_top__links`.
@@ -623,9 +639,11 @@ troubleshooting port.
 
 ## Reverse Proxy (Managed Externally)
 
-Reverse proxy and TLS termination are managed outside this repository.
+Reverse proxy and TLS termination are managed outside this repository. Use a
+trusted TLS certificate for the public hostname; do not disable certificate verification.
 
-For OMERO.web forwarding from your external reverse proxy (for example, nginx managed via Ansible), target:
+For a proxy on the same Docker network as OMERO.web (for example, nginx managed
+via Ansible), target:
 
 - Scheme: `http`
 - Forward Hostname / IP: `omeroweb`
@@ -633,3 +651,9 @@ For OMERO.web forwarding from your external reverse proxy (for example, nginx ma
 
 The host-published troubleshooting port is `OMERO_WEB_HOST_PORT`; both values
 default to `4090` in `env/omeroweb_example.env`.
+For a proxy outside that network, discover the published host binding instead
+of assuming the Docker service name is resolvable. Restrict direct HTTP access
+to the trusted proxy or administration network. Operators must set
+`CONFIG_omero_web_csrf__trusted__origins` to the intended public HTTPS origins
+in their deployment configuration and keep CSRF protection enabled. Verify
+login, upload, and embedded monitoring through the public endpoint after changes.

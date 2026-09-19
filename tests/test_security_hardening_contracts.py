@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_DOCKERFILE = REPO_ROOT / "docker" / "omero-server.Dockerfile"
 WEB_DOCKERFILE = REPO_ROOT / "docker" / "omero-web.Dockerfile"
 INSTALLATION_SCRIPT = REPO_ROOT / "installation" / "installation_script.sh"
+BUILD_DEPENDENCY_CLEANUP = REPO_ROOT / "docker" / "remove-build-dependencies.sh"
 
 
 class SecurityHardeningContractTests(unittest.TestCase):
@@ -129,6 +130,127 @@ class SecurityHardeningContractTests(unittest.TestCase):
                 self.assertIn(f"ARG {name}_VERSION={version}\n", hardening)
                 self.assertIn(f'"{package}==${{{name}_VERSION}}"', hardening)
         self.assertIn('"${VENV_DIR}/bin/python" -m pip check;', hardening)
+
+    def test_build_dependency_cleanup_checks_transactions_and_removal(self):
+        """Exercise the real cleanup script against an instrumented RPM boundary.
+
+        Inputs: package inventories and transaction failures. Output: exact-only removal.
+        """
+        cases = (
+            ("absent", "python3\nansible-core-extra", {}, 0, False),
+            ("present", "python3\nansible-core\npython3.12-pip", {}, 0, True),
+            ("inventory-failed", "ansible-core", {"RPM_QUERY_RC": "67"}, 67, False),
+            ("dependency-required", "ansible-core", {"RPM_TEST_RC": "68"}, 68, False),
+            ("remove-failed", "ansible-core", {"RPM_REMOVE_RC": "69"}, 69, True),
+            ("remove-ineffective", "ansible-core", {"RPM_KEEP": "1"}, 1, True),
+        )
+        for name, inventory, overrides, expected_rc, removal_attempted in cases:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                calls = root / "calls"
+                removed = root / "removed"
+                executable = root / "rpm"
+                executable.write_text(
+                    "#!/bin/bash\n"
+                    'printf "%s\\n" "$*" >> "$RPM_CALLS"\n'
+                    'if [[ "$1" == "-qa" ]]; then\n'
+                    '  if [[ ! -f "$RPM_REMOVED" || "${RPM_KEEP:-0}" == "1" ]]; then\n'
+                    '    printf "%s\\n" "$RPM_INVENTORY"\n'
+                    "  else\n"
+                    '    printf "python3\\n"\n'
+                    "  fi\n"
+                    '  exit "${RPM_QUERY_RC:-0}"\n'
+                    "fi\n"
+                    'if [[ "$2" == "--test" ]]; then exit "${RPM_TEST_RC:-0}"; fi\n'
+                    ': > "$RPM_REMOVED"\n'
+                    'exit "${RPM_REMOVE_RC:-0}"\n',
+                    encoding="utf-8",
+                )
+                executable.chmod(0o700)
+                result = subprocess.run(
+                    [
+                        shutil.which("bash") or "/bin/bash",
+                        str(BUILD_DEPENDENCY_CLEANUP),
+                    ],
+                    env={
+                        **os.environ,
+                        "PATH": str(root),
+                        "RPM_CALLS": str(calls),
+                        "RPM_REMOVED": str(removed),
+                        "RPM_INVENTORY": inventory,
+                        **overrides,
+                    },
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, expected_rc, result.stderr)
+                self.assertEqual(removed.exists(), removal_attempted)
+                commands = calls.read_text(encoding="utf-8").splitlines()
+                if name == "present":
+                    self.assertEqual(
+                        commands[1:3],
+                        [
+                            "-e --test -- ansible-core python3.12-pip",
+                            "-e -- ansible-core python3.12-pip",
+                        ],
+                    )
+                elif name in {"absent", "inventory-failed"}:
+                    self.assertEqual(len(commands), 1)
+                elif name == "remove-ineffective":
+                    self.assertIn("Build dependency remains installed", result.stderr)
+
+    def test_both_images_remove_build_dependencies_after_application_installation(self):
+        """Inputs: image recipes. Output: cleanup runs last with privileged package access."""
+        for image, content, user in (
+            ("server", self.server_dockerfile, "omero-server"),
+            ("web", self.web_dockerfile, "omero-web"),
+        ):
+            with self.subTest(image=image):
+                cleanup = content.index(
+                    "RUN /bin/bash /tmp/remove-build-dependencies.sh"
+                )
+                self.assertGreater(cleanup, content.rindex("pip install"))
+                self.assertLess(cleanup, content.rindex(f"USER {user}"))
+
+    def test_server_jdbc_update_is_verified_before_installation(self):
+        """Inputs: server driver stage. Output: both classpaths share a verified release."""
+        stage = self.server_dockerfile.split("ARG POSTGRESQL_JDBC_VERSION=", 1)[1]
+        self.assertTrue(stage.startswith("42.7.13\n"))
+        self.assertIn(
+            "ARG POSTGRESQL_JDBC_SHA256="
+            "6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93\n",
+            stage,
+        )
+        self.assertIn('"${#SERVER_DIRS[@]}" -ne 1', stage)
+        self.assertLess(stage.index("sha256sum -c -"), stage.index("unzip -p"))
+        self.assertLess(stage.index("unzip -p"), stage.index("install -o"))
+        self.assertIn(
+            'grep -Fx "Implementation-Version: ${POSTGRESQL_JDBC_VERSION}"', stage
+        )
+        self.assertIn("for subdir in lib/client lib/server", stage)
+        self.assertIn('test -f "${SERVER_DIR}/${subdir}/postgresql.jar"', stage)
+        self.assertIn('rm -f "${SERVER_DIR}.zip"', stage)
+
+    def test_pdf_text_parser_updates_the_matching_library_pair(self):
+        """Inputs: server parser stage. Output: verified matching libraries on both classpaths."""
+        stage = self.server_dockerfile.split("ARG PDFBOX_VERSION=", 1)[1]
+        self.assertTrue(stage.startswith("2.0.37\n"))
+        self.assertIn(
+            "ARG PDFBOX_SHA256="
+            "fcb04e6dac53f8681108bb66d5ac2ca72987b6c6795b14a8071636fc49a5d703\n",
+            stage,
+        )
+        self.assertIn(
+            "ARG FONTBOX_SHA256="
+            "992e14d5e903f69517903a1a817040ed7bf1288e768870e0a27bf9090bb34ec3\n",
+            stage,
+        )
+        self.assertIn("for artifact in pdfbox fontbox", stage)
+        self.assertIn("for subdir in lib/client lib/server", stage)
+        self.assertLess(stage.index("sha256sum -c -"), stage.index("unzip -p"))
+        self.assertLess(stage.index("unzip -p"), stage.index("install -o"))
+        self.assertIn('test -f "${SERVER_DIR}/${subdir}/${artifact}.jar"', stage)
 
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
         """Verify locale data is preserved while other hardening stays enabled.

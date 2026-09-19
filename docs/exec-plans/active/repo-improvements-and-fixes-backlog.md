@@ -80,7 +80,6 @@ This backlog is grounded in the current repository state and documentation:
 | Add a broader full-deployment test suite with realistic service dependencies | The quality docs already note the absence of a full deployment validation suite. | Better as a second-stage quality investment after fast CI exists. |
 | Continue reducing giant-module pressure through surgical refactors | Large files exist across Import, Admin Tools, OMP, and Imaris service code. | This should be continuous maintenance, not a disruptive rewrite. |
 | Reduce local repo-status noise from helper-generated artifacts | Helper-created runtime artifacts can make local status harder to read if not ignored or cleaned. | Repo hygiene matters, but it is below correctness and operator-document accuracy. |
-| Strengthen release-note and migration discipline | `docs/reference/release-notes.md` exists, but release hygiene is still mostly procedural rather than enforced. | Best added once CI, docs-drift checks, and branch policy are stable. |
 
 ## Recommended Delivery Order
 
@@ -89,7 +88,7 @@ This backlog is grounded in the current repository state and documentation:
 3. Protect the highest-risk docs contracts: compose env-file commands, topology facts, supervisord process names, and intentional legacy aliases.
 4. Preserve the canonical explicit Import surface while breaking up the biggest modules with focused edge-case tests.
 5. Add plugin metrics, SLOs, and alert rules once the workflows and tests can keep them honest.
-6. Land slower quality investments such as fuzzing, broader deployment suites, secret rotation, and release hygiene after the repo's baseline is stable.
+6. Land slower quality investments such as fuzzing, broader deployment suites, and secret rotation after the repo's baseline is stable.
 
 ## Progress Log
 
@@ -101,6 +100,7 @@ This backlog is grounded in the current repository state and documentation:
 | 2026-07-18 | Corrected workflow-linting and release evidence and documented Dependabot's Compose parsing limitation.                    |
 | 2026-07-18 | Enabled Bash validation in Super-Linter and cleared the full ShellCheck 0.11.0 repository scan.                            |
 | 2026-07-18 | Added non-mutating deployment contracts and removed superseded Import, CSRF, and debug-default backlog entries.            |
+| 2026-09-19 | Retired stale release-note debt; versioned notes, disclosure review, and artifact consistency are enforced.                |
 
 ## Decision Log
 
