@@ -17,6 +17,12 @@ Start from `third_party/ecc-v2.0.0/skills/python-testing/SKILL.md` for the gener
 
 - Follow the split-pytest rule from `AGENTS.md` and `.agents/skills/plugin-regression-triager/`.
 - Prefer narrow regression tests that prove the exact contract being changed.
+- Execute setup and writes before asserting their results; mutation inside
+  `assert` can be skipped by optimized Python and triggers CodeQL's
+  `py/side-effect-in-assert` rule.
+- Give every new test helper, including nested functions, compact input/output
+  docstrings. Run `tests/test_function_documentation_contract.py` before the
+  full matrix when adding helpers, so documentation failures surface early.
 - Use `python3 -m py_compile` when full dependency-complete testing is blocked.
 - Use `bash -n` for shell/bootstrap changes.
 - Never weaken tests just to get green output.

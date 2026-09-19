@@ -17,13 +17,14 @@ Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the ge
 
 ### Efficiency and invalidation
 
-- Keep a verification ledger containing the exact command, relevant tree state,
-  result, and artifact under test.
+- Record the exact command, relevant tree state, result, and artifact in a verification ledger.
 - Before validating a source copy, compare its complete intended file inventory
   and content hashes with the candidate, including intended new files. A clean
   scanner result from a tracked-only copy that omitted new source is incomplete.
 - Do not repeat a passing command until one of its inputs changes. A final
   repository-wide matrix supersedes earlier unchanged targeted runs.
+- Key image evidence by immutable image ID and build inputs, not mutable tags.
+  Docs-only edits preserve image evidence; dependency or runtime configuration changes invalidate affected live checks.
 - Preserve the tested command's exit status when limiting output. Use the
   repository gate runner or capture logs and check the original status; a
   successful `head` or `tail` process is not a passing test result.
@@ -32,6 +33,8 @@ Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the ge
   persistent-storage state.
 - During iteration, select tests from the changed ownership boundary. Run the
   complete required matrix once against the final tree and before release. Scanner changes require `--profile all`, including DevSkim; `--profile ci` omits container engines. Verify transitive engine pins, not only action wrappers, and preserve failed raw reports.
+- After validation, follow the runtime playbook's final cleanup inventory reconciliation.
+  A fresh-install image inventory never means resetting existing data or configuration.
 
 ### 1. Documentation structure
 
@@ -102,8 +105,7 @@ Never imply that full pytest passed when only `py_compile`, `bash -n`, or narrow
 
 ## Common blockers
 
-- Host Python missing Django or optional test dependencies such as `numpy`,
-  `numcodecs`, or `matplotlib`: run
+- Host Python missing Django, `numpy`, `numcodecs`, or `matplotlib`: run
   `python3 tools/run_local_workflow_gates.py --setup-only`, then run targeted
   pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
 - Docker socket unavailable: do not keep retrying the same runtime probe

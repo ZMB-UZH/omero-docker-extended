@@ -308,7 +308,8 @@ def test_managed_path_and_import_candidate_helpers_cover_remaining_lines(
         "open",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("no fsync")),
     )
-    assert core_functions._fsync_directory(tmp_path) is None
+    with pytest.raises(OSError, match="no fsync"):
+        core_functions._fsync_directory(tmp_path)
 
     original_extract_candidates = core_functions._extract_import_candidates
     original_parse_candidate = core_functions._parse_candidate_path_line

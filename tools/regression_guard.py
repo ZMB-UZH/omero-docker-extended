@@ -777,9 +777,8 @@ CATALOG: tuple[Rule, ...] = (
         severity="medium",
         title="@csrf_exempt decorator on a view",
         fix=(
-            "Send X-CSRFToken from the client and remove the decorator; only the "
-            "documented Grafana proxy exception may remain behind OMERO root auth "
-            "and Grafana CSRF validation."
+            "Send X-CSRFToken from the client and remove the decorator; "
+            "no production exemptions are allowed, including Grafana proxies."
         ),
         scanner="semgrep/csrf-exempt",
         closed_history=34,

@@ -117,6 +117,8 @@ class RegressionGuardEngineTests(unittest.TestCase):
 
         Inputs: synthesized views. Output: fails on CSRF guard drift.
         """
+        rule = next(rule for rule in regression_guard.CATALOG if rule.id == "RG006")
+        self.assertIn("no production exemptions are allowed", rule.fix)
         grafana_proxy = self._scan_one(
             "module/grafana.py",
             "from django.views.decorators.csrf import csrf_exempt\n"

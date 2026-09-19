@@ -40,6 +40,14 @@ before upload.
 
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
+OSV scans the repository recursively and explicitly parses every CI lockfile in
+`.github/requirements` using `--lockfile=requirements.txt:<path>`. Their custom
+filenames are not recognized by recursive requirements discovery alone. A
+workflow contract requires a scanner argument for every CI requirement source;
+new or renamed lockfiles must update the scan arguments too. Before changing
+this scope or the scanner version, inspect an `--all-packages` report from the
+exact engine and verify that each lockfile contributes its resolved packages.
+
 Do not narrow scanner scope to improve scores. New path filters, rule skips,
 ignored globs, SARIF cleanup categories, or workflow trigger filters require
 documented false-positive or runtime-scope proof, an audit-log line that shows
@@ -168,6 +176,21 @@ The historical split checksum fixtures are not a pattern to repeat: do not
 split, encode, or move a value merely to avoid a scanner's matching rule.
 
 ## Active scanners
+
+### Runtime image inventory
+
+The release and recovery tools analyze the bundled runtime images separately
+from the carrier. Scout's native JSON SBOM is passed unchanged to `scout cves
+sbom://...`; the complete SBOM, raw SARIF, image identities, and report hashes
+remain private audit evidence. This avoids the SPDX serializer's image-reference
+failure without discarding packages or findings. Empty or malformed inventories,
+failed analysis, and changed image identities stop publication.
+
+Completed analysis is not a clean-security verdict. Compare exact runtime
+artifacts, retain vendor-backport and reachability evidence separately from raw
+findings, and never infer runtime safety from the carrier's Docker Hub status.
+See the [Scout SBOM reference](https://docs.docker.com/reference/cli/docker/scout/sbom/)
+and [SBOM analysis support](https://docs.docker.com/reference/cli/docker/scout/cves/).
 
 ### DevSkim engine parity and public fingerprints
 
@@ -549,7 +572,7 @@ contain genuine issues if a future scan reintroduces them:
 2. **Path injection** (`py/path-injection`): Review all file path construction to confirm traversal prevention is in place.
 3. **Log injection** (`py/log-injection`): Confirm all user-controlled values are sanitized before logging.
 4. **Raw SQL** (`sqlalchemy-execute-raw-query`): Review parameterization of all SQLAlchemy execute calls.
-5. **CSRF exempt** (`csrf-exempt`): Confirm each exempt view has alternative authentication (OMERO session tokens).
+5. **CSRF exempt** (`csrf-exempt`): Remove production exemptions and verify the client sends a valid Django CSRF token, including through the Grafana proxy. Authentication does not replace CSRF protection.
 6. **Subprocess injection** (`subprocess-injection`): Review argument construction in delete views.
 7. **Regex injection** (`py/regex-injection`): Review filename parser to confirm user input is escaped before regex compilation.
 8. **Dockerfile USER** (`DS002`, `missing-user-entrypoint`, `last-user-is-root`): Images should default to application users. If startup bind-mount reconciliation requires root, make root an explicit Compose handoff and drop privileges before long-running processes.

@@ -1478,6 +1478,54 @@ to pass the minimum content threshold while omitting all standard categories.
 
         self.assertEqual("example.local/local-only:latest", reference)
 
+    def test_release_prune_helper_rejects_empty_inventory_before_docker(self) -> None:
+        """Inputs: empty inventory files. Output: refusal before any Docker call."""
+        for content in ("", "\n \t\n"):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as temp:
+                inventory = Path(temp) / "required-images.txt"
+                inventory.write_text(content, encoding="utf-8")
+                with mock.patch.object(
+                    prune_non_required_docker_images,
+                    "default_docker_runner",
+                    return_value=mock.Mock(returncode=0, stdout="", stderr=""),
+                ) as runner:
+                    status = prune_non_required_docker_images.main(
+                        ["--required-images-file", str(inventory), "--execute"]
+                    )
+                    self.assertEqual(status, 1)
+                    runner.assert_not_called()
+
+    def test_release_prune_empty_inventory_cli_never_starts_docker(self) -> None:
+        """Inputs: empty inventory and sentinel CLI. Output: no Docker execution."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            inventory = root / "required-images.txt"
+            inventory.write_text("", encoding="utf-8")
+            marker = root / "docker-called"
+            docker = root / "docker"
+            docker.write_text(
+                '#!/bin/sh\nprintf called > "$DOCKER_SENTINEL"\nexit 73\n',
+                encoding="utf-8",
+            )
+            docker.chmod(0o700)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    prune_non_required_docker_images.__file__,
+                    "--required-images-file",
+                    str(inventory),
+                    "--execute",
+                ],
+                env={**os.environ, "PATH": str(root), "DOCKER_SENTINEL": str(marker)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn("must not be empty", completed.stderr)
+            self.assertFalse(marker.exists())
+
     def test_prebuilt_carrier_image_is_scratch_data_only(self) -> None:
         """Verify carrier image is data-only and has no OS package surface.
 

@@ -97,6 +97,27 @@ def test_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
     ) in expressions
 
 
+def test_network_panel_reads_host_counters_without_summing_interfaces() -> None:
+    """Keep the network panel tied to host traffic, not the exporter namespace.
+
+    Inputs: provisioned dashboard. Output: verifies host scope and interface labels.
+    """
+    panel = next(
+        item
+        for item in _dashboard("omero-infrastructure.json")["panels"]
+        if item["id"] == 9
+    )
+    assert panel["fieldConfig"]["defaults"]["unit"] == "Bps"
+    for target, direction, label in zip(
+        panel["targets"], ("receive", "transmit"), ("RX", "TX"), strict=True
+    ):
+        assert target["expr"] == (
+            f"rate(container_network_{direction}_bytes_total"
+            '{job="cadvisor",id="/",interface!="lo"}[5m])'
+        )
+        assert target["legendFormat"] == label + " {{interface}}"
+
+
 def test_plugin_database_cache_hit_ratio_queries_guard_zero_denominators() -> None:
     """Verify plugin database cache hit ratio queries guard zero denominators.
 

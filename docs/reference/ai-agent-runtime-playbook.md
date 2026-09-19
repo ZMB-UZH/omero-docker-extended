@@ -48,7 +48,7 @@ Deep operational guidance for AI Agents. `AGENTS.md` should route here instead o
 
 OMERO.web configuration properties are set via `CONFIG_omero_web_*` environment variables in `env/omeroweb.env`. The translation from OMERO config property names to Docker env variable names follows strict rules:
 
-- **Dots (`.`) become single underscores (`_`)**: `omero.web.session_engine` → `CONFIG_omero_web_session_engine`
+- **Dots (`.`) become single underscores (`_`)**: `omero.web.debug` → `CONFIG_omero_web_debug`
 - **Underscores (`_`) become DOUBLE underscores (`__`)**: `omero.web.session_cookie_age` → `CONFIG_omero_web_session__cookie__age`
 
 Examples:
@@ -65,7 +65,21 @@ Examples:
 
 ## Docker image rebuilds: cached vs no-cache
 
+- Before overwriting a mutable image tag or replacing its container, retain an
+  inspectable rollback image or verified export and the corresponding baseline
+  scan evidence. A container's recorded image ID alone is not a retained image;
+  verify the saved reference independently before proceeding.
 - `docker compose build <service>` reuses unchanged layers. Changed build ARG values invalidate dependent instructions; changed base-image digests and COPY inputs also invalidate their dependent layers. Verify the resolved inputs and installed versions rather than assuming a cache hit means stale code.
+- A plain Compose build does not enable optional dependency-update arguments.
+  Match the reviewed installer or release hardening profile explicitly, then
+  verify installed package versions and `pip check` in the resulting images.
+  Do not change operator-owned env files to select a verification build profile.
+- Before full-image analysis, check available memory, swap, scratch space, and
+  scanner concurrency. Large image indexing belongs on a suitably sized build
+  host, not an already busy application host. Docker exports allow analysis
+  elsewhere without rebuilding; verify immutable image identities before and
+  after export, and retain complete SBOMs and advisory reports. An interrupted
+  scan is incomplete, never a clean result.
 - `docker compose build --no-cache <service>` reruns every layer. Use it when refreshing externally resolved packages without a changed cache input, or when investigating a demonstrated stale layer, not automatically for every version change. See [Docker cache invalidation](https://docs.docker.com/build/cache/invalidation/).
 - If a live installation build starts transferring GBs of context, stop before
   `up` and inspect `.dockerignore`; generated runtime roots such as
@@ -76,6 +90,23 @@ Examples:
   `env/omeroserver.env`. `docker-compose.yml`
   and `docker/<service>.Dockerfile` fail closed when those values are absent
   instead of silently falling back to in-code defaults.
+
+### Final deployment cleanup
+
+Derive required images from the guarded, rendered Compose configuration and
+active containers, including configured optional profiles and one-shot helpers.
+Compare this set with the daemon's image IDs and tags, temporary containers, and
+builder caches. Retain rollback artifacts until live checks pass. Obtain the
+required separate approval for each pre-existing object before removal; do not
+use a broad prune as a substitute for inventory reconciliation.
+The release-runner pruning helper rejects an empty required-image inventory
+before contacting Docker; do not bypass that check for cleanup.
+
+A fresh-install image inventory is not a data reset. Preserve operator env
+files, database and application volumes, bind-mounted data, shared transfer and
+temporary roots, permissions, and unrelated workloads. Remove only reviewed
+superseded images and owned verification artifacts. Finish with a second image
+inventory, unchanged persistent mounts/configuration, and healthy services.
 
 ## Prebuilt carrier and easy installation
 

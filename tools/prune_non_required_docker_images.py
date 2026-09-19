@@ -66,6 +66,8 @@ def read_required_images(path: Path) -> list[str]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
+    if not images:
+        raise ValueError("Required-image inventory must not be empty.")
     return sorted(images)
 
 

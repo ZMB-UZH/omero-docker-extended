@@ -68,12 +68,12 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 ### Monitoring stack
 
 - **Prometheus** (v3.14.0): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
-- **Grafana** (13.2.1): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
-- **Loki** (3.7.7): log aggregation backend with TSDB storage and 5000 max entries per query.
+- **Grafana** (13.2.2): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Loki** (3.7.8): log aggregation backend with TSDB storage and 5000 max entries per query.
 - **Alloy** (v1.19.2): collects OMERO server/web internal log files and pushes them to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
 - **Node exporter** (v1.12.1): host-level metrics.
-- **cAdvisor** (v0.60.5): container resource metrics.
+- **cAdvisor** (v0.60.6): container resource metrics.
 - **Postgres exporters** (v0.20.1, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.91.1): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
@@ -103,7 +103,7 @@ Custom image based on postgres:16.15 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.45.0) runs by default for container management. It exposes
+Portainer CE (2.45.1) runs by default for container management. It exposes
 HTTPS only on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, disables the legacy HTTP
 listener, uses a read-only root filesystem, drops Linux capabilities, and keeps
 the internal tunnel listener bound to container loopback. The Compose service

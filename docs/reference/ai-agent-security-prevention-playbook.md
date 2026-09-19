@@ -271,8 +271,8 @@ Required rules:
 
 - Prefer `JsonResponse`, `render()`, and `format_html()` over raw `HttpResponse(string)`.
 - Escape reflected user content or keep the response type `text/plain`.
-- Prefer CSRF-compatible request flows with `X-CSRFToken`; do not add `@csrf_exempt` unless there is a documented, reviewed reason.
-- When a CSRF exemption remains necessary, document the alternative authentication/control that makes the route safe.
+- Use CSRF-compatible request flows with `X-CSRFToken`; RG006 rejects every `csrf_exempt` use, including assignments and aliases.
+- Authentication and authorization complement CSRF checks; alternative authentication does not replace CSRF protection.
 - Boundary decorators such as `require_non_root_user` must fail closed when the current OMERO username is empty or unresolved.
 - Job and progress ownership checks must require a persisted owner identifier; ownerless job payloads are not valid compatibility fallbacks.
 - When browser input supplies object IDs scoped by a parent object, intersect those IDs with the server-derived accessible objects before fetching, mutating, or deleting anything.

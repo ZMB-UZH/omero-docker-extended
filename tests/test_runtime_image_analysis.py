@@ -1,26 +1,81 @@
 """Regression coverage for runtime-package analysis, independent of the carrier."""
 
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from tools import scan_prebuilt_runtime_images as scanner
 
 
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_real_scanner_process_keeps_public_and_private_output_separate(
+    tmp_path, exit_code
+):
+    """Exercise the subprocess boundary with real byte streams and exit statuses.
+
+    Inputs: temporary child process. Output: verifies captured output and private logs.
+    """
+    source = "\n".join(
+        (
+            "import sys",
+            "print('command output', flush=True)",
+            "print('command diagnostic', file=sys.stderr, flush=True)",
+            f"sys.exit({exit_code})",
+        )
+    )
+    log = tmp_path / "scan.log"
+    arguments = ["-c", source]
+    if exit_code:
+        with pytest.raises(RuntimeError, match="inspect the private scan log"):
+            scanner._run(sys.executable, arguments, env=dict(os.environ), log=log)
+        expected = b"command diagnostic\ncommand output\n"
+    else:
+        result = scanner._run(sys.executable, arguments, env=dict(os.environ), log=log)
+        assert result == "command output\n"
+        expected = b"command diagnostic\n"
+    assert log.read_bytes() == expected
+
+
+@pytest.mark.parametrize("timeout", [False, True])
+@pytest.mark.parametrize("output", [None, b"private scanner detail\n"])
+def test_scanner_failures_preserve_output_only_in_private_log(
+    monkeypatch, tmp_path, timeout, output
+):
+    """Keep scanner diagnostics without disclosing them in public failure text.
+
+    Inputs: failed or timed-out command output. Output: verifies private diagnostics.
+    """
+
+    def fail(arguments, **kwargs):
+        """Inputs: scanner invocation. Output: writes stderr and raises its failure."""
+        kwargs["stderr"].write(b"private stderr\n")
+        if timeout:
+            raise subprocess.TimeoutExpired(arguments, 1800, output=output)
+        raise subprocess.CalledProcessError(1, arguments, output=output)
+
+    monkeypatch.setattr(scanner.subprocess, "run", fail)
+    log = tmp_path / "scan.log"
+    with pytest.raises(RuntimeError, match="inspect the private scan log") as error:
+        scanner._run("/usr/bin/docker", ["scout", "sbom"], env={}, log=log)
+    assert log.read_bytes() == b"private stderr\n" + (output or b"")
+    assert "private scanner detail" not in str(error.value)
+    assert "private stderr" not in str(error.value)
+
+
 def _sbom():
-    """Inputs: none. Output: a minimal SPDX software-package fixture."""
+    """Inputs: none. Output: a minimal native Scout software-package fixture."""
     return {
-        "spdxVersion": "SPDX-2.3",
-        "packages": [
+        "descriptor": {"name": "docker-scout", "version": "1.24.0"},
+        "artifacts": [
             {
-                "SPDXID": "SPDXRef-package",
-                "externalRefs": [
-                    {
-                        "referenceType": "purl",
-                        "referenceLocator": "pkg:pypi/example@1.0",
-                    }
-                ],
+                "name": "example",
+                "version": "1.0",
+                "type": "pypi",
+                "purl": "pkg:pypi/example@1.0",
             }
         ],
     }
@@ -31,15 +86,26 @@ def _sbom():
     [
         None,
         {},
-        {"spdxVersion": "SPDX-2.3", "packages": []},
-        {"spdxVersion": "SPDX-2.3", "packages": [None]},
-        {"spdxVersion": "SPDX-2.3", "packages": [{"SPDXID": "file"}]},
+        {**_sbom(), "descriptor": None},
+        {**_sbom(), "descriptor": {"name": "another-tool"}},
+        {**_sbom(), "artifacts": []},
+        {**_sbom(), "artifacts": [None]},
+        {**_sbom(), "artifacts": [{"name": "file"}]},
+        {**_sbom(), "artifacts": [{"name": "file", "purl": "file://image"}]},
+        {**_sbom(), "artifacts": [{"name": "file", "purl": 42}]},
     ],
 )
 def test_empty_or_nonsoftware_inventory_fails(document):
-    """Inputs: invalid SPDX documents. Output: asserts rejection, not clean coverage."""
+    """Inputs: invalid native documents. Output: rejects missing package coverage."""
     with pytest.raises(ValueError):
         scanner.package_count(document)
+
+
+def test_native_scout_inventory_is_accepted_without_lossy_conversion():
+    """Inputs: native package inventory. Output: counts each unmodified artifact."""
+    document = _sbom()
+    document["artifacts"].append({"name": "source", "type": "file"})
+    assert scanner.package_count(document) == 2
 
 
 @pytest.mark.parametrize(
@@ -82,6 +148,8 @@ def test_every_required_image_is_accounted_for_and_identical_images_scan_once(
         assert env["DOCKER_SCOUT_CACHE_FORMAT"] == "tar"
         output = Path(arguments[arguments.index("--output") + 1])
         if arguments[1] == "sbom":
+            assert arguments[arguments.index("--format") + 1] == "json"
+            assert output.name.endswith(".scout.json")
             assert arguments[-1] in {f"local://{first}", f"local://{second}"}
             document = _sbom()
         else:

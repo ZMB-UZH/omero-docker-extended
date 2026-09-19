@@ -103,6 +103,30 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         self.assertTrue((self.repo_root / "docs" / "SECURITY.md").exists())
 
+    def test_csrf_playbook_does_not_offer_an_exception_to_regression_guard(
+        self,
+    ) -> None:
+        """Inputs: CSRF guidance. Output: no exception to the unconditional RG006 rule."""
+        playbook = self.read_text(
+            "docs/reference/ai-agent-security-prevention-playbook.md"
+        )
+        section = playbook.split("### 6. Django responses", 1)[1].split("### 7.", 1)[0]
+        self.assertIn("RG006 rejects every `csrf_exempt` use", section)
+        self.assertIn("does not replace CSRF protection", section)
+        self.assertNotIn("unless there is a documented, reviewed reason", section)
+        self.assertNotIn("When a CSRF exemption remains necessary", section)
+
+    def test_cleanup_guidance_preserves_deployment_data_and_scopes_evidence(
+        self,
+    ) -> None:
+        """Inputs: cleanup guidance. Output: preserved data and scoped verification."""
+        playbook = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
+        skill = self.read_text(".agents/skills/verification-loop/SKILL.md")
+        self.assertIn("A fresh-install image inventory is not a data reset.", playbook)
+        self.assertIn("separate approval for each pre-existing object", playbook)
+        self.assertIn("unchanged persistent mounts/configuration", playbook)
+        self.assertIn("immutable image ID and build inputs", skill)
+
     def test_github_community_standard_files_exist(self) -> None:
         """Verify github community standard files exist.
 
@@ -642,7 +666,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.34.0"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.34.2"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -659,10 +683,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.34.0",
+            "README.md": "ollama/ollama:0.34.2",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.34.0",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.34.2",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():

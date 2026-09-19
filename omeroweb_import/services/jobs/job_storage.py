@@ -6,8 +6,11 @@ import time
 import random
 import logging
 import re
+import tempfile
 import portalocker
 from pathlib import Path
+
+from omero_plugin_common.logging_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -163,16 +166,72 @@ def load_job(job_id: str, jobs_root: Path):
     if not path.exists():
         return None
     try:
-        with portalocker.Lock(path, "r", timeout=JOB_LOCK_TIMEOUT_SECONDS) as handle:
-            return json.load(handle)
+        with portalocker.Lock(
+            path.with_name(f".{path.stem}.lock"), "a+", timeout=JOB_LOCK_TIMEOUT_SECONDS
+        ):
+            with path.open("r", encoding="utf-8") as handle:
+                return json.load(handle)
     except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to lock or read job file %s: %s", path, exc)
+        logger.warning(
+            "Unable to lock or read job file %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
     try:
-        with path.open("r") as handle:
+        with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to read job file %s without lock: %s", path, exc)
+        logger.warning(
+            "Unable to read job file %s without lock: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
     return None
+
+
+def _write_job_file(path: Path, job_dict) -> None:
+    """Replace a job record only after its complete JSON is synchronized.
+
+    Inputs: validated job path and JSON payload. Output: atomically commits the
+    new record, or raises with the previous record intact before replacement.
+    """
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(job_dict, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning(
+                    "Unable to remove uncommitted job file: %s", sanitize_log_value(exc)
+                )
+
+
+def _sync_jobs_directory(directory: Path) -> None:
+    """Synchronize the directory entry after committing a job record.
+
+    Inputs: managed jobs directory. Output: raises on an uncertain durability
+    result; callers must not replay a mutation that has already committed.
+    """
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def save_job(
@@ -183,11 +242,13 @@ def save_job(
 ):
     """Save job data to filesystem with retry logic.
 
-    Inputs: `job_dict`, `jobs_root`, `retries`, `timeout`. Output: bool.
+    Inputs: `job_dict`, `jobs_root`, `retries`, `timeout`. Output: bool. Raises:
+    OSError if finalization fails after commit, without retrying the write.
     """
     path = get_job_path(job_dict["job_id"], jobs_root)
     job_dict["updated"] = time.time()
     for attempt in range(retries):
+        committed = False
         if attempt:
             time.sleep(
                 random.uniform(  # nosec B311
@@ -195,21 +256,27 @@ def save_job(
                 )
             )
         try:
-            with portalocker.Lock(path, "w", timeout=timeout) as handle:
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+            with portalocker.Lock(
+                path.with_name(f".{path.stem}.lock"), "a+", timeout=timeout
+            ):
+                _write_job_file(path, job_dict)
+                committed = True
+                _sync_jobs_directory(path.parent)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
+            if committed:
+                raise
             logger.warning(
                 "Unable to lock job file %s for writing (attempt %s/%s): %s",
-                path,
+                sanitize_log_value(path),
                 attempt + 1,
                 retries,
-                exc,
+                sanitize_log_value(exc),
             )
     logger.error(
-        "Failed to lock job file %s for writing after %s attempts.", path, retries
+        "Failed to lock job file %s for writing after %s attempts.",
+        sanitize_log_value(path),
+        retries,
     )
     return False
 
@@ -224,13 +291,15 @@ def robust_update_job(
     """Atomically update job with function.
 
     Inputs: `job_id`, `update_fn`, `jobs_root`, `retries`, `timeout`. Output: `job_dict`
-    or None.
+    or None. Raises: OSError if finalization fails after commit, without replaying
+    the update function.
     """
     try:
         path = get_job_path(job_id, jobs_root)
     except ValueError:
         return None
     for attempt in range(retries):
+        committed = False
         if attempt:
             time.sleep(
                 random.uniform(  # nosec B311
@@ -238,28 +307,37 @@ def robust_update_job(
                 )
             )
         try:
-            with portalocker.Lock(path, "r+", timeout=timeout) as handle:
-                job_dict = json.load(handle)
+            with portalocker.Lock(
+                path.with_name(f".{path.stem}.lock"), "a+", timeout=timeout
+            ):
+                with path.open("r", encoding="utf-8") as handle:
+                    job_dict = json.load(handle)
                 job_dict = update_fn(job_dict)
-                handle.seek(0)
-                handle.truncate()
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+                _write_job_file(path, job_dict)
+                committed = True
+                _sync_jobs_directory(path.parent)
             return job_dict
         except json.JSONDecodeError as exc:
-            logger.error("Job file %s is corrupt: %s", path, exc)
+            logger.error(
+                "Job file %s is corrupt: %s",
+                sanitize_log_value(path),
+                sanitize_log_value(exc),
+            )
             return None
         except (portalocker.exceptions.LockException, OSError) as exc:
+            if committed:
+                raise
             logger.warning(
                 "Unable to lock job file %s for update (attempt %s/%s): %s",
-                path,
+                sanitize_log_value(path),
                 attempt + 1,
                 retries,
-                exc,
+                sanitize_log_value(exc),
             )
     logger.error(
-        "Failed to lock job file %s for update after %s attempts.", path, retries
+        "Failed to lock job file %s for update after %s attempts.",
+        sanitize_log_value(path),
+        retries,
     )
     return None
 
@@ -269,7 +347,7 @@ def safe_job_id(value: str) -> bool:
 
     Inputs: `value`. Output: `bool`.
     """
-    return bool(value and JOB_ID_SANITIZER.match(value))
+    return bool(isinstance(value, str) and JOB_ID_SANITIZER.fullmatch(value))
 
 
 def append_job_message(job: dict, message: str):

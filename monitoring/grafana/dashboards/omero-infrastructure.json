@@ -602,16 +602,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(node_network_receive_bytes_total{device!=\"lo\"}[5m]))",
-          "legendFormat": "RX"
+          "expr": "rate(container_network_receive_bytes_total{job=\"cadvisor\",id=\"/\",interface!=\"lo\"}[5m])",
+          "legendFormat": "RX {{interface}}"
         },
         {
           "refId": "B",
-          "expr": "sum(rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m]))",
-          "legendFormat": "TX"
+          "expr": "rate(container_network_transmit_bytes_total{job=\"cadvisor\",id=\"/\",interface!=\"lo\"}[5m])",
+          "legendFormat": "TX {{interface}}"
         }
       ],
-      "description": "Aggregate host network receive and transmit throughput (excluding loopback)."
+      "description": "Host network receive and transmit throughput from cAdvisor's root cgroup, shown per interface without summing bridge and physical-interface traffic. Loopback is excluded."
     },
     {
       "type": "timeseries",

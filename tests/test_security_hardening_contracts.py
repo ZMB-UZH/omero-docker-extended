@@ -116,6 +116,20 @@ class SecurityHardeningContractTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 67, result.stdout + result.stderr)
 
+    def test_server_curated_updates_include_image_and_serialization_libraries(self):
+        """Inputs: final server update stage. Output: pinned codecs and pip validation."""
+        hardening = self.server_dockerfile.split("# Final security hardening pass", 1)[
+            1
+        ]
+        for name, package, version in (
+            ("PILLOW", "pillow", "12.3.0"),
+            ("MSGPACK", "msgpack", "1.2.2"),
+        ):
+            with self.subTest(package=package):
+                self.assertIn(f"ARG {name}_VERSION={version}\n", hardening)
+                self.assertIn(f'"{package}==${{{name}_VERSION}}"', hardening)
+        self.assertIn('"${VENV_DIR}/bin/python" -m pip check;', hardening)
+
     def test_locale_data_is_preserved_while_other_hardening_stays_enabled(self):
         """Verify locale data is preserved while other hardening stays enabled.
 

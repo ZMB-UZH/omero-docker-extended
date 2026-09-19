@@ -5,12 +5,12 @@
 | Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
 | -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
 | Prometheus                 | v3.14.0              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
-| Grafana                    | 13.2.1               | Dashboards and visualization                                            | `http://grafana:3000`                      |
-| Loki                       | 3.7.7                | Log aggregation backend                                                 | `http://loki:3100`                         |
+| Grafana                    | 13.2.2               | Dashboards and visualization                                            | `http://grafana:3000`                      |
+| Loki                       | 3.7.8                | Log aggregation backend                                                 | `http://loki:3100`                         |
 | Alloy                      | v1.19.2              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
 | Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
 | Node exporter              | v1.12.1              | Host-level metrics                                                      | `http://node-exporter:9100`                |
-| cAdvisor                   | v0.60.5              | Container resource metrics                                              | `http://cadvisor:8080`                     |
+| cAdvisor                   | v0.60.6              | Container resource metrics                                              | `http://cadvisor:8080`                     |
 | Postgres exporter          | v0.20.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
 | Postgres exporter (plugin) | v0.20.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
 | Redis exporter             | v1.91.1              | Redis metrics                                                           | `http://redis-exporter:9121`               |
@@ -144,6 +144,12 @@ Four dashboards auto-provisioned in the `OMERO` folder:
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
+
+Host network throughput uses cAdvisor's root-cgroup counters (`id="/"`) and
+shows receive/transmit rates separately for each non-loopback interface. This
+avoids confusing the bridge-isolated node exporter's own traffic with host
+traffic or double-counting traffic by summing physical and bridge interfaces.
+No host-network listener or additional published port is required.
 
 Grafana Live is disabled with `GF_LIVE_MAX_CONNECTIONS=0`. Admin Tools proxies
 Grafana over standard HTTP and intentionally does not tunnel WebSockets; the
