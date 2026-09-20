@@ -754,9 +754,9 @@ run_image_build() {
         fi
         compose_build_args+=(--provenance "${provenance_setting}")
 
-        # Optional docker image security hardening build args
+        # Preserve an explicit opt-out even when application Dockerfiles default to hardening.
+        compose_build_args+=(--build-arg "APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING}")
         if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
-            compose_build_args+=(--build-arg "APPLY_SECURITY_HARDENING=1")
             compose_build_args+=(--build-arg "APPLY_DNF_UPDATES=1")
             compose_build_args+=(--build-arg "APPLY_OMERO_VENV_TOOLING_UPDATES=1")
             compose_build_args+=(--build-arg "APPLY_OMEROWEB_DNF_UPDATES=1")

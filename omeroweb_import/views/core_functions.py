@@ -3329,11 +3329,49 @@ _IMPORT_OBJECT_PATTERNS = (
 _IMPORT_OBJECT_PATTERN = _IMPORT_OBJECT_PATTERNS[0]
 
 
+def _import_java_options() -> list[str]:
+    """Select the configured immutable client bundle; retain standalone CLI defaults.
+
+    Inputs: operator environment. Output: explicit CLI classpath and logging options.
+    """
+    configured = os.environ.get("OMERO_IMPORT_CLIENT_DIR", "").strip()
+    if not configured:
+        return []
+    client_dir = Path(configured)
+    logback = client_dir / "logback-cli.xml"
+    if not client_dir.is_absolute() or not client_dir.is_dir() or not logback.is_file():
+        raise RuntimeError("Configured OMERO Java client bundle is unavailable.")
+    return ["--clientdir", str(client_dir), "--logback", str(logback)]
+
+
+def _import_cli_environment() -> dict[str, str]:
+    """Select the import JVM without changing the web process environment.
+
+    Inputs: operator environment. Output: validated child-process environment.
+    """
+    env = os.environ.copy()
+    configured = env.get("OMERO_IMPORT_JAVA_HOME", "").strip()
+    if configured:
+        home = Path(configured)
+        executable = home / "bin" / "java"
+        if (
+            not home.is_absolute()
+            or not executable.is_file()
+            or not os.access(executable, os.X_OK)
+        ):
+            raise RuntimeError("Configured OMERO import Java runtime is unavailable.")
+        env["JAVA_HOME"] = str(home)
+        env["PATH"] = str(executable.parent) + os.pathsep + env.get("PATH", os.defpath)
+    return env
+
+
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     """OMERO cli command.
 
     Inputs: `subcommand`, `session_key`, `host`, `port`. Output: `cmd`.
     """
+    if subcommand and subcommand[0] == "import":
+        subcommand = [*subcommand, *_import_java_options()]
     if session_key:
         cmd = [
             sys.executable,
@@ -4019,10 +4057,11 @@ def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
         "-f",
         "--depth",
         str(OMERO_IMPORT_SCAN_DEPTH),
+        *_import_java_options(),
         str(path),
     ]
 
-    env = os.environ.copy()
+    env = _import_cli_environment()
     omerodir_path = (
         get_plugin_tmp_dir("compat-check", create=True)
         / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
@@ -4127,7 +4166,7 @@ def _build_cli_env():
     Factored out of ``_run_omero_cli`` so that ``_import_file`` can re-use it
     for both the blocking and streaming command paths.
     """
-    cli_env = os.environ.copy()
+    cli_env = _import_cli_environment()
     cli_home = _get_upload_root() / ".omero-cli-home"
     cli_cache = cli_home / ".cache"
     _ensure_dir_with_permissions(cli_home, 0o700)

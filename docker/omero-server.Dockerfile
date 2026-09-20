@@ -110,11 +110,11 @@ RUN set -euo pipefail; \
 ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.6.1
 ARG OMERO_ZARR_PIXEL_BUFFER_SHA256=9cb3d1ed491ef866bc1703415b809097693fda13eb4818dc0eb6959f8fe94f97
 ARG CAFFEINE_3_2_4_SHA256=9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
-ARG AWS_JAVA_SDK_S3_1_12_659_SHA256=44ed3a329a14c486a3f1c3b46eb47d26db4d93426a630790d2eefe542983dfa9
-ARG AWS_JAVA_SDK_CORE_1_12_659_SHA256=f7713aa96c49f3e9f8c2a67b2d9b2d431d746fbfa9a73083be67f914043d23eb
-ARG AWS_JAVA_SDK_KMS_1_12_659_SHA256=828c441cb154326f9dec238c498eeb346ea2a19f60e36f5910cccc7570b9bd10
+ARG AWS_JAVA_SDK_S3_1_12_797_SHA256=322f60899f4f0ea16e94d2d2a8c2f059cc2e0204e11f1f26654e08cf2df590e7
+ARG AWS_JAVA_SDK_CORE_1_12_797_SHA256=75c70d4a7a5b6f3ee3f1fc86b1c7f91106acba4769744791fa4159c4c35bfebc
+ARG AWS_JAVA_SDK_KMS_1_12_797_SHA256=b74486c30294cd34062aa9acef627320df6ef5d61c2bd090b01e4de1f675f04a
 ARG S3FS_2_2_3_SHA256=a22e94403de3dcf6e08fe233718d9364b578cf91555eb0dd6edc628443f44602
-ARG TIKA_CORE_1_28_5_SHA256=e64b3dc06c60b98ecbdfb9dbc3857f4ab54f9548eedd449ee0de39c0df5e3170
+ARG TIKA_CORE_3_3_2_SHA256=84d0f2b6add29b97359113499a1e1e7c10dfbfa1e410c122d163c83f3fc5359b
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
@@ -129,21 +129,21 @@ RUN set -euo pipefail; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.2.4.jar" \
         "https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.2.4/caffeine-3.2.4.jar"; \
     printf '%s  %s\n' "${CAFFEINE_3_2_4_SHA256}" "${SERVER_DIR}/lib/server/caffeine-3.2.4.jar" | sha256sum -c -; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" \
-        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.659/aws-java-sdk-s3-1.12.659.jar"; \
-    printf '%s  %s\n' "${AWS_JAVA_SDK_S3_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" | sha256sum -c -; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.659.jar" \
-        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.12.659/aws-java-sdk-core-1.12.659.jar"; \
-    printf '%s  %s\n' "${AWS_JAVA_SDK_CORE_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.659.jar" | sha256sum -c -; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.659.jar" \
-        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-kms/1.12.659/aws-java-sdk-kms-1.12.659.jar"; \
-    printf '%s  %s\n' "${AWS_JAVA_SDK_KMS_1_12_659_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.659.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.797.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.797/aws-java-sdk-s3-1.12.797.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_S3_1_12_797_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.797.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.797.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.12.797/aws-java-sdk-core-1.12.797.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_CORE_1_12_797_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.797.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.797.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-kms/1.12.797/aws-java-sdk-kms-1.12.797.jar"; \
+    printf '%s  %s\n' "${AWS_JAVA_SDK_KMS_1_12_797_SHA256}" "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.797.jar" | sha256sum -c -; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" \
         "https://repo1.maven.org/maven2/org/lasersonlab/s3fs/2.2.3/s3fs-2.2.3.jar"; \
     printf '%s  %s\n' "${S3FS_2_2_3_SHA256}" "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" | sha256sum -c -; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-1.28.5.jar" \
-        "https://repo1.maven.org/maven2/org/apache/tika/tika-core/1.28.5/tika-core-1.28.5.jar"; \
-    printf '%s  %s\n' "${TIKA_CORE_1_28_5_SHA256}" "${SERVER_DIR}/lib/server/tika-core-1.28.5.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-3.3.2.jar" \
+        "https://repo1.maven.org/maven2/org/apache/tika/tika-core/3.3.2/tika-core-3.3.2.jar"; \
+    printf '%s  %s\n' "${TIKA_CORE_3_3_2_SHA256}" "${SERVER_DIR}/lib/server/tika-core-3.3.2.jar" | sha256sum -c -; \
     chown omero-server:omero-server "${SERVER_DIR}"/lib/server/omero-zarr-pixel-buffer-*.jar \
         "${SERVER_DIR}"/lib/server/caffeine-*.jar \
         "${SERVER_DIR}"/lib/server/aws-java-sdk-*.jar \
@@ -190,7 +190,7 @@ RUN set -euo pipefail; \
 # APPLY_SECURITY_HARDENING is declared here for layer ordering but the
 # broad upgrade runs at the end of the Dockerfile (after all pip/dnf installs)
 # so that every transitive dependency is covered.
-ARG APPLY_SECURITY_HARDENING=0
+ARG APPLY_SECURITY_HARDENING=1
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
@@ -804,6 +804,16 @@ RUN set -euo pipefail; \
         done; \
         rm -f "/tmp/${artifact}.jar"; \
     done
+
+# Verify and update compatible libraries on both server and client classpaths.
+COPY docker/java-dependencies.cdx.xml /usr/local/share/omero-java-dependencies.cdx.xml
+COPY tools/install_java_dependencies.py /tmp/install-java-dependencies.py
+RUN set -euo pipefail; \
+    SERVER_DIR="$(readlink -f /opt/omero/server/OMERO.server)"; \
+    python3 -B /tmp/install-java-dependencies.py \
+        --profile server --root "${SERVER_DIR}" \
+        --lock /usr/local/share/omero-java-dependencies.cdx.xml; \
+    rm -f /tmp/install-java-dependencies.py
 
 # Remove inherited build-only OS dependencies without touching application venvs.
 COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh

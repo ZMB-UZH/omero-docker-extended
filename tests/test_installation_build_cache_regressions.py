@@ -239,6 +239,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             compose_log = log_path.read_text(encoding="utf-8").strip()
+            self.assertIn("--build-arg APPLY_SECURITY_HARDENING=0", compose_log)
             self.assertIn(
                 "--progress plain build --no-cache --provenance false",
                 compose_log,

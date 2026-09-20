@@ -464,7 +464,8 @@ jobs:
             -o -name 'setup.py' -o -name 'setup.cfg' \
             -o -name 'package.json' -o -name 'package-lock.json' -o -name 'yarn.lock' \
             -o -name 'pnpm-lock.yaml' -o -name 'go.sum' -o -name 'go.mod' \
-            -o -name 'Gemfile.lock' -o -name 'pom.xml' -o -name 'gradle.lockfile' \) \
+            -o -name 'Gemfile.lock' -o -name 'pom.xml' -o -name 'gradle.lockfile' \
+            -o -name '*.cdx.xml' -o -name '*.cdx.json' \) \
             -not -path './.git/*' -not -path './node_modules/*' | sort
           echo "--- Explicit CI requirements lockfiles ---"
           find .github/requirements -maxdepth 1 -type f -name '*.txt' | sort
@@ -486,6 +487,7 @@ jobs:
         --lockfile=requirements.txt:.github/requirements/security-code-scanning.txt
         --lockfile=requirements.txt:.github/requirements/tests-ci.txt
         --lockfile=requirements.txt:.github/requirements/vulture-ci.txt
+        --lockfile=docker/java-dependencies.cdx.xml
         ./
 
   scorecard:

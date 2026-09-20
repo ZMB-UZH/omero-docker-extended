@@ -1,0 +1,506 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">
+  <!-- Curated replacements only; runtime-image inventories also cover embedded dependencies. -->
+  <!-- SHA-256 values identify public Maven Central and reviewed upstream distribution bytes. -->
+  <metadata><component type="application"><name>OMERO curated Java dependency overrides</name></component></metadata>
+  <components>
+    <component type="library">
+      <group>commons-beanutils</group>
+      <name>commons-beanutils</name>
+      <version>1.11.0</version>
+      <hashes><hash alg="SHA-256">9e44ba68ec9a3f21286fa2a8bbb003b735c0f69101bb43144b79f4f8aaa74709</hash></hashes>
+      <purl>pkg:maven/commons-beanutils/commons-beanutils@1.11.0</purl>
+      <properties>
+        <property name="omero:server:source-version">1.9.3</property>
+        <property name="omero:server:source-sha256">c058e39c7c64203d3a448f3adb588cb03d6378ed808485618f26e137f29dae73</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>commons-logging</group>
+      <name>commons-logging</name>
+      <version>1.3.5</version>
+      <hashes><hash alg="SHA-256">6d7a744e4027649fbb50895df9497d109f98c766a637062fe8d2eabbb3140ba4</hash></hashes>
+      <purl>pkg:maven/commons-logging/commons-logging@1.3.5</purl>
+      <properties>
+        <property name="omero:server:source-version">1.3.0</property>
+        <property name="omero:server:source-sha256">66d3c980470b99b0c511dad3dfc0ae7b265ec1fb144e96bc0253a8a175fd34d9</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>commons-io</group>
+      <name>commons-io</name>
+      <version>2.22.0</version>
+      <hashes><hash alg="SHA-256">2b9a7b1f726fb86216dbd2c8321eabe0221dbd5b1be81c18e1cb53811b104758</hash></hashes>
+      <purl>pkg:maven/commons-io/commons-io@2.22.0</purl>
+      <properties>
+        <property name="omero:server:source-version">2.6</property>
+        <property name="omero:server:source-sha256">f877d304660ac2a142f3865badfc971dec7ed73c747c7f8d5d2f5139ca736513</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpclient</name>
+      <version>4.5.14</version>
+      <hashes><hash alg="SHA-256">c8bc7e1c51a6d4ce72f40d2ebbabf1c4b68bfe76e732104b04381b493478e9d6</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpclient@4.5.14</purl>
+      <properties>
+        <property name="omero:server:source-version">4.5.6</property>
+        <property name="omero:server:source-sha256">c03f813195e7a80e3608d0ddd8da80b21696a4c92a6a2298865bf149071551c7</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpcore</name>
+      <version>4.4.16</version>
+      <hashes><hash alg="SHA-256">6c9b3dd142a09dc468e23ad39aad6f75a0f2b85125104469f026e52a474e464f</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpcore@4.4.16</purl>
+      <properties>
+        <property name="omero:server:source-version">4.4.10</property>
+        <property name="omero:server:source-sha256">78ba1096561957db1b55200a159b648876430342d15d461277e62360da19f6fd</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpmime</name>
+      <version>4.5.14</version>
+      <hashes><hash alg="SHA-256">d401243d5c6eae928a37121b6e819158c8c32ea0584793e7285bb489ab2a3d17</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpmime@4.5.14</purl>
+      <properties>
+        <property name="omero:server:source-version">4.5.6</property>
+        <property name="omero:server:source-sha256">0b2b1102c18d3c7e05a77214b9b7501a6f6056174ae5604e0e256776eda7553e</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-annotations</name>
+      <version>2.21</version>
+      <hashes><hash alg="SHA-256">53ca085f4a150f703f49e1aabd935bd03b43e1ea3d55d135438292af22cef56b</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.21</purl>
+      <properties>
+        <property name="omero:server:source-version">2.15.0</property>
+        <property name="omero:server:source-sha256">91adcd3dcf5fd9a16499934e7536a23d456692a0093e3d4fd52f138c3936348c</property>
+        <property name="omero:converter:source-version">2.20</property>
+        <property name="omero:converter:source-sha256">959a2ffb2d591436f51f183c6a521fc89347912f711bf0cae008cdf045d95319</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-core</name>
+      <version>2.21.6</version>
+      <hashes><hash alg="SHA-256">36111c3a4372cd5c2be6f4ec44a050382487920f3fc38ca3015c9c1678bd7c56</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-core@2.21.6</purl>
+      <properties>
+        <property name="omero:server:source-version">2.15.0</property>
+        <property name="omero:server:source-sha256">5b483f68fa9dd6aa37da37d1f79dd5c4b9464238f4f0660a242cb6b5c724950c</property>
+        <property name="omero:converter:source-version">2.20.0</property>
+        <property name="omero:converter:source-sha256">bc0cf46075877201f8406ee7de2741ae7df6c066f5f0457bd80632a718c06e72</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-databind</name>
+      <version>2.21.6</version>
+      <hashes><hash alg="SHA-256">62134a98de12d0a421cd2f5b9854c8e63f10f524b0341e66cfd31a4326f6a329</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.21.6</purl>
+      <properties>
+        <property name="omero:server:source-version">2.15.0</property>
+        <property name="omero:server:source-sha256">00c5a5d5ae71ac8e8d5b8da606841e2251c806355939cb5d51c4cdc6b644a0dc</property>
+        <property name="omero:converter:source-version">2.20.0</property>
+        <property name="omero:converter:source-sha256">a70e146a6bf2cba4f9cd367169787f50adcfbb57122bc2e9c8390cd0b397ac30</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.dataformat</group>
+      <name>jackson-dataformat-yaml</name>
+      <version>2.21.6</version>
+      <hashes><hash alg="SHA-256">e5a4ea8c86f9f8d068bb280b69be5c450f263343b4bf1d81be8586d4e8d5c698</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml@2.21.6</purl>
+      <properties>
+        <property name="omero:server:source-version">2.15.0</property>
+        <property name="omero:server:source-sha256">691a0a605de15ea610180317331957fe6f7e91f45471ee45cbf9832d74291c31</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.yaml</group>
+      <name>snakeyaml</name>
+      <version>2.5</version>
+      <hashes><hash alg="SHA-256">e6682acf1ace77508ef13649cbf4f8d09d2cf5457bdb61d25ffb6ac0233d78dd</hash></hashes>
+      <purl>pkg:maven/org.yaml/snakeyaml@2.5</purl>
+      <properties>
+        <property name="omero:server:source-version">2.0</property>
+        <property name="omero:server:source-sha256">880c9d896e4b74a06c549c15ca496450165d6909fa15d7e662bee8f6a66d7afa</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.jayway.jsonpath</group>
+      <name>json-path</name>
+      <version>2.10.0</version>
+      <hashes><hash alg="SHA-256">890daa95dd3892d34d9fabc27cd5153656e6f369358625c88f4dc7b79cbd6c5a</hash></hashes>
+      <purl>pkg:maven/com.jayway.jsonpath/json-path@2.10.0</purl>
+      <properties>
+        <property name="omero:server:source-version">2.7.0</property>
+        <property name="omero:server:source-sha256">de82f0e4602eea0187df36779ae8cfc1653b6d920125674af4d365d0bca59508</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>net.minidev</group>
+      <name>json-smart</name>
+      <version>2.6.0</version>
+      <hashes><hash alg="SHA-256">1ae4b561458afb540be8ec5c6dbb4f2e715a319a7ae64854998aaf924770d61b</hash></hashes>
+      <purl>pkg:maven/net.minidev/json-smart@2.6.0</purl>
+      <properties>
+        <property name="omero:server:source-version">2.4.7</property>
+        <property name="omero:server:source-sha256">28c17ed16ac22e6845743fd1e84321edf5d7735fc216e44ee269d106bf3d8146</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>net.minidev</group>
+      <name>accessors-smart</name>
+      <version>2.6.0</version>
+      <hashes><hash alg="SHA-256">222c9f547bb20a99fc486403a398352d1306fb671b38abd7ecab6401df170e61</hash></hashes>
+      <purl>pkg:maven/net.minidev/accessors-smart@2.6.0</purl>
+      <properties>
+        <property name="omero:server:source-version">2.4.7</property>
+        <property name="omero:server:source-sha256">ef5103429f101f7e3ff62f3a182342720439eaea43d2eed3119bba770bb202a9</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.ow2.asm</group>
+      <name>asm</name>
+      <version>9.10.1</version>
+      <hashes><hash alg="SHA-256">ed825d10ab1399c8c0cb669e688cf0c8c82629b4c8399b58352b68e92ca10fcb</hash></hashes>
+      <purl>pkg:maven/org.ow2.asm/asm@9.10.1</purl>
+      <properties>
+        <property name="omero:server:source-version">9.1.0</property>
+        <property name="omero:server:source-sha256">cda4de455fab48ff0bcb7c48b4639447d4de859a7afc30a094a986f0936beba2</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.slf4j</group>
+      <name>slf4j-api</name>
+      <version>2.0.18</version>
+      <hashes><hash alg="SHA-256">44508fd1576500688c790b190acdd16fec4f8c79a3e0b900afd70503cf055f55</hash></hashes>
+      <purl>pkg:maven/org.slf4j/slf4j-api@2.0.18</purl>
+      <properties>
+        <property name="omero:server:source-version">2.0.9</property>
+        <property name="omero:server:source-sha256">0818930dc8d7debb403204611691da58e49d42c50b6ffcfdce02dadb7c3c2b6c</property>
+        <property name="omero:converter:source-version">2.0.17</property>
+        <property name="omero:converter:source-sha256">7b751d952061954d5abfed7181c1f645d336091b679891591d63329c622eb832</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.protobuf</group>
+      <name>protobuf-java</name>
+      <version>3.25.9</version>
+      <hashes><hash alg="SHA-256">df18b719cd0c5a11e569013216cc9de47a0a954adeede685c0f98ce4c42d4d1a</hash></hashes>
+      <purl>pkg:maven/com.google.protobuf/protobuf-java@3.25.9</purl>
+      <properties>
+        <property name="omero:server:source-version">3.21.9</property>
+        <property name="omero:server:source-sha256">1b78b4a76a71512debfdff8f8fc5aef6bfd459f65758fecf7aff245e6e6301e4</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.dataformat</group>
+      <name>jackson-dataformat-cbor</name>
+      <version>2.21.6</version>
+      <hashes><hash alg="SHA-256">1682391f5deb36acbd34702eeeecd9f2f450c8e468504de05784a27aabdef5e3</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.dataformat/jackson-dataformat-cbor@2.21.6</purl>
+      <properties>
+        <property name="omero:converter:source-version">2.20.0</property>
+        <property name="omero:converter:source-sha256">ab075616cbd67f5676f89825ec9c8bc7b54c84dbe934b162145b34172370b5d6</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.datatype</group>
+      <name>jackson-datatype-jdk8</name>
+      <version>2.21.6</version>
+      <hashes><hash alg="SHA-256">ffcb606cc9fec4ad22c096fdc101bf1b6eb17b5f53c741ab306632ecdf4a438e</hash></hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.datatype/jackson-datatype-jdk8@2.21.6</purl>
+      <properties>
+        <property name="omero:converter:source-version">2.20.0</property>
+        <property name="omero:converter:source-sha256">3eae9db4a4ebb81c33067ab6683a1b12967317957f433c5dcec2a859237c4877</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>ch.qos.logback</group>
+      <name>logback-core</name>
+      <version>1.6.3</version>
+      <hashes><hash alg="SHA-256">a6967a28c8b086dee75a694d2f6fb8830c71153539866d7d8af065c9b6df91e0</hash></hashes>
+      <purl>pkg:maven/ch.qos.logback/logback-core@1.6.3</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.5.32</property>
+        <property name="omero:converter:source-sha256">6a904d5778d0e361a9692f9cbe68b1b0620ae0f3eda2ec2ed09102755bf036c4</property>
+        <property name="omero:client:source-version">1.3.16</property>
+        <property name="omero:client:source-sha256">f153c7d582ad19219c906dd728df335232790663f5b3d2db187ac83d9e5a3b8b</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>ch.qos.logback</group>
+      <name>logback-classic</name>
+      <version>1.6.3</version>
+      <hashes><hash alg="SHA-256">beebede8db065fe1b72909ecc66bb49acda618901635d86c25fce14a5915e37e</hash></hashes>
+      <purl>pkg:maven/ch.qos.logback/logback-classic@1.6.3</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.5.32</property>
+        <property name="omero:converter:source-sha256">2d4cf592db78be2de4d6140434c2fec170dcb16a09e8c8b7b207dbf5e31b848a</property>
+        <property name="omero:client:source-version">1.3.16</property>
+        <property name="omero:client:source-sha256">3f63cbc593b91670f75890ab256aa47c123a9b125185939a272c720ca1417c2c</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-buffer</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">5bef3ea2b9e80c5e8d03151ca1609bd75fd1e264863bf3e2f8d538392c0f2c38</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-buffer@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">d741726adcc76107553092d456d0da5837daad39919c8a40df15327d7fa3296d</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">21b9b7717da9ed7034c7a9ef4fcea4a08825e8f52d775da4d898364edf99327f</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-codec@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">8ebb8284cc76b26025d892ff8bc1a90cc4ae7492dae0e3794068cd8ebc452600</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec-http</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">7d9000e53c8e37504be42b8dd7b646a7d1c73ad2cf801527fe3c6301880fe06f</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-codec-http@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">0a32369bbd7278f1066048fc0830f2a6df1f0f72de6ae7f5386976c4d2f6788f</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec-http2</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">c7521231535c252903d9e424e162f789b5b55b0b0799628ea466a9b3daf49dae</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-codec-http2@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">bb5eb960f552d9b90a98c8bc40e40b89316294c1dd1e67b2728ad047f2da3bbe</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-common</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">b4ebb8fa44cd5790731928a83fd0f25a530e41c407c093bef4a0196db30b693f</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-common@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">ac2b777562723a94962ea30a30d968fa5678455141ede64100b9d0530426db9c</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-handler</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">a79fb814e029db17da82baea25a0340172af2c59f107fd20b394c1fa28680f21</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-handler@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">1846e8e770288aab3a203a16f78e2515ddba0bf9df1c26665ceffc38c9fc875b</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-resolver</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">50c338a0e5c9997513e738f0fcb47d579a9e8852d317ba367f5d141e210187c0</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-resolver@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">c66be4ca4e37c263af785253449024b7ef150093257490c208bdc1d774e2c6d7</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">6c064c1cae4d410b920abfc07959a49db1b4778a9547614373e97d31cab0cad6</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-transport@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">30065562b7708e88cdf7c3fd192be9083651be538676ba27c8631e255825f315</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport-classes-epoll</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">a3caf181f3af1665a7cd8b5d409ffe425308da49bf9297482df3942411a7707c</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-transport-classes-epoll@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">d7e0684969dad68e224e4fbf3e8e0de6b5191b25d820f8d6ae05201c70b33654</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport-native-unix-common</name>
+      <version>4.1.138.Final</version>
+      <hashes><hash alg="SHA-256">8d1ada8f185d6f6da4cd79f9daeef39f1db49908cfec8bc2a1fb602458aa2341</hash></hashes>
+      <purl>pkg:maven/io.netty/netty-transport-native-unix-common@4.1.138.Final</purl>
+      <properties>
+        <property name="omero:converter:source-version">4.1.126.Final</property>
+        <property name="omero:converter:source-sha256">b6578df0ad9092f4e846d34976a5f887b067ebaa71307eb90653d3a1898c1f5f</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.client5</group>
+      <name>httpclient5</name>
+      <version>5.6.4</version>
+      <hashes><hash alg="SHA-256">bdef5f8841145cd76c4c605ff301bc840eea0d5292332b7b892a93316c0d8ee1</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.6.4</purl>
+      <properties>
+        <property name="omero:server:source-version">5.1.3</property>
+        <property name="omero:server:source-sha256">28c759254f4e35319e078bb6ffea75676608dc12cb243b24fb3c8732522977fe</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.core5</group>
+      <name>httpcore5</name>
+      <version>5.4.3</version>
+      <hashes><hash alg="SHA-256">18bfbbabb478dfb67f31aeaf428c387f3c3df654582e1309f708ee1f3086830a</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.core5/httpcore5@5.4.3</purl>
+      <properties>
+        <property name="omero:server:source-version">5.1.3</property>
+        <property name="omero:server:source-sha256">f2bf2f2c7772169c9e30699719667ad30f9b46c4e9d7841907deb2d12d9923fe</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.core5</group>
+      <name>httpcore5-h2</name>
+      <version>5.4.3</version>
+      <hashes><hash alg="SHA-256">c7db7026b8e2dea39132b04a6069f6671e2858309b20a146ec5c7dd6ed73a0b6</hash></hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.core5/httpcore5-h2@5.4.3</purl>
+      <properties>
+        <property name="omero:server:source-version">5.1.3</property>
+        <property name="omero:server:source-sha256">d0e78ba15aa8ebe77982b660ac4b09a95d6e035dbdbea762577dc1c8e2935807</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>junit</group>
+      <name>junit</name>
+      <version>4.13.2</version>
+      <hashes><hash alg="SHA-256">8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3</hash></hashes>
+      <purl>pkg:maven/junit/junit@4.13.2</purl>
+      <properties>
+        <property name="omero:server:source-version">4.12</property>
+        <property name="omero:server:source-sha256">59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.amazonaws</group>
+      <name>aws-java-sdk-core</name>
+      <version>1.12.797</version>
+      <hashes><hash alg="SHA-256">75c70d4a7a5b6f3ee3f1fc86b1c7f91106acba4769744791fa4159c4c35bfebc</hash></hashes>
+      <purl>pkg:maven/com.amazonaws/aws-java-sdk-core@1.12.797</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.11.232</property>
+        <property name="omero:converter:source-sha256">ff61697dbfbd08288d9fbf4b920f9d8b1dcb8a06a277a2f2132c3ec46ce58bc9</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.amazonaws</group>
+      <name>aws-java-sdk-kms</name>
+      <version>1.12.797</version>
+      <hashes><hash alg="SHA-256">b74486c30294cd34062aa9acef627320df6ef5d61c2bd090b01e4de1f675f04a</hash></hashes>
+      <purl>pkg:maven/com.amazonaws/aws-java-sdk-kms@1.12.797</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.11.232</property>
+        <property name="omero:converter:source-sha256">dc57dc79801a579b8d17be1cebf0a9f10a196ef515cf378eec0ac77ce622ed7d</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.amazonaws</group>
+      <name>aws-java-sdk-s3</name>
+      <version>1.12.797</version>
+      <hashes><hash alg="SHA-256">322f60899f4f0ea16e94d2d2a8c2f059cc2e0204e11f1f26654e08cf2df590e7</hash></hashes>
+      <purl>pkg:maven/com.amazonaws/aws-java-sdk-s3@1.12.797</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.11.232</property>
+        <property name="omero:converter:source-sha256">7aee7d43851354928bfec09a37e98c43fdfb187e80b5f7ce48f53082eb10deec</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.amazon.ion</group>
+      <name>ion-java</name>
+      <version>1.12.1</version>
+      <hashes><hash alg="SHA-256">47f5d5b90690eb6fbff2b5946c1e20e22ba02b0dd9444a7e08de46f19c5b000e</hash></hashes>
+      <purl>pkg:maven/com.amazon.ion/ion-java@1.12.1</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.0.2</property>
+        <property name="omero:converter:source-sha256">0d127b205a1fce0abc2a3757a041748651bc66c15cf4c059bac5833b27d471a5</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.tika</group>
+      <name>tika-core</name>
+      <version>3.3.2</version>
+      <hashes><hash alg="SHA-256">84d0f2b6add29b97359113499a1e1e7c10dfbfa1e410c122d163c83f3fc5359b</hash></hashes>
+      <purl>pkg:maven/org.apache.tika/tika-core@3.3.2</purl>
+      <properties>
+        <property name="omero:converter:source-version">1.5</property>
+        <property name="omero:converter:source-sha256">6f3f3981d6fbab0b7de73a3fd203a7728bf8549d2d1af59f3866c1aec7dc102e</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.commons</group>
+      <name>commons-lang3</name>
+      <version>3.20.0</version>
+      <hashes><hash alg="SHA-256">69e5c9fa35da7a51a5fd2099dfe56a2d8d32cf233e2f6d770e796146440263f4</hash></hashes>
+      <purl>pkg:maven/org.apache.commons/commons-lang3@3.20.0</purl>
+      <properties>
+        <property name="omero:server:source-version">3.18.0</property>
+        <property name="omero:server:source-sha256">4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720</property>
+        <property name="omero:converter:source-version">3.18.0</property>
+        <property name="omero:converter:source-sha256">4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.postgresql</group>
+      <name>postgresql</name>
+      <version>42.7.13</version>
+      <hashes><hash alg="SHA-256">6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93</hash></hashes>
+      <purl>pkg:maven/org.postgresql/postgresql@42.7.13</purl>
+      <properties>
+        <property name="omero:client:source-version">42.2.29</property>
+        <property name="omero:client:source-sha256">4c5d4528527354b2e594f458f0807e710f4d5683491179d2580f3d5ae5e7477c</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.pdfbox</group>
+      <name>pdfbox</name>
+      <version>2.0.37</version>
+      <hashes><hash alg="SHA-256">fcb04e6dac53f8681108bb66d5ac2ca72987b6c6795b14a8071636fc49a5d703</hash></hashes>
+      <purl>pkg:maven/org.apache.pdfbox/pdfbox@2.0.37</purl>
+      <properties>
+        <property name="omero:client:source-version">2.0.8</property>
+        <property name="omero:client:source-sha256">8deec6288a6d0866f2794ae2c1924459f1b70234f04ac223ff9a773e317f5816</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.pdfbox</group>
+      <name>fontbox</name>
+      <version>2.0.37</version>
+      <hashes><hash alg="SHA-256">992e14d5e903f69517903a1a817040ed7bf1288e768870e0a27bf9090bb34ec3</hash></hashes>
+      <purl>pkg:maven/org.apache.pdfbox/fontbox@2.0.37</purl>
+      <properties>
+        <property name="omero:client:source-version">2.0.8</property>
+        <property name="omero:client:source-sha256">a6fab3b2ad256564e10224d7c2c0d4977fcfd5cd566a659f429e9c3793720e12</property>
+      </properties>
+    </component>
+  </components>
+</bom>

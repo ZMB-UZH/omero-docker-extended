@@ -282,6 +282,55 @@ exit 0
                 joined_bake_lines,
             )
 
+    def test_hardening_default_opt_out_and_invalid_choice(self) -> None:
+        """Check hardening reaches Bake. Inputs: choices. Output: exact argv assertions."""
+        for choice in (None, "0", "1", "invalid"):
+            with self.subTest(choice=choice), tempfile.TemporaryDirectory() as temp_dir:
+                temporary = Path(temp_dir)
+                bin_dir = temporary / "bin"
+                bin_dir.mkdir()
+                log = temporary / "docker.log"
+                log.touch()
+                self._create_fake_docker(bin_dir, log)
+                env = {
+                    **os.environ,
+                    "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(log),
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "0",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "BUILDX_DATA_PATH": str(temporary / "buildx"),
+                }
+                env.pop("APPLY_SECURITY_HARDENING", None)
+                if choice is not None:
+                    env["APPLY_SECURITY_HARDENING"] = choice
+                result = subprocess.run(
+                    [str(self.script_path)],
+                    cwd=self.repo_root,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                commands = log.read_text()
+                if choice == "invalid":
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        "APPLY_SECURITY_HARDENING must be 0 or 1", result.stderr
+                    )
+                    self.assertNotIn("buildx bake", commands)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn(
+                        f"omeroserver.args.APPLY_SECURITY_HARDENING={choice or '1'}",
+                        commands,
+                    )
+                    self.assertEqual(
+                        "omeroserver.args.APPLY_DNF_UPDATES=1" in commands,
+                        choice != "0",
+                    )
+
     def test_script_runs_flatten_flow_with_metadata_restore(self) -> None:
         """Verify the script runs flatten flow with metadata restore execution contract.
 
