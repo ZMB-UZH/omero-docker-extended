@@ -1792,6 +1792,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 + lockfile.relative_to(self.repo_root).as_posix()
             )
         self.assertTrue(expected)
+        expected.add("--lockfile=docker/java-dependencies.cdx.xml")
         self.assertEqual(
             expected, {arg for arg in args if arg.startswith("--lockfile")}
         )

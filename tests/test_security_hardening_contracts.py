@@ -75,6 +75,12 @@ class SecurityHardeningContractTests(unittest.TestCase):
                     expected_attempts,
                 )
 
+    def test_application_images_enable_final_hardening_by_default(self):
+        """Check direct builds remain hardened. Inputs: Dockerfiles. Output: assertions."""
+        for dockerfile in (self.server_dockerfile, self.web_dockerfile):
+            self.assertIn("ARG APPLY_SECURITY_HARDENING=1\n", dockerfile)
+            self.assertNotIn("ARG APPLY_SECURITY_HARDENING=0\n", dockerfile)
+
     def test_failed_curated_python_update_stops_server_build(self):
         """Execute the actual curated pip update with a failing interpreter.
 

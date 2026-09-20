@@ -27,6 +27,15 @@ Related docs:
   HTTPS requests. It does not depend on Explorer automation, PowerShell,
   COM-only pickers, or a Windows 11-only shell API.
 - OMERO CLI-based import with configurable batching and concurrency.
+- Managed images include a verified Java client selected by
+  `OMERO_IMPORT_CLIENT_DIR` and an isolated Java 17 runtime selected by
+  `OMERO_IMPORT_JAVA_HOME`. Import planning and execution use that same bundle,
+  independently of old writable CLI caches. Rebuilding the image updates its
+  dependencies; existing uploads and cached operator files are preserved.
+  JVM selection sets both `JAVA_HOME` and `PATH` only in the CLI child environment.
+  Standalone installations without these settings retain upstream CLI behavior.
+  A configured but incomplete bundle or JVM fails before import, rather
+  than downloading an unreviewed fallback.
 - OMERO CLI import and import preflight checks run with `--depth 15` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
 - Long-running OMERO CLI imports use `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` with a 24-hour default so very large structured datasets are not aborted by a short plugin-side subprocess timeout.

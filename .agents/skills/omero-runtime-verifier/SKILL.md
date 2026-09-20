@@ -74,6 +74,8 @@ docker exec <container> env HOME=<home> USER=<service-user> \
 - service health and container status
 - runtime venv path and importability
 - exact-checkout live code injection, rebuild, or restart for changed services
+- dependency identity and class-origin checks for server, browser-import client,
+  converter, and embedded JARs; these are independent runtime consumers
 - Loki-backed logs and diagnostics
 - OMERO CLI connectivity using the correct user and flag ordering
 - Celery worker/process startup behavior when relevant

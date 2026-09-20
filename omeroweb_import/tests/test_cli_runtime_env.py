@@ -6,10 +6,133 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from omeroweb_import.services.omero import connection_service, import_service
 from omeroweb_import.services.import_management import workflow_service
 from omeroweb_import.strings import errors
 from omeroweb_import.views import core_functions
+
+
+def test_import_jvm_is_optional_and_scoped_to_child_environment(tmp_path, monkeypatch):
+    """Check scoped JVM selection. Inputs: runtime fixture. Output: env assertions."""
+    monkeypatch.setenv("JAVA_HOME", "original")
+    monkeypatch.delenv("OMERO_IMPORT_JAVA_HOME", raising=False)
+    assert core_functions._import_cli_environment()["JAVA_HOME"] == "original"
+    monkeypatch.setenv("OMERO_IMPORT_JAVA_HOME", " ")
+    assert core_functions._import_cli_environment()["JAVA_HOME"] == "original"
+    home = tmp_path / "java with spaces"
+    executable = home / "bin" / "java"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\nexit 0\n")
+    executable.chmod(0o700)
+    monkeypatch.setenv("OMERO_IMPORT_JAVA_HOME", str(home))
+    original_path = core_functions.os.environ.get("PATH", core_functions.os.defpath)
+    selected = core_functions._import_cli_environment()
+    assert selected["JAVA_HOME"] == str(home)
+    assert (
+        selected["PATH"]
+        == str(executable.parent) + core_functions.os.pathsep + original_path
+    )
+    assert core_functions.os.environ["JAVA_HOME"] == "original"
+    assert (
+        core_functions.os.environ.get("PATH", core_functions.os.defpath)
+        == original_path
+    )
+    monkeypatch.delenv("PATH", raising=False)
+    assert core_functions._import_cli_environment()["PATH"].endswith(
+        core_functions.os.pathsep + core_functions.os.defpath
+    )
+
+
+@pytest.mark.parametrize(
+    "problem", ["relative", "missing", "directory", "not-executable"]
+)
+def test_invalid_import_jvm_never_falls_back(tmp_path, monkeypatch, problem):
+    """Reject invalid JVMs. Inputs: temporary layout. Output: fail-closed assertions."""
+    home = tmp_path / "java"
+    executable = home / "bin" / "java"
+    if problem == "directory":
+        executable.mkdir(parents=True)
+    elif problem == "not-executable":
+        executable.parent.mkdir(parents=True)
+        executable.write_text("not executable")
+        executable.chmod(0o600)
+    monkeypatch.setenv(
+        "OMERO_IMPORT_JAVA_HOME", "relative" if problem == "relative" else str(home)
+    )
+    with pytest.raises(RuntimeError, match="Java runtime is unavailable"):
+        core_functions._import_cli_environment()
+
+
+def test_import_java_options_are_optional_outside_managed_images(monkeypatch):
+    """Check the optional bundle. Inputs: environment fixture. Output: assertions."""
+    monkeypatch.delenv("OMERO_IMPORT_CLIENT_DIR", raising=False)
+    assert core_functions._import_java_options() == []
+    monkeypatch.setenv("OMERO_IMPORT_CLIENT_DIR", "  ")
+    assert core_functions._import_java_options() == []
+
+
+@pytest.mark.parametrize("problem", ["relative", "missing", "file", "missing-logback"])
+def test_configured_import_client_never_silently_downloads_a_fallback(
+    tmp_path, monkeypatch, problem
+):
+    """Reject incomplete bundles. Inputs: temporary layout. Output: assertions."""
+    client = tmp_path / "client"
+    if problem == "file":
+        client.write_text("not a directory")
+    elif problem == "missing-logback":
+        client.mkdir()
+    monkeypatch.setenv(
+        "OMERO_IMPORT_CLIENT_DIR", "relative" if problem == "relative" else str(client)
+    )
+    with pytest.raises(RuntimeError, match="client bundle is unavailable"):
+        core_functions._import_java_options()
+
+
+@pytest.mark.parametrize("session", ["", "test-session"])
+def test_import_uses_managed_client_with_and_without_session_wrapper(
+    tmp_path, monkeypatch, session
+):
+    """Check managed argv and secret transport. Inputs: fixtures. Output: assertions."""
+    client = tmp_path / "client with spaces"
+    client.mkdir()
+    config = client / "logback-cli.xml"
+    config.write_text("<configuration/>")
+    monkeypatch.setenv("OMERO_IMPORT_CLIENT_DIR", str(client))
+    subcommand = ["import"]
+    command = core_functions._build_omero_cli_command(subcommand, session, "", 0)
+    assert subcommand == ["import"]
+    assert command[-5:] == [
+        "import",
+        "--clientdir",
+        str(client),
+        "--logback",
+        str(config),
+    ]
+    if session:
+        assert session not in command
+    assert "--clientdir" not in core_functions._build_omero_cli_command(
+        ["zarr", "import"], session, "", 0
+    )
+
+
+def test_import_scan_uses_the_same_managed_client(tmp_path, monkeypatch):
+    """Check preflight uses the import bundle. Inputs: fixtures. Output: assertions."""
+    client = tmp_path / "client"
+    client.mkdir()
+    config = client / "logback-cli.xml"
+    config.write_text("<configuration/>")
+    monkeypatch.setenv("OMERO_IMPORT_CLIENT_DIR", str(client))
+    monkeypatch.setattr(
+        core_functions, "_get_upload_root", lambda: tmp_path / "uploads"
+    )
+    captured = []
+    monkeypatch.setattr(
+        core_functions.process_utils, "run", lambda cmd, **_kwargs: captured.append(cmd)
+    )
+    core_functions._run_local_import_scan(tmp_path / "image.ome.tiff")
+    assert captured[0][-5:-1] == ["--clientdir", str(client), "--logback", str(config)]
 
 
 def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch):

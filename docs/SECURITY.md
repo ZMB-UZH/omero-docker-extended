@@ -62,7 +62,10 @@ Docker scout is optional — if the CLI plugin is not installed, both phases are
 
 ## Security hardening (optional)
 
-Interactive installation defaults docker image security hardening to **yes**. Set `APPLY_SECURITY_HARDENING=0` or answer "no" to skip it. Setting `APPLY_SECURITY_HARDENING=1` also enables the same build pass explicitly:
+Application Dockerfiles, the build helper, and interactive installation default
+security hardening to **yes**. The installer and helper preserve an explicit
+`APPLY_SECURITY_HARDENING=0` opt-out; direct Docker/Compose builds require
+`--build-arg APPLY_SECURITY_HARDENING=0` to skip the pass. Hardened builds apply:
 
 1. **OS packages**: Runs `dnf update` (Rocky-based images) or `apt-get upgrade` (Ubuntu-based) or `apk upgrade` (Alpine-based) to patch known vulnerabilities in system libraries.
 2. **Python packages**: Applies curated compatibility-safe Python updates only. The hardening pass does **not** blanket-upgrade entire OMERO/plugin virtual environments after OMERO/plugin packages are installed.

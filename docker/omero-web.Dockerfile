@@ -1,5 +1,8 @@
 # Keep the upstream image pinned; validate virtualenv discovery when upgrading it.
 
+# Stage the matching upstream Java client independently of any writable import cache.
+FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f AS omero-client
+
 # Pull image
 # ----------
 FROM openmicroscopy/omero-web-standalone:5.33.1@sha256:d50ce7a8cf150313813a4cffc5da5d80a4a2913a435e0346a8ab30fb05439d7a
@@ -471,7 +474,7 @@ RUN set -euo pipefail; \
 # Runs AFTER all dnf installs and pip installs are complete, so that every
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
-ARG APPLY_SECURITY_HARDENING=0
+ARG APPLY_SECURITY_HARDENING=1
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
         echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
@@ -559,6 +562,24 @@ RUN set -euo pipefail; \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
+
+# Update converter dependencies without changing its explicit launcher classpath layout.
+COPY docker/java-dependencies.cdx.xml /usr/local/share/omero-java-dependencies.cdx.xml
+COPY tools/install_java_dependencies.py /tmp/install-java-dependencies.py
+COPY --from=omero-client /opt/omero/server/OMERO.server/lib/client/ /opt/omero/client/lib/client/
+COPY --from=omero-client /opt/omero/server/OMERO.server/etc/logback-cli.xml /opt/omero/client/lib/client/logback-cli.xml
+ENV OMERO_IMPORT_CLIENT_DIR=/opt/omero/client/lib/client \
+    OMERO_IMPORT_JAVA_HOME=/usr/lib/jvm/jre-17-openjdk
+RUN python3 -B /tmp/install-java-dependencies.py \
+        --profile converter --root /opt/bioformats2raw \
+        --lock /usr/local/share/omero-java-dependencies.cdx.xml \
+    && python3 -B /tmp/install-java-dependencies.py \
+        --profile client --root /opt/omero/client \
+        --lock /usr/local/share/omero-java-dependencies.cdx.xml \
+    && install -m 0644 /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar "${OMERO_IMPORT_CLIENT_DIR}/OMEZarrReader.jar" \
+    && install -m 0644 /opt/omero/web/zarr-jar-upgrade/jzarr.jar "${OMERO_IMPORT_CLIENT_DIR}/jzarr.jar" \
+    && bioformats2raw --help >/dev/null \
+    && rm -f /tmp/install-java-dependencies.py
 
 # Remove inherited build-only OS dependencies without touching application venvs.
 COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh

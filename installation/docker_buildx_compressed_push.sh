@@ -25,6 +25,7 @@ DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"
 DOCKER_BUILD_FLATTEN_ONLY="${DOCKER_BUILD_FLATTEN_ONLY:-0}"
+APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-1}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
@@ -1061,10 +1062,9 @@ build_target_overrides() {
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
 
-        # Optional docker image security hardening build args
-        # Controlled by APPLY_SECURITY_HARDENING from the installation script
-        if [ "${APPLY_SECURITY_HARDENING:-0}" = "1" ]; then
-            printf -- '--set\n%s.args.APPLY_SECURITY_HARDENING=1\n' "${target}"
+        # Always forward the choice, including an explicit opt-out.
+        printf -- '--set\n%s.args.APPLY_SECURITY_HARDENING=%s\n' "${target}" "${APPLY_SECURITY_HARDENING}"
+        if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
             printf -- '--set\n%s.args.APPLY_DNF_UPDATES=1\n' "${target}"
             printf -- '--set\n%s.args.APPLY_OMERO_VENV_TOOLING_UPDATES=1\n' "${target}"
             printf -- '--set\n%s.args.APPLY_OMEROWEB_DNF_UPDATES=1\n' "${target}"
@@ -1267,6 +1267,7 @@ main() {
     validate_compression_type
     validate_compression_level
     validate_build_progress
+    validate_toggle "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"
     validate_toggle "DOCKER_BUILD_USE_OCI_MEDIATYPES" "${DOCKER_BUILD_USE_OCI_MEDIATYPES}"
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"

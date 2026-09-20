@@ -225,7 +225,36 @@ findings, and never infer runtime safety from the carrier's Docker Hub status.
 See the [Scout SBOM reference](https://docs.docker.com/reference/cli/docker/scout/sbom/)
 and [SBOM analysis support](https://docs.docker.com/reference/cli/docker/scout/cves/).
 
-### DevSkim engine parity and public fingerprints
+### Curated Java Dependencies
+
+`docker/java-dependencies.cdx.xml` is a CycloneDX build lock for reviewed Java
+overrides, not a complete runtime SBOM. OSV explicitly scans its Maven package
+URLs as well as the recursive repository scope. Its XML representation keeps
+the standard package metadata and complete public checksums readable, with
+comments for provenance. Do not classify artifact checksums as credentials or
+encode them to avoid a heuristic.
+
+`tools/install_java_dependencies.py` verifies the original distribution bytes,
+rejects ambiguous classpaths, and downloads and validates every replacement
+before modifying a disposable build layer. The import client inherits shared
+server pins unless a client-specific pin is recorded; the converter has its own set.
+Changing a base image or distribution requires reviewing the recorded source
+hashes, not relaxing the checks. The XML loader rejects DTD/entity declarations.
+
+Validate actual class origins and operations for all three consumers: server,
+browser-import client, and converter. Also inspect libraries embedded inside
+other JARs. A direct dependency replacement does not update those copies.
+Keep full-layer reports separate from active-filesystem evidence and retain both.
+Use a private known-vulnerable control to prove advisory matching, not only a
+package count or an empty report. A successful build is not a live import test.
+
+Review logging configuration as well as JAR APIs. The server's upstream Janino
+filters and fileset log routing prevent a blind Logback replacement; the bundled
+import client and converter use independently tested Java 17 logging stacks.
+For large image inventories, put scanner `TMPDIR` on a disk-backed private
+workspace with sufficient free space, not a quota-limited temporary filesystem.
+
+### DevSkim Engine Parity And Public Fingerprints
 
 `tools/devskim_gate.py` is the shared local and GitHub runner. Its reviewed
 `tools/devskim_tooling.ini` pins the DevSkim 1.0.90 NuGet package by full SHA-256

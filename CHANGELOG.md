@@ -10,6 +10,23 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.2.1-main.1] - 2026-09-20
+
+### Changed
+
+- Updated compatible application libraries and bundled a verified Java client for browser imports.
+- Made application-image hardening the default and expanded automated dependency checks.
+- Clarified deployment and maintenance guidance.
+
+### Upgrade Notes
+
+- Rebuild application images; retain existing configuration and data.
+- No database migration or storage-layout change.
+
+### Verification
+
+- Linux automated tests and live import, rendering, export, and monitoring checks passed.
+
 ## [1.2.0-main.1] - 2026-09-19
 
 ### Changed
@@ -110,7 +127,8 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.0-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.1-main.1...HEAD
+[1.2.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.0-main.1...1.2.1-main.1
 [1.2.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.2-main.1...1.2.0-main.1
 [1.1.2-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.1-main.1...1.1.2-main.1
 [1.1.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.0-main.1...1.1.1-main.1
