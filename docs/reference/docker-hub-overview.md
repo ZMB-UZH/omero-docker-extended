@@ -1,12 +1,17 @@
 # OMERO Docker Extended
 
-A complete OMERO deployment for microscopy facilities, with custom research
-workflows and the tools needed to operate them together.
+A security-focused OMERO deployment for microscopy facilities. Cybersecurity
+hardening is the project's primary focus, complemented by custom research
+workflows and integrated operating tools.
 
 ## Beyond stock OMERO
 
 Built on OMERO.server and OMERO.web, this project adds:
 
+- **Layered security hardening:** restricted service access, permission-aware
+  integrations, and automated code and dependency checks. Selected bundled
+  libraries receive checksum-verified upstream fixes after compatibility and
+  regression testing, balancing security maintenance with OMERO stability.
 - **Browser-based imports:** file and folder uploads, chunked large-file
   transfers, background jobs, and specialized SEM-EDX handling.
 - **Metadata workflows:** filename-to-annotation parsing, reusable variable
@@ -30,6 +35,10 @@ Review the upgrade instructions and validate your formats, permissions and
 integrations before production use. Quotas and alternative Zarr workflows
 require their documented prerequisites; OMP and Imaris integrations remain
 under active development.
+
+Security also depends on deployment configuration, access policies, regular
+updates, and operational monitoring. A release carrier's scan is not a
+substitute for checking the runtime images it contains.
 
 [Source and README](https://github.com/ZMB-UZH/omero-docker-extended) |
 [Releases and installation bundles](https://github.com/ZMB-UZH/omero-docker-extended/releases) |

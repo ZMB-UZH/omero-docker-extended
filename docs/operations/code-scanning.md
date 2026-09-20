@@ -48,6 +48,30 @@ new or renamed lockfiles must update the scan arguments too. Before changing
 this scope or the scanner version, inspect an `--all-packages` report from the
 exact engine and verify that each lockfile contributes its resolved packages.
 
+Bandit and Hadolint share file discovery with the local workflow gate. Bandit
+includes first-party Python in tools, startup, monitoring, Docker helpers,
+scripts, environment tooling and hidden agent/CI directories, not just plugin
+packages. Production and test files are disjoint; `conftest.py` is test code.
+Hadolint discovers `Dockerfile`, `Dockerfile.*` and `*.Dockerfile` throughout
+first-party source. Discovery uses Git's tracked and non-ignored new files,
+avoiding generated installation data. The Bandit artifact contains both raw
+reports and its exact file inventory, including on failure.
+Scanner error notifications and unsuccessful invocations fail the local gate
+even when the findings list is empty. In particular, a Python parse failure
+must not turn an incomplete Bandit scan into a clean result.
+
+Semgrep's tracked `.semgrepignore` replaces its implicit test-directory
+exclusions, so first-party tests participate in SAST as well as Bandit and
+CodeQL. Preserve the raw SARIF, including parser diagnostics, on every run.
+Semgrep can partially parse valid Bash, BuildKit Dockerfiles, or embedded
+GitHub expressions; a zero-finding report does not mean complete extraction.
+Reconcile those diagnostics with ShellCheck, Hadolint, Actionlint/Zizmor and
+the relevant execution tests. Do not hide warnings or rewrite working runtime
+code solely to accommodate a scanner parser.
+See [Semgrep's scope defaults](https://semgrep.dev/docs/ignoring-files-folders-code).
+
+## Scan Scope Policy
+
 Do not narrow scanner scope to improve scores. New path filters, rule skips,
 ignored globs, SARIF cleanup categories, or workflow trigger filters require
 documented false-positive or runtime-scope proof, an audit-log line that shows
@@ -68,16 +92,14 @@ tracked repository file. The workflow now prints the tracked language
 candidates before CodeQL initialization so a lower GitHub UI count can be
 explained from the run log instead of guessed.
 
-- Python: the current repo has 355 tracked `.py` implementation files and 33
-  tracked `.pyi` type stubs. A `355/388` CodeQL count means the implementation
-  files were included and type stubs were not counted as Python source; stubs
-  are still covered by Ruff/Mypy contracts. The earlier `310/343` UI count had
-  the same meaning before tracked Python files such as `tools/regression_guard.py`
-  and its companion test module were added.
-- JavaScript/TypeScript: the current repo has 8 tracked JS-family files. The 2
-  files under `.agents/skills/frontend-preview/agents/` are tool config files
-  audited by workflow logs and repo lint/tests; the 6 application/test JS files
-  are the expected CodeQL product-surface candidates.
+- Python: compare the tracked `.py` implementation inventory with the extracted
+  files for the exact commit. `.pyi` type stubs do not count as Python
+  implementation; they remain covered by Ruff/Mypy contracts. Historical UI
+  totals are not a current coverage baseline.
+- JavaScript/TypeScript: reconcile every tracked JS-family file with the
+  extraction log. Agent-tool configuration files may be classified differently
+  from application sources; account for them explicitly through lint/tests
+  instead of assuming a smaller total proves complete coverage.
 - Do not force non-source stubs or agent-tool config files into CodeQL only to
   make the numerator equal the denominator. First prove an implementation file
   is missing from the CodeQL candidate audit, then adjust the workflow.
@@ -178,6 +200,17 @@ split, encode, or move a value merely to avoid a scanner's matching rule.
 ## Active scanners
 
 ### Runtime image inventory
+
+Source dependency checks do not inventory libraries bundled inside upstream
+application archives. Full runtime-image SBOMs remain required. When verifying
+scanner upgrades, compare package identities and use a private known-vulnerable
+version fixture as a negative control; package counts alone do not prove
+correct advisory matching.
+
+Full-layer inventories can retain packages replaced in later image layers.
+Preserve raw reports and verify the active filesystem and class origins
+separately. A library embedded in another upstream archive is not fixed merely
+because a direct classpath dependency was replaced.
 
 The release and recovery tools analyze the bundled runtime images separately
 from the carrier. Scout's native JSON SBOM is passed unchanged to `scout cves
@@ -615,15 +648,12 @@ rules:
 
 6. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
-7. **Adding new plugins or test directories**: The Bandit workflow
-   auto-discovers both scan targets and test directories at runtime. Any
-   directory at the repo root matching `omero_*` or `omeroweb_*` that contains
-   `__init__.py` is automatically included in the scan. Test directories named
-   `tests/` or `test/` within those packages are auto-discovered and excluded
-   from the production scan, and scanned separately with B101/B106 skipped. The
-   repo-root `tests/` directory is also included in the test-only scan. **You
-   do NOT need to update the workflow file** because discovery is fully
-   dynamic. Just follow the naming convention.
+7. **Adding Python or Docker source**: Shared Git-based discovery includes
+   first-party files regardless of package name or location. Python under
+   `test/` or `tests/`, plus `conftest.py`, uses the test policy; all other
+   Python uses the production policy. Check `bandit-scope.json` for new files
+   and test discovery whenever changing naming conventions or exclusions.
+   Dockerfile discovery is also repository-wide, not limited to `docker/`.
 
 8. **Commit message convention**: When fixing a security finding, use the commit message format:
 

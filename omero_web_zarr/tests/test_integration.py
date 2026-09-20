@@ -2453,7 +2453,7 @@ def test_install_webgateway_overrides_cover_regular_fallback_and_error_paths(
     monkeypatch.setattr(
         integration,
         "HttpJavascriptResponseServerError",
-        lambda message: HttpResponse(message, status=500),
+        lambda message: HttpResponse(message, content_type="text/plain", status=500),
     )
     monkeypatch.setattr(
         integration, "settings", type("Settings", (), {"THUMBNAILS_BATCH": 2})()
