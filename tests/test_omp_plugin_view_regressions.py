@@ -819,16 +819,17 @@ class OmpPluginViewRegressionTests(TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions when delete views hide internal exception text stops reporting the expected error.
         """
+        from omeroweb_omp_plugin.views import delete_all_view, delete_plugin_view
+
         cases = [
             (
-                "omeroweb_omp_plugin.views.delete_plugin_view",
+                delete_plugin_view,
                 "delete_plugin_keyvaluepairs",
             ),
-            ("omeroweb_omp_plugin.views.delete_all_view", "delete_all_keyvaluepairs"),
+            (delete_all_view, "delete_all_keyvaluepairs"),
         ]
-        for module_name, function_name in cases:
-            with self.subTest(module=module_name):
-                view_module = importlib.import_module(module_name)
+        for view_module, function_name in cases:
+            with self.subTest(module=view_module.__name__):
                 conn = mock.Mock()
                 conn.getUser.return_value.getName.return_value = "alice"
 

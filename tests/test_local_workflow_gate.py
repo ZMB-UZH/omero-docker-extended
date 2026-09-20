@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import subprocess
 import sys
@@ -38,41 +39,82 @@ class LocalWorkflowGateTests(unittest.TestCase):
         """
         self.tool = _load_tool()
 
-    def test_bandit_discovery_matches_workflow_package_convention(self) -> None:
-        """Verify the bandit discovery matches workflow package convention execution contract.
+    def test_scan_discovery_covers_all_first_party_locations(self) -> None:
+        """Keep tools, hooks and future packages in scope.
 
-        Inputs: repository fixtures. Output: fails on regressions in bandit discovery matches workflow package convention integration.
+        Inputs: a Git fixture with tracked, new and ignored files. Output: exact inventories.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            for package in (
-                "omero_alpha",
-                "omero_web_zarr",
-                "omeroweb_beta",
-                "omeroweb_without_init",
+            root = Path(tmp_dir)
+            subprocess.run(
+                [self.tool._require_executable("git"), "init", "-q", str(root)],
+                check=True,
+            )
+            production = (
+                "omero_alpha/__init__.py",
+                "omeroweb_without_init/task.py",
+                "tools/build.py",
+                "startup/bootstrap.py",
+                "monitoring/exporter.py",
+                "docker/check.py",
+                "scripts/agent.py",
+                "env/validate.py",
+                ".agents/hooks/check.py",
+                ".github/helpers/ci.py",
+                "root script.py",
+            )
+            tests = ("conftest.py", "omero_alpha/tests/check.py", "tests/root.py")
+            dockerfiles = (
+                "Dockerfile",
+                "docker/server.Dockerfile",
+                ".agents/build/Dockerfile.ci",
+            )
+            for relative in (
+                production
+                + tests
+                + dockerfiles
+                + (
+                    "third_party/vendor.py",
+                    "third_party/Dockerfile",
+                    ".cache/generated.py",
+                )
             ):
-                (repo_root / package).mkdir()
-            for package in ("omero_alpha", "omero_web_zarr", "omeroweb_beta"):
-                (repo_root / package / "__init__.py").write_text("", encoding="utf-8")
-            (repo_root / "omero_alpha" / "tests").mkdir()
-            (repo_root / "omeroweb_beta" / "test").mkdir()
-            (repo_root / "tests").mkdir()
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+            (root / ".gitignore").write_text(".cache/\n", encoding="utf-8")
+            subprocess.run(
+                [self.tool._require_executable("git"), "add", "--", "omero_alpha"],
+                cwd=root,
+                check=True,
+            )
+            targets = self.tool.discover_bandit_targets(root)
+            self.assertEqual(
+                tuple(sorted("./" + p for p in production)), targets.production_files
+            )
+            self.assertEqual(tuple(sorted("./" + p for p in tests)), targets.test_files)
+            self.assertEqual(
+                tuple(sorted(dockerfiles)), self.tool.discover_dockerfiles(root)
+            )
+            self.assertFalse(set(targets.production_files) & set(targets.test_files))
 
-            targets = self.tool.discover_bandit_targets(repo_root)
-
-        self.assertEqual(
-            ("omero_alpha", "omero_web_zarr", "omeroweb_beta"),
-            targets.scan_dirs,
-        )
-        self.assertEqual(
-            ("omero_alpha/tests", "omeroweb_beta/test"),
-            targets.package_test_dirs,
-        )
-        self.assertEqual(
-            ("omero_alpha/tests", "omeroweb_beta/test", "tests"),
-            targets.test_dirs,
-        )
-        self.assertEqual("omero_alpha/tests,omeroweb_beta/test", targets.exclude_csv)
+    def test_scan_discovery_rejects_source_symlinks(self) -> None:
+        """Reject aliased sources. Inputs: temporary symlink. Output: fail-closed discovery."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.py"
+            source.write_text("", encoding="utf-8")
+            link = root / "alias.py"
+            link.symlink_to(source)
+            with (
+                unittest.mock.patch.object(
+                    self.tool, "tracked_source_paths", return_value=("alias.py",)
+                ),
+                self.assertRaisesRegex(self.tool.GateError, "regular in-repository"),
+            ):
+                self.tool.discover_bandit_targets(root)
+            link.unlink()
+            self.assertFalse(self.tool._regular_source_file(root, "alias.py"))
 
     def test_bandit_gate_uses_same_skip_policy_as_security_workflow(self) -> None:
         """Verify the bandit gate uses same skip policy as security workflow execution contract.
@@ -84,8 +126,8 @@ class LocalWorkflowGateTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         tool_text = TOOL_PATH.read_text(encoding="utf-8")
 
-        self.assertIn('--skip "B603,B404"', workflow_text)
-        self.assertIn('--skip "B101,B106,B603,B404"', workflow_text)
+        self.assertIn("python3 tools/run_local_workflow_gates.py", workflow_text)
+        self.assertIn("--profile bandit", workflow_text)
         self.assertIn('"B603,B404"', tool_text)
         self.assertIn('"B101,B106,B603,B404"', tool_text)
 
@@ -109,6 +151,13 @@ class LocalWorkflowGateTests(unittest.TestCase):
             unittest.mock.patch.object(self.tool, "_run"),
             unittest.mock.patch.object(
                 self.tool,
+                "discover_bandit_targets",
+                return_value=self.tool.BanditTargets(
+                    ("./tools/source.py",), ("./tests/source.py",)
+                ),
+            ),
+            unittest.mock.patch.object(
+                self.tool,
                 "_sarif_result_count",
                 side_effect=[0, 1],
             ),
@@ -118,6 +167,57 @@ class LocalWorkflowGateTests(unittest.TestCase):
             ),
         ):
             self.tool.run_bandit(context)
+
+    def test_scanner_report_rejects_partial_analysis(self) -> None:
+        """Reject false clean reports. Inputs: SARIF fixtures. Output: explicit failures."""
+        invalid = [
+            [],
+            {},
+            {"runs": []},
+            {"runs": [None]},
+            {"runs": [{"results": {}}]},
+            {"runs": [{"results": [None]}]},
+            {"runs": [{"invocations": {}}]},
+            {"runs": [{"invocations": [None]}]},
+            {"runs": [{"invocations": [{"executionSuccessful": False}]}]},
+        ]
+        for key in ("toolConfigurationNotifications", "toolExecutionNotifications"):
+            for notices in (
+                {},
+                [None],
+                [{"level": "error", "message": {"text": "syntax error"}}],
+            ):
+                invalid.append(
+                    {"runs": [{"results": [], "invocations": [{key: notices}]}]}
+                )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "result.sarif"
+            for document in invalid:
+                with self.subTest(document=document):
+                    path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaises(self.tool.GateError):
+                        self.tool._sarif_result_count(path)
+            path.write_text(
+                json.dumps(
+                    {
+                        "runs": [
+                            {
+                                "results": [{"ruleId": "example"}],
+                                "invocations": [
+                                    {
+                                        "executionSuccessful": True,
+                                        "toolExecutionNotifications": [
+                                            {"level": "note"}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(1, self.tool._sarif_result_count(path))
 
     def test_ci_profile_matches_locally_reproducible_workflow_set(self) -> None:
         """Verify the ci profile matches locally reproducible workflow set execution contract.
@@ -175,6 +275,9 @@ class LocalWorkflowGateTests(unittest.TestCase):
             (repo_root / "docker" / "example.Dockerfile").write_text(
                 "FROM example:1\n", encoding="utf-8"
             )
+            (repo_root / "example.Dockerfile").write_text(
+                "FROM another:2\n", encoding="utf-8"
+            )
             context = self.tool.GateContext(
                 repo_root=repo_root,
                 artifact_dir=repo_root / ".cache",
@@ -187,6 +290,11 @@ class LocalWorkflowGateTests(unittest.TestCase):
             with (
                 unittest.mock.patch.object(
                     self.tool, "_require_executable", return_value="/usr/bin/docker"
+                ),
+                unittest.mock.patch.object(
+                    self.tool,
+                    "discover_dockerfiles",
+                    return_value=("docker/example.Dockerfile", "example.Dockerfile"),
                 ),
                 unittest.mock.patch.object(
                     self.tool.subprocess,
@@ -203,6 +311,13 @@ class LocalWorkflowGateTests(unittest.TestCase):
             self.assertEqual(
                 "hadolint", command[command.index(self.tool.HADOLINT_IMAGE) + 1]
             )
+            for relative in ("docker/example.Dockerfile", "example.Dockerfile"):
+                self.assertEqual(
+                    sarif,
+                    (
+                        context.artifact_dir / "hadolint" / f"{relative}.sarif"
+                    ).read_text(),
+                )
 
     def test_test_gate_uses_clean_explicit_coverage_files(self) -> None:
         """Verify the local pytest gate writes explicit fresh coverage files.
@@ -328,7 +443,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.16.6", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.16.8", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

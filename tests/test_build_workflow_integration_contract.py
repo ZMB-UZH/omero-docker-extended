@@ -2033,7 +2033,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.176.0@sha256:12672acdb0949e19f9f6a4c2b288edd0b404f268f0ca7738a2c06f372f50362e",
+            "semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -2047,64 +2047,36 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertEqual("v0.74.0", trivy_step["with"]["version"])
 
-        bandit_scope_step = next_or_fail(
+        bandit_step = next_or_fail(
             step
             for step in workflow["jobs"]["bandit"]["steps"]
-            if step.get("name") == "Audit — list files in scan scope"
+            if step.get("name") == "Run Bandit across first-party Python sources"
         )
         self.assertEqual(
-            "${{ steps.discover.outputs.scan_dirs }}",
-            bandit_scope_step["env"]["SCAN_DIRS"],
+            "python3 tools/run_local_workflow_gates.py --profile bandit "
+            '--artifact-dir "${RUNNER_TEMP}/bandit"',
+            bandit_step["run"],
         )
-        self.assertEqual(
-            "${{ steps.discover.outputs.test_dirs }}",
-            bandit_scope_step["env"]["TEST_DIRS"],
-        )
-        self.assertIn('find "${scan_dirs[@]}"', bandit_scope_step["run"])
-        self.assertNotIn(
-            "${{ steps.discover.outputs.scan_dirs }}", bandit_scope_step["run"]
-        )
-        self.assertNotIn(
-            "${{ steps.discover.outputs.test_dirs }}", bandit_scope_step["run"]
-        )
-
-        bandit_prod_step = next_or_fail(
+        self.assertNotIn("${{", bandit_step["run"])
+        report_step = next_or_fail(
             step
             for step in workflow["jobs"]["bandit"]["steps"]
             if step.get("name")
-            == "Run Bandit scan (production code — excludes test directories)"
+            == "Preserve unmodified Bandit reports and scope inventory"
         )
-        self.assertEqual(
-            "${{ steps.discover.outputs.scan_dirs }}",
-            bandit_prod_step["env"]["SCAN_DIRS"],
+        self.assertEqual("always()", report_step["if"])
+        self.assertEqual("${{ runner.temp }}/bandit", report_step["with"]["path"])
+        self.assertEqual("error", report_step["with"]["if-no-files-found"])
+        discovery = workflow["jobs"]["hadolint-discover"]["steps"]
+        self.assertTrue(
+            any(
+                "tools/run_local_workflow_gates.py --list-dockerfiles"
+                in step.get("run", "")
+                for step in discovery
+            )
         )
-        self.assertEqual(
-            "${{ steps.discover.outputs.exclude_csv }}",
-            bandit_prod_step["env"]["EXCLUDE_CSV"],
-        )
-        self.assertIn(
-            'bandit_cmd=(bandit -r "${scan_dirs[@]}")', bandit_prod_step["run"]
-        )
-        self.assertNotIn(
-            "${{ steps.discover.outputs.scan_dirs }}", bandit_prod_step["run"]
-        )
-        self.assertNotIn(
-            "${{ steps.discover.outputs.exclude_csv }}", bandit_prod_step["run"]
-        )
-
-        bandit_test_step = next_or_fail(
-            step
-            for step in workflow["jobs"]["bandit"]["steps"]
-            if step.get("name")
-            == "Run Bandit scan (test code — skips assert and test-credential rules)"
-        )
-        self.assertEqual(
-            "${{ steps.discover.outputs.test_dirs }}",
-            bandit_test_step["env"]["TEST_DIRS"],
-        )
-        self.assertIn('"${test_dirs[@]}"', bandit_test_step["run"])
-        self.assertNotIn(
-            "${{ steps.discover.outputs.test_dirs }}", bandit_test_step["run"]
+        self.assertFalse(
+            any("sparse-checkout" in step.get("with", {}) for step in discovery)
         )
 
         hadolint_audit_step = next_or_fail(
@@ -2170,6 +2142,19 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "semgrep scan --sarif --config auto --exclude third_party . > semgrep-results.sarif",
             semgrep_run,
         )
+        ignore_patterns = [
+            line.strip()
+            for line in (self.repo_root / ".semgrepignore").read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual([".git/"], ignore_patterns)
+        semgrep_artifact = next_or_fail(
+            step
+            for step in security_jobs["semgrep"]["steps"]
+            if step.get("name") == "Preserve unmodified Semgrep report and diagnostics"
+        )
+        self.assertEqual("always()", semgrep_artifact["if"])
+        self.assertEqual("semgrep-results.sarif", semgrep_artifact["with"]["path"])
 
         trivy_with = next_or_fail(
             step
@@ -2182,23 +2167,16 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("skip-files", trivy_with)
         self.assertNotIn("trivyignores", trivy_with)
 
-        bandit_prod = next_or_fail(
-            step
-            for step in security_jobs["bandit"]["steps"]
-            if step.get("name")
-            == "Run Bandit scan (production code — excludes test directories)"
-        )["run"]
-        self.assertIn('--skip "B603,B404"', bandit_prod)
-        self.assertNotIn("B101", bandit_prod)
-        self.assertNotIn("B106", bandit_prod)
+        from tools import run_local_workflow_gates
+        import inspect
 
-        bandit_test = next_or_fail(
-            step
-            for step in security_jobs["bandit"]["steps"]
-            if step.get("name")
-            == "Run Bandit scan (test code — skips assert and test-credential rules)"
-        )["run"]
-        self.assertIn('--skip "B101,B106,B603,B404"', bandit_test)
+        bandit_source = inspect.getsource(run_local_workflow_gates.run_bandit)
+        self.assertEqual(
+            {"B603,B404", "B101,B106,B603,B404"},
+            set(re.findall(r'"(B[0-9,B]+)"', bandit_source)),
+        )
+        self.assertNotIn("--exclude", bandit_source)
+        self.assertNotIn('"B101,B106"', bandit_source)
 
         devskim_gate = next_or_fail(
             step

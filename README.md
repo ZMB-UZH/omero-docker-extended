@@ -16,9 +16,10 @@
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
 <!-- END GENERATED BADGES -->
 
-An integrated OMERO platform for microscopy facilities, combining OMERO.server
-and OMERO.web with browser-based imports, searchable acquisition metadata,
-Imaris workflows, and day-to-day administration in a Linux Docker deployment.
+A security-focused OMERO platform for microscopy facilities. Cybersecurity
+hardening is its primary focus, alongside browser-based imports, searchable
+acquisition metadata, Imaris workflows, and integrated administration in a
+Linux Docker deployment.
 
 <details open>
 <summary><h2>What this repository delivers</h2></summary>
@@ -28,6 +29,13 @@ client APIs. This repository builds on that foundation with an integrated set
 of research workflows and operating tools that would otherwise need to be
 assembled, configured and maintained separately:
 
+- **Strengthen deployment security.** Layered hardening, restricted service
+  access, permission-aware integrations, and automated code and dependency
+  checks extend the OMERO platform. Selected bundled libraries receive
+  checksum-verified maintenance updates after compatibility and regression
+  testing, bringing in upstream security fixes without blindly replacing
+  OMERO's underlying frameworks.
+  [Security and verification](docs/operations/code-scanning.md)
 - **Import from the browser.** Upload files and folders, transfer large files
   in chunks, track background imports, and handle supported directory-backed
   formats and SEM-EDX data. [Import workflow](docs/plugins/import-plugin.md)
@@ -60,6 +68,8 @@ monitoring and other infrastructure run as separate services.
 > Before installation or upgrade, validate persistent storage, permissions,
 > port mappings and coexistence with other workloads in your environment.
 > Preserve backups and test the formats and integrations your facility uses.
+> Effective security also depends on deployment configuration, access policies,
+> ongoing updates, and operational monitoring.
 
 For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 

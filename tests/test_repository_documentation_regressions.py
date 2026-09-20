@@ -1055,22 +1055,22 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         workflow_text = self.read_text(".github/workflows/security-code-scanning.yml")
 
         self.assertIn("CodeQL File-Count Coverage", runbook_text)
-        py_count = self.git_file_count("*.py")
-        pyi_count = self.git_file_count("*.pyi")
-        total_python_count = py_count + pyi_count
         self.assertIn(
-            f"{py_count} tracked `.py` implementation files "
-            f"and {pyi_count} tracked `.pyi` type stubs",
+            "compare the tracked `.py` implementation inventory with the extracted files for the exact commit",
             normalized_runbook_text,
         )
         self.assertIn(
-            f"`{py_count}/{total_python_count}` CodeQL count",
+            "`.pyi` type stubs do not count as Python implementation",
             normalized_runbook_text,
         )
-        self.assertIn("earlier `310/343` UI count", normalized_runbook_text)
-        self.assertIn("8 tracked JS-family files", normalized_runbook_text)
-        self.assertIn(".agents/skills/frontend-preview/agents/", runbook_text)
-        self.assertIn("6 application/test JS files", runbook_text)
+        self.assertIn(
+            "Historical UI totals are not a current coverage baseline",
+            normalized_runbook_text,
+        )
+        self.assertIn(
+            "reconcile every tracked JS-family file with the extraction log",
+            normalized_runbook_text,
+        )
         self.assertIn("Audit — explain CodeQL language candidates", workflow_text)
         self.assertIn("git ls-files '*.py'", workflow_text)
         self.assertIn("git ls-files '*.pyi'", workflow_text)

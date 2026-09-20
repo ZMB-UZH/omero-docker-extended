@@ -1,0 +1,2 @@
+# Include first-party tests; do not inherit Semgrep's implicit test exclusions.
+.git/

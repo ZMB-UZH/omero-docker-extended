@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Sequence
 
 
@@ -30,12 +30,10 @@ HADOLINT_IMAGE = (
 
 @dataclass(frozen=True)
 class BanditTargets:
-    """Helper type for bandit targets behavior."""
+    """Disjoint first-party Python implementation and test inventories."""
 
-    scan_dirs: tuple[str, ...]
-    package_test_dirs: tuple[str, ...]
-    test_dirs: tuple[str, ...]
-    exclude_csv: str
+    production_files: tuple[str, ...]
+    test_files: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -503,49 +501,116 @@ def run_tests(context: GateContext) -> None:
         raise GateError(f"One or more test workflow steps failed:\n{joined}")
 
 
-def discover_bandit_targets(repo_root: Path) -> BanditTargets:
-    """Discover the bandit targets.
+def tracked_source_paths(repo_root: Path) -> tuple[str, ...]:
+    """Inventory tracked and non-ignored new files without walking runtime data.
 
-    Inputs: `repo_root` (Path). Output: `BanditTargets`.
+    Inputs: `repo_root`. Output: sorted repository-relative file paths.
     """
-    scan_dirs = tuple(
-        sorted(
-            path.name
-            for path in repo_root.iterdir()
-            if path.is_dir()
-            and (path.name.startswith("omero_") or path.name.startswith("omeroweb_"))
-            and (path / "__init__.py").is_file()
+    result = subprocess.run(
+        [
+            _require_executable("git"),
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return tuple(sorted(set(filter(None, result.stdout.split("\0")))))
+
+
+def discover_bandit_targets(repo_root: Path) -> BanditTargets:
+    """Discover every first-party Python file, including tools and hidden hooks.
+
+    Inputs: `repo_root`. Output: production and test files with no package-name filter.
+    """
+    production_files: list[str] = []
+    test_files: list[str] = []
+    for relative in tracked_source_paths(repo_root):
+        path = PurePosixPath(relative)
+        if path.suffix != ".py" or path.parts[0] == "third_party":
+            continue
+        if not _regular_source_file(repo_root, relative):
+            continue
+        target = (
+            test_files
+            if (
+                {"test", "tests"}.intersection(path.parts) or path.name == "conftest.py"
+            )
+            else production_files
         )
+        target.append("./" + relative)
+    return BanditTargets(tuple(production_files), tuple(test_files))
+
+
+def discover_dockerfiles(repo_root: Path) -> tuple[str, ...]:
+    """Discover Dockerfiles anywhere in first-party source.
+
+    Inputs: `repo_root`. Output: repository-relative Dockerfile paths.
+    """
+    return tuple(
+        relative
+        for relative in tracked_source_paths(repo_root)
+        if PurePosixPath(relative).parts[0] != "third_party"
+        and (
+            PurePosixPath(relative).name == "Dockerfile"
+            or PurePosixPath(relative).name.endswith(".Dockerfile")
+            or PurePosixPath(relative).name.startswith("Dockerfile.")
+        )
+        and _regular_source_file(repo_root, relative)
     )
 
-    package_test_dirs: list[str] = []
-    for relative_dir in scan_dirs:
-        root = repo_root / relative_dir
-        for path in root.rglob("*"):
-            if path.is_dir() and path.name in {"test", "tests"}:
-                package_test_dirs.append(path.relative_to(repo_root).as_posix())
 
-    package_test_dirs_tuple = tuple(sorted(package_test_dirs))
-    test_dirs = list(package_test_dirs_tuple)
-    if (repo_root / "tests").is_dir():
-        test_dirs.append("tests")
-
-    return BanditTargets(
-        scan_dirs=scan_dirs,
-        package_test_dirs=package_test_dirs_tuple,
-        test_dirs=tuple(test_dirs),
-        exclude_csv=",".join(package_test_dirs_tuple),
-    )
+def _regular_source_file(repo_root: Path, relative: str) -> bool:
+    """Reject source aliases outside the checkout. Inputs: root, path. Output: exists."""
+    candidate = repo_root / relative
+    if candidate.is_symlink() or not candidate.resolve().is_relative_to(
+        repo_root.resolve()
+    ):
+        raise GateError(
+            f"Scanner source must be a regular in-repository file: {relative}"
+        )
+    return candidate.is_file()
 
 
 def _sarif_result_count(path: Path) -> int:
-    """Return the sarif result count.
+    """Count findings only after checking scanner completion and diagnostics.
 
     Inputs: `path` (Path) path. Output: `int`.
     """
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
-    return sum(len(run.get("results", [])) for run in data.get("runs", []))
+    runs = data.get("runs") if isinstance(data, dict) else None
+    if not isinstance(runs, list) or not runs:
+        raise GateError(f"Scanner report has no valid SARIF runs: {path}")
+    count = 0
+    for run in runs:
+        if not isinstance(run, dict) or not isinstance(run.get("results", []), list):
+            raise GateError(f"Invalid scanner result structure: {path}")
+        invocations = run.get("invocations", [])
+        if not isinstance(invocations, list):
+            raise GateError(f"Invalid scanner invocation structure: {path}")
+        for invocation in invocations:
+            if (
+                not isinstance(invocation, dict)
+                or invocation.get("executionSuccessful") is False
+            ):
+                raise GateError(f"Scanner did not complete successfully: {path}")
+            for key in ("toolConfigurationNotifications", "toolExecutionNotifications"):
+                notifications = invocation.get(key, [])
+                if not isinstance(notifications, list) or any(
+                    not isinstance(item, dict) or item.get("level") == "error"
+                    for item in notifications
+                ):
+                    raise GateError(f"Scanner reported errors or skipped files: {path}")
+        if any(not isinstance(item, dict) for item in run.get("results", [])):
+            raise GateError(f"Invalid scanner finding structure: {path}")
+        count += len(run.get("results", []))
+    return count
 
 
 def run_bandit(context: GateContext) -> None:
@@ -557,56 +622,44 @@ def run_bandit(context: GateContext) -> None:
     bandit = _require_executable("bandit", context)
     context.artifact_dir.mkdir(parents=True, exist_ok=True)
     targets = discover_bandit_targets(context.repo_root)
-    print(f"Bandit production directories: {' '.join(targets.scan_dirs) or 'none'}")
-    print(f"Bandit test directories: {' '.join(targets.test_dirs) or 'none'}")
+    print(f"Bandit production files: {len(targets.production_files)}")
+    print(f"Bandit test files: {len(targets.test_files)}")
+    if not targets.production_files or not targets.test_files:
+        raise GateError("Expected non-empty production and test Python inventories.")
+    (context.artifact_dir / "bandit-scope.json").write_text(
+        json.dumps(
+            {"production": targets.production_files, "tests": targets.test_files},
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     failures: list[str] = []
-    if targets.scan_dirs:
-        prod_output = context.artifact_dir / "bandit-prod.sarif"
-        command: list[str] = [
-            bandit,
-            "-r",
-            *targets.scan_dirs,
-        ]
-        if targets.exclude_csv:
-            command.extend(("--exclude", targets.exclude_csv))
-        command.extend(
-            (
-                "--skip",
-                "B603,B404",
-                "-f",
-                "sarif",
-                "-o",
-                str(prod_output),
-                "--exit-zero",
-            )
-        )
-        _run(command, cwd=context.repo_root, label="bandit production scan")
-        prod_count = _sarif_result_count(prod_output)
-        if prod_count:
-            failures.append(f"Bandit production scan produced {prod_count} result(s).")
-
-    if targets.test_dirs:
-        test_output = context.artifact_dir / "bandit-test.sarif"
+    for scope, files, skip_rules in (
+        ("production", targets.production_files, "B603,B404"),
+        ("test", targets.test_files, "B101,B106,B603,B404"),
+    ):
+        suffix = "prod" if scope == "production" else "test"
+        output = context.artifact_dir / f"bandit-{suffix}.sarif"
         _run(
             (
                 bandit,
-                "-r",
-                *targets.test_dirs,
+                *files,
                 "--skip",
-                "B101,B106,B603,B404",
+                skip_rules,
                 "-f",
                 "sarif",
                 "-o",
-                str(test_output),
+                str(output),
                 "--exit-zero",
             ),
             cwd=context.repo_root,
-            label="bandit test scan",
+            label=f"bandit {scope} scan",
         )
-        test_count = _sarif_result_count(test_output)
-        if test_count:
-            failures.append(f"Bandit test scan produced {test_count} result(s).")
+        count = _sarif_result_count(output)
+        if count:
+            failures.append(f"Bandit {scope} scan produced {count} result(s).")
 
     if failures:
         raise GateError("\n".join(failures))
@@ -619,14 +672,14 @@ def run_hadolint(context: GateContext) -> None:
     """
 
     docker = _require_executable("docker", context)
-    dockerfiles = sorted((context.repo_root / "docker").glob("*.Dockerfile"))
+    dockerfiles = discover_dockerfiles(context.repo_root)
     if not dockerfiles:
         raise GateError("No Dockerfiles were found for the Hadolint gate.")
 
     context.artifact_dir.mkdir(parents=True, exist_ok=True)
     findings: list[str] = []
-    for dockerfile in dockerfiles:
-        relative_path = dockerfile.relative_to(context.repo_root).as_posix()
+    for relative_path in dockerfiles:
+        dockerfile = context.repo_root / relative_path
         command = (
             docker,
             "run",
@@ -658,7 +711,8 @@ def run_hadolint(context: GateContext) -> None:
                 f"{result.returncode}: {detail}"
             )
 
-        output = context.artifact_dir / f"hadolint-{dockerfile.stem}.sarif"
+        output = context.artifact_dir / "hadolint" / f"{relative_path}.sarif"
+        output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(result.stdout, encoding="utf-8")
         try:
             result_count = _sarif_result_count(output)
@@ -809,6 +863,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         description="Run locally reproducible gates from the GitHub workflows."
     )
     parser.add_argument(
+        "--list-dockerfiles",
+        action="store_true",
+        help="Print the shared Dockerfile discovery result as a JSON workflow matrix.",
+    )
+    parser.add_argument(
         "--profile",
         choices=sorted(PROFILES),
         default="ci",
@@ -859,6 +918,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     Inputs: `argv`. Output: `int`.
     """
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.list_dockerfiles:
+        print(json.dumps(discover_dockerfiles(REPO_ROOT)))
+        return 0
     artifact_dir = args.artifact_dir.resolve()
     tool_venv = (
         args.tool_venv

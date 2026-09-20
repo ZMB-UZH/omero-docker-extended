@@ -895,11 +895,11 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             omero_dir = root / "OMERO"
             server_home = root / "server" / "OMERO.server"
             os.chown(root, nobody_uid, nobody_account.pw_gid)
-            os.chmod(root, 0o700)
-            omero_dir.mkdir(parents=True, exist_ok=True)
+            self.assertEqual(0o700, root.stat().st_mode & 0o777)
+            omero_dir.mkdir(mode=0o700)
             server_home.mkdir(parents=True, exist_ok=True)
             os.chown(omero_dir, 0, 0)
-            os.chmod(omero_dir, 0o700)
+            self.assertEqual(0o700, omero_dir.stat().st_mode & 0o777)
 
             script = textwrap.dedent(
                 f"""\
