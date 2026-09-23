@@ -214,6 +214,125 @@ def _install_process_job_defaults(
     return job_state, saved_jobs
 
 
+def test_sem_edx_duplicate_filenames_keep_dataset_identity(monkeypatch, tmp_path):
+    """Each spectrum must target its image, even when folder basenames repeat.
+
+    Inputs: isolated job storage and connection doubles. Output: exact target and
+    spectrum assertions across two same-named images in separate datasets.
+    """
+    job = _base_job("d" * 32)
+    job.update(
+        special_upload="sem_edx_spectra",
+        dataset_map={"first": 11, "second": 22},
+        sem_edx_settings={
+            "create_tables": False,
+            "create_figures_attachments": False,
+            "create_figures_images": False,
+        },
+        sem_edx_associations={
+            "first/image.tif": ["first/spectrum.txt"],
+            "second/image.tif": ["second/spectrum.txt"],
+        },
+    )
+    upload_root = tmp_path / job["job_id"]
+    for folder in ("first", "second"):
+        staged = upload_root / "_staged" / folder / "spectrum.txt"
+        staged.parent.mkdir(parents=True)
+        staged.write_text(folder, encoding="utf-8")
+        job["files"].append(
+            {
+                "relative_path": f"{folder}/spectrum.txt",
+                "staged_path": f"_staged/{folder}/spectrum.txt",
+                "status": "uploaded",
+                "size": len(folder),
+            }
+        )
+    _install_process_job_defaults(monkeypatch, job, upload_root)
+    monkeypatch.setattr(
+        core_functions,
+        "_background_user_connection",
+        lambda *_args, **_kwargs: nullcontext(object()),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_dataset_name_for_path",
+        lambda relative_path, _orphan: relative_path.split("/")[0],
+    )
+    queries = []
+
+    def find_images(_conn, names, dataset_id):
+        """Return an image identity tied to the requested dataset.
+
+        Inputs: requested names and dataset ID. Output: name-to-image mapping.
+        """
+        queries.append((tuple(names), dataset_id))
+        return {name: _ImportedImage(dataset_id, name) for name in names}
+
+    monkeypatch.setattr(core_functions, "_batch_find_images_by_name", find_images)
+    attached = []
+    monkeypatch.setattr(
+        core_functions,
+        "_attach_txt_to_image_service",
+        lambda _conn, image_id, path, *_args, **_kwargs: attached.append(
+            (image_id, path.read_text(encoding="utf-8"))
+        ),
+    )
+
+    core_functions._process_import_job(job["job_id"])
+
+    assert attached == [(11, "first"), (22, "second")]
+    assert queries == [(("image.tif",), 11), (("image.tif",), 22)]
+    assert job["status"] == "done"
+
+
+@pytest.mark.parametrize(
+    ("unit", "file_status"),
+    [({"covered_indexes": [0]}, "error"), ({"index": 0}, "error"), ({}, "uploaded")],
+)
+def test_unexpected_import_failure_is_persisted_and_retains_payload(
+    monkeypatch, tmp_path, unit, file_status
+):
+    """An unexpected worker exception must not turn a failed import into success.
+
+    Inputs: a disposable staged file and an injected import exception. Output:
+    persisted job/file errors without private diagnostics or successful cleanup.
+    """
+    job = _base_job("e" * 32)
+    job["files"] = [{"relative_path": "image.tif", "size": 6, "status": "uploaded"}]
+    upload_root = tmp_path / job["job_id"]
+    upload_root.mkdir()
+    payload = upload_root / "image.tif"
+    payload.write_bytes(b"pixels")
+    _, saved = _install_process_job_defaults(monkeypatch, job, upload_root)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_units",
+        lambda *_args, **_kwargs: [dict(unit, relative_path="image.tif")],
+    )
+
+    def fail_import(*_args, **_kwargs):
+        """Fail outside the normal CLI-error return path.
+
+        Inputs: ignored import arguments. Output: a private diagnostic exception.
+        """
+        raise RuntimeError("private-worker-diagnostic")
+
+    monkeypatch.setattr(core_functions, "_import_job_entry", fail_import)
+    removed = []
+    monkeypatch.setattr(
+        core_functions, "safe_remove_job_data", lambda *args: removed.append(args)
+    )
+    core_functions._process_import_job(job["job_id"])
+    assert saved[-1]["status"] == "error"
+    assert saved[-1]["files"][0]["status"] == file_status
+    assert saved[-1]["errors"] == [
+        core_functions.errors.unexpected_server_error_importing()
+    ]
+    assert "private-worker-diagnostic" not in str(saved[-1])
+    assert removed == []
+    assert payload.read_bytes() == b"pixels"
+
+
 def test_core_function_remaining_helper_paths_cover_last_direct_branches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -545,6 +664,7 @@ def test_process_import_job_cleans_up_import_payloads_and_unlinks_files(
             "status": "imported",
             "covered_indexes": [0],
             "rel_path": "demo.ome.tif",
+            "imported_image_ids": [123],
             "cleanup_staged_paths": [
                 "_staged/folder",
                 "_staged/demo.ome.tif",
@@ -563,6 +683,7 @@ def test_process_import_job_cleans_up_import_payloads_and_unlinks_files(
 
     assert cleanup_file.exists() is False
     assert saved_jobs[-1]["status"] == "done"
+    assert saved_jobs[-1]["files"][0]["imported_image_ids"] == [123]
     assert any(
         "Import success: demo.ome.tif" in message
         for message in saved_jobs[-1]["messages"]

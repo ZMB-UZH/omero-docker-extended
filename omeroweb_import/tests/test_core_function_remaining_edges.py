@@ -405,9 +405,11 @@ def test_units_ids_and_normalization_connection_cover_fallback_paths(
     )
 
 
+@pytest.mark.parametrize("success", [False, True])
 def test_import_job_entry_dataset_override_selects_dataset_before_import(
     tmp_path,
     monkeypatch,
+    success,
 ) -> None:
     """Verify import job entry dataset override selects dataset before import.
 
@@ -453,15 +455,13 @@ def test_import_job_entry_dataset_override_selects_dataset_before_import(
         Inputs: `**kwargs`. Output: tuple.
         """
         captured["import_dataset_id"] = kwargs["dataset_id"]
-        return False, "", "import failed"
+        return (
+            success,
+            "Image:12" if success else "",
+            "" if success else "import failed",
+        )
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
-    monkeypatch.setattr(
-        core_functions, "_extract_imported_object_ids", lambda output: []
-    )
-    monkeypatch.setattr(
-        core_functions, "_extract_imported_image_ids", lambda output: []
-    )
 
     result = core_functions._import_job_entry(
         {
@@ -484,7 +484,9 @@ def test_import_job_entry_dataset_override_selects_dataset_before_import(
         "normalization_dataset_id": 44,
         "import_dataset_id": 44,
     }
-    assert result["status"] == "error"
+    assert result["status"] == ("imported" if success else "error")
+    if success:
+        assert result["imported_image_ids"] == [12]
 
 
 def test_managed_runtime_and_job_file_helpers_cover_remaining_error_paths(

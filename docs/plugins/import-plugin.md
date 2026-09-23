@@ -318,6 +318,11 @@ Successful jobs retain the normal immediate temporary-payload cleanup.
 Image lookups and attachments run in independent, group-scoped sessions owned
 by the importing user. Reconnection preserves that identity without reusing the
 browser session or requiring service-account membership in the target group.
+New imports retain their returned image IDs for spectrum attachment targeting,
+including repeated filenames and imports into an existing Dataset. Older job
+records use unambiguous matches within their selected Dataset (or orphan images
+when no Dataset is selected). Missing or ambiguous matches retain the failed job
+instead of attaching a spectrum to an unrelated image.
 
 ## Operational controls
 

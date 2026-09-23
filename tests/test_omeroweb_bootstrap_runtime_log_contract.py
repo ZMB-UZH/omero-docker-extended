@@ -21,6 +21,20 @@ class OmeroWebBootstrapRuntimeLogContractTests(unittest.TestCase):
             encoding="utf-8"
         )
 
+    def test_supervisor_configuration_permissions_are_set_in_the_image(self) -> None:
+        """Keep Supervisor readable without inheriting checkout permissions.
+
+        Inputs: the tracked web Dockerfile. Output: fails unless its immutable
+        Supervisor configuration is explicitly readable by the runtime user.
+        """
+        dockerfile = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "COPY --chmod=0444 supervisord.conf /etc/supervisord.conf",
+            dockerfile.splitlines(),
+        )
+
     def test_supervisord_declares_expected_log_targets(self) -> None:
         """Verify supervisord declares expected log targets.
 

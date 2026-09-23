@@ -143,6 +143,7 @@ def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     try:
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True, mode=mode)
+            path.chmod(mode)
         elif path.is_dir():
             path.chmod(mode)
         else:

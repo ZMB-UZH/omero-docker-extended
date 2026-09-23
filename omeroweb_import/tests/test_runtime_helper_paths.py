@@ -1,10 +1,34 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
+from omeroweb_import.utils import file_helpers
 from omeroweb_import.views import core_functions
+
+
+@pytest.mark.parametrize("mask", [0o022, 0o077, 0o777])
+def test_requested_directory_permissions_are_independent_of_umask(tmp_path, mask):
+    """Explicit directory modes must hold after creation under every umask.
+
+    Inputs: temporary paths and a restrictive or normal process umask. Output:
+    exact-mode assertions for both import directory helpers, restoring the umask.
+    """
+    previous = os.umask(mask)
+    try:
+        for index, helper in enumerate(
+            (
+                core_functions._ensure_dir_with_permissions,
+                file_helpers.ensure_dir_with_permissions,
+            )
+        ):
+            target = tmp_path / str(index)
+            assert helper(target, 0o750) is True
+            assert target.stat().st_mode & 0o777 == 0o750
+    finally:
+        os.umask(previous)
 
 
 def test_directory_initialization_uses_parent_checks_and_caches_paths(
@@ -114,7 +138,8 @@ def test_directory_helpers_cover_failure_and_permission_fix_paths(
 
     chmod_calls = []
     existing = tmp_path / "existing"
-    existing.mkdir(mode=0o755)
+    existing.mkdir(mode=0o700)
+    existing.chmod(0o750)
     original_chmod = Path.chmod
 
     def chmod(self, path_mode):

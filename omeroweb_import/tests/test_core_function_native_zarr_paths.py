@@ -1414,10 +1414,10 @@ def test_process_import_job_handles_group_resolution_preskips_and_cleanup_warnin
     assert deferred_jobs == []
 
 
-def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions(
+def test_process_import_job_records_worker_errors_with_sparse_results(
     tmp_path: Path, monkeypatch
 ):
-    """Verify process import job ignores sparse result payloads and worker exceptions result shape.
+    """Keep worker errors even when later import results contain no usable entries.
 
     Inputs: `tmp_path` (Path) temporary path fixture, `monkeypatch` pytest monkeypatch
     fixture. Output: None after assertions pass. Raises: RuntimeError when validation or
@@ -1511,10 +1511,13 @@ def test_process_import_job_ignores_sparse_result_payloads_and_worker_exceptions
     core_functions._process_import_job(job_id)
 
     assert lock.released is True
-    assert state["job"]["status"] == "done"
+    assert state["job"]["status"] == "error"
+    assert state["job"]["errors"] == [
+        core_functions.errors.unexpected_server_error_importing()
+    ]
     assert state["job"]["imported_bytes"] == 0
     assert state["job"]["messages"] == []
-    assert deferred_jobs == []
+    assert deferred_jobs == [job_id]
 
 
 def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path):

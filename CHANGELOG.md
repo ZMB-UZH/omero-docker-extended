@@ -14,7 +14,7 @@ details, or technical information that would enable misuse.
 
 ### Changed
 
-- Improved completion tracking for spectrum imports and display handling for Zarr images.
+- Improved application startup, spectrum import completion and attachment targeting, and display handling for Zarr images.
 - Strengthened automated scan-result verification.
 
 ### Upgrade Notes
