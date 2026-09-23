@@ -133,7 +133,8 @@ def test_session_handoff_rejects_unsafe_directory_state(tmp_path, monkeypatch):
         session_handoff._handoff_dir()
     base.unlink()
 
-    base.mkdir(mode=0o777)
+    base.mkdir(mode=0o700)
+    base.chmod(0o750)
     monkeypatch.setattr(session_handoff.os, "chmod", lambda *_args, **_kwargs: None)
     with pytest.raises(RuntimeError, match="too permissive"):
         session_handoff._handoff_dir()

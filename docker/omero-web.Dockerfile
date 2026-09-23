@@ -502,7 +502,7 @@ RUN set -euo pipefail; \
 
 # Configure supervisord to run OMERO.web and plugin background workers
 # -------------------------------------------------------------------
-COPY supervisord.conf /etc/supervisord.conf
+COPY --chmod=0444 supervisord.conf /etc/supervisord.conf
 COPY startup/30-start-omero-web.sh /opt/omero/web/bin/start-omero-web.sh
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
 COPY startup/40-start-tools-celery-worker.sh /opt/omero/web/bin/start-tools-celery-worker.sh

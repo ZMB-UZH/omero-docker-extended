@@ -391,7 +391,9 @@ def test_quota_transactions_coordinate_separate_processes(
     }
 
 
-@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "public"])
+@pytest.mark.parametrize(
+    "kind", ["symlink", "hardlink", "directory", "fifo", "group-readable"]
+)
 def test_quota_lock_rejects_unsafe_existing_objects(tmp_path, monkeypatch, kind):
     """Reject sidecar substitution without altering the referenced object.
 
@@ -413,7 +415,8 @@ def test_quota_lock_rejects_unsafe_existing_objects(tmp_path, monkeypatch, kind)
     elif kind == "fifo":
         os.mkfifo(lock, 0o600)
     else:
-        lock.touch(mode=0o644)
+        lock.touch(mode=0o600)
+        lock.chmod(0o640)
     with pytest.raises(storage_quotas.QuotaError):
         storage_quotas.upsert_quotas([("fixture", 1)])
     assert target.read_text() == "preserve"

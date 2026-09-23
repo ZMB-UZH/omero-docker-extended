@@ -555,6 +555,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
             # Parent directory must already exist
             try:
                 path.mkdir(mode=mode, exist_ok=True)
+                path.chmod(mode)
                 logger.info(
                     "Created directory: %s with permissions %s",
                     sanitize_log_value(path),
@@ -4625,7 +4626,7 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
     Inputs: `conn`, `file_names`, `dataset_id`, `timeout_seconds`. Output: computed
     value.
 
-    Returns: dict mapping file_name -> Image wrapper object
+    Returns: dict mapping unambiguous file_name -> Image wrapper object.
 
     CRITICAL: This is the key to fixing SEM EDX performance.
     Instead of N queries (one per TXT file), we do 1 query for all images.
@@ -4654,6 +4655,7 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
             query = """
                 SELECT i FROM Image i
                 WHERE i.name IN (:names)
+                AND i.datasetLinks IS EMPTY
             """
 
         logger.info(
@@ -4661,10 +4663,21 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
         )
         images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
+        seen_ids = set()
+        ambiguous_names = set()
         for image_obj in images:
-            img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
+            image_id = image_obj.getId().getValue()
+            if image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+            img_wrapper = conn.getObject("Image", image_id)
             if img_wrapper:
-                results[img_wrapper.getName()] = img_wrapper
+                name = img_wrapper.getName()
+                if name in results:
+                    ambiguous_names.add(name)
+                results[name] = img_wrapper
+        for name in ambiguous_names:
+            del results[name]
 
         elapsed = time.time() - start_time
         logger.info(
@@ -4682,11 +4695,65 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
 
         missing = set(file_names) - set(results.keys())
         if missing:
-            logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
+            logger.warning("Missing or ambiguous image matches: %d", len(missing))
     except Exception as exc:
-        logger.error("Batch image search failed: %s", exc)
+        logger.error("Batch image search failed: %s", sanitize_log_value(exc))
+        return {}
 
     return results
+
+
+def _sem_edx_image_cache(
+    conn,
+    image_paths,
+    entries_by_path,
+    dataset_map,
+    orphan_dataset_name,
+    dataset_name_override,
+):
+    """Resolve attachment targets by import identity, retaining path boundaries.
+
+    Inputs: importing-user connection, association paths, persisted entries and
+    dataset routing. Output: relative path to an unambiguous image wrapper.
+    Legacy entries without image IDs are resolved only within their dataset.
+    """
+    resolved = {}
+    images_by_id = {}
+    legacy_groups: dict[int | None, dict[str, list[str]]] = {}
+    for image_path in image_paths:
+        image_name = PurePosixPath(image_path).name if image_path else ""
+        if not image_name:
+            continue
+        entry = entries_by_path.get(image_path) or {}
+        if entry and entry.get("status") != "imported":
+            continue
+        image_ids = list(dict.fromkeys(entry.get("imported_image_ids") or []))
+        if image_ids:
+            candidates = []
+            for image_id in image_ids:
+                if image_id not in images_by_id:
+                    images_by_id[image_id] = conn.getObject("Image", image_id)
+                image = images_by_id[image_id]
+                if image is not None and (
+                    len(image_ids) == 1 or image.getName() == image_name
+                ):
+                    candidates.append(image)
+            if len(candidates) == 1:
+                resolved[image_path] = candidates[0]
+            continue
+        dataset_name = dataset_name_override or _dataset_name_for_path(
+            image_path, orphan_dataset_name
+        )
+        dataset_id = entry.get("dataset_id_override") or dataset_map.get(dataset_name)
+        legacy_groups.setdefault(dataset_id, {}).setdefault(image_name, []).append(
+            image_path
+        )
+    for dataset_id, names_to_paths in legacy_groups.items():
+        matches = _batch_find_images_by_name(conn, list(names_to_paths), dataset_id)
+        for name, paths in names_to_paths.items():
+            if len(paths) == 1 and name in matches:
+                resolved[paths[0]] = matches[name]
+    return resolved
 
 
 def _first_non_empty_env(*names: str) -> str:
@@ -9052,6 +9119,9 @@ def _import_job_entry(
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "imported",
+            "imported_image_ids": _extract_imported_image_ids_for_normalization(
+                combined_output, api_verified_image_ids
+            ),
             "rel_path": rel_path,
             "file_path": file_path,
         }
@@ -9291,23 +9361,23 @@ def _process_import_job(job_id: str):
                     _save_job(job)
 
                     try:
-                        result = subprocess.run(
+                        conversion_result = subprocess.run(
                             cmd,
                             timeout=ngff_timeout_seconds,
                             env=_build_cli_env(),
                             start_new_session=True,
                         )
-                        stdout_text = result.stdout or ""
-                        stderr_text = result.stderr or ""
+                        stdout_text = conversion_result.stdout or ""
+                        stderr_text = conversion_result.stderr or ""
 
-                        if result.returncode != 0:
+                        if conversion_result.returncode != 0:
                             error_summary = _summarize_cli_error_text(
                                 stdout_text,
                                 stderr_text,
                             )
                             entry["status"] = "error"
                             entry.setdefault("errors", []).append(
-                                f"bioformats2raw failed (exit {result.returncode}): "
+                                f"bioformats2raw failed (exit {conversion_result.returncode}): "
                                 f"{error_summary}"
                             )
                             _append_job_error(
@@ -9471,11 +9541,19 @@ def _process_import_job(job_id: str):
                         )
                     except Exception as exc:
                         logger.error(
-                            "Import future raised unexpected error: %s",
+                            "Import worker raised unexpected error: %s",
                             sanitize_log_value(exc),
                             exc_info=sanitized_exc_info(exc),
                         )
-                        continue
+                        entry_error = errors.unexpected_server_error_importing()
+                        _append_job_error(job, entry_error)
+                        _save_job(job)
+                        result = {
+                            "status": "error",
+                            "entry_error": entry_error,
+                            "covered_indexes": entry_payload.get("covered_indexes")
+                            or [entry_payload.get("index")],
+                        }
                     if not result or result.get("skip"):
                         continue
                     covered_indexes = result.get("covered_indexes") or []
@@ -9523,6 +9601,9 @@ def _process_import_job(job_id: str):
                         )
                         for entry in covered_entries:
                             entry["status"] = "imported"
+                            entry["imported_image_ids"] = result.get(
+                                "imported_image_ids", []
+                            )
                         job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
                             entry.get("size", 0) for entry in covered_entries
                         )
@@ -9643,64 +9724,19 @@ def _process_import_job(job_id: str):
                             safe_job_id_for_log,
                         )
 
-                        # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
-                        logger.info(
-                            "Pre-loading image cache for %d images",
-                            len(sem_edx_associations),
+                        image_cache = _sem_edx_image_cache(
+                            conn,
+                            sem_edx_associations,
+                            entries_by_path,
+                            dataset_map,
+                            orphan_dataset_name,
+                            dataset_name_override,
                         )
-                        all_image_names = []
-                        image_to_dataset = {}  # Track which dataset each image should be in
-
-                        for image_rel in sem_edx_associations.keys():
-                            image_name = (
-                                PurePosixPath(image_rel).name if image_rel else ""
-                            )
-                            if image_name:
-                                all_image_names.append(image_name)
-                                if dataset_name_override:
-                                    dataset_name = dataset_name_override
-                                else:
-                                    dataset_name = _dataset_name_for_path(
-                                        image_rel,
-                                        orphan_dataset_name,
-                                    )
-                                dataset_id = dataset_map.get(dataset_name)
-                                image_to_dataset[image_name] = dataset_id
-
-                        # Do batch lookup - this is 100-1000x faster than individual lookups
-                        image_cache = {}
-                        datasets_to_search = set(image_to_dataset.values())
-
-                        for dataset_id in datasets_to_search:
-                            if dataset_id:
-                                # Find all images for this dataset
-                                dataset_images = [
-                                    name
-                                    for name, did in image_to_dataset.items()
-                                    if did == dataset_id
-                                ]
-                                if dataset_images:
-                                    batch_results = _batch_find_images_by_name(
-                                        conn, dataset_images, dataset_id
-                                    )
-                                    image_cache.update(batch_results)
-
-                        # Fallback: global search for images not found in datasets
-                        missing_images = set(all_image_names) - set(image_cache.keys())
-                        if missing_images:
-                            logger.info(
-                                "Searching globally for %d missing images",
-                                len(missing_images),
-                            )
-                            global_results = _batch_find_images_by_name(
-                                conn, list(missing_images), None
-                            )
-                            image_cache.update(global_results)
 
                         logger.info(
                             "Image cache loaded: %d/%d found",
                             len(image_cache),
-                            len(all_image_names),
+                            len(sem_edx_associations),
                         )
 
                         plot_cache: dict[str, Path | None] = {}
@@ -9768,32 +9804,17 @@ def _process_import_job(job_id: str):
 
                                 # Re-populate cache after reconnect
                                 logger.info("Re-loading image cache after reconnect")
-                                image_cache.clear()
-                                for dataset_id in datasets_to_search:
-                                    if dataset_id:
-                                        dataset_images = [
-                                            name
-                                            for name, did in image_to_dataset.items()
-                                            if did == dataset_id
-                                        ]
-                                        if dataset_images:
-                                            batch_results = _batch_find_images_by_name(
-                                                conn,
-                                                dataset_images,
-                                                dataset_id,
-                                            )
-                                            image_cache.update(batch_results)
-                                missing_images = set(all_image_names) - set(
-                                    image_cache.keys()
+                                image_cache = _sem_edx_image_cache(
+                                    conn,
+                                    sem_edx_associations,
+                                    entries_by_path,
+                                    dataset_map,
+                                    orphan_dataset_name,
+                                    dataset_name_override,
                                 )
-                                if missing_images:
-                                    global_results = _batch_find_images_by_name(
-                                        conn, list(missing_images), None
-                                    )
-                                    image_cache.update(global_results)
 
                             # Get cached image (no query needed!)
-                            image_obj = image_cache.get(image_name)
+                            image_obj = image_cache.get(image_rel)
 
                             # Process each text file for this image
                             for txt_rel in txt_paths:
