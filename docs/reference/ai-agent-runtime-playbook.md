@@ -81,6 +81,11 @@ Examples:
   elsewhere without rebuilding; verify immutable image identities before and
   after export, and retain complete SBOMs and advisory reports. An interrupted
   scan is incomplete, never a clean result.
+- Runtime-image analysis creates private per-image scratch under its selected
+  `--output-dir`, not global temporary storage. Choose an output filesystem with
+  room for image export and unpacked layers; a small RAM-backed temporary
+  directory is unsuitable. Scratch is removed on success and failure without
+  pruning shared caches or touching other output files.
 - `docker compose build --no-cache <service>` reruns every layer. Use it when refreshing externally resolved packages without a changed cache input, or when investigating a demonstrated stale layer, not automatically for every version change. See [Docker cache invalidation](https://docs.docker.com/build/cache/invalidation/).
 - If a live installation build starts transferring GBs of context, stop before
   `up` and inspect `.dockerignore`; generated runtime roots such as

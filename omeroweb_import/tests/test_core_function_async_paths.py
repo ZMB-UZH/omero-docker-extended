@@ -4,7 +4,7 @@ from iter_test_helpers import next_or_fail
 
 import sys
 import types
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from omeroweb_import.views import core_functions
@@ -1657,8 +1657,13 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     service_conn = _ServiceConn()
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: service_conn,
+        "_background_import_session",
+        lambda *args, **kwargs: nullcontext("independent-session"),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda key, host, port, group_id=None: service_conn,
     )
     batch_lookup_calls = []
 
@@ -1769,7 +1774,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     assert attached[0]["image_id"] == 301
     assert attached[0]["txt_path"] == staged_txt
     assert attached[0]["plot_path"] == plot_source
-    assert attached[0]["kwargs"]["session_key"] == "session"
+    assert not attached[0]["kwargs"].get("session_key")
     assert plot_imports == [
         (
             "images/sample_plot.png",
@@ -1947,8 +1952,13 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     connection_iter = iter(connections)
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        lambda host, port, group_id=None: next_or_fail(connection_iter),
+        "_background_import_session",
+        lambda *args, **kwargs: nullcontext("independent-session"),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda key, host, port, group_id=None: next_or_fail(connection_iter),
     )
 
     validate_iter = iter((False,))

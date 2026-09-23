@@ -116,6 +116,10 @@ invalidate affected checks. The full required final-tree matrix still applies.
 - `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates.
   GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result. Before pushing any scanner/action update, inspect its embedded scanner version and run `--profile all` with that exact engine.
   Guard every controllable SARIF with `tools/sarif_result_guard.py` before upload; require the hosted zero-delta job and verified three-rule Scorecard baseline. Never obfuscate constants: false positives need proven provenance and native, line-specific annotations. Preserve raw findings and report unsuppressed counts explicitly; follow the DevSkim runbook.
+  After upload, require `tools/security_delta_guard.py --sarif-id ...
+  --expected-sha ...` to verify error-free analysis records for that exact upload
+  and commit. A green upload step or unchanged alert count cannot establish
+  successful analysis processing.
 
 ## CocoIndex
 

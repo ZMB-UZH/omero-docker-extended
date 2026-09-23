@@ -497,6 +497,14 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     assert created == [(("alice", "users_private", "User"), 12000, 12000)]
     assert len(closed) == 1
 
+    with pytest.raises(RuntimeError, match="^attachment failed$"):
+        with core_functions._background_import_session(
+            "alice", "omeroserver", 4064, group_name="users_private"
+        ) as key:
+            assert key == "background-session"
+            raise RuntimeError("attachment failed")
+    assert len(closed) == 2
+
     failing_service = SimpleNamespace(
         createSessionWithTimeouts=lambda *args: _raise(RuntimeError("session exploded"))
     )

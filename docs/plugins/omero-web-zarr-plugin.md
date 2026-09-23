@@ -65,6 +65,11 @@ For store-backed images, the plugin can render directly from the managed Zarr st
 
 This avoids the fragile dependency on classic OMERO RenderingEngine pyramid files for external Zarr-backed images.
 
+Automatic display windows use finite pixel values only. NaN and infinite
+samples render black without changing stored data or hiding valid signal.
+Disabled channels contribute no pixels, including single-channel images and
+images with every channel disabled.
+
 For non-store-backed images, the plugin does not replace OMERO.web rendering
 unless the alternative rendering overrides are enabled via
 `OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=true` in `env/omeroweb.env`. When

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
+from uuid import UUID
 
 
 AlertFetcher = Callable[..., list[dict[str, Any]]]
@@ -85,6 +86,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="Poll interval while waiting for the alert snapshot to stabilize.",
+    )
+    parser.add_argument(
+        "--sarif-id",
+        default=None,
+        help="Verify this exact SARIF upload and its analysis records instead of alert deltas.",
+    )
+    parser.add_argument(
+        "--expected-sha",
+        default=os.environ.get("GITHUB_SHA", ""),
+        help="Expected analyzed commit for --sarif-id; defaults to GITHUB_SHA.",
     )
     parser.add_argument(
         "--baseline-alert",
@@ -831,6 +842,91 @@ class _GitHubApiVersionCache:
 _GITHUB_API_VERSION_CACHE = _GitHubApiVersionCache()
 
 
+def verify_sarif_processing(
+    repository: str,
+    token: str,
+    sarif_id: str,
+    expected_sha: str,
+    *,
+    settle_timeout_seconds: int = 180,
+    poll_interval_seconds: int = 10,
+    fetch_json: Callable[[str, str], Any] | None = None,
+    monotonic: ClockFn = time.monotonic,
+    sleep: SleepFn = time.sleep,
+) -> EvaluationResult:
+    """Require successful analysis records, not just a completed SARIF upload.
+
+    Inputs: repository, transient credential, upload ID, commit and bounded polling.
+    Output: pass only for matching error-free analyses; malformed input raises.
+    """
+    repository = validate_github_repository(repository)
+    upload_id = str(UUID(sarif_id))
+    if re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", expected_sha) is None:
+        raise ValueError("An exact commit SHA is required to verify SARIF processing.")
+    request = fetch_json or github_api_get_json
+    base = f"/repos/{repository}/code-scanning"
+    deadline = monotonic() + max(settle_timeout_seconds, 0)
+    while True:
+        status = request(f"{base}/sarifs/{upload_id}", token)
+        if not isinstance(status, dict):
+            raise RuntimeError("Unexpected SARIF processing-status response.")
+        state = status.get("processing_status")
+        if not isinstance(state, str) or state not in {"pending", "complete", "failed"}:
+            raise RuntimeError("Unknown SARIF processing status.")
+        if state == "failed" or status.get("errors"):
+            return EvaluationResult("fail", "GitHub rejected the SARIF upload.")
+        if state == "complete":
+            page = 1
+            analyses = []
+            while True:
+                if page > 1 and monotonic() >= deadline:
+                    return EvaluationResult(
+                        "fail", "Timed out reading GitHub analysis records."
+                    )
+                query = urlencode(
+                    {"sarif_id": upload_id, "per_page": 100, "page": page}
+                )
+                batch = request(f"{base}/analyses?{query}", token)
+                if not isinstance(batch, list):
+                    raise RuntimeError("Unexpected SARIF analysis-list response.")
+                for analysis in batch:
+                    if (
+                        not isinstance(analysis, dict)
+                        or analysis.get("sarif_id") != upload_id
+                        or analysis.get("commit_sha") != expected_sha.lower()
+                        or not isinstance(analysis.get("error"), str)
+                    ):
+                        raise RuntimeError(
+                            "SARIF analysis identity or error status is invalid."
+                        )
+                analyses.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+            failures = [
+                {"id": analysis.get("id"), "error": analysis["error"]}
+                for analysis in analyses
+                if analysis["error"]
+            ]
+            if failures:
+                return EvaluationResult(
+                    "fail",
+                    "GitHub analysis failed after upload: " + json.dumps(failures),
+                )
+            if analyses:
+                return EvaluationResult(
+                    "pass",
+                    f"Verified {len(analyses)} error-free analysis record(s) "
+                    f"for SARIF {upload_id} at {expected_sha.lower()}.",
+                )
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return EvaluationResult(
+                "fail", "Timed out waiting for matching GitHub analysis records."
+            )
+        sleep(min(max(poll_interval_seconds, 1), remaining))
+
+
 def latest_github_api_version(token: str) -> str:
     """Return the latest github API version.
 
@@ -996,7 +1092,7 @@ def main() -> int:
     Inputs: none. Output: `int`.
     """
     args = parse_args()
-    if not args.event_path:
+    if not args.event_path and args.sarif_id is None:
         print("ERROR: --event-path is required.", file=sys.stderr)
         return 2
     if not args.repository:
@@ -1017,6 +1113,20 @@ def main() -> int:
         return 2
 
     try:
+        if args.sarif_id is not None:
+            result = verify_sarif_processing(
+                repository,
+                token,
+                args.sarif_id,
+                args.expected_sha,
+                settle_timeout_seconds=args.settle_timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+            )
+            print(
+                result.message,
+                file=sys.stderr if result.status == "fail" else sys.stdout,
+            )
+            return int(result.status == "fail")
         event_payload = load_event_payload(args.event_path)
 
         def fetch_alerts(**kwargs: Any) -> list[dict[str, Any]]:

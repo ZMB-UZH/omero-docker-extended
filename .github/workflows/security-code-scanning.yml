@@ -89,11 +89,20 @@ jobs:
         run: python3 tools/sarif_result_guard.py "${CODEQL_RESULTS}"/*.sarif
 
       - name: Upload CodeQL results to GitHub Security tab
+        id: upload-sarif
         if: success()
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: ${{ runner.temp }}/codeql-results
           category: /language:${{ matrix.language }}
+
+      - name: Verify accepted CodeQL analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   trivy-filesystem:
     name: Trivy filesystem scan (SARIF)
@@ -143,11 +152,20 @@ jobs:
         run: python3 tools/sarif_result_guard.py trivy-results.sarif
 
       - name: Upload Trivy scan results to GitHub Security tab
+        id: upload-sarif
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
         if: success()
+
+      - name: Verify accepted Trivy analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   semgrep:
     name: Semgrep SAST
@@ -200,11 +218,20 @@ jobs:
         run: python3 tools/sarif_result_guard.py semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
+        id: upload-sarif
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
         if: success()
+
+      - name: Verify accepted Semgrep analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   bandit:
     name: Bandit Python security scan
@@ -300,26 +327,53 @@ jobs:
         run: python3 tools/sarif_result_guard.py "${RUNNER_TEMP}/bandit/bandit-legacy-cleanup.sarif"
 
       - name: Upload Bandit production results to GitHub Security tab
+        id: upload-prod
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-prod.sarif
           category: bandit-prod
         if: success()
 
+      - name: Verify accepted Bandit production analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-prod.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
+
       - name: Upload Bandit test results to GitHub Security tab
+        id: upload-test
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-test.sarif
           category: bandit-test
         if: success()
 
+      - name: Verify accepted Bandit test analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-test.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
+
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
+        id: upload-legacy
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
           category: bandit
         if: success()
+
+      - name: Verify accepted Bandit legacy analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-legacy.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   hadolint-discover:
     name: Discover Dockerfiles
@@ -384,11 +438,20 @@ jobs:
         run: python3 tools/sarif_result_guard.py hadolint-results.sarif
 
       - name: Upload Hadolint results to GitHub Security tab
+        id: upload-sarif
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
         if: success()
+
+      - name: Verify accepted Hadolint analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   devskim:
     name: DevSkim security lint
@@ -438,11 +501,20 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload DevSkim results to GitHub Security tab
+        id: upload-sarif
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: ${{ runner.temp }}/devskim/devskim-results.sarif
           category: devskim
         if: success()
+
+      - name: Verify accepted DevSkim analysis
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   osv-scanner-audit:
     name: OSV scan scope audit
@@ -524,11 +596,21 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
+        id: upload-sarif
         uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
         if: always()
+
+      - name: Verify accepted Scorecard analysis
+        if: always() && steps.upload-sarif.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload-sarif.outputs.sarif-id }}
+        run: >-
+          python3 tools/security_delta_guard.py --repository "$GITHUB_REPOSITORY"
+          --sarif-id "$SARIF_ID" --expected-sha "$GITHUB_SHA"
 
   security-delta:
     name: Zero added alerts gate

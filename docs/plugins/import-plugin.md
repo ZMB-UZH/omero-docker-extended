@@ -309,6 +309,16 @@ The Import plugin includes specialized support for SEM-EDX (Scanning Electron Mi
 - Attaches generated spectrum images as OMERO file annotations on imported images.
 - Configurable per-user via special method settings.
 
+TXT attachments are part of job completion. A missing image/file, attachment
+failure, or lost background connection leaves the job in an error state and keeps
+its upload payload for the configured failed-import retention period. Already
+imported images remain in OMERO; review them before retrying to avoid duplicates.
+Successful jobs retain the normal immediate temporary-payload cleanup.
+
+Image lookups and attachments run in independent, group-scoped sessions owned
+by the importing user. Reconnection preserves that identity without reusing the
+browser session or requiring service-account membership in the target group.
+
 ## Operational controls
 
 Configuration values in `env/omeroweb.env`:

@@ -139,6 +139,7 @@ def test_every_required_image_is_accounted_for_and_identical_images_scan_once(
     second = "sha256:" + "b" * 64
     ids = {"example/web:1": first, "example/worker:1": first, "example/db:2": second}
     calls = []
+    scratch_paths = []
 
     def run(_docker, arguments, *, env, log):
         """Inputs: Docker command. Output: fixture identity or generated analysis file."""
@@ -146,6 +147,11 @@ def test_every_required_image_is_accounted_for_and_identical_images_scan_once(
         if arguments[:2] == ["image", "inspect"]:
             return ids[arguments[-1]]
         assert env["DOCKER_SCOUT_CACHE_FORMAT"] == "tar"
+        scratch = Path(env["TMPDIR"])
+        assert scratch.parent == tmp_path.resolve()
+        assert env["DOCKER_SCOUT_CACHE_DIR"] == str(scratch)
+        assert scratch.is_dir() and scratch.stat().st_mode & 0o777 == 0o700
+        scratch_paths.append(scratch)
         output = Path(arguments[arguments.index("--output") + 1])
         if arguments[1] == "sbom":
             assert arguments[arguments.index("--format") + 1] == "json"
@@ -172,6 +178,39 @@ def test_every_required_image_is_accounted_for_and_identical_images_scan_once(
         for row in summary["images"].values()
     )
     assert json.loads((tmp_path / "coverage.json").read_text()) == summary
+    assert scratch_paths and all(not path.exists() for path in scratch_paths)
+
+
+def test_failed_image_analysis_cleans_only_its_output_local_scratch(
+    monkeypatch, tmp_path
+):
+    """Large image scratch belongs on the selected output filesystem, not global tmp.
+
+    Inputs: a failed scanner and unrelated output content. Output: private scratch removed.
+    """
+    unrelated = tmp_path / "operator-artifact"
+    unrelated.write_text("retain", encoding="utf-8")
+    scratch_paths = []
+
+    def fail(_docker, arguments, *, env, log):
+        """Return a stable image identity, then fail after creating scratch content.
+
+        Inputs: Docker invocation. Output: image ID or an explicit scanner failure.
+        """
+        if arguments[:2] == ["image", "inspect"]:
+            return "sha256:" + "a" * 64
+        scratch = Path(env["TMPDIR"])
+        assert scratch.parent == tmp_path.resolve()
+        (scratch / "partial-layer").write_text("incomplete", encoding="utf-8")
+        scratch_paths.append(scratch)
+        raise RuntimeError("Scanner failed")
+
+    monkeypatch.setattr(scanner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(scanner, "_run", fail)
+    with pytest.raises(RuntimeError, match="Scanner failed"):
+        scanner.scan_images(["example/web:1"], tmp_path)
+    assert scratch_paths and all(not path.exists() for path in scratch_paths)
+    assert unrelated.read_text(encoding="utf-8") == "retain"
 
 
 def test_invalid_inventory_and_missing_docker_fail(monkeypatch, tmp_path):

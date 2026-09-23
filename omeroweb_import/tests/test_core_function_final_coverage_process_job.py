@@ -6,6 +6,7 @@ import copy
 import logging
 import sys
 import types
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -128,6 +129,16 @@ def _install_process_job_defaults(
     monkeypatch.setattr(
         core_functions,
         "_open_service_connection",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_background_import_session",
+        lambda *args, **kwargs: nullcontext("independent-session"),
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
@@ -558,7 +569,7 @@ def test_process_import_job_cleans_up_import_payloads_and_unlinks_files(
     )
 
 
-def test_process_import_job_reports_sem_edx_service_connection_failures(
+def test_process_import_job_reports_sem_edx_background_connection_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -575,9 +586,9 @@ def test_process_import_job_reports_sem_edx_service_connection_failures(
 
     core_functions._process_import_job(job["job_id"])
 
-    assert saved_jobs[-1]["status"] == "done"
+    assert saved_jobs[-1]["status"] == "error"
     assert any(
-        "failed to open service connection" in message
+        "failed to open background connection" in message
         for message in saved_jobs[-1]["messages"]
     )
 
@@ -634,7 +645,7 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
             """
             raise RuntimeError("expired connection")
 
-    def _open_service_connection(*args, **kwargs):
+    def _open_background_connection(*args, **kwargs):
         """Open the service connection.
 
         Inputs: `*args` positional arguments, `**kwargs` keyword arguments. Output:
@@ -655,14 +666,14 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
     )
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
-        _open_service_connection,
+        "_open_group_scoped_session_connection",
+        _open_background_connection,
     )
     monkeypatch.setattr(core_functions, "_validate_session", lambda conn: False)
 
     core_functions._process_import_job(job["job_id"])
 
-    assert saved_jobs[-1]["status"] == "done"
+    assert saved_jobs[-1]["status"] == "error"
     assert any(
         message.startswith("spectra.txt:image-0.ome.tif:True")
         for message in saved_jobs[-1]["messages"]
@@ -692,7 +703,7 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
     _, saved_jobs = _install_process_job_defaults(monkeypatch, job, upload_root)
     monkeypatch.setattr(
         core_functions,
-        "_open_service_connection",
+        "_open_group_scoped_session_connection",
         lambda *args, **kwargs: SimpleNamespace(
             close=lambda: (_ for _ in ()).throw(RuntimeError("close failed"))
         ),
@@ -708,13 +719,260 @@ def test_process_import_job_logs_sem_edx_outer_exceptions(
 
     core_functions._process_import_job(job["job_id"])
 
-    assert saved_jobs[-1]["status"] == "done"
+    assert saved_jobs[-1]["status"] == "error"
     assert any(
         "SEM EDX txt attachment failed" in record.message for record in caplog.records
     )
     assert any(
-        "Error closing connection" in record.message for record in caplog.records
+        "Failed to close temporary user OMERO connection" in record.message
+        for record in caplog.records
     )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        None,
+        "connection",
+        "reconnect",
+        "lookup",
+        "attachment",
+        "missing_image",
+        "missing_file",
+    ],
+)
+def test_sem_edx_completion_preserves_uploads_after_attachment_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str | None
+):
+    """Only fully completed attachment processing may remove the upload payload.
+
+    Inputs: isolated job storage and injected service/file failure boundaries.
+    Output: persisted failure state and deferred retention, or successful cleanup.
+    """
+    job = _base_job("b" * 32)
+    job.update(
+        special_upload="sem_edx_spectra",
+        dataset_map={"Dataset": 77},
+        sem_edx_settings={
+            "create_tables": False,
+            "create_figures_attachments": False,
+            "create_figures_images": False,
+        },
+        sem_edx_associations={
+            f"image-{index}.ome.tif": ["spectra.txt"]
+            for index in range(11 if failure == "reconnect" else 1)
+        },
+        files=[
+            {
+                "relative_path": "spectra.txt",
+                "staged_path": "_staged/spectra.txt",
+                "size": 8,
+                "status": "uploaded",
+            }
+        ],
+    )
+    upload_root = tmp_path / "uploads" / job["job_id"]
+    staged = upload_root / "_staged" / "spectra.txt"
+    staged.parent.mkdir(parents=True)
+    if failure != "missing_file":
+        staged.write_text("spectrum", encoding="utf-8")
+    record_result = core_functions._append_txt_attachment_message
+    _install_process_job_defaults(monkeypatch, job, upload_root)
+    monkeypatch.setattr(core_functions, "_append_txt_attachment_message", record_result)
+    persisted = {"job": copy.deepcopy(job)}
+
+    def save_job(payload):
+        """Model a committed JSON record without sharing mutable worker state.
+
+        Inputs: worker job payload. Output: successful independent stored copy.
+        """
+        persisted["job"] = copy.deepcopy(payload)
+        return True
+
+    monkeypatch.setattr(core_functions, "_save_job", save_job)
+    monkeypatch.setattr(
+        core_functions, "_load_job", lambda _job_id: copy.deepcopy(persisted["job"])
+    )
+    connection_calls = []
+
+    def open_connection(*_args, **_kwargs):
+        """Inject initial or resumed service-connection unavailability.
+
+        Inputs: ignored connection arguments. Output: connection double or None.
+        """
+        connection_calls.append(True)
+        if failure == "connection" or (
+            failure == "reconnect" and len(connection_calls) > 1
+        ):
+            return None
+        return SimpleNamespace(close=lambda: None)
+
+    def fail_service(*_args, **_kwargs):
+        """Raise a private diagnostic to test the stored-job disclosure boundary.
+
+        Inputs: ignored service arguments. Output: a raised diagnostic exception.
+        """
+        raise RuntimeError("private-diagnostic-must-not-reach-job-state")
+
+    monkeypatch.setattr(
+        core_functions, "_open_group_scoped_session_connection", open_connection
+    )
+    monkeypatch.setattr(
+        core_functions, "_validate_session", lambda _conn: failure != "reconnect"
+    )
+    if failure == "lookup":
+        monkeypatch.setattr(core_functions, "_batch_find_images_by_name", fail_service)
+    elif failure == "attachment":
+        monkeypatch.setattr(
+            core_functions, "_attach_txt_to_image_service", fail_service
+        )
+    elif failure == "missing_image":
+        monkeypatch.setattr(
+            core_functions, "_batch_find_images_by_name", lambda *_args, **_kwargs: {}
+        )
+    removed = []
+    retained = []
+    monkeypatch.setattr(
+        core_functions, "safe_remove_job_data", lambda *args: removed.append(args)
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_mark_failed_job_for_deferred_cleanup",
+        lambda job_id: retained.append(job_id),
+    )
+
+    core_functions._process_import_job(job["job_id"])
+
+    final_job = persisted["job"]
+    assert final_job["status"] == ("error" if failure else "done")
+    assert bool(final_job["errors"]) == bool(failure)
+    assert retained == ([job["job_id"]] if failure else [])
+    assert len(removed) == (0 if failure else 1)
+    assert "private-diagnostic" not in repr(final_job)
+    if failure != "missing_file":
+        assert staged.read_text(encoding="utf-8") == "spectrum"
+
+
+@pytest.mark.parametrize("failure", [None, "connection", "lookup", "session"])
+def test_sem_edx_lookups_use_independent_importer_sessions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str | None
+):
+    """Keep lookup/reconnection identity and resource cleanup bound to the importer.
+
+    Inputs: a grouped job with eleven attachments and injected setup/lookup failures.
+    Output: independent sessions close once and never use the browser/service session.
+    """
+    job = _base_job("c" * 32)
+    job.update(
+        group_id=91,
+        group_name="new-import-group",
+        session_key="browser-session-must-not-be-used",
+        special_upload="sem_edx_spectra",
+        dataset_map={"Dataset": 77},
+        sem_edx_settings={
+            "create_tables": False,
+            "create_figures_attachments": False,
+            "create_figures_images": False,
+        },
+        sem_edx_associations={
+            f"image-{index}.ome.tif": ["spectra.txt"] for index in range(11)
+        },
+        files=[
+            {
+                "relative_path": "spectra.txt",
+                "staged_path": "spectra.txt",
+                "size": 8,
+                "status": "uploaded",
+            }
+        ],
+    )
+    upload_root = tmp_path / "uploads" / job["job_id"]
+    upload_root.mkdir(parents=True)
+    (upload_root / "spectra.txt").write_text("spectrum", encoding="utf-8")
+    _, saved_jobs = _install_process_job_defaults(monkeypatch, job, upload_root)
+    events = []
+
+    @contextmanager
+    def independent_session(username, host, port, **kwargs):
+        """Record creation and cleanup of each independent importer session.
+
+        Inputs: requested identity and group. Output: unique key or unavailable session.
+        """
+        assert (username, host, port) == ("alice", "omeroserver", 4064)
+        assert kwargs["group_id"] == 91
+        assert kwargs["group_name"] == "new-import-group"
+        key = f"independent-{len(events)}"
+        events.append(("session-open", key))
+        try:
+            yield None if failure == "session" else key
+        finally:
+            events.append(("session-close", key))
+
+    def open_connection(key, host, port, **kwargs):
+        """Refuse browser sessions and record connection lifetime.
+
+        Inputs: independent key and group. Output: a close-recording connection.
+        """
+        assert key.startswith("independent-")
+        assert (host, port, kwargs["group_id"]) == ("omeroserver", 4064, 91)
+        if failure == "connection":
+            return None
+        events.append(("connection-open", key))
+        return SimpleNamespace(close=lambda: events.append(("connection-close", key)))
+
+    def forbidden_service(*args, **kwargs):
+        """Reject service-account use for importer-owned lookups.
+
+        Inputs: ignored arguments. Output: immediate test failure.
+        """
+        pytest.fail("SEM lookup must not use the service account")
+
+    def failed_lookup(*args, **kwargs):
+        """Exercise cleanup after processing fails inside an acquired session.
+
+        Inputs: ignored query arguments. Output: raised processing exception.
+        """
+        raise RuntimeError("lookup unavailable")
+
+    attachment_calls = []
+    attach = core_functions._attach_txt_to_image_service
+
+    def independent_attachment(*args, **kwargs):
+        """Check attachment writes cannot inherit a browser session key.
+
+        Inputs: attachment arguments. Output: the existing attachment test double.
+        """
+        assert not kwargs.get("session_key")
+        attachment_calls.append(True)
+        return attach(*args, **kwargs)
+
+    monkeypatch.setattr(
+        core_functions, "_background_import_session", independent_session
+    )
+    monkeypatch.setattr(
+        core_functions, "_open_group_scoped_session_connection", open_connection
+    )
+    monkeypatch.setattr(core_functions, "_open_service_connection", forbidden_service)
+    monkeypatch.setattr(
+        core_functions, "_attach_txt_to_image_service", independent_attachment
+    )
+    monkeypatch.setattr(core_functions, "_validate_session", lambda conn: False)
+    if failure == "lookup":
+        monkeypatch.setattr(core_functions, "_batch_find_images_by_name", failed_lookup)
+
+    core_functions._process_import_job(job["job_id"])
+
+    assert saved_jobs[-1]["status"] == ("error" if failure else "done")
+    session_keys = [key for event, key in events if event == "session-open"]
+    assert len(session_keys) == (1 if failure else 2)
+    expected = []
+    for key in session_keys:
+        expected.append(("session-open", key))
+        if failure not in {"connection", "session"}:
+            expected.extend([("connection-open", key), ("connection-close", key)])
+        expected.append(("session-close", key))
+    assert events == expected
+    assert len(attachment_calls) == (0 if failure else 11)
 
 
 def test_start_import_thread_covers_missing_job_and_thread_start_failures(

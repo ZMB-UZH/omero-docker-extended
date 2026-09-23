@@ -1249,6 +1249,57 @@ def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
     assert invisible.shape == (2, 2)
 
 
+@pytest.mark.parametrize(
+    ("pixels", "expected"),
+    [
+        ([[0.0, np.nan, 10.0]], [[0, 0, 255]]),
+        ([[np.nan, np.nan]], [[0, 0]]),
+        ([[0.0, np.inf, -np.inf, 10.0]], [[0, 0, 0, 255]]),
+        ([[5.0, np.nan, 5.0]], [[255, 0, 255]]),
+    ],
+)
+def test_render_nonfinite_pixels_without_warnings_or_losing_finite_signal(
+    pixels, expected
+):
+    """Invalid samples must not obscure valid samples or emit numeric warnings.
+
+    Inputs: floating-point image planes with finite and non-finite samples.
+    Output: deterministic grayscale pixels and an unchanged source array.
+    """
+    source = np.array(pixels, dtype=np.float32)
+    original = source.copy()
+    node = _FakeNode([source], {"axes": ["y", "x"]})
+    with np.errstate(all="raise"):
+        rendered = render_store_backed_plane(node)
+    np.testing.assert_array_equal(rendered, np.array(expected, dtype=np.uint8))
+    np.testing.assert_array_equal(source, original)
+
+
+@pytest.mark.parametrize("channel_count", [0, 1, 2])
+@pytest.mark.parametrize("color", ["FFFFFF", "FF0000"])
+def test_render_disabled_channels_as_black(channel_count, color):
+    """Turning every channel off must not expose the first channel instead.
+
+    Inputs: implicit, one- and two-channel images with visibility disabled.
+    Output: black rendered pixels without changing the stored source data.
+    """
+    source = np.full(
+        (channel_count, 2, 3) if channel_count else (2, 3), 10, dtype=np.uint16
+    )
+    node = _FakeNode(
+        [source],
+        {
+            "axes": ["c", "y", "x"] if channel_count else ["y", "x"],
+            "visible": [False] * max(1, channel_count),
+            "contrast_limits": [[0, 10]] * max(1, channel_count),
+            "colormap": [color] * max(1, channel_count),
+        },
+    )
+    rendered = render_store_backed_plane(node)
+    assert not rendered.any()
+    np.testing.assert_array_equal(source, np.full_like(source, 10))
+
+
 def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
     """Verify get safe image tile size prepares rendering engine and falls back.
 

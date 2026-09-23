@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "security_delta_guard.py"
@@ -18,6 +19,288 @@ sys.modules[SPEC.name] = security_delta_guard
 SPEC.loader.exec_module(security_delta_guard)
 
 TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
+TEST_SARIF_ID = "00000000-0000-0000-0000-000000000001"
+TEST_COMMIT_SHA = "a" * 40
+
+
+def test_every_controlled_upload_checks_its_exact_analysis():
+    """Prevent upload success from bypassing GitHub analysis verification.
+
+    Inputs: committed workflow. Output: every SARIF upload has a blocking gate.
+    """
+    workflow = yaml.safe_load(
+        (
+            MODULE_PATH.parents[1] / ".github/workflows/security-code-scanning.yml"
+        ).read_text(encoding="utf-8")
+    )
+    checked = 0
+    for job in workflow["jobs"].values():
+        steps = job.get("steps", [])
+        for index, step in enumerate(steps):
+            if not step.get("uses", "").startswith(
+                "github/codeql-action/upload-sarif@"
+            ):
+                continue
+            gate = steps[index + 1]
+            assert gate["env"]["SARIF_ID"] == (
+                "${{ steps." + step["id"] + ".outputs.sarif-id }}"
+            )
+            assert gate["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+            assert gate["run"].split() == [
+                "python3",
+                "tools/security_delta_guard.py",
+                "--repository",
+                '"$GITHUB_REPOSITORY"',
+                "--sarif-id",
+                '"$SARIF_ID"',
+                "--expected-sha",
+                '"$GITHUB_SHA"',
+            ]
+            assert not gate.get("continue-on-error", False)
+            assert gate.get("if", "success()") == (
+                "always() && steps.upload-sarif.outcome == 'success'"
+                if step.get("if") == "always()"
+                else "success()"
+            )
+            checked += 1
+    assert checked == 9
+
+
+def _analysis_record(**overrides):
+    """Build one successful GitHub analysis record for the exact test upload.
+
+    Inputs: explicit field overrides. Output: isolated API fixture mapping.
+    """
+    return {
+        "id": 1,
+        "sarif_id": TEST_SARIF_ID,
+        "commit_sha": TEST_COMMIT_SHA,
+        "error": "",
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize("error", ["", "Unknown Error"])
+def test_completed_sarif_upload_requires_error_free_analysis(error):
+    """A completed upload may still contain GitHub's analysis-processing error.
+
+    Inputs: completed status and matching analysis with or without an error.
+    Output: pass or fail according to analysis health, not transport success.
+    """
+    responses = iter(
+        [
+            {"processing_status": "complete", "errors": None},
+            [_analysis_record(error=error)],
+        ]
+    )
+    result = security_delta_guard.verify_sarif_processing(
+        "owner/repo",
+        TEST_GITHUB_CREDENTIAL,
+        TEST_SARIF_ID,
+        TEST_COMMIT_SHA,
+        fetch_json=lambda *_args: next_or_fail(responses),
+        settle_timeout_seconds=0,
+    )
+    assert result.status == ("fail" if error else "pass")
+    if error:
+        assert error in result.message
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        [{"processing_status": "pending"}],
+        [{"processing_status": "failed"}],
+        [{"processing_status": "complete", "errors": ["rejected"]}],
+        [{"processing_status": "complete"}, []],
+    ],
+)
+def test_sarif_processing_never_accepts_incomplete_or_missing_analysis(responses):
+    """Missing, rejected, or pending analysis is not clean-scan evidence.
+
+    Inputs: incomplete GitHub response sequences with zero settling time.
+    Output: failed evaluation without an unbounded retry.
+    """
+    sequence = iter(responses)
+    result = security_delta_guard.verify_sarif_processing(
+        "owner/repo",
+        TEST_GITHUB_CREDENTIAL,
+        TEST_SARIF_ID,
+        TEST_COMMIT_SHA,
+        fetch_json=lambda *_args: next_or_fail(sequence),
+        settle_timeout_seconds=0,
+    )
+    assert result.status == "fail"
+
+
+def test_sarif_processing_waits_for_analysis_and_keeps_api_requests_scoped():
+    """Allow eventual consistency without following response-provided URLs.
+
+    Inputs: pending upload, delayed analysis, and finally a matching record.
+    Output: bounded waits and repository-local API paths ending in success.
+    """
+    responses = iter(
+        [
+            {"processing_status": "pending"},
+            {
+                "processing_status": "complete",
+                "analyses_url": "https://example.org/untrusted",
+            },
+            [],
+            {"processing_status": "complete"},
+            [_analysis_record()],
+        ]
+    )
+    paths = []
+    sleeps = []
+
+    def fetch(path, credential):
+        """Record bounded API calls while returning an independent response sequence.
+
+        Inputs: API path and transient credential. Output: the next fixture payload.
+        """
+        assert credential == TEST_GITHUB_CREDENTIAL
+        paths.append(path)
+        return next_or_fail(responses)
+
+    result = security_delta_guard.verify_sarif_processing(
+        "owner/repo",
+        TEST_GITHUB_CREDENTIAL,
+        TEST_SARIF_ID,
+        TEST_COMMIT_SHA,
+        fetch_json=fetch,
+        monotonic=lambda: 0,
+        sleep=sleeps.append,
+        settle_timeout_seconds=3,
+        poll_interval_seconds=1,
+    )
+    assert result.status == "pass"
+    assert sleeps == [1, 1]
+    assert all(path.startswith("/repos/owner/repo/code-scanning/") for path in paths)
+    assert all("example.org" not in path for path in paths)
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        [[]],
+        [{}],
+        [{"processing_status": []}],
+        [{"processing_status": "complete"}, {}],
+        [{"processing_status": "complete"}, [None]],
+        [{"processing_status": "complete"}, [_analysis_record(error=None)]],
+        [{"processing_status": "complete"}, [_analysis_record(commit_sha="b" * 40)]],
+        [{"processing_status": "complete"}, [_analysis_record(sarif_id="other")]],
+    ],
+)
+def test_sarif_processing_rejects_malformed_or_wrong_identity_records(responses):
+    """Never validate another upload, commit, or an unknown response schema.
+
+    Inputs: malformed or mismatched GitHub response fixtures.
+    Output: explicit validation failure before any success claim.
+    """
+    sequence = iter(responses)
+    with pytest.raises(RuntimeError):
+        security_delta_guard.verify_sarif_processing(
+            "owner/repo",
+            TEST_GITHUB_CREDENTIAL,
+            TEST_SARIF_ID,
+            TEST_COMMIT_SHA,
+            fetch_json=lambda *_args: next_or_fail(sequence),
+            settle_timeout_seconds=0,
+        )
+
+
+@pytest.mark.parametrize("timeout", [0, 30])
+def test_sarif_processing_checks_every_analysis_page_with_a_deadline(timeout):
+    """A later analysis page can contain the failure after a full clean page.
+
+    Inputs: 100 successful records followed by a failed record, or an expired budget.
+    Output: failed evaluation from the later error or the bounded deadline.
+    """
+    responses = iter(
+        [
+            {"processing_status": "complete"},
+            [_analysis_record(id=index) for index in range(100)],
+            [_analysis_record(id=101, error="late-page failure")],
+        ]
+    )
+    paths = []
+
+    def fetch(path, _credential):
+        """Capture page selection for the multi-page analysis fixture.
+
+        Inputs: API path and ignored credential. Output: next response mapping.
+        """
+        paths.append(path)
+        return next_or_fail(responses)
+
+    result = security_delta_guard.verify_sarif_processing(
+        "owner/repo",
+        TEST_GITHUB_CREDENTIAL,
+        TEST_SARIF_ID,
+        TEST_COMMIT_SHA,
+        fetch_json=fetch,
+        monotonic=lambda: 0,
+        settle_timeout_seconds=timeout,
+    )
+    assert result.status == "fail"
+    assert ("late-page failure" in result.message) == bool(timeout)
+    assert ("page=2" in paths[-1]) == bool(timeout)
+
+
+@pytest.mark.parametrize(
+    ("upload_id", "error", "exit_code"),
+    [(TEST_SARIF_ID, "", 0), (TEST_SARIF_ID, "Unknown Error", 1), ("", "", 2)],
+)
+def test_sarif_cli_propagates_analysis_failure_and_refuses_missing_output(
+    monkeypatch, capsys, upload_id, error, exit_code
+):
+    """An empty action output must not select the unrelated alert-delta mode.
+
+    Inputs: explicit CLI upload IDs and successful or failed analysis records.
+    Output: matching CLI exit status with no credential disclosure.
+    """
+    responses = iter(
+        [
+            {"processing_status": "complete"},
+            [_analysis_record(error=error)],
+        ]
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "security_delta_guard.py",
+            "--repository",
+            "owner/repo",
+            "--sarif-id",
+            upload_id,
+            "--expected-sha",
+            TEST_COMMIT_SHA,
+        ],
+    )
+    monkeypatch.setenv("GITHUB_TOKEN", TEST_GITHUB_CREDENTIAL)
+    monkeypatch.setattr(
+        security_delta_guard,
+        "github_api_get_json",
+        lambda *_args: next_or_fail(responses),
+    )
+    assert security_delta_guard.main() == exit_code
+    output = capsys.readouterr()
+    assert TEST_GITHUB_CREDENTIAL not in output.out + output.err
+
+
+def test_sarif_processing_rejects_non_commit_identifiers():
+    """Mutable branch names are insufficient to bind an uploaded analysis.
+
+    Inputs: valid upload ID with a branch name instead of a commit SHA.
+    Output: validation failure before network access.
+    """
+    with pytest.raises(ValueError, match="exact commit SHA"):
+        security_delta_guard.verify_sarif_processing(
+            "owner/repo", TEST_GITHUB_CREDENTIAL, TEST_SARIF_ID, "main"
+        )
 
 
 def _alert(number: int, *, created_at: str, severity: str = "high") -> dict:
