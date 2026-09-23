@@ -11,7 +11,7 @@ Use this skill when adding features, fixing bugs, or refactoring behavior that s
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/tdd-workflow/SKILL.md` for the generic red-green-refactor workflow.
+`third_party/ecc-v2.0.0/skills/tdd-workflow/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

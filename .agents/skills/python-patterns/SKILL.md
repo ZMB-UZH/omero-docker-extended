@@ -11,7 +11,7 @@ Use this skill when writing or refactoring Python in plugin code, shared helpers
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/python-patterns/SKILL.md` for the generic Python guidance.
+`third_party/ecc-v2.0.0/skills/python-patterns/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

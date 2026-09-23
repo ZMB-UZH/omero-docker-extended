@@ -1,179 +1,97 @@
 # AGENTS guide
 
-Repository entrypoint for coding agents. Keep it small: load only the smallest correct context for the current task, then stop expanding.
+Mandatory baseline for every coding agent. Read once per revision; load only the
+task-specific sections linked below. Adapters inherit this policy, not a copy.
 
-## Pinned Karpathy agent baseline
+## Safety and scope
 
-Adapted from <https://github.com/forrestchang/andrej-karpathy-skills> at `2c606141936f1eeef17fa3043a72095b4765b9c2`.
-Apply this agent-neutral baseline before repo-specific rules without weakening
-single-session, identity, configuration, security, live-verification, or workflow requirements.
+- Work in one session. No background, delegated, or separate agent session.
+  Codex Security scans are on-demand only: pause and clearly ask the user for
+  the exact scan target, mode, and worker/subagent use. Continue only after
+  explicit user approval or the Codex Security UI Start Scan handoff. Minimum
+  required workers only; all edits, commits, pushes, releases, and reconciliation
+  stay in the parent session.
+- Pause before every deletion of a pre-existing or persistent object. Require
+  fresh approval naming exactly one object and one deletion, including replacements,
+  containers, images, tags, releases, volumes, files, backups, and data.
+  Blanket, earlier, or same-version permission never carries forward.
+- Before every release, confirm exact GitHub and Docker tags and public notes.
+  Never infer or auto-increment versions. Require a matching `CHANGELOG.md`,
+  automated disclosure validation, and human public-safety review. Never publish
+  credentials, personal/host information, private infrastructure, findings,
+  vulnerability mechanics, or exploit-enabling detail.
+- Configuration is environment-driven and host/installation-agnostic. Never
+  hard-code deployment paths, credentials, endpoints, ports, or live object IDs.
+  Preserve user data and unrelated changes. Non-example deployment env files
+  are operator-owned: never edit, overwrite, delete, normalize, or print their
+  values without explicit one-off authorization for that exact operation.
+- Resolve the current remote default branch; develop, commit, push, and verify
+  there unless the user explicitly names another branch. No routine feature
+  branches, PR branches, temporary remote branches, or draft PRs.
+- AI-created/rewritten commits require author and committer `AI Agent <>` and
+  only `Co-authored-by: AI Agent` trailers. Use command-scoped Git identity.
+  Stop if the tool cannot preserve that identity.
 
-- Think before coding: state assumptions, surface ambiguity and tradeoffs, and
-  ask when uncertainty would otherwise become a guess.
-- Simplicity first: solve the requested problem with the minimum maintainable
-  code; avoid speculative features, abstractions, configurability, or new
-  defensive branches that repo contracts prove unnecessary.
-- Compact and efficient code matters, not just lower token usage. Prefer
-  shorter, clearer implementations that preserve behavior; do not trade away
-  security, environment safety, live-verification evidence, or OMERO runtime
-  correctness for fewer lines.
-- Surgical changes: touch only what the task requires and preserve local
-  contracts. Match existing style only when it is already clear, efficient,
-  and consistent; otherwise improve style only where the task gives evidence
-  and scope to do so. Clean up only orphans created by your change and mention
-  unrelated debt instead of editing it.
-- Goal-driven execution: turn work into verifiable success criteria, reproduce
-  bugs with a test or concrete failing check when practical, loop until the
-  relevant checks pass, and report the exact verification performed.
-- Treat upstream `EXAMPLES.md` as optional maintenance rationale only. Do not
-  load or import it by default or let it override repository rules.
+## Mandatory efficiency
 
-## AI commit identity
+Lower-token operation is the default, without reducing reasoning or verification.
 
-- AI Agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI Agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI Agent` with no email. Use command-scoped config such as `git -c user.name='AI Agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.
-- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, vendor identity, or profile-mapped AI/tool address, stop before committing. Human contributors are not required to use the AI identity.
-- Identity audits must check authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`) from fresh branch-head fetches; report PR-head refs separately. Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses, never host/local placeholders or fake emails.
+- CocoIndex Code is mandatory for broad semantic routing. Check the
+  `cocoindex-code` MCP tool first; follow
+  [cocoindex-code-search](.agents/skills/cocoindex-code-search/SKILL.md).
+  Exact known symbols, strings, scanner counts, and already-small scopes use
+  bounded `rg` directly. Confirm semantic hits against current source.
+  Never silently trust a stale index or install/refresh one through MCP search.
+- Apply [caveman](.agents/skills/caveman/SKILL.md) lite by default to internal AI
+  communication: remove repetition, not reasoning or evidence. This is mandatory,
+  not opt-in. Public text, code, commands, exact errors, and user replies stay
+  normal prose and lossless. Expand normally for safety, approvals, ambiguity,
+  incidents, and ordered procedures; required progress updates remain mandatory.
+- Use the [context router](docs/reference/ai-agent-context-routing.md) only when
+  the task location is unknown; load one matching skill, not the catalog.
+  Follow its numeric caps, escalating with a stated reason when correctness
+  needs more context. Never use a budget to skip required analysis or tests.
+- Keep a verification ledger: command, relevant source/configuration/runtime
+  identity, result, and evidence location; reuse fresh evidence. Retry failures
+  only after changing a hypothesis/input. Run the full required matrix once on
+  the stable final tree. Preserve raw logs and exit status; inspect complete
+  failures, not only a truncated tail.
+- Do not reread unchanged files, dump trees/logs, poll unchanged jobs, load
+  upstream reference skills, or rediscover known tool schemas by default.
+  Keep handoffs to decisions, changed files, evidence, risks, and next action.
+  Never compress user requests or claim billing savings from byte counts.
 
-## Single-session rule
+## Before the matching action
 
-- AI Agents must work in one session only. Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session. This rule must not be bypassed except for the Codex Security exception below.
-- Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use.
-- Continue only after explicit user approval or the Codex Security UI Start Scan handoff. Use minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
+Read only the required section of
+[task contracts](docs/reference/ai-agent-task-contracts.md):
 
-## Default-branch development rule
+| Action | Required contract and next reference |
+| --- | --- |
+| Authorized Codex Security scan | Single-session rule; approved target/mode/workers only |
+| Code/design decisions | Pinned Karpathy agent baseline; nearest implementation and tests |
+| Paths, I/O, logging, HTTP, SQL, subprocesses, Docker, workflows, secrets or auth | Mandatory security read order: `regression_guard.py catalog`, `scan`, matching prevention/history sections |
+| Deployment configuration, imports or test data | Configuration; tracked `*_example*` contracts |
+| Live, Docker/Compose or sync | Runtime and sync; `docs/reference/ai-agent-runtime-playbook.md`; env `check` and `compose-guard` before Compose |
+| Documentation or instruction edits | Documentation; `docs/reference/ai-agent-integrations.md` for adapters |
+| Tests, commit or push | Verification; `.agents/skills/verification-loop/SKILL.md` |
+| Git identity, branches, deletion or publication | AI commit identity; Default-branch development rule; Destructive operations and releases |
+| Index/MCP maintenance | CocoIndex; `.agents/skills/cocoindex-code-search/SKILL.md` |
 
-- AI Agents must develop, commit, push, and verify on the repository's current remote default branch unless the user explicitly names another branch. Resolve it from the remote, for example with `git remote show origin` or `git symbolic-ref refs/remotes/origin/HEAD`, and never hard-code `main` in agent workflow decisions.
-- Do not create feature branches, PR branches, temporary remote branches, or draft PRs for routine coding, verification, workflow checks, or scanner checks. If one is created accidentally, move the work back to the resolved default branch, delete the temporary branch, close any PR, and continue there.
+## Completion gate
 
-## Destructive operations and releases
-
-- Pause before every deletion of a pre-existing or persistent object and ask for fresh, explicit user approval naming exactly one object and one deletion operation. Separate approval is required for each file or directory tree, branch, Git tag, GitHub release, Docker image or tag, container, volume, backup, data object, and local or remote artifact.
-- Approval never carries forward. Blanket or "full" permission, an earlier deletion approval, a replace/recreate request, and approval for the same version or object in an earlier run do not authorize a later deletion. Do not start a command, script, or workflow capable of the deletion until that exact approval has been received.
-- Before every release, pause and ask the user to provide or confirm the exact GitHub release tag and the exact Docker repository/tag. Never infer, auto-increment, or reuse a release version from history or an earlier conversation. Release replacement needs the release/tag choices plus separate fresh approvals for each GitHub release, Git tag, and Docker tag deletion.
-- Every release needs a version-matched `CHANGELOG.md` section with human-readable changes, checks, and upgrade impact. Publish the rendered notes and OCI metadata through GitHub and the Docker carrier. Keep notes curated and concise: include notable user/operator impact, compatibility, upgrade actions, and brief verification; omit internal, agent, commit-by-commit, and exhaustive-test detail.
-  Before publication, require automated disclosure validation and explicit human public-safety review; public notes must never contain credentials, personal or host-specific information, private infrastructure details, security findings, vulnerability mechanics, or other exploit-enabling detail.
-
-## Mandatory security read order
-
-Before writing or rewriting code or tests that touch filesystem paths, file I/O, logs, HTTP responses, outbound HTTP, SQL, subprocesses, Dockerfiles, workflows, secrets, authentication, or authorization, consult these in order:
-
-1. `python3 tools/regression_guard.py catalog` and `python3 tools/regression_guard.py scan` — the canonical machine-checked anti-regression gate (catalog rules cover every recurring closed-alert family).
-2. `docs/reference/ai-agent-security-prevention-playbook.md` for normative coding patterns and external best-practice links.
-3. `docs/reference/code-scanning-resolved-findings.md` and `docs/operations/code-scanning.md` for closed-alert history and the live alert workflow (reference only).
-
-Do not start coding until you can name the helper boundary you will harden and the regression tests that will prove the fix.
-
-## Fast load order
-
-1. `docs/reference/ai-agent-context-routing.md` for the smallest correct docs, code roots, skills, and test lanes.
-2. `docs/reference/ai-agent-runtime-playbook.md` for Docker, Git ownership, container-network probing, OMERO CLI, testing, log triage, and joined-session rules.
-3. `docs/reference/ai-agent-skills.md` and `.agents/skills/` for reusable repo workflows.
-4. `docs/index.md` only when the routing doc is insufficient.
-5. The nearest plugin or operations doc for the touched subsystem.
-
-## Working contract
-
-- All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
-- In committed code and tests, do not hard-code installation-specific clone paths or host paths unless the product intentionally guarantees that runtime path.
-- For live checks, discover active container IDs, published host bindings, service ports, and runtime interpreter paths from Compose and container state. Documented default ports are reference facts, not probe inputs.
-- Treat ignored live env files created from tracked `env/*_example.env` contracts as operator-owned host state. Do not regenerate, normalize, migrate, or auto-edit them from example files unless the user explicitly asks for that exact host-local action.
-- When a tracked `env/*_example.env` default changes, update the tracked example contract and docs/tests. Do not invent installer migrations, upgrade rewrites, or automatic mutation of existing host env files unless the user explicitly requests that behavior and the change is separately reviewed and tested.
-- If live verification shows an ignored host env file has an outdated value, report the exact key and value. Change it only as a narrow host-local edit after explicit user approval, preserving all unrelated values.
-- Custom import workflows must keep upload and conversion work in tmp/shared-transfer space and move data into `ManagedRepository` only at the final persistent import handoff.
-- Do not assume any non-root user, group, Dataset, Project, Screen, Image, file, annotation, script ID, plugin row, or other OMERO object already exists in a live installation unless the current task explicitly provisions it first.
-- When tests or live verification need OMERO images, files, annotations, acquisition metadata, users, groups, or plugin index rows, create deterministic disposable fixtures inside the test or verification flow and clean or isolate them by unique names. A user-named live object may be inspected only as a diagnostic target, never as a product assumption or required test precondition.
-- Keep changes deterministic, explicit, minimal, and reproducible; less is more when fewer lines prove full functional parity and satisfy every repo rule.
-- If the user explicitly asks for lower-token replies, use opt-in `caveman` only for internal AI communication. It never rewrites repo docs, comments, or user-facing copy, and never changes routing, tools, verification, or uncertainty handling; drop it for destructive/security/ambiguous work.
-- Update `docs/` whenever behavior or operating assumptions change; preserve every required meaning when compacting docs, add objective regression checks before line-budget changes, and fix a proven avoidable retry/error loop in repo instructions/tools only after the correct workflow is verified.
-- When creating or editing plugin help pages, follow `docs/reference/plugin-help-page-style-guide.md` for user-facing copy, screenshots, collapse behavior, and button/link consistency.
-- Run `python3 tools/lint_docs_structure.py` after documentation or instruction-surface edits.
-- Use Ruff as the canonical Python formatter and lint gate; host `ruff` must match the repo-pinned version, then run `ruff check .` and `ruff format --check .`; if only the module is available, use `python3 -m ruff check .` and `python3 -m ruff format --check .`.
-- Run split `pytest` suites separately; never combine the repo into one giant `pytest` process.
-- Do not modify README badges or workflow badges unless the user explicitly asked for that badge change.
-- The README top badge row is generated by `tools/update_readme_badges.py`; keep it limited to active repository-native status surfaces and do not add a DeepSource active-issues badge.
-- Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource counts need explicit credentials and can be unavailable for auth, subscription, or access. GitHub HTTPS Git operations require a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If a GitHub PAT is unavailable, ask immediately and pause; do not retry auth failures except local tasks.
-  If DeepSource scanning is skipped or unavailable, report it as unavailable, not zero, and continue the rest of the local and GitHub workflow verification instead of treating it as a blocking failure.
-- After every push, verify GitHub workflows are green and compare DeepSource grouped issues and issue occurrences for the pushed commit against the pre-push baseline when DeepSource auth and repository access are available; if either count increased, fetch grouped issue details, fix the regression root cause, rerun targeted tests, and repeat post-push verification.
-  When many unrelated workflows fail at once, check official GitHub Status and
-  exact job logs before deciding whether the root cause is an outage or a repo
-  regression.
-- Prefer focused unit/contract tests first; when live testing makes sense or the user explicitly requests it for functional OMERO/install/Compose/startup/plugin/env-contract changes, reconcile the live root, preserve unrelated dirty work non-destructively, match the exact checkout, run env guards, rebuild/inject/restart affected containers, and test mechanisms end to end before commit/push.
-- Pin image tags and dependency versions; never use `:latest`. Before changing OMERO.web or OMERO.server, review tagged release notes, tagged `UPGRADING.md` when present, and the official server upgrade guide, then test every applicable migration or compatibility requirement.
-- Treat plugin input as untrusted and validate at system boundaries; treat every tracked `*_example*` file as the canonical configuration contract.
-- Prefer repo-local skills before falling back to generic workflows.
-- For broad repo navigation, the CocoIndex Code gate is mandatory: check for a `cocoindex-code` MCP server or tool first, then use `.agents/skills/cocoindex-code-search/` as semantic routing before exact `rg`. Use direct `rg` first only for precise string, symbol, scanner-count, or already-small searches.
-  It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors/DB/runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
-  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. It indexes text-decodable mirrored files through CocoIndex Code 0.2.41; do not claim binary semantic search, add repo-specific language rewrites or file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
-  Keep embedding-device selection automatic unless an intentional `--device` or `AGENT_COCOINDEX_DEVICE` override is needed; unavailable explicit GPUs must fail closed and CPU fallback must work.
-  After MCP install or launcher changes, prove `initialize`, `list_tools`, and probes with `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search` only against an active index. For current edits run `python3 tools/cocoindex_agent_search.py index --allow-dirty-index` or `search --refresh "<query>"`; MCP search itself never refreshes and can return stale active-index text.
-- Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
-- Never create, edit, overwrite, delete, normalize, or print values from non-example deployment env files (`.env`, `installation_paths.env`, `env/*.env`) unless the user explicitly grants a one-off exception for that exact operation; examples remain the tracked contract.
-- Run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard` before any `docker compose` operation to verify deployment env files are intact and the checkout matches the live installation root. Use `python3 tools/env_safety_guard.py template-check` only to report env-template key drift without values.
-- Validate Markdown with `npx --yes markdownlint-cli2@0.23.2` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
-- Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` to mirror the Docker-backed Hadolint, DevSkim, and Super-Linter gates locally; use `--profile devskim` for focused DevSkim iteration.
-- `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates.
-  GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result. Before pushing any scanner/action update, inspect its embedded scanner version and run `--profile all` with that exact engine.
-  Guard every controllable SARIF with `tools/sarif_result_guard.py` before upload; require the hosted zero-delta job and verified three-rule Scorecard baseline. Never obfuscate constants: false positives need proven provenance and native, line-specific annotations. Preserve raw findings and report unsuppressed counts explicitly; follow the DevSkim runbook.
-
-## Repository map
-
-- `README.md`: deployment scope, service topology, quick start, and plugin summaries.
-- `ARCHITECTURE.md`: layer model, dependency boundaries, data flow, and plugin structure.
-- `docs/index.md`: full documentation hub.
-- `docs/reference/ai-agent-context-routing.md`: minimal task router for docs, code roots, skills, and verification lanes.
-- `docs/reference/ai-agent-runtime-playbook.md`: deep operational procedures and pitfalls.
-- `docs/reference/ai-agent-skills.md`: harness-neutral skill catalog for `.agents/skills/`.
-- `docs/reference/ai-agent-integrations.md`: Copilot, Cursor, Claude, Gemini, and ECC adapter map.
-- `docs/reference/ai-agent-upstream-sources.md` and `third_party/ecc-v2.0.0/`: pinned ECC provenance.
-- `docs/reference/ai-agent-security-prevention-playbook.md`: canonical anti-regression security guide.
-- `docs/reference/plugin-help-page-style-guide.md`: canonical plugin help page formatting and verification rules.
-
-## Domain roots
-
-- Infrastructure: `docker-compose.yml`, `docker/`, `startup/`, `installation/`, `maintenance/`, `env/*_example.env`, `installation_paths_example.env`
-- Web plugins: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omero_imaris_connector/`, `omeroweb_tools/`, `omero_web_zarr/`
-- Shared library: `omero_plugin_common/`
-- Monitoring: `monitoring/`, `docs/operations/monitoring.md`
-- Tests: `tests/`, `omero_plugin_common/tests/`, `omero_imaris_connector/tests/`, `omeroweb_admin_tools/tests/`, `omeroweb_omp_plugin/tests/`, `omeroweb_import/tests/`, `omeroweb_tools/tests/`, `omero_web_zarr/tests/`
-
-## Topology facts
-
-- This deployment has `21 Compose services` total and runs `19 long-running runtime containers by default`; 20 when the profile-gated `crowdsec` service is enabled.
-- The `redis-sysctl-init` helper is a one-shot profile-gated service, not a long-running runtime container.
-- The `omeroweb` container runs OMERO.web, Imaris and Tools Celery workers, and the storage-quota reconciliation loop under `supervisord`.
-
-## Small-context rules
-
-- Start with `rg` and the routing doc before opening files.
-- Treat the routing doc's numeric caps as mandatory, not advisory.
-- Open one domain doc, one nearest test module, and one matching skill before broadening context.
-- Stop once you can name the exact files to edit and the exact suites to run.
-- Summarize long docs once, batch independent read-only work with bounded output, and reuse fresh evidence instead of reopening files or repolling unchanged external state.
-- Keep a verification ledger keyed by command and relevant tree/runtime state: do not retry a failed tool without a changed hypothesis or input, do not repeat an unchanged passing gate, and run the full matrix once against the stable final tree.
-
-## Verification minimum
-
-```bash
-python3 tools/lint_docs_structure.py
-python3 -m unittest -v tests/test_lint_docs_structure.py
-python3 -m pytest tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omero_imaris_connector/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_tools/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
-ruff check .
-ruff format --check .
-```
-
-If the active host exposes Ruff only as a Python module, replace those two Ruff commands with `python3 -m ruff check .` and `python3 -m ruff format --check .`.
-
-Use the routing doc and `verification-loop` skill to choose the minimal subset during normal iteration, but report the exact verification level achieved.
-
-## Deep references
-
-- Operational pitfalls, Docker socket/network procedure, OMERO CLI rules, testing fallbacks, log triage, and joined-session constraints live in `docs/reference/ai-agent-runtime-playbook.md`.
-- Anti-regression gate is `tools/regression_guard.py` (machine-checked catalog); `docs/reference/ai-agent-security-prevention-playbook.md`, `docs/reference/code-scanning-resolved-findings.md`, and `docs/operations/code-scanning.md` are reference-only history.
-- When a reusable environment-specific failure is discovered, update the relevant deep doc in the same change so later agents do not rediscover it.
+- Preserve every required meaning and add objective regression checks before
+  compacting instructions. Fewer lines must prove full functional parity and
+  satisfy every repo rule. Do not weaken approvals, scanner scope, or tests.
+- Before commit/push run
+  `python3 tools/run_local_workflow_gates.py --setup --profile ci`.
+  Scanner/action changes require `--profile all` with the exact engine.
+  Run split pytest suites separately, never one monolithic process.
+- Functional OMERO/install changes require fresh-code live verification when
+  appropriate/requested, before commit/push. Agent-only edits do not justify
+  rebuilding unchanged application images or restarting services.
+- After every push, verify GitHub workflows and alert deltas for that exact
+  commit. No suppression, scope reduction, or score manipulation to pass.
+  Report untested areas and residual findings explicitly.
+- Detailed skill catalog: `docs/reference/ai-agent-skills.md`; full docs hub:
+  `docs/index.md`. Neither is a mandatory startup read.

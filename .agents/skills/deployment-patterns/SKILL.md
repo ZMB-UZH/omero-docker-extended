@@ -11,7 +11,7 @@ Use this skill when changing installation, update, rollout, health, or service t
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` for generic deployment checklists and rollout patterns.
+`third_party/ecc-v2.0.0/skills/deployment-patterns/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

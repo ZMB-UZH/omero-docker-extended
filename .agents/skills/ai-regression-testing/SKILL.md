@@ -11,7 +11,7 @@ Use this skill when an AI Agent has changed helpers, views, startup scripts, wor
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/ai-regression-testing/SKILL.md` for the general anti-blind-spot workflow.
+`third_party/ecc-v2.0.0/skills/ai-regression-testing/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

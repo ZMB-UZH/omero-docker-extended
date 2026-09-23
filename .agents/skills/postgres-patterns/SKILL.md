@@ -11,7 +11,7 @@ Use this skill when changing SQL, schema behavior, plugin persistence, or mainte
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/postgres-patterns/SKILL.md` for the generic PostgreSQL patterns.
+`third_party/ecc-v2.0.0/skills/postgres-patterns/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

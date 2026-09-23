@@ -11,7 +11,7 @@ Use this skill before introducing new code, dependencies, wrappers, or automatio
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/search-first/SKILL.md` for the generic research-before-coding workflow.
+`third_party/ecc-v2.0.0/skills/search-first/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## When to activate
 
@@ -22,7 +22,7 @@ Start from `third_party/ecc-v2.0.0/skills/search-first/SKILL.md` for the generic
 
 ## Search order
 
-1. Search this repository first with `rg`.
+1. Search this repository first: mandatory `cocoindex-code-search` for broad navigation, bounded `rg` for exact known symbols or already-small scopes.
 2. Route through `docs/reference/ai-agent-context-routing.md` and read the nearest tests, docs, and example env files.
 3. Check official upstream docs and release notes.
 4. Check upstream implementations or maintained references.
@@ -32,7 +32,7 @@ Start from `third_party/ecc-v2.0.0/skills/search-first/SKILL.md` for the generic
 
 - Search the relevant package, service, or plugin directory first.
 - Search `tests/` and package-local `*/tests/` before assuming coverage is missing.
-- Search `docs/`, `README.md`, `ARCHITECTURE.md`, and `CLAUDE.md` for existing operating rules.
+- Read only the nearest matching documentation section. Do not load other agent adapters or full docs trees.
 - Treat `env/*_example.env` and `installation_paths_example.env` as canonical contracts.
 - Adopt when the existing pattern is already correct, extend when a thin repo wrapper is enough, and build custom only when the repo needs a stricter contract.
 - Do not use background agents, subagents, spawned agents, delegated agents, or any separate agent session for research in this repo.

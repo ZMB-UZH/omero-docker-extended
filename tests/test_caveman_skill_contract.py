@@ -1,4 +1,4 @@
-"""Contract tests for the opt-in caveman integration."""
+"""Contract tests for the mandatory caveman integration."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class CavemanSkillContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in active caveman skill is guarded and repo specific.
         """
         skill_text = self.read_text(".agents/skills/caveman/SKILL.md")
-        self.assertIn("Use this skill only when the user explicitly asks", skill_text)
+        self.assertIn("Apply this skill by default in every task", skill_text)
         self.assertIn("context-budget", skill_text)
         self.assertIn("changes response style only", skill_text)
         self.assertIn("must not change context selection", skill_text)
@@ -80,26 +80,26 @@ class CavemanSkillContractTests(unittest.TestCase):
         self.assertIn("natural-language auto-activation", skill_text)
         self.assertIn("third_party/caveman-v2.2.0/skills/caveman/SKILL.md", skill_text)
 
-    def test_caveman_adapter_disables_implicit_invocation(self) -> None:
-        """Verify caveman adapter disables implicit invocation.
+    def test_caveman_adapter_enables_implicit_invocation(self) -> None:
+        """Verify caveman adapter enables implicit invocation.
 
-        Inputs: repository fixtures. Output: fails on regressions in caveman adapter disables implicit invocation.
+        Inputs: adapter metadata. Output: confirms implicit invocation and safety guidance.
         """
         adapter = yaml.safe_load(
             self.read_text(".agents/skills/caveman/agents/openai.yaml")
         )
-        self.assertEqual(False, adapter["policy"]["allow_implicit_invocation"])
+        self.assertEqual(True, adapter["policy"]["allow_implicit_invocation"])
         self.assertIn(
-            "explicitly asks",
+            "mandatory caveman lite",
             adapter["interface"]["default_prompt"],
         )
         self.assertIn("normal prose", adapter["interface"]["default_prompt"])
         self.assertIn("across agents", adapter["interface"]["default_prompt"])
 
-    def test_cross_agent_surfaces_present_caveman_as_opt_in(self) -> None:
-        """Verify cross agent surfaces present caveman as opt in.
+    def test_cross_agent_surfaces_present_caveman_as_mandatory(self) -> None:
+        """Verify cross agent surfaces present caveman as mandatory.
 
-        Inputs: repository fixtures. Output: fails on regressions in cross agent surfaces present caveman as opt in.
+        Inputs: shared instruction surfaces. Output: confirms mandatory cross-agent integration.
         """
         tracked_surfaces = (
             "AGENTS.md",
@@ -230,10 +230,10 @@ class CavemanSkillContractTests(unittest.TestCase):
             sources.raw_file_url("caveman"),
         )
 
-    def test_readme_documents_opt_in_caveman_badge(self) -> None:
-        """Verify readme documents opt in caveman badge.
+    def test_readme_documents_caveman_badge(self) -> None:
+        """Verify readme documents caveman badge.
 
-        Inputs: repository fixtures. Output: fails on regressions in readme documents opt in caveman badge.
+        Inputs: repository fixtures. Output: verifies the README's guarded caveman integration.
         """
         readme_text = self.read_text("README.md")
         self.assertIn("[![caveman](", readme_text)

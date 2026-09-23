@@ -104,7 +104,7 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 - Vendored files: `LICENSE` and `skills/caveman/SKILL.md` only. Upstream README/install docs stay upstream-only so repo docs remain standard prose.
 - Selected upstream reference: `third_party/caveman-v2.2.0/skills/caveman/SKILL.md`
 - Integration rule: the active repo surface is `.agents/skills/caveman/`; it
-  is an all-agent, opt-in overlay for lower-token replies and internal AI
+  is an all-agent, mandatory lite overlay for lower-token internal AI
   prompting only. Upstream hooks, plugin auto-loading, `.codex` hook config,
   natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`/config resolution,
   `off`, `caveman-help`, compression-tool context rewriting, stats/statusline

@@ -1,152 +1,80 @@
 ---
 name: cocoindex-code-search
-description: Mandatory MCP-first workflow for the repo's pinned host-side CocoIndex Code semantic routing and token reduction without writing index artifacts into the live checkout.
+description: Mandatory semantic routing for broad repository navigation; use exact rg for known symbols and keep all index state external.
 origin: repo-local skill based on verified cocoindex-code 0.2.41 behavior
 ---
 
 # CocoIndex Code Search
 
-The wrapper runs CocoIndex package APIs with the cached runtime's own isolated
-Python interpreter. Do not add that environment's `site-packages` to the agent's
-Python path: compiled extensions may target a different Python minor version.
-After changing runtime integration, test CLI search and MCP smoke with both a
-matching and a different supported host Python version.
-
-Use this skill for broad repo navigation when semantic routing can reduce
-context before exact `rg`, file reads, and tests.
+Use semantic output as routing only. Confirm paths, symbols, and behavior in
+current source before editing. Exact strings, symbols, scanner counts, and
+already-small scopes use `rg` directly without semantic-search overhead.
 
 ## Required workflow
 
-1. For broad repo navigation, this skill is mandatory. Check for an already
-   configured MCP server or tool named `cocoindex-code` before reading
-   installation instructions. If this Codex session does not expose the tool,
-   inspect `codex mcp get cocoindex-code` and verify its `AGENT_COCOINDEX_REPO`
-   matches the target checkout. A registration for another repository is not
-   stale: do not overwrite it or trust its search results for this task. Use
-   repository-scoped CLI search or an explicitly configured workspace instead.
-   Repair a stale command for this same repository with `mcp-install`.
-2. Keep `rg` as the exact search and validation tool.
-3. Use `python3 tools/cocoindex_agent_search.py mcp-install` for Codex, or
-   `python3 tools/cocoindex_agent_search.py mcp-config` for other MCP clients,
-   only when the MCP server is absent.
-4. After installing, changing, or debugging the MCP path, run
-   `python3 tools/cocoindex_agent_search.py mcp-smoke`; registration alone is
-   not proof until stdio `initialize`, raw JSON-RPC protocol probes,
-   and `list_tools` succeed. This smoke test launches the repository wrapper;
-   inspect the client's registration separately to prove it targets that wrapper.
-   `mcp-smoke --include-search` may only use an
-   already-recorded active index and must refuse to build or refresh one.
-5. Before relying on MCP search for current local edits or just-changed docs,
-   refresh explicitly with
-   `python3 tools/cocoindex_agent_search.py index --allow-dirty-index` for an
-   intentional dirty-worktree index, or
+1. Broad navigation is mandatory MCP-first: check for an MCP server or tool named
+   `cocoindex-code`. Verify its repository binding; never trust another checkout's
+   results or overwrite another repository's registration.
+2. Query a current active index with a specific natural-language question and
+   `limit=3` initially. Refine once using the discovered vocabulary and subtree;
+   avoid loading duplicate chunks or all matching files. Escalate when evidence
+   is insufficient, not just because more results exist.
+3. MCP search itself never refreshes and can return stale active-index text.
+   After relevant edits, explicitly run
+   `python3 tools/cocoindex_agent_search.py index --allow-dirty-index`, or
    `python3 tools/cocoindex_agent_search.py search --refresh "<query>"` on a
-   clean tree. MCP search itself never refreshes, and stale active indexes can
-   return old text.
-6. Use `python3 tools/cocoindex_agent_search.py install` directly only when MCP
-   is unavailable or a CLI-only workflow is intentionally being prepared.
-7. Use `python3 tools/cocoindex_agent_search.py search --limit 5 "<query>"` only
-   after an explicit `index` has recorded an active index for this repo. Use
-   `--index-if-missing` only when cold indexing is intentional and safe, then
-   confirm the returned files with `rg` in the real repo.
-   `prepare`, `index`, `search --index-if-missing`, `search --refresh`, and
-   `benchmark` reject dirty or untracked worktrees unless the caller uses the
-   explicit dirty flag for that disk-heavy operation.
-8. If the wrapper reports a cold semantic index, tell the user once in one
-   short sentence that the first search can take several minutes and later
-   searches reuse the external cache.
-9. Use `--path '<glob>'` only after the first pass identifies a likely subtree.
-10. Run
-   `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`
-   when changing this workflow or after a major CocoIndex Code release.
-11. Leave device selection automatic by default. CocoIndex/Sentence Transformers
-    will use a supported accelerator when its Linux runtime exposes one. Use
-    `--device cuda`, `--device mps`, or `AGENT_COCOINDEX_DEVICE` only for an
-    intentional override; unavailable explicit accelerators must fail before
-    indexing. Use `--device auto` to restore upstream automatic selection.
-12. Skip CocoIndex when an exact string, symbol, or small `rg` result is already
-   likely; the hybrid path is for broad routing where candidate output would be
-   large.
+   clean tree. Never infer current-source truth from an old index.
+4. If MCP is absent, inspect `codex mcp get cocoindex-code` and its
+   `AGENT_COCOINDEX_REPO` binding once. Use repo-scoped CLI search when the
+   registration belongs to another repo or the client cannot expose the tool:
+   `python3 tools/cocoindex_agent_search.py search --limit 3 "<query>"`.
+5. If no active index exists, check disk headroom/system load, then explicitly
+   run `python3 tools/cocoindex_agent_search.py index`. The first cold semantic
+   index can take several minutes; tell the user once. Later searches reuse
+   the external cache. Dirty/untracked trees require the explicit dirty flag.
+   Never retry an unchanged missing-index, binding, or install failure.
+6. Open only the smallest confirmed source/test set. Use `--path '<glob>'`
+   after identifying a subtree; avoid `--lang` on mixed-language files unless
+   proven safe. Follow `context-budget`; save complete evidence outside source.
 
-## Artifact rules
+If indexing is genuinely unavailable (access, resources, or tool failure), state
+the limitation once and use bounded `rg` temporarily. Do not claim CocoIndex
+ran successfully, discard relevant files, or block exact-file work on an index.
 
-- Never run `ccc init` directly in the live checkout.
-- Keep pinned `cocoindex-code[full]==0.2.41`; do not use a floating version.
+## State and quality boundaries
+
+- Keep pinned `cocoindex-code[full]==0.2.41`; never run `ccc init` directly
+  in the live checkout. Use one host install under XDG/`AGENT_COCOINDEX_HOME`.
 - The wrapper indexes an external mirror of Git-visible non-ignored files.
-  Settings, runtime files, model caches, and SQLite databases stay under XDG
-  paths or `AGENT_COCOINDEX_HOME`, never under the live repository.
-- Use exactly one host install per user account: the shared pinned venv lives
-  under `AGENT_COCOINDEX_HOME` or the XDG data default. Each repository content
-  digest gets a separate mirror, database directory, and daemon runtime
-  directory under that one install so parallel agents on different repositories
-  do not share project locks or databases.
-- The wrapper reuses a daemon that already exists for the same repository
-  runtime, starts one only when needed, and stops only daemons it started itself.
-  Do not leave wrapper-owned `ccc run-daemon` processes running after CLI or MCP
-  verification.
-- Launch commands from the target Git repository root, or set
-  `AGENT_COCOINDEX_REPO` to that root for clients that cannot control their
-  working directory. Do not put installation-specific paths in committed files.
-- Do not add, commit, or normalize `.cocoindex_code/` in the repository.
-- Do not index real `.env` files; only example env contracts are allowed.
-- The mirror asks CocoIndex Code 0.2.41 to include every Git-visible mirrored
-  file pattern. CocoIndex indexes text-decodable content and safely skips
-  undecodable binary files; do not claim semantic search inside arbitrary binary
-  formats.
-- Do not add repo-specific language rewrites or file-type exclusions without a
-  tested, documented configuration contract.
-- Avoid `--lang` for mixed-language or container formats such as templates,
-  notebooks, Markdown with code blocks, or generated manifests unless the exact
-  language filter is known to be safe for that file type.
-- Treat semantic output as routing only; read and edit real repo files after
-  exact confirmation.
+  Per-repo content digests isolate mirrors, databases, runtime files, and locks.
+  Settings, model caches, and `.cocoindex_code/` stay outside the live checkout.
+  Never index real deployment env files; only example env contracts are allowed.
+- Include every mirrored file pattern. CocoIndex indexes text-decodable content;
+  binary formats are not semantically searchable. Do not add file-type
+  exclusions or language rewrites without a tested configuration contract.
+- Leave embedding-device selection automatic. Supported accelerators may be
+  used; explicit unavailable GPUs must fail closed and CPU fallback must work.
+- The wrapper uses the cached runtime's own isolated Python interpreter, never
+  another interpreter's `site-packages`. It reuses existing daemons and stops
+  only daemons it started itself. Do not leave wrapper-owned daemons running.
 
-## MCP
+## Maintenance only
 
-- Upstream CocoIndex Code documents the native contract as
-  `pipx install 'cocoindex-code[full]'` plus
-  `codex mcp add cocoindex-code -- ccc mcp`. This repo intentionally registers
-  an `AGENT_COCOINDEX_HOME` launcher that invokes
-  `tools/cocoindex_agent_search.py mcp` through `AGENT_COCOINDEX_REPO` so agents
-  get the same CocoIndex server while keeping `.cocoindex_code/`, runtime files,
-  model caches, and per-repo databases outside the live checkout. Do not
-  register a temporary clone's absolute `tools/cocoindex_agent_search.py` path
-  directly in Codex.
-- Do not copy the upstream `ccc` skill into this repository. Keep this file as
-  the single repository-local CocoIndex skill surface and generate MCP
-  configuration from `tools/cocoindex_agent_search.py mcp-config` when another
-  MCP-capable agent needs explicit stdio settings.
-- Generic MCP: first check whether a server or tool named `cocoindex-code` is
-  already configured. If it is absent, run
-  `python3 tools/cocoindex_agent_search.py mcp-config` and map the printed
-  stdio `command`, `args`, `env`, `startup_timeout_sec`, and `tool_timeout_sec`
-  into the MCP-capable client's native config. The client must launch it from
-  the target Git repository root, or use `mcp-config --pin-repo` only for a
-  workspace-scoped static config. Do not claim compatibility with an agent that
-  cannot run local stdio MCP servers, set environment variables, and allow long
-  tool timeouts.
-- Codex: run `python3 tools/cocoindex_agent_search.py mcp-install`. It registers
-  one MCP server named `cocoindex-code` with a host-stable launcher under
-  `AGENT_COCOINDEX_HOME`, pins the current checkout through
-  `AGENT_COCOINDEX_REPO`, repairs stale same-repository entries instead of adding
-  duplicates, and refuses to overwrite a different or unproven repository binding
-  before any launcher or configuration write. It sets explicit startup/tool
-  timeouts. The MCP
-  server must answer
-  initialize and tool-list requests without installing, mirroring, launching the
-  daemon, or indexing; MCP search may only query an existing active index.
-  Refresh current local edits with the CLI first; MCP search itself must stay
-  read-only and must not refresh the active index.
-  Then run `python3 tools/cocoindex_agent_search.py mcp-smoke` from the target
-  repo root to prove the repository wrapper completes the MCP handshake. Use
-  `mcp-smoke --include-search` only for an explicit end-to-end search smoke
-  against an existing active index; it must refuse to build or refresh one.
+Read the CocoIndex section of `docs/reference/ai-agent-integrations.md` when
+installing, changing the launcher/runtime, debugging MCP, or upgrading the tool.
+Do not load installer procedures during ordinary successful searches.
 
-## Stop signs
-
-- Do not use this for precise string, symbol, or scanner-count checks; use `rg`
-  or the repo scanner tools.
-- Do not run CocoIndex plus `rg` by default for narrow queries; benchmark it
-  first if the token budget benefit is unclear.
-- Do not expand context just because semantic search returned results. Open the
-  smallest confirmed file set and follow `context-budget`.
+- `mcp-install` registers one MCP server named `cocoindex-code` using a
+  host-stable launcher and repository binding; it refuses other/unproven bindings.
+  Use `mcp-config` for compatible stdio clients, `--pin-repo` only for a
+  workspace-scoped static config. Never register a temporary clone's tool path.
+- After MCP/launcher changes, run
+  `python3 tools/cocoindex_agent_search.py mcp-smoke`: verify `initialize`,
+  `list_tools`, and protocol probes. Add `--include-search` only with an
+  existing active index. Handshake/search must never install, mirror, or index.
+- Test CLI and MCP integration with matching and different supported host Python
+  versions after runtime changes. Do not copy the upstream `ccc` skill here.
+- Benchmark changed search workflows with
+  `python3 tools/cocoindex_agent_search.py benchmark --cases <cases.json>`.
+  Record expected-file recall, output bytes, and timing for both broad and exact
+  cases. Do not call character counts model tokens or promise universal savings.

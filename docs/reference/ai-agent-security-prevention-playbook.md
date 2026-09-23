@@ -392,7 +392,7 @@ Before merging any security-document change, check these criteria:
 
 1. **Freshness**: live counts in `docs/operations/code-scanning.md` were refreshed from the GitHub API on the same date the doc claims.
 2. **Single-source ownership**: live counts appear only in the runbook; resolved-history counts appear only in the ledger; bad/good examples live only here.
-3. **Routing**: `AGENTS.md` references this playbook near the top, and `docs/index.md` links to it.
+3. **Routing**: `AGENTS.md` routes security-sensitive edits to the mandatory read order in `docs/reference/ai-agent-task-contracts.md`, which names this playbook; `docs/index.md` links to it.
 4. **Coverage**: the top recurring rule families from the closed-alert history all map to a section in this document.
 5. **No stale numeric drift**: `AGENTS.md` and `docs/index.md` contain no hardcoded historical alert totals.
 6. **Verification story**: the doc update explains how future agents should prove fixes instead of only how to appease scanners.

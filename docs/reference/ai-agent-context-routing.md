@@ -17,7 +17,7 @@ Do not broad-read `docs/`, all plugin trees, or all tests unless the first narro
 
 Use the ECC-inspired progressive retrieval pattern:
 
-1. Dispatch: search broadly with `rg` for the task terms and touched paths.
+1. Dispatch: use mandatory `cocoindex-code-search` for broad navigation; use bounded `rg` directly for exact known symbols, strings, scanner counts, or already-small scopes.
 2. Evaluate: keep only files that directly affect the requested change.
 3. Refine: search again using the repo terminology you just discovered.
 4. Stop: once you have the edit target, one confirming test module, and one verification lane.
@@ -32,6 +32,10 @@ These numeric caps are CI-validated by `python3 tools/lint_docs_structure.py`.
 - Run at most 2 refine loops before you either name the edit target or escalate.
 - Add at most 3 more files per escalation round: one additional domain doc, one adjacent implementation file, and one more confirming test module.
 - If you have opened 8 task-specific files without naming the edit target and verification lane, stop and summarize before reading more.
+
+These are escalation thresholds, not limits on review depth. State the missing
+evidence before expanding. Known file/symbol tasks skip the matrix and semantic
+search overhead; they still follow the matching safety and verification contracts.
 
 ## Task matrix
 
@@ -70,6 +74,9 @@ Run only touched lanes while inputs are changing. Record each result against its
 - Detailed procedures belong in deep docs such as `docs/reference/ai-agent-runtime-playbook.md`.
 - Reusable workflows belong in `.agents/skills/`, not in every adapter file.
 - If an instruction file becomes long enough that agents keep rereading it, split it and link to the deeper file.
+- `docs/reference/ai-agent-task-contracts.md` owns conditional policy details;
+  `AGENTS.md` names the trigger for each section. Adapters require AGENTS rather
+  than duplicating it. CI checks links, UTF-8 byte budgets, and retained policy.
 
 ## What not to load by default
 
@@ -77,6 +84,7 @@ Run only touched lanes while inputs are changing. Record each result against its
 - Entire `docs/` when one plugin or operations document answers the question
 - All split test suites during debug cycles
 - Vendored ECC sources under `third_party/` unless verifying provenance or adapting a specific skill
+- Other harness adapters, the whole skill catalog, or unchanged tool schemas
 
 ## Escalation
 

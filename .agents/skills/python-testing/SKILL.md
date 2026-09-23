@@ -11,7 +11,7 @@ Use this skill when adding or selecting tests for Python and shell-adjacent chan
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/python-testing/SKILL.md` for the generic Python testing guidance.
+`third_party/ecc-v2.0.0/skills/python-testing/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

@@ -28,7 +28,7 @@ Use this skill whenever code changes alter behavior, operating assumptions, or u
 - Topology or container counts: `README.md`, `ARCHITECTURE.md`, `docs/references/docker-compose-llms.txt`
 - Env contract: `docs/deployment/configuration.md`, `env/*_example.env`
 - Plugin behavior: `docs/plugins/*.md`
-- Runtime/debugging procedure: `AGENTS.md`, `CLAUDE.md`, `docs/troubleshooting/*.md`
+- Runtime/debugging procedure: triggered `docs/reference/ai-agent-task-contracts.md` sections, `docs/reference/ai-agent-runtime-playbook.md`, nearest troubleshooting doc
 - Security behavior: `docs/SECURITY.md`, `docs/operations/code-scanning.md`, `docs/reference/ai-agent-security-prevention-playbook.md`
 
 ## Drift to watch for
@@ -45,6 +45,8 @@ Use this skill whenever code changes alter behavior, operating assumptions, or u
 - undocumented new runtime assumptions
 - compact rewrites that pass line budgets while dropping required meaning;
   update regression checks before changing a docs budget
+- copied policy in adapters instead of an explicit link to its canonical source;
+  validate inheritance, retained safeguards, byte budgets, and task routing
 - bloated changes where fewer lines can prove full functional parity while
   satisfying every repo rule
 - instructions or tools that caused a proven avoidable retry/error loop; update

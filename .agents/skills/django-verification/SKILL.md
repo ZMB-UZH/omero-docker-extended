@@ -11,7 +11,7 @@ Use this skill after Django or OMERO.web changes.
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/django-verification/SKILL.md` for the generic Django verification flow.
+`third_party/ecc-v2.0.0/skills/django-verification/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

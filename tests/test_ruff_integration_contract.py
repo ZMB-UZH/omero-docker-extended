@@ -8,6 +8,8 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from tests.agent_instruction_helpers import read_instruction_contract
+
 import yaml
 
 
@@ -81,7 +83,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in agents document ruff commands.
         """
-        agents_text = self.read_text("AGENTS.md")
+        agents_text = read_instruction_contract(self.repo_root, "AGENTS.md")
         self.assertIn("Use Ruff as the canonical Python formatter", agents_text)
         self.assertIn("lint gate", agents_text)
         self.assertIn(
@@ -113,7 +115,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         ):
             self.assertIn(
                 "repo-pinned version",
-                self.read_text(adapter_path),
+                read_instruction_contract(self.repo_root, adapter_path),
                 adapter_path,
             )
         self.assertIn("ruff check .", agents_text)

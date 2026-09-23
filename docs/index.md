@@ -70,6 +70,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 ## 8. Reference
 
+- `reference/ai-agent-task-contracts.md` - conditional agent policies, loaded only for the matching action.
 - `reference/ai-agent-context-routing.md` -- minimal task router for docs, code roots, skills, and split test lanes
 - `reference/ai-agent-runtime-playbook.md` -- deep Git, Docker, OMERO CLI, testing, logging, and joined-session procedure for AI Agents
 - `reference/ai-agent-skills.md` -- harness-neutral catalog for repo-local AI Agent skills under `.agents/skills/`
