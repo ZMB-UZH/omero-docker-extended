@@ -11,7 +11,7 @@ Use this skill when changing OMERO.web plugin views, services, templates, routin
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/django-patterns/SKILL.md` for the generic Django architecture guidance.
+`third_party/ecc-v2.0.0/skills/django-patterns/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 

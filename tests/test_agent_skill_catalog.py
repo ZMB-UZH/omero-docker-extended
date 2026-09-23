@@ -6,6 +6,8 @@ import re
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+
+from tests.agent_instruction_helpers import read_instruction_contract
 from typing import Union
 
 import yaml
@@ -104,13 +106,13 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
     ),
     "caveman": SkillScenario(
         scenario=(
-            "A maintainer explicitly asks for lower-token replies but still needs "
+            "Every task uses mandatory lite compression internally but still needs "
             "the repo's safety rules, exact file references, and clear escalation "
             "back to normal detail when a risky step appears."
         ),
         skill_phrases=(
             "lower token usage",
-            "user explicitly asks",
+            "mandatory, not opt-in",
             "context-budget",
             "compression never outranks correctness",
             ("drop compression", "return to normal detail"),
@@ -393,7 +395,9 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "extend, or build custom logic."
         ),
         skill_phrases=(
-            "search this repository first with `rg`",
+            "search this repository first",
+            "mandatory `cocoindex-code-search` for broad navigation",
+            "bounded `rg` for exact known symbols",
             "official upstream docs and release notes",
             "adopt",
             "build custom",
@@ -484,15 +488,15 @@ class AgentSkillCatalogTests(unittest.TestCase):
         cls.catalog_text = (
             cls.repo_root / "docs" / "reference" / "ai-agent-skills.md"
         ).read_text(encoding="utf-8")
-        cls.agents_text = (cls.repo_root / "AGENTS.md").read_text(encoding="utf-8")
-        cls.claude_text = (cls.repo_root / "CLAUDE.md").read_text(encoding="utf-8")
-        cls.gemini_text = (cls.repo_root / "GEMINI.md").read_text(encoding="utf-8")
-        cls.copilot_text = (
-            cls.repo_root / ".github" / "copilot-instructions.md"
-        ).read_text(encoding="utf-8")
-        cls.cursor_core_text = (
-            cls.repo_root / ".cursor" / "rules" / "00-omero-core.mdc"
-        ).read_text(encoding="utf-8")
+        cls.agents_text = read_instruction_contract(cls.repo_root, "AGENTS.md")
+        cls.claude_text = read_instruction_contract(cls.repo_root, "CLAUDE.md")
+        cls.gemini_text = read_instruction_contract(cls.repo_root, "GEMINI.md")
+        cls.copilot_text = read_instruction_contract(
+            cls.repo_root, ".github/copilot-instructions.md"
+        )
+        cls.cursor_core_text = read_instruction_contract(
+            cls.repo_root, ".cursor/rules/00-omero-core.mdc"
+        )
         cls.cursor_rule_texts = {
             str(path.relative_to(cls.repo_root)): path.read_text(encoding="utf-8")
             for path in sorted((cls.repo_root / ".cursor" / "rules").glob("*.mdc"))
@@ -723,7 +727,7 @@ class AgentSkillCatalogTests(unittest.TestCase):
                     self.assertIn("## Upstream baseline", skill_text)
 
                 self.assertIsInstance(adapter, dict)
-                expected_implicit_policy = skill_name != "caveman"
+                expected_implicit_policy = True
                 self.assertEqual(
                     expected_implicit_policy,
                     adapter.get("policy", {}).get("allow_implicit_invocation"),

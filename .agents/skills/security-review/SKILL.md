@@ -13,7 +13,7 @@ Use this skill when reviewing or changing security-sensitive code outside a scan
 
 ## Repo overlay
 
-- Start from `third_party/ecc-v2.0.0/skills/security-review/SKILL.md` and follow the mandatory security read order in `AGENTS.md`.
+- Follow the mandatory security read order in `AGENTS.md`. `third_party/ecc-v2.0.0/skills/security-review/SKILL.md` is provenance; load it only for missing task-specific guidance.
 - Focus on helper and boundary correctness: uploads, filesystem paths, SQL, responses, subprocesses, Docker/workflows, outbound HTTP, logs, and secrets.
 - Prefer root-cause fixes over suppressions or call-site patches.
 - Treat env parsing and shell interpolation as security boundaries, not convenience helpers.

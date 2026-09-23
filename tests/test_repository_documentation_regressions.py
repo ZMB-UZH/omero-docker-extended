@@ -9,6 +9,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tests.agent_instruction_helpers import read_instruction_contract
+
 import yaml
 
 
@@ -554,7 +556,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
 
         expected_phrases = {
-            "AGENTS.md": "storage-quota reconciliation loop under `supervisord`",
+            "docs/reference/ai-agent-task-contracts.md": "storage-quota reconciliation loop under `supervisord`",
             "ARCHITECTURE.md": "The `omeroweb` container runs four processes via supervisord",
             "docs/RELIABILITY.md": "The `omeroweb` container runs four processes via supervisord",
             "docs/architecture/system-overview.md": "as four supervised processes",
@@ -729,7 +731,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in doc compaction requires objective meaning preservation.
         """
-        agents_text = self.read_text("AGENTS.md")
+        agents_text = read_instruction_contract(self.repo_root, "AGENTS.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         docs_skill_text = self.read_text(
             ".agents/skills/docs-knowledge-maintainer/SKILL.md"
@@ -750,7 +752,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".cursor/rules/00-omero-core.mdc",
         ):
             with self.subTest(adapter_path=adapter_path):
-                adapter_text = " ".join(self.read_text(adapter_path).split())
+                adapter_text = " ".join(
+                    read_instruction_contract(self.repo_root, adapter_path).split()
+                )
                 self.assertIn("fewer lines", adapter_text)
                 self.assertRegex(adapter_text, r"(parity|full parity)")
         self.assertIn("compact rewrites", docs_skill_text)
@@ -762,7 +766,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         Inputs: repository instruction fixtures. Output: verifies efficient
         verification rules retain the final-tree quality gate.
         """
-        agents_text = self.read_text("AGENTS.md")
+        agents_text = read_instruction_contract(self.repo_root, "AGENTS.md")
         context_skill = self.read_text(".agents/skills/context-budget/SKILL.md")
         verification_skill = self.read_text(".agents/skills/verification-loop/SKILL.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
@@ -786,11 +790,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".cursor/rules/00-omero-core.mdc",
         ):
             with self.subTest(adapter_path=adapter_path):
-                adapter_text = " ".join(self.read_text(adapter_path).split())
-                self.assertIn("reuse fresh evidence", adapter_text)
-                self.assertRegex(
-                    adapter_text, r"never rerun unchanged (checks|checks or tools)"
+                adapter_text = " ".join(
+                    read_instruction_contract(self.repo_root, adapter_path).split()
                 )
+                self.assertIn("reuse fresh evidence", adapter_text)
+                self.assertIn("do not repeat a passing check", adapter_text)
 
     def test_agent_instructions_close_proven_retry_loops_after_verification(
         self,
@@ -799,7 +803,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in agent instructions close proven retry loops after verification.
         """
-        agents_text = self.read_text("AGENTS.md")
+        agents_text = read_instruction_contract(self.repo_root, "AGENTS.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         docs_skill_text = self.read_text(
@@ -823,8 +827,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         for adapter_path in adapter_paths:
             with self.subTest(adapter_path=adapter_path):
-                adapter_text = " ".join(self.read_text(adapter_path).split())
-                self.assertIn("proven bad instructions/tools", adapter_text)
+                adapter_text = " ".join(
+                    read_instruction_contract(self.repo_root, adapter_path).split()
+                )
+                self.assertIn("proven avoidable retry/error loop", adapter_text)
                 self.assertIn("correct workflow", adapter_text)
 
     def test_codex_security_scan_requires_explicit_user_authorization(
@@ -848,7 +854,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".github/copilot-instructions.md",
             ".cursor/rules/00-omero-core.mdc",
         ):
-            text = " ".join(self.read_text(relative_path).split())
+            text = " ".join(
+                read_instruction_contract(self.repo_root, relative_path).split()
+            )
             with self.subTest(relative_path=relative_path):
                 for phrase in expected_phrases:
                     self.assertIn(phrase, text)
@@ -880,7 +888,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".cursor/rules/00-omero-core.mdc",
         ):
             with self.subTest(adapter_path=adapter_path):
-                adapter_text = " ".join(self.read_text(adapter_path).split())
+                adapter_text = " ".join(
+                    read_instruction_contract(self.repo_root, adapter_path).split()
+                )
                 self.assertIn("exact", adapter_text)
                 self.assertIn("before commit/push", adapter_text)
                 self.assertIn("dirty", adapter_text)
@@ -901,7 +911,9 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         normalized_runbook_text = " ".join(runbook_text.split())
-        normalized_agents_text = " ".join(self.read_text("AGENTS.md").split())
+        normalized_agents_text = " ".join(
+            read_instruction_contract(self.repo_root, "AGENTS.md").split()
+        )
         self.assertIn(
             "do not search for, create, restore, or edit",
             normalized_agents_text.lower(),
@@ -913,7 +925,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".github/copilot-instructions.md",
             ".cursor/rules/00-omero-core.mdc",
         ):
-            self.assertIn(".deepsource.toml", self.read_text(adapter_path))
+            self.assertIn(
+                ".deepsource.toml",
+                read_instruction_contract(self.repo_root, adapter_path),
+            )
         self.assertIn(expected_phrase, normalized_runbook_text)
         self.assertIn(
             "GitHub PAT is not a DeepSource API credential", normalized_runbook_text
@@ -987,7 +1002,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ".github/copilot-instructions.md",
             ".cursor/rules/00-omero-core.mdc",
         ):
-            adapter_text = self.read_text(adapter_path)
+            adapter_text = read_instruction_contract(self.repo_root, adapter_path)
             normalized_adapter_text = " ".join(adapter_text.split())
             self.assertIn(".deepsource.toml", adapter_text)
             self.assertIn("ask immediately", normalized_adapter_text)
@@ -999,12 +1014,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.assertIn("subscription", normalized_adapter_text)
             self.assertRegex(
                 normalized_adapter_text,
-                r"(did not increase|no DeepSource count increase)",
+                r"(did not increase|no DeepSource count increase|count increased)",
             )
-        self.assertIn(expected_auth_phrase, self.read_text("CLAUDE.md"))
+        self.assertIn(
+            expected_auth_phrase, read_instruction_contract(self.repo_root, "CLAUDE.md")
+        )
         self.assertIn(
             expected_auth_phrase,
-            self.read_text(".github/copilot-instructions.md"),
+            read_instruction_contract(
+                self.repo_root, ".github/copilot-instructions.md"
+            ),
         )
         self.assertIn("GitHub PAT", normalized_agents_text)
         self.assertIn(
@@ -1020,10 +1039,11 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("do not retry auth failures", normalized_agents_text)
         self.assertIn(
             "After every push, verify GitHub workflows are green",
-            self.read_text("AGENTS.md"),
+            read_instruction_contract(self.repo_root, "AGENTS.md"),
         )
         self.assertIn(
-            "issue occurrences for the pushed commit", self.read_text("AGENTS.md")
+            "issue occurrences for the pushed commit",
+            read_instruction_contract(self.repo_root, "AGENTS.md"),
         )
         self.assertIn(
             "DeepSource auth or subscription failures are non-blocking",
@@ -1139,7 +1159,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         for path in entrypoints:
             with self.subTest(path=path):
-                text = " ".join(self.read_text(path).split())
+                text = " ".join(read_instruction_contract(self.repo_root, path).split())
                 self.assertIn("current remote default branch", text)
                 self.assertIn("unless the user explicitly names another branch", text)
                 self.assertRegex(
@@ -1148,7 +1168,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 )
                 self.assertIn("draft PRs", text)
 
-        agents_text = self.read_text("AGENTS.md")
+        agents_text = read_instruction_contract(self.repo_root, "AGENTS.md")
         runtime_text = self.read_text("docs/reference/ai-agent-runtime-playbook.md")
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         self.assertIn("never hard-code `main`", agents_text)
@@ -1170,7 +1190,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in markdownlint command is pinned integration.
         """
         expected = "npx --yes markdownlint-cli2@0.23.2"
-        self.assertIn(expected, self.read_text("AGENTS.md"))
+        self.assertIn(expected, read_instruction_contract(self.repo_root, "AGENTS.md"))
         self.assertIn(
             expected,
             self.read_text("docs/reference/plugin-help-page-style-guide.md"),
@@ -1393,7 +1413,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         tracked_docs = [
             "README.md",
             "ARCHITECTURE.md",
-            "AGENTS.md",
+            "docs/reference/ai-agent-task-contracts.md",
             "docs/references/docker-compose-llms.txt",
         ]
         for relative_path in tracked_docs:
@@ -1649,7 +1669,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.assertIn(phrase, guide_text)
 
         expected_references = {
-            "AGENTS.md": "docs/reference/plugin-help-page-style-guide.md",
+            "docs/reference/ai-agent-task-contracts.md": "docs/reference/plugin-help-page-style-guide.md",
             "docs/index.md": "reference/plugin-help-page-style-guide.md",
             "docs/reference/ai-agent-context-routing.md": (
                 "docs/reference/plugin-help-page-style-guide.md"

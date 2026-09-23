@@ -11,7 +11,7 @@ Use this skill after any non-trivial change and before committing, pushing, or o
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` for the generic verify-before-finish workflow.
+`third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Verification order
 

@@ -6,10 +6,10 @@ The goal is to support the major documented instruction systems without changing
 
 ## Precedence
 
-Apply guidance in this order:
+Apply guidance in this order when relevant; this is precedence, not a startup reading list:
 
 1. `AGENTS.md`
-2. `docs/reference/ai-agent-context-routing.md`
+2. Triggered sections of `docs/reference/ai-agent-task-contracts.md` and `docs/reference/ai-agent-context-routing.md`
 3. `docs/reference/ai-agent-runtime-playbook.md`
 4. `docs/reference/ai-agent-security-prevention-playbook.md`
 5. `docs/reference/code-scanning-resolved-findings.md`
@@ -27,9 +27,10 @@ loaded security skill requires.
 
 ## Karpathy baseline
 
-`AGENTS.md` carries a compact, pinned Karpathy agent baseline sourced from
+`AGENTS.md` routes engineering work to the pinned Karpathy agent baseline in
+`docs/reference/ai-agent-task-contracts.md`, sourced from
 `forrestchang/andrej-karpathy-skills@2c606141936f1eeef17fa3043a72095b4765b9c2`.
-It is centralized in the universal entrypoint so Claude, Gemini, Copilot, and
+It has one canonical definition so Claude, Gemini, Copilot, and
 Cursor inherit the same four-principle behavior without duplicating full prompt
 text in each adapter.
 
@@ -71,16 +72,16 @@ This avoids importing ECC hooks, commands, multi-agent orchestration, or platfor
 
 ## caveman integration model
 
-This repository also carries an opt-in `caveman` communication overlay:
+This repository requires the `caveman` lite communication overlay by default:
 
 - vendored upstream prompt reference material under `third_party/caveman-v2.2.0/`
 - a repo-local overlay at `.agents/skills/caveman/`
 - shared-skill catalog routing in `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and `.cursor/rules/00-omero-core.mdc`
 
-Compression stays opt-in and quality-first:
+Compression is mandatory and quality-first:
 
 - use `context-budget` to reduce input/context cost first
-- use `caveman` only when the user explicitly asks for lower-token replies
+- apply `caveman` lite to internal AI communication on every task for lower-token work; no separate user request is needed
 - expose `caveman` through the same shared `.agents/skills/` catalog as every other skill; do not make it Codex-only
 - start at lite compression in this repo and return to normal detail whenever safety, sequencing, or ambiguity matters
 - keep `caveman` limited to internal AI communication and prompting; repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text stay in normal prose
@@ -89,8 +90,8 @@ Compression stays opt-in and quality-first:
 The local overlay preserves negation, numbers, units, code symbols, and normal
 persisted prose. It follows explicit reply-language instructions before the
 conversation's dominant language, as clarified upstream in `v2.7.0`.
-Token savings depend on the task; this repository makes no measured percentage
-claim. Only applicable prompt-level guidance is adopted. Upstream activation,
+End-to-end token savings depend on the task, model, caching, and tool output.
+Instruction-size measurements are not billing or code-quality measurements. Only applicable prompt-level guidance is adopted. Upstream activation,
 hooks, installers, MCP, subagents, statusline, stats, credential routing, and
 context rewriting remain disabled.
 
@@ -99,8 +100,8 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 ## What is intentionally imported
 
 - engineering skills relevant to this repo: Python, Django, testing, verification, Docker, deployment, PostgreSQL, security, research, and context-budget control
-- the opt-in `caveman` overlay for lower-token replies when the user explicitly requests terseness
-- the compact, pinned Karpathy baseline in `AGENTS.md`
+- the mandatory `caveman` lite overlay for lower-token internal AI communication
+- the compact, pinned Karpathy baseline in the shared task contracts
 - ECC provenance and license material for the selected upstream skills
 - harness-specific adapters that route agents into the repo's existing docs and tests
 
@@ -115,13 +116,60 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 
 ## Token and speed guidance
 
+`AGENTS.md` retains unconditional safeguards and action triggers. Conditional
+procedures live in `docs/reference/ai-agent-task-contracts.md`; native adapters
+must explicitly inherit AGENTS rather than copy its paragraphs. Tests validate
+both raw entrypoint links/budgets and the inherited policy. Broken inheritance
+must fail; concatenating unrelated documents is not evidence of preserved rules.
+
+Run `python3 tools/lint_docs_structure.py --context-report` for deterministic
+UTF-8 byte sizes and ceilings. This JSON report runs all validations and returns
+nonzero on failure; it does not estimate model tokens. Byte limits complement
+line limits and cannot be bypassed by joining prose into a long line. Report
+actual tokenizer counts separately, with the encoding and baseline revision.
+
+Routine tasks load only their matching skills. Vendored upstream material is
+provenance or missing-detail reference, not another compulsory startup prompt.
+Keep complete raw logs outside committed source; summarize successful checks,
+preserve command exit status, and inspect every relevant failure. Never hide
+findings or shrink testing scope to meet a context budget.
+
+### Measured instruction footprint
+
+Measured on 2026-09-23 against commit `86e53e30d61515ff12bc251059de2ea82e67e479`,
+using `tiktoken==0.14.0` with `o200k_base` and LF-normalized UTF-8 source:
+
+| Surface | Before tokens | After tokens |
+| --- | ---: | ---: |
+| AGENTS | 4,576 | 1,322 |
+| Claude adapter | 1,756 | 156 |
+| Gemini adapter | 1,201 | 134 |
+| Copilot adapter | 1,422 | 151 |
+| Cursor core adapter | 826 | 158 |
+| CocoIndex skill | 2,083 | 1,068 |
+
+The shared entrypoint is 71% smaller. A Claude adapter plus AGENTS is 77%
+smaller before task-specific reads. These are static input-token measurements,
+not total session savings, model reasoning measurements, or a quality benchmark.
+Conditional safety procedures remain intact and still cost context when needed.
+Reproduce by encoding each baseline `git show <revision>:<path>` and current
+file with `tiktoken.get_encoding("o200k_base").encode(text)`; count the returned
+IDs. Do not extrapolate upstream Caveman benchmarks to this repository.
+
+The [Caveman upstream guidance](https://github.com/JuliusBrussee/caveman)
+distinguishes style savings from tool-input compression. This integration uses
+the reviewed prompt overlay only: no proxy, telemetry, credential interception,
+or lossy rewriting of source, user prompts, or evidence. The
+[CocoIndex contract](https://github.com/cocoindex-io/cocoindex-code/tree/v0.2.41)
+remains pinned and supports scoped semantic retrieval rather than bulk reads.
+
 The adapter set is designed to improve accuracy first, then reduce wasted context:
 
 - route agents into `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and the nearest domain doc before broad repo reads
 - keep the routing doc's numeric caps CI-validated so first-pass reads, refine loops, and escalation stay bounded
-- keep the Karpathy baseline centralized in `AGENTS.md` instead of duplicating it across adapters
+- keep the Karpathy baseline centralized in the shared task contracts instead of duplicating it across adapters
 - expose reusable workflows through `.agents/skills/`
-- prefer `context-budget` for input reduction and the opt-in `caveman` overlay for output reduction
+- prefer `context-budget` for input reduction and mandatory `caveman` lite for internal output reduction
 - add path-specific Copilot and Cursor guidance so agents do not rediscover the same rules every time
 - keep skills in `.agents/skills/` as the all-agent source of truth; adapter files may point to the catalog but should not duplicate full skill bodies
 - keep all workflows single-session; skills and adapters must not introduce

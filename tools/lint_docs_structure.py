@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -127,6 +128,14 @@ def validate_context_surfaces(repo_root: Path) -> list[ValidationError]:
             errors.append(ValidationError(f"Missing context surface: {rel_path}"))
             continue
         text = path.read_text(encoding="utf-8")
+        byte_count = len(text.encode("utf-8"))
+        if contract.max_utf8_bytes is not None and byte_count > contract.max_utf8_bytes:
+            errors.append(
+                ValidationError(
+                    f"{rel_path} exceeds UTF-8 context budget: "
+                    f"{byte_count} bytes > {contract.max_utf8_bytes}"
+                )
+            )
         if contract.max_nonempty_lines is not None:
             nonempty_lines = [line for line in text.splitlines() if line.strip()]
             if len(nonempty_lines) > contract.max_nonempty_lines:
@@ -255,6 +264,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description="Validate repository documentation structure and agent surfaces."
     )
     parser.add_argument(
+        "--context-report",
+        action="store_true",
+        help="Report instruction sizes and budgets as JSON; still run every validation.",
+    )
+    parser.add_argument(
         "--repo-root",
         type=Path,
         default=Path(__file__).resolve().parents[1],
@@ -271,6 +285,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = args.repo_root
     errors: Sequence[ValidationError] = run_validations(repo_root)
+    if args.context_report:
+        print(
+            json.dumps(
+                {
+                    "surfaces": context_size_report(repo_root),
+                    "errors": [error.message for error in errors],
+                },
+                indent=2,
+            )
+        )
+        return int(bool(errors))
     if errors:
         for error in errors:
             print(f"ERROR: {error.message}")
@@ -278,6 +303,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print("Documentation structure validation passed.")
     return 0
+
+
+def context_size_report(repo_root: Path) -> dict[str, dict[str, int | None]]:
+    """Report normalized UTF-8 sizes, not model tokens or billing estimates.
+
+    Inputs: repository root. Output: existing policy paths with byte counts and caps.
+    """
+    return {
+        relative_path: {
+            "utf8_bytes": len(path.read_text(encoding="utf-8").encode("utf-8")),
+            "max_utf8_bytes": contract.max_utf8_bytes,
+        }
+        for relative_path, contract in CONTEXT_SURFACE_CONTRACTS.items()
+        if (path := repo_root / relative_path).is_file()
+    }
 
 
 if __name__ == "__main__":

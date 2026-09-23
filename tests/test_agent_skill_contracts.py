@@ -10,6 +10,8 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
+from tests.agent_instruction_helpers import read_instruction_contract
+
 import yaml
 
 from tools import agent_skill_provenance
@@ -343,13 +345,28 @@ class AgentSkillContractTests(unittest.TestCase):
     COMPACT_SKILL_LINE_BUDGETS: dict[str, int] = {
         "ai-regression-testing": 24,
         "caveman": 24,
-        "context-budget": 32,
+        "context-budget": 34,
         "env-contract-reviewer": 44,
         "plugin-regression-triager": 41,
         "search-first": 41,
         "security-review": 24,
         "verification-loop": 82,
     }
+
+    def test_all_skill_entrypoints_have_bounded_discovery_and_body_cost(self) -> None:
+        """Prevent new prompt bloat without constraining linked reference depth.
+
+        Inputs: all local skill bodies and metadata. Output: size and loading-policy assertions.
+        """
+        for name, text in self.skill_texts.items():
+            with self.subTest(skill=name):
+                self.assertLessEqual(len(text.encode("utf-8")), 6500, name)
+                self.assertLessEqual(
+                    len(self.frontmatters[name]["description"].encode("utf-8")),
+                    300,
+                    name,
+                )
+                self.assertNotIn("Start from `third_party/", text)
 
     @staticmethod
     def parse_frontmatter(skill_text: str) -> dict[str, object]:
@@ -573,7 +590,7 @@ class AgentSkillContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in agent surfaces use only valid repo references.
         """
         surfaces = {
-            "AGENTS.md": (self.repo_root / "AGENTS.md").read_text(encoding="utf-8"),
+            "AGENTS.md": read_instruction_contract(self.repo_root, "AGENTS.md"),
             "docs/reference/ai-agent-skills.md": (
                 self.repo_root / "docs" / "reference" / "ai-agent-skills.md"
             ).read_text(encoding="utf-8"),
@@ -657,8 +674,8 @@ class AgentSkillContractTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED_SPLIT_TEST_SUITES), discovered)
 
         surfaces = {
-            "AGENTS.md": (self.repo_root / "AGENTS.md").read_text(encoding="utf-8"),
-            "CLAUDE.md": (self.repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            "AGENTS.md": read_instruction_contract(self.repo_root, "AGENTS.md"),
+            "CLAUDE.md": read_instruction_contract(self.repo_root, "CLAUDE.md"),
             "docs/reference/ai-agent-context-routing.md": (
                 self.repo_root / "docs" / "reference" / "ai-agent-context-routing.md"
             ).read_text(encoding="utf-8"),
@@ -706,7 +723,7 @@ class AgentSkillContractTests(unittest.TestCase):
             "exploit-enabling detail",
         )
         for relative_path in relative_paths:
-            text = (self.repo_root / relative_path).read_text(encoding="utf-8")
+            text = read_instruction_contract(self.repo_root, relative_path)
             normalized_text = " ".join(text.lower().split())
             with self.subTest(relative_path=relative_path):
                 for token in required_tokens:
@@ -718,6 +735,34 @@ class AgentSkillContractTests(unittest.TestCase):
                 self.assertIn("fresh", normalized_text)
                 self.assertRegex(normalized_text, r"carr(?:y|ies) forward")
 
+    def test_conditional_instructions_preserve_approval_and_secret_boundaries(
+        self,
+    ) -> None:
+        """Prevent task-specific advice from contradicting the safety baseline.
+
+        Inputs: every canonical policy inheritance chain. Output: retained
+        per-object approval and value-nondisclosure assertions.
+        """
+        for path in (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md",
+            ".cursor/rules/00-omero-core.mdc",
+        ):
+            with self.subTest(path=path):
+                text = " ".join(read_instruction_contract(self.repo_root, path).split())
+                self.assertIn(
+                    "Obtain fresh approval for each branch deletion or PR closure before cleanup",
+                    text,
+                )
+                self.assertIn("accidental creation does not authorize deletion", text)
+                self.assertIn(
+                    "report the key name and required action only, never the configured value without exact authorization",
+                    text,
+                )
+                self.assertNotIn("report the exact key and value", text)
+
     def test_agent_surfaces_avoid_host_specific_clone_paths(self) -> None:
         """Verify agent surfaces avoid host specific clone paths.
 
@@ -727,7 +772,7 @@ class AgentSkillContractTests(unittest.TestCase):
             ".claude/settings.json": (
                 self.repo_root / ".claude" / "settings.json"
             ).read_text(encoding="utf-8"),
-            "CLAUDE.md": (self.repo_root / "CLAUDE.md").read_text(encoding="utf-8"),
+            "CLAUDE.md": read_instruction_contract(self.repo_root, "CLAUDE.md"),
             "GEMINI.md": (self.repo_root / "GEMINI.md").read_text(encoding="utf-8"),
             "docs/reference/ai-agent-integrations.md": (
                 self.repo_root / "docs" / "reference" / "ai-agent-integrations.md"

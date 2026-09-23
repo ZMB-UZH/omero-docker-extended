@@ -11,7 +11,7 @@ Use this skill whenever the answer depends on current library, framework, image,
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/documentation-lookup/SKILL.md` for the generic documentation-first workflow.
+`third_party/ecc-v2.0.0/skills/documentation-lookup/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## When to activate
 
@@ -31,7 +31,7 @@ Start from `third_party/ecc-v2.0.0/skills/documentation-lookup/SKILL.md` for the
 
 ## Repo-specific source map
 
-- Repository policy and navigation: `AGENTS.md`, `CLAUDE.md`, `README.md`, `ARCHITECTURE.md`, `docs/index.md`
+- Repository policy: `AGENTS.md` and its triggered task contracts; use the nearest domain doc, not another harness adapter or the whole doc hub.
 - Security policy: `docs/reference/ai-agent-security-prevention-playbook.md`
 - Live scanning state: `docs/operations/code-scanning.md`
 - Closed finding history: `docs/reference/code-scanning-resolved-findings.md`

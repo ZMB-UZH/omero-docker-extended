@@ -9,6 +9,8 @@ import subprocess
 import sys
 import venv
 from pathlib import Path, PurePosixPath
+
+from tests.agent_instruction_helpers import read_instruction_contract
 from types import SimpleNamespace
 from unittest import mock
 
@@ -2698,7 +2700,7 @@ def test_cross_agent_surfaces_describe_generic_cocoindex_workflow() -> None:
     )
 
     for relative_path in tracked_surfaces:
-        text = (repo_root / relative_path).read_text(encoding="utf-8")
+        text = read_instruction_contract(repo_root, relative_path)
         assert "cocoindex-code-search" in text, relative_path
         assert "MCP" in text and "cocoindex-code" in text, relative_path
         assert "mandatory" in text.lower(), relative_path

@@ -11,7 +11,7 @@ Use this skill when changing Dockerfiles, `docker-compose.yml`, startup scripts,
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic container and Compose patterns.
+`third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 
@@ -38,7 +38,7 @@ Start from `third_party/ecc-v2.0.0/skills/docker-patterns/SKILL.md` for generic 
 - Never delete a pre-existing Docker image or tag without fresh approval naming
   that one object. Approval for a replacement, prior run, or same version does
   not carry forward.
-- For live runtime probing, follow the Loki-first and service-user rules in `AGENTS.md`.
+- For live runtime probing, follow the Loki-first and service-user rules in `docs/reference/ai-agent-runtime-playbook.md`.
 - Test installer changes against disposable Linux project copies with isolated
   configuration and data roots. Keep the source checkout read-only in test
   containers and never mount the live Docker socket into an installer harness.

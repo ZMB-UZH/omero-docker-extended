@@ -653,7 +653,7 @@ Both operations are designed for online use. However, they may briefly acquire l
 <summary><h2>Documentation</h2></summary>
 
 Optional AI Agent compression is available to all supported agents via the
-opt-in [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
+mandatory lite [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
 internal AI communication only. Repository documentation, comments, docstrings,
 function descriptions, and user-facing text stay in standard prose.
 

@@ -1,17 +1,17 @@
 ---
 name: caveman
-description: Lower output token usage on demand for all AI Agents without sacrificing technical accuracy, safety, or repo-specific clarity.
+description: Mandatory lite compression for internal AI communication; preserve exact evidence, safety, and normal public prose.
 origin: repo-local caveman overlay adapted from caveman v2.2.0 for OMERO Docker Extended
 ---
 
 # caveman
 
-Use this skill only when the user explicitly asks for lower-token replies, terse mode, `$caveman`, or "less tokens".
+Apply this skill by default in every task. Lower token usage is mandatory, not opt-in; use lite compression for internal AI communication only.
 
 ## Route first
 
-- Keep `AGENTS.md`, `docs/reference/ai-agent-context-routing.md`, and `docs/reference/ai-agent-skills.md` as the primary contract.
-- Use `context-budget` to cut input/context cost first and `caveman` second. All supported agents share this overlay; its upstream reference is `third_party/caveman-v2.2.0/skills/caveman/SKILL.md`.
+- Keep `AGENTS.md` as the primary contract; use the context router only when the task location is unknown. Do not load the entire skill catalog.
+- Use `context-budget` to cut input/context cost first and `caveman` second. All supported agents share this overlay; `third_party/caveman-v2.2.0/skills/caveman/SKILL.md` is provenance, not a required read.
 - `caveman` is for internal AI reply/prompting only. Never use caveman prose in persisted text for other people: docs, comments, docstrings, commits, issues, pull requests, defect reports, messages, and user-facing copy always use normal prose. It changes response style only and must not change context selection, tool choice, verification scope, or clarification decisions.
 - This repo does not import upstream hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`, `off`, `caveman-help`, `/compress` rewriting, stats/statusline scripts, `caveman-shrink`, `caveman-init`, cavecrew subagents, or smart-installer side effects.
 

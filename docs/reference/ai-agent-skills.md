@@ -8,10 +8,10 @@ ECC-derived overlays point back to the pinned upstream snapshot in `third_party/
 
 ## Precedence
 
-Apply guidance in this order:
+Apply relevant guidance in this order; this is precedence, not a startup reading list:
 
 1. `AGENTS.md`
-2. `docs/reference/ai-agent-context-routing.md`
+2. Triggered sections of `docs/reference/ai-agent-task-contracts.md` and `docs/reference/ai-agent-context-routing.md`
 3. `docs/reference/ai-agent-security-prevention-playbook.md`
 4. the relevant skill in `.agents/skills/`
 5. harness-specific files such as `CLAUDE.md`
@@ -22,7 +22,7 @@ split-pytest policy, or environment-driven configuration model. The only
 single-session exception is explicitly authorized, on-demand Codex Security
 vulnerability scanning when the loaded security skill requires it.
 
-Opt-in compression skills are advisory only. They never override risk handling, safety warnings, exact dates, or clarity-first explanations.
+The mandatory caveman lite policy never overrides risk handling, safety warnings, exact dates, or clarity-first explanations. Its required fallback is normal detail whenever compression would obscure meaning.
 
 ## Repo-native operational skills
 
@@ -36,7 +36,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
 | `source-audit` | `.agents/skills/source-audit/SKILL.md` | before giving advice or claims based on web research | final answers separate confirmed facts, inference, and open gaps |
 | `compliance-and-rate-limit` | `.agents/skills/compliance-and-rate-limit/SKILL.md` | when repeated requests, crawling, or larger-scope extraction could create policy or load risk | collection stays cache-aware, paced, and non-evasive |
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before commit/push | verification states exactly what was checked and what was blocked |
-| `caveman` | `.agents/skills/caveman/SKILL.md` | when the user explicitly asks for lower-token replies or terse mode in AI communication | output tokens drop without losing technical substance or safety |
+| `caveman` | `.agents/skills/caveman/SKILL.md` | mandatory lite compression for internal AI communication on every task | output tokens drop without losing technical substance or safety |
 | `cocoindex-code-search` | `.agents/skills/cocoindex-code-search/SKILL.md` | when broad repo navigation needs semantic routing before exact validation | context drops by routing to fewer candidate files without replacing `rg` |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |
@@ -107,7 +107,7 @@ Opt-in compression skills are advisory only. They never override risk handling, 
   claim broader agent compatibility without testing that client's MCP config and
   a real `mcp-smoke` equivalent.
 - Never paste secrets, PATs, passwords, or internal-only URLs into external research tools.
-- `caveman` is opt-in and available through the shared `.agents/skills/` catalog like every other skill. Use it only when the user asks for terseness or lower token usage, and drop it immediately if clarity or safety would suffer.
+- `caveman` lite is mandatory for lower token usage in internal AI communication. It is available through the shared `.agents/skills/` catalog; no explicit invocation is required. Expand to normal detail immediately if clarity or safety would suffer.
 - `caveman` is limited to internal AI communication and prompting. Keep repository docs, comments, docstrings, function descriptions, commit messages, and user-facing text in normal prose.
 - `caveman` changes reply style only. It never changes routing, tool use, verification scope, or the need to surface uncertainty clearly.
 - The repo-local overlay intentionally stays narrower than upstream `v2.2.0`:

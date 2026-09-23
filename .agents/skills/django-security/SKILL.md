@@ -11,7 +11,7 @@ Use this skill when touching Django views, uploads, JSON responses, templates, o
 
 ## Upstream baseline
 
-Start from `third_party/ecc-v2.0.0/skills/django-security/SKILL.md` for the generic Django security checklist.
+`third_party/ecc-v2.0.0/skills/django-security/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
 
 ## Repo overlay
 
