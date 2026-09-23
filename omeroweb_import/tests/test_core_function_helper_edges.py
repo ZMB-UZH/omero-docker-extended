@@ -497,12 +497,15 @@ def test_background_import_session_covers_missing_error_and_cleanup_paths(
     assert created == [(("alice", "users_private", "User"), 12000, 12000)]
     assert len(closed) == 1
 
-    with pytest.raises(RuntimeError, match="^attachment failed$"):
-        with core_functions._background_import_session(
-            "alice", "omeroserver", 4064, group_name="users_private"
-        ) as key:
-            assert key == "background-session"
-            raise RuntimeError("attachment failed")
+    session_context = core_functions._background_import_session(
+        "alice", "omeroserver", 4064, group_name="users_private"
+    )
+    assert session_context.__enter__() == "background-session"
+    # A body failure must propagate, not be suppressed or trigger a second yield.
+    assert (
+        session_context.__exit__(RuntimeError, RuntimeError("attachment failed"), None)
+        is False
+    )
     assert len(closed) == 2
 
     failing_service = SimpleNamespace(
