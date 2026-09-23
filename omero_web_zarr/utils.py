@@ -1240,24 +1240,28 @@ def _channel_limits(entry, data):
         low = float(entry[0])
         high = float(entry[1])
     else:
-        low = float(np.nanmin(data))
-        high = float(np.nanmax(data))
+        finite = np.isfinite(data)
+        if not finite.any():
+            return 0.0, 0.0
+        low = float(np.min(data, where=finite, initial=np.inf))
+        high = float(np.max(data, where=finite, initial=-np.inf))
     return low, high
 
 
 def _normalize_to_uint8(data, limits=None):
-    """Normalize the to uint8.
+    """Normalize finite samples to an 8-bit display plane; invalid samples are black.
 
     Inputs: `data` payload, `limits`. Output: `astype` result.
     """
     plane = np.asarray(data, dtype=np.float32)
+    finite = np.isfinite(plane)
     low, high = _channel_limits(limits, plane)
     if not np.isfinite(low) or not np.isfinite(high):
         return np.zeros(plane.shape, dtype=np.uint8)
     if high <= low:
         fill_value = 255 if high > 0 else 0
-        return np.full(plane.shape, fill_value, dtype=np.uint8)
-    clipped = np.clip(plane, low, high)
+        return np.where(finite, fill_value, 0).astype(np.uint8)
+    clipped = np.clip(np.where(finite, plane, low), low, high)
     scaled = (clipped - low) / (high - low)
     return np.round(scaled * 255.0).astype(np.uint8)
 
@@ -1289,15 +1293,22 @@ def render_store_backed_plane(
         height=height,
     )
     metadata = getattr(node, "metadata", {}) or {}
+    visible = metadata.get("visible") or []
 
     if plane.ndim == 2 or "c" not in remaining_axes:
+        if visible and not visible[0]:
+            return np.zeros(plane.shape, dtype=np.uint8)
         return _normalize_to_uint8(plane)
 
     if plane.shape[0] == 1:
         single_color = _channel_color((metadata.get("colormap") or [None])[0], 0)
-        single_plane = _normalize_to_uint8(
-            plane[0],
-            (metadata.get("contrast_limits") or [None])[0],
+        single_plane = (
+            np.zeros(plane.shape[1:], dtype=np.uint8)
+            if visible and not visible[0]
+            else _normalize_to_uint8(
+                plane[0],
+                (metadata.get("contrast_limits") or [None])[0],
+            )
         )
         if single_color == (255, 255, 255):
             return single_plane
@@ -1308,7 +1319,6 @@ def render_store_backed_plane(
             ).astype(np.uint8)
         return rgb
 
-    visible = metadata.get("visible") or []
     limits = metadata.get("contrast_limits") or []
     colormap = metadata.get("colormap") or []
 
@@ -1338,7 +1348,7 @@ def render_store_backed_plane(
         composite += normalized[..., None] * color
 
     if not any_visible:
-        return _normalize_to_uint8(plane[0], limits[0] if limits else None)
+        return np.zeros(plane.shape[1:], dtype=np.uint8)
 
     return np.clip(np.round(composite * 255.0), 0, 255).astype(np.uint8)
 

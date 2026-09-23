@@ -38,6 +38,33 @@ before rejection. Workflow contracts exercise the actual Bash guard with clean,
 non-empty, missing, and malformed reports and require analysis before validation
 before upload.
 
+Each controlled upload is followed by
+`tools/security_delta_guard.py --sarif-id ... --expected-sha ...`. This gate
+checks the exact upload's processing status and every associated analysis
+record against the workflow commit. Missing records, mismatched identities,
+analysis errors, API failures, and expired polling deadlines fail closed.
+Successful upload transport alone is not a successful code scan.
+
+## Analysis Processing Errors
+
+A DevSkim upload once returned `processing_status: complete` without upload
+errors, while its analysis record contained `Unknown Error`. The job was green
+even though the tool-status page correctly reported failure. A single rerun
+of the same job and commit produced an error-free analysis from byte-identical
+SARIF. This establishes an intermittent processing failure; it does not
+establish a scanner regression or identify a particular GitHub outage.
+
+When this occurs, preserve the raw report and inspect the exact upload and
+analysis records through the [GitHub code-scanning API](https://docs.github.com/en/rest/code-scanning/code-scanning).
+Compare the scanner version, commit, category, and report hash with the last
+successful run. After checking GitHub Status and the job logs, retry the
+affected job once when the evidence supports a transient processing problem.
+Confirm the new analysis has an empty `error` field for the expected commit.
+Persistent failures require investigation or GitHub support, not repeated
+uploads, report rewriting, analysis deletion, or scanner-scope changes.
+
+## Scanner Execution And Scope
+
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
 OSV scans the repository recursively and explicitly parses every CI lockfile in

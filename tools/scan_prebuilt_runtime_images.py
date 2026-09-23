@@ -129,9 +129,11 @@ def scan_images(images: list[str], output_dir: Path) -> dict:
         name = image_id.split(":", 1)[1]
         sbom = output_dir / f"{name}.scout.json"
         report = output_dir / f"{name}.sarif.json"
-        # Scout temporary layers can be large. Reclaim only this invocation's
-        # scratch space after each image, without pruning Docker or shared caches.
-        with tempfile.TemporaryDirectory(prefix="omero-runtime-scout-") as scratch:
+        # Use the selected output filesystem: system tmp may be a small tmpfs.
+        # Reclaim only this image's private scratch, never shared caches.
+        with tempfile.TemporaryDirectory(
+            prefix="omero-runtime-scout-", dir=output_dir
+        ) as scratch:
             env = dict(
                 os.environ,
                 DOCKER_SCOUT_CACHE_FORMAT="tar",

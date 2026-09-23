@@ -19,7 +19,7 @@ import threading
 import time
 import tempfile
 import uuid
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 import omero
@@ -3816,32 +3816,33 @@ def _background_import_session(
     session = None
     session_key = None
     try:
-        resolved_group_name = _resolve_group_name(
-            admin_conn, group_id, group_name=group_name
-        )
-        principal = omero.sys.Principal(
-            (username or "").strip(),
-            resolved_group_name or "",
-            "User",
-        )
-        timeout_ms = (
-            _get_background_import_session_timeout_seconds(timeout_hint_seconds) * 1000
-        )
-        session = admin_conn.c.sf.getSessionService().createSessionWithTimeouts(
-            principal,
-            timeout_ms,
-            timeout_ms,
-        )
-        session_key = session.getUuid().getValue()
+        try:
+            resolved_group_name = _resolve_group_name(
+                admin_conn, group_id, group_name=group_name
+            )
+            principal = omero.sys.Principal(
+                (username or "").strip(),
+                resolved_group_name or "",
+                "User",
+            )
+            timeout_ms = (
+                _get_background_import_session_timeout_seconds(timeout_hint_seconds)
+                * 1000
+            )
+            session = admin_conn.c.sf.getSessionService().createSessionWithTimeouts(
+                principal,
+                timeout_ms,
+                timeout_ms,
+            )
+            session_key = session.getUuid().getValue()
+        except Exception as exc:
+            logger.error(
+                "Failed to create independent background OMERO session for user %s: %s",
+                sanitize_log_value(username),
+                sanitize_log_value(exc),
+                exc_info=sanitized_exc_info(exc),
+            )
         yield session_key
-    except Exception as exc:
-        logger.error(
-            "Failed to create independent background OMERO session for user %s: %s",
-            sanitize_log_value(username),
-            sanitize_log_value(exc),
-            exc_info=sanitized_exc_info(exc),
-        )
-        yield None
     finally:
         if session is not None:
             try:
@@ -5521,6 +5522,8 @@ def _append_txt_attachment_message(
     """
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
+    if not success:
+        _append_job_error(job, "SEM EDX: a TXT attachment could not be completed.")
 
 
 def _verify_import(conn, file_name: str, dataset_id=None):
@@ -9173,8 +9176,6 @@ def _process_import_job(job_id: str):
                             logger.debug(
                                 "Suppressed exception in cleanup", exc_info=True
                             )
-            session_key = job.get("session_key")
-
             # IMPORTANT: never join/close the user's active OMERO.web session here.
             # Doing so can terminate their login. We validate session indirectly by
             # executing the import command and handling any authentication failure.
@@ -9600,502 +9601,484 @@ def _process_import_job(job_id: str):
                     _save_job(job)
 
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
+                connection_stack = ExitStack()
                 try:
-                    conn = _open_service_connection(
-                        host, port, group_id=job.get("group_id")
+                    conn = connection_stack.enter_context(
+                        _background_user_connection(
+                            username,
+                            host=host,
+                            port=port,
+                            group_id=job.get("group_id"),
+                            group_name=job.get("group_name"),
+                            purpose="SEM EDX attachment lookup",
+                        )
                     )
                     if not conn:
                         logger.error(
-                            "Failed to open SEM-EDX service connection for TXT attachments"
+                            "Failed to open SEM-EDX background connection for TXT attachments"
                         )
                         _append_job_message(
                             job,
-                            "SEM EDX: failed to open service connection for TXT attachments",
+                            "SEM EDX: failed to open background connection for TXT attachments",
+                        )
+                        _append_job_error(
+                            job, "SEM EDX: TXT attachment service is unavailable."
                         )
                         _save_job(job)
                     else:
-                        try:
-                            entries_by_path = {
-                                entry.get("relative_path"): entry
-                                for entry in job.get("files", [])
-                            }
-                            attachment_count = 0
-                            total_attachments = sum(
-                                len(txt_paths)
-                                for txt_paths in sem_edx_associations.values()
-                                if isinstance(txt_paths, list)
+                        entries_by_path = {
+                            entry.get("relative_path"): entry
+                            for entry in job.get("files", [])
+                        }
+                        attachment_count = 0
+                        total_attachments = sum(
+                            len(txt_paths)
+                            for txt_paths in sem_edx_associations.values()
+                            if isinstance(txt_paths, list)
+                        )
+
+                        logger.info(
+                            "Processing %d SEM EDX text attachments for job %s",
+                            total_attachments,
+                            safe_job_id_for_log,
+                        )
+
+                        # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
+                        logger.info(
+                            "Pre-loading image cache for %d images",
+                            len(sem_edx_associations),
+                        )
+                        all_image_names = []
+                        image_to_dataset = {}  # Track which dataset each image should be in
+
+                        for image_rel in sem_edx_associations.keys():
+                            image_name = (
+                                PurePosixPath(image_rel).name if image_rel else ""
+                            )
+                            if image_name:
+                                all_image_names.append(image_name)
+                                if dataset_name_override:
+                                    dataset_name = dataset_name_override
+                                else:
+                                    dataset_name = _dataset_name_for_path(
+                                        image_rel,
+                                        orphan_dataset_name,
+                                    )
+                                dataset_id = dataset_map.get(dataset_name)
+                                image_to_dataset[image_name] = dataset_id
+
+                        # Do batch lookup - this is 100-1000x faster than individual lookups
+                        image_cache = {}
+                        datasets_to_search = set(image_to_dataset.values())
+
+                        for dataset_id in datasets_to_search:
+                            if dataset_id:
+                                # Find all images for this dataset
+                                dataset_images = [
+                                    name
+                                    for name, did in image_to_dataset.items()
+                                    if did == dataset_id
+                                ]
+                                if dataset_images:
+                                    batch_results = _batch_find_images_by_name(
+                                        conn, dataset_images, dataset_id
+                                    )
+                                    image_cache.update(batch_results)
+
+                        # Fallback: global search for images not found in datasets
+                        missing_images = set(all_image_names) - set(image_cache.keys())
+                        if missing_images:
+                            logger.info(
+                                "Searching globally for %d missing images",
+                                len(missing_images),
+                            )
+                            global_results = _batch_find_images_by_name(
+                                conn, list(missing_images), None
+                            )
+                            image_cache.update(global_results)
+
+                        logger.info(
+                            "Image cache loaded: %d/%d found",
+                            len(image_cache),
+                            len(all_image_names),
+                        )
+
+                        plot_cache: dict[str, Path | None] = {}
+                        plot_rel_cache: dict[str, str] = {}
+                        imported_plots: set[str] = set()
+                        if create_figures_attachments or create_figures_images:
+                            from ..services.omero.sem_edx_parser import (
+                                create_edx_spectrum_plot,
                             )
 
-                            logger.info(
-                                "Processing %d SEM EDX text attachments for job %s",
-                                total_attachments,
-                                safe_job_id_for_log,
-                            )
+                        # Now process attachments using cached images
+                        for attachment_idx, (image_rel, txt_paths) in enumerate(
+                            sem_edx_associations.items()
+                        ):
+                            if not isinstance(txt_paths, list):
+                                continue
 
-                            # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
+                            # Progress logging
+                            progress_pct = (
+                                attachment_idx / len(sem_edx_associations)
+                            ) * 100
                             logger.info(
-                                "Pre-loading image cache for %d images",
+                                "Processing image %d/%d (%.1f%%) - %s",
+                                attachment_idx + 1,
                                 len(sem_edx_associations),
-                            )
-                            all_image_names = []
-                            image_to_dataset = {}  # Track which dataset each image should be in
-
-                            for image_rel in sem_edx_associations.keys():
-                                image_name = (
-                                    PurePosixPath(image_rel).name if image_rel else ""
-                                )
-                                if image_name:
-                                    all_image_names.append(image_name)
-                                    if dataset_name_override:
-                                        dataset_name = dataset_name_override
-                                    else:
-                                        dataset_name = _dataset_name_for_path(
-                                            image_rel,
-                                            orphan_dataset_name,
-                                        )
-                                    dataset_id = dataset_map.get(dataset_name)
-                                    image_to_dataset[image_name] = dataset_id
-
-                            # Do batch lookup - this is 100-1000x faster than individual lookups
-                            image_cache = {}
-                            datasets_to_search = set(image_to_dataset.values())
-
-                            for dataset_id in datasets_to_search:
-                                if dataset_id:
-                                    # Find all images for this dataset
-                                    dataset_images = [
-                                        name
-                                        for name, did in image_to_dataset.items()
-                                        if did == dataset_id
-                                    ]
-                                    if dataset_images:
-                                        batch_results = _batch_find_images_by_name(
-                                            conn, dataset_images, dataset_id
-                                        )
-                                        image_cache.update(batch_results)
-
-                            # Fallback: global search for images not found in datasets
-                            missing_images = set(all_image_names) - set(
-                                image_cache.keys()
-                            )
-                            if missing_images:
-                                logger.info(
-                                    "Searching globally for %d missing images",
-                                    len(missing_images),
-                                )
-                                global_results = _batch_find_images_by_name(
-                                    conn, list(missing_images), None
-                                )
-                                image_cache.update(global_results)
-
-                            logger.info(
-                                "Image cache loaded: %d/%d found",
-                                len(image_cache),
-                                len(all_image_names),
+                                progress_pct,
+                                sanitize_log_value(image_rel),
                             )
 
-                            plot_cache: dict[str, Path | None] = {}
-                            plot_rel_cache: dict[str, str] = {}
-                            imported_plots: set[str] = set()
-                            if create_figures_attachments or create_figures_images:
-                                from ..services.omero.sem_edx_parser import (
-                                    create_edx_spectrum_plot,
-                                )
+                            image_name = (
+                                PurePosixPath(image_rel).name if image_rel else ""
+                            )
 
-                            # Now process attachments using cached images
-                            for attachment_idx, (image_rel, txt_paths) in enumerate(
-                                sem_edx_associations.items()
+                            # Reconnect independently of the live browser session.
+                            if (
+                                attachment_count > 0
+                                and attachment_count % 10 == 0
+                                and not _validate_session(conn)
                             ):
-                                if not isinstance(txt_paths, list):
+                                logger.warning(
+                                    "SEM EDX background session expired; reopening."
+                                )
+                                connection_stack.close()
+                                conn = connection_stack.enter_context(
+                                    _background_user_connection(
+                                        username,
+                                        host=host,
+                                        port=port,
+                                        group_id=job.get("group_id"),
+                                        group_name=job.get("group_name"),
+                                        purpose="SEM EDX attachment lookup",
+                                    )
+                                )
+
+                                if not conn:
+                                    logger.error(
+                                        "Failed to reopen background "
+                                        "connection, aborting SEM EDX attachments"
+                                    )
+                                    _append_job_error(
+                                        job,
+                                        "SEM EDX: TXT attachment service could not reconnect.",
+                                    )
+                                    break
+
+                                # Re-populate cache after reconnect
+                                logger.info("Re-loading image cache after reconnect")
+                                image_cache.clear()
+                                for dataset_id in datasets_to_search:
+                                    if dataset_id:
+                                        dataset_images = [
+                                            name
+                                            for name, did in image_to_dataset.items()
+                                            if did == dataset_id
+                                        ]
+                                        if dataset_images:
+                                            batch_results = _batch_find_images_by_name(
+                                                conn,
+                                                dataset_images,
+                                                dataset_id,
+                                            )
+                                            image_cache.update(batch_results)
+                                missing_images = set(all_image_names) - set(
+                                    image_cache.keys()
+                                )
+                                if missing_images:
+                                    global_results = _batch_find_images_by_name(
+                                        conn, list(missing_images), None
+                                    )
+                                    image_cache.update(global_results)
+
+                            # Get cached image (no query needed!)
+                            image_obj = image_cache.get(image_name)
+
+                            # Process each text file for this image
+                            for txt_rel in txt_paths:
+                                txt_name = PurePosixPath(txt_rel).name
+                                attachment_count += 1
+
+                                if not image_obj:
+                                    logger.warning(
+                                        "Image not found for %s, skipping attachment",
+                                        txt_name,
+                                    )
+                                    _append_txt_attachment_message(
+                                        job,
+                                        txt_name,
+                                        image_name or image_rel,
+                                        False,
+                                    )
                                     continue
 
-                                # Progress logging
-                                progress_pct = (
-                                    attachment_idx / len(sem_edx_associations)
-                                ) * 100
-                                logger.info(
-                                    "Processing image %d/%d (%.1f%%) - %s",
-                                    attachment_idx + 1,
-                                    len(sem_edx_associations),
-                                    progress_pct,
-                                    sanitize_log_value(image_rel),
-                                )
-
-                                image_name = (
-                                    PurePosixPath(image_rel).name if image_rel else ""
-                                )
-
-                                # Validate job-service session periodically (every 10 attachments).
-                                # IMPORTANT: NEVER reconnect using the end-user session_key here.
-                                if (
-                                    attachment_count > 0
-                                    and attachment_count % 10 == 0
-                                    and not _validate_session(conn)
-                                ):
+                                image_id = _get_id(image_obj)
+                                if not image_id:
                                     logger.warning(
-                                        "job-service session expired, reopening "
-                                        "service connection..."
+                                        "Could not get image ID for %s, skipping %s",
+                                        sanitize_log_value(image_name),
+                                        sanitize_log_value(txt_name),
                                     )
-                                    try:
-                                        try:
-                                            conn.close()
-                                        except Exception as close_exc:
-                                            logger.debug(
-                                                "Failed to close expired "
-                                                "job-service connection: %s",
-                                                sanitize_log_value(close_exc),
-                                            )
-                                        conn = _open_service_connection(
-                                            host, port, group_id=job.get("group_id")
-                                        )
-                                    except Exception:
-                                        conn = None
+                                    _append_txt_attachment_message(
+                                        job,
+                                        txt_name,
+                                        image_name or image_rel,
+                                        False,
+                                    )
+                                    continue
 
-                                    if not conn:
-                                        logger.error(
-                                            "Failed to reopen job-service "
-                                            "connection, aborting SEM EDX attachments"
-                                        )
+                                sem_dataset_id = None
+                                try:
+                                    for ds in image_obj.listParents():
+                                        sem_dataset_id = ds.getId()
                                         break
-
-                                    # Re-populate cache after reconnect
-                                    logger.info(
-                                        "Re-loading image cache after reconnect"
-                                    )
-                                    image_cache.clear()
-                                    for dataset_id in datasets_to_search:
-                                        if dataset_id:
-                                            dataset_images = [
-                                                name
-                                                for name, did in image_to_dataset.items()
-                                                if did == dataset_id
-                                            ]
-                                            if dataset_images:
-                                                batch_results = (
-                                                    _batch_find_images_by_name(
-                                                        conn,
-                                                        dataset_images,
-                                                        dataset_id,
-                                                    )
-                                                )
-                                                image_cache.update(batch_results)
-                                    missing_images = set(all_image_names) - set(
-                                        image_cache.keys()
-                                    )
-                                    if missing_images:
-                                        global_results = _batch_find_images_by_name(
-                                            conn, list(missing_images), None
-                                        )
-                                        image_cache.update(global_results)
-
-                                # Get cached image (no query needed!)
-                                image_obj = image_cache.get(image_name)
-
-                                # Process each text file for this image
-                                for txt_rel in txt_paths:
-                                    txt_name = PurePosixPath(txt_rel).name
-                                    attachment_count += 1
-
-                                    if not image_obj:
-                                        logger.warning(
-                                            "Image not found for %s, skipping attachment",
-                                            txt_name,
-                                        )
-                                        _append_txt_attachment_message(
-                                            job,
-                                            txt_name,
-                                            image_name or image_rel,
-                                            False,
-                                        )
-                                        continue
-
-                                    image_id = _get_id(image_obj)
-                                    if not image_id:
-                                        logger.warning(
-                                            "Could not get image ID for %s, skipping %s",
-                                            sanitize_log_value(image_name),
-                                            sanitize_log_value(txt_name),
-                                        )
-                                        _append_txt_attachment_message(
-                                            job,
-                                            txt_name,
-                                            image_name or image_rel,
-                                            False,
-                                        )
-                                        continue
-
+                                except Exception:
                                     sem_dataset_id = None
-                                    try:
-                                        for ds in image_obj.listParents():
-                                            sem_dataset_id = ds.getId()
-                                            break
-                                    except Exception:
-                                        sem_dataset_id = None
 
-                                    logger.info(
-                                        "SEM-EDX: SEM image dataset resolved "
-                                        "from OMERO: image=%s image_id=%s "
-                                        "sem_dataset_id=%s",
-                                        image_name,
-                                        image_id,
-                                        sem_dataset_id,
+                                logger.info(
+                                    "SEM-EDX: SEM image dataset resolved "
+                                    "from OMERO: image=%s image_id=%s "
+                                    "sem_dataset_id=%s",
+                                    image_name,
+                                    image_id,
+                                    sem_dataset_id,
+                                )
+
+                                txt_entry = entries_by_path.get(txt_rel)
+                                if not txt_entry:
+                                    logger.warning(
+                                        "Text entry not found for %s, skipping",
+                                        sanitize_log_value(txt_rel),
+                                    )
+                                    _append_txt_attachment_message(
+                                        job, txt_name, image_name, False
+                                    )
+                                    continue
+
+                                staged_path = txt_entry.get("staged_path") or txt_rel
+                                txt_path, staged_error = _resolve_staged_target_path(
+                                    upload_root, staged_path
+                                )
+                                if staged_error:
+                                    logger.warning(
+                                        "Rejected SEM-EDX text staged path "
+                                        "for job %s: txt=%s staged=%s error=%s",
+                                        safe_job_id_for_log,
+                                        sanitize_log_value(txt_rel),
+                                        sanitize_log_value(staged_path),
+                                        sanitize_log_value(staged_error),
+                                    )
+                                    _append_job_error(job, staged_error)
+                                    _append_txt_attachment_message(
+                                        job, txt_name, image_name, False
+                                    )
+                                    continue
+
+                                if not txt_path.exists():
+                                    logger.warning(
+                                        "Text file not found at %s, skipping",
+                                        sanitize_log_value(txt_path),
+                                    )
+                                    _append_txt_attachment_message(
+                                        job, txt_name, image_name, False
+                                    )
+                                    continue
+
+                                plot_path = None
+                                plot_rel = None
+                                if create_figures_attachments or create_figures_images:
+                                    if txt_rel in plot_cache:
+                                        plot_path = plot_cache.get(txt_rel)
+                                        plot_rel = plot_rel_cache.get(txt_rel)
+                                    else:
+                                        plot_path = create_edx_spectrum_plot(txt_path)
+                                        plot_cache[txt_rel] = plot_path
+                                        if plot_path:
+                                            plot_rel = str(
+                                                PurePosixPath(txt_rel).with_name(
+                                                    plot_path.name
+                                                )
+                                            )
+                                            plot_rel_cache[txt_rel] = plot_rel
+
+                                if (
+                                    create_figures_images
+                                    and plot_path
+                                    and plot_rel
+                                    and txt_rel not in imported_plots
+                                ):
+                                    plot_import_rel = str(
+                                        PurePosixPath(image_rel).with_name(
+                                            PurePosixPath(plot_rel).name
+                                        )
+                                    )
+                                    plot_staged_rel = _build_staged_relative_path(
+                                        plot_import_rel
                                     )
 
-                                    txt_entry = entries_by_path.get(txt_rel)
-                                    if not txt_entry:
-                                        logger.warning(
-                                            "Text entry not found for %s, skipping",
-                                            sanitize_log_value(txt_rel),
-                                        )
-                                        _append_txt_attachment_message(
-                                            job, txt_name, image_name, False
-                                        )
-                                        continue
-
-                                    staged_path = (
-                                        txt_entry.get("staged_path") or txt_rel
-                                    )
-                                    txt_path, staged_error = (
+                                    staged_plot_path, staged_plot_error = (
                                         _resolve_staged_target_path(
-                                            upload_root, staged_path
+                                            upload_root,
+                                            plot_staged_rel,
                                         )
                                     )
-                                    if staged_error:
+                                    if staged_plot_error:
                                         logger.warning(
-                                            "Rejected SEM-EDX text staged path "
-                                            "for job %s: txt=%s staged=%s error=%s",
+                                            "Rejected SEM-EDX plot staged "
+                                            "path for job %s: rel=%s staged=%s "
+                                            "error=%s",
                                             safe_job_id_for_log,
-                                            sanitize_log_value(txt_rel),
-                                            sanitize_log_value(staged_path),
-                                            sanitize_log_value(staged_error),
-                                        )
-                                        _append_job_error(job, staged_error)
-                                        _append_txt_attachment_message(
-                                            job, txt_name, image_name, False
-                                        )
-                                        continue
-
-                                    if not txt_path.exists():
-                                        logger.warning(
-                                            "Text file not found at %s, skipping",
-                                            sanitize_log_value(txt_path),
-                                        )
-                                        _append_txt_attachment_message(
-                                            job, txt_name, image_name, False
-                                        )
-                                        continue
-
-                                    plot_path = None
-                                    plot_rel = None
-                                    if (
-                                        create_figures_attachments
-                                        or create_figures_images
-                                    ):
-                                        if txt_rel in plot_cache:
-                                            plot_path = plot_cache.get(txt_rel)
-                                            plot_rel = plot_rel_cache.get(txt_rel)
-                                        else:
-                                            plot_path = create_edx_spectrum_plot(
-                                                txt_path
-                                            )
-                                            plot_cache[txt_rel] = plot_path
-                                            if plot_path:
-                                                plot_rel = str(
-                                                    PurePosixPath(txt_rel).with_name(
-                                                        plot_path.name
-                                                    )
-                                                )
-                                                plot_rel_cache[txt_rel] = plot_rel
-
-                                    if (
-                                        create_figures_images
-                                        and plot_path
-                                        and plot_rel
-                                        and txt_rel not in imported_plots
-                                    ):
-                                        plot_import_rel = str(
-                                            PurePosixPath(image_rel).with_name(
-                                                PurePosixPath(plot_rel).name
-                                            )
-                                        )
-                                        plot_staged_rel = _build_staged_relative_path(
-                                            plot_import_rel
-                                        )
-
-                                        staged_plot_path, staged_plot_error = (
-                                            _resolve_staged_target_path(
-                                                upload_root,
-                                                plot_staged_rel,
-                                            )
-                                        )
-                                        if staged_plot_error:
-                                            logger.warning(
-                                                "Rejected SEM-EDX plot staged "
-                                                "path for job %s: rel=%s staged=%s "
-                                                "error=%s",
-                                                safe_job_id_for_log,
-                                                sanitize_log_value(plot_import_rel),
-                                                sanitize_log_value(plot_staged_rel),
-                                                sanitize_log_value(staged_plot_error),
-                                            )
-                                            _append_job_error(job, staged_plot_error)
-                                            imported_plots.add(txt_rel)
-                                            continue
-                                        try:
-                                            staged_plot_path.parent.mkdir(
-                                                parents=True, exist_ok=True
-                                            )
-                                            shutil.copy2(plot_path, staged_plot_path)
-                                        except Exception as exc:
-                                            logger.error(
-                                                "Failed to stage SEM-EDX plot PNG "
-                                                "for import: src=%s dst=%s error=%s",
-                                                sanitize_log_value(plot_path),
-                                                sanitize_log_value(staged_plot_path),
-                                                sanitize_log_value(exc),
-                                                exc_info=sanitized_exc_info(exc),
-                                            )
-                                            _append_job_error(
-                                                job,
-                                                "Failed to stage SEM-EDX plot PNG "
-                                                f"for import: {staged_plot_path.name}",
-                                            )
-                                            imported_plots.add(txt_rel)
-                                            continue
-
-                                        logger.info(
-                                            "SEM-EDX: plot staged for import: "
-                                            "rel=%s staged=%s exists=%s",
                                             sanitize_log_value(plot_import_rel),
-                                            sanitize_log_value(staged_plot_path),
-                                            staged_plot_path.exists(),
+                                            sanitize_log_value(plot_staged_rel),
+                                            sanitize_log_value(staged_plot_error),
                                         )
-
-                                        import_entry = {
-                                            "relative_path": plot_import_rel,
-                                            "staged_path": plot_staged_rel,
-                                            "dataset_id_override": sem_dataset_id,
-                                        }
-                                        import_result = _import_job_entry(
-                                            import_entry,
-                                            upload_root,
-                                            session_key,
-                                            host,
-                                            port,
-                                            dataset_map,
-                                            orphan_dataset_name,
-                                            dataset_name_override=dataset_name_override,
-                                            progress_job=job,
-                                            username=job.get("username"),
-                                            group_name=job.get("group_name"),
-                                        )
-                                        if import_result.get("status") == "error":
-                                            if import_result.get("job_error"):
-                                                _append_job_error(
-                                                    job, import_result["job_error"]
-                                                )
-                                            if import_result.get("job_message"):
-                                                _append_job_message(
-                                                    job, import_result["job_message"]
-                                                )
-                                            logger.error(
-                                                "Failed to import SEM EDX plot %s "
-                                                "(dataset_id=%s staged=%s)",
-                                                sanitize_log_value(plot_import_rel),
-                                                sem_dataset_id,
-                                                sanitize_log_value(
-                                                    str(staged_plot_path)
-                                                ),
-                                            )
-                                        elif import_result.get("status") == "imported":
-                                            _append_job_message(
-                                                job,
-                                                messages.imported_file(plot_import_rel),
-                                            )
-                                            logger.info(
-                                                "Imported SEM EDX plot %s into dataset_id=%s",
-                                                sanitize_log_value(plot_import_rel),
-                                                sem_dataset_id,
-                                            )
+                                        _append_job_error(job, staged_plot_error)
                                         imported_plots.add(txt_rel)
-
-                                    # Attach through the API with a detached
-                                    # user session when available.
-                                    # This keeps ownership/group context aligned with the importing
-                                    # user without requiring job-service admin rights.
+                                        continue
                                     try:
-                                        logger.info(
-                                            "Attaching %s to %s (Image:%d)",
-                                            sanitize_log_value(txt_name),
-                                            sanitize_log_value(image_name),
-                                            image_id,
+                                        staged_plot_path.parent.mkdir(
+                                            parents=True, exist_ok=True
                                         )
-                                        _attach_txt_to_image_service(
-                                            conn,
-                                            image_id,
-                                            txt_path,
-                                            username,
-                                            create_tables,
-                                            plot_path=plot_path
-                                            if create_figures_attachments
-                                            else None,
-                                            session_key=session_key,
-                                            host=host,
-                                            port=port,
-                                            group_id=job.get("group_id"),
-                                        )
-
-                                        # Mark as imported if not already
-                                        if txt_entry.get("status") != "imported":
-                                            txt_entry["status"] = "imported"
-                                            job["imported_bytes"] = job.get(
-                                                "imported_bytes", 0
-                                            ) + txt_entry.get("size", 0)
-
-                                        _append_txt_attachment_message(
-                                            job, txt_name, image_name, True
-                                        )
-                                        logger.info(
-                                            "Successfully attached %s to %s",
-                                            sanitize_log_value(txt_name),
-                                            sanitize_log_value(image_name),
-                                        )
-
+                                        shutil.copy2(plot_path, staged_plot_path)
                                     except Exception as exc:
                                         logger.error(
-                                            "Failed to attach %s to %s: %s",
-                                            sanitize_log_value(txt_rel),
-                                            sanitize_log_value(image_rel),
+                                            "Failed to stage SEM-EDX plot PNG "
+                                            "for import: src=%s dst=%s error=%s",
+                                            sanitize_log_value(plot_path),
+                                            sanitize_log_value(staged_plot_path),
                                             sanitize_log_value(exc),
                                             exc_info=sanitized_exc_info(exc),
                                         )
-                                        _append_txt_attachment_message(
-                                            job, txt_name, image_name, False
+                                        _append_job_error(
+                                            job,
+                                            "Failed to stage SEM-EDX plot PNG "
+                                            f"for import: {staged_plot_path.name}",
                                         )
+                                        imported_plots.add(txt_rel)
+                                        continue
 
-                                    # Save job state periodically
-                                    if attachment_count % 5 == 0:
-                                        _save_job(job)
+                                    logger.info(
+                                        "SEM-EDX: plot staged for import: "
+                                        "rel=%s staged=%s exists=%s",
+                                        sanitize_log_value(plot_import_rel),
+                                        sanitize_log_value(staged_plot_path),
+                                        staged_plot_path.exists(),
+                                    )
 
-                            # Final save
-                            _save_job(job)
-                            logger.info(
-                                "Completed SEM EDX attachment processing for "
-                                "job %s: %d/%d processed",
-                                safe_job_id_for_log,
-                                attachment_count,
-                                total_attachments,
-                            )
+                                    import_entry = {
+                                        "relative_path": plot_import_rel,
+                                        "staged_path": plot_staged_rel,
+                                        "dataset_id_override": sem_dataset_id,
+                                    }
+                                    import_result = _import_job_entry(
+                                        import_entry,
+                                        upload_root,
+                                        "",
+                                        host,
+                                        port,
+                                        dataset_map,
+                                        orphan_dataset_name,
+                                        dataset_name_override=dataset_name_override,
+                                        progress_job=job,
+                                        username=job.get("username"),
+                                        group_name=job.get("group_name"),
+                                    )
+                                    if import_result.get("status") == "error":
+                                        if import_result.get("job_error"):
+                                            _append_job_error(
+                                                job, import_result["job_error"]
+                                            )
+                                        if import_result.get("job_message"):
+                                            _append_job_message(
+                                                job, import_result["job_message"]
+                                            )
+                                        logger.error(
+                                            "Failed to import SEM EDX plot %s "
+                                            "(dataset_id=%s staged=%s)",
+                                            sanitize_log_value(plot_import_rel),
+                                            sem_dataset_id,
+                                            sanitize_log_value(str(staged_plot_path)),
+                                        )
+                                    elif import_result.get("status") == "imported":
+                                        _append_job_message(
+                                            job,
+                                            messages.imported_file(plot_import_rel),
+                                        )
+                                        logger.info(
+                                            "Imported SEM EDX plot %s into dataset_id=%s",
+                                            sanitize_log_value(plot_import_rel),
+                                            sem_dataset_id,
+                                        )
+                                    imported_plots.add(txt_rel)
 
-                        finally:
-                            try:
-                                if conn is not None:
-                                    conn.close()
-                            except Exception as exc:
-                                logger.warning(
-                                    "Error closing connection: %s",
-                                    sanitize_log_value(exc),
-                                )
+                                # Attach through the API with a detached
+                                # user session when available.
+                                # This keeps ownership/group context aligned with the importing
+                                # user without requiring job-service admin rights.
+                                try:
+                                    logger.info(
+                                        "Attaching %s to %s (Image:%d)",
+                                        sanitize_log_value(txt_name),
+                                        sanitize_log_value(image_name),
+                                        image_id,
+                                    )
+                                    _attach_txt_to_image_service(
+                                        conn,
+                                        image_id,
+                                        txt_path,
+                                        username,
+                                        create_tables,
+                                        plot_path=plot_path
+                                        if create_figures_attachments
+                                        else None,
+                                        host=host,
+                                        port=port,
+                                        group_id=job.get("group_id"),
+                                    )
+
+                                    # Mark as imported if not already
+                                    if txt_entry.get("status") != "imported":
+                                        txt_entry["status"] = "imported"
+                                        job["imported_bytes"] = job.get(
+                                            "imported_bytes", 0
+                                        ) + txt_entry.get("size", 0)
+
+                                    _append_txt_attachment_message(
+                                        job, txt_name, image_name, True
+                                    )
+                                    logger.info(
+                                        "Successfully attached %s to %s",
+                                        sanitize_log_value(txt_name),
+                                        sanitize_log_value(image_name),
+                                    )
+
+                                except Exception as exc:
+                                    logger.error(
+                                        "Failed to attach %s to %s: %s",
+                                        sanitize_log_value(txt_rel),
+                                        sanitize_log_value(image_rel),
+                                        sanitize_log_value(exc),
+                                        exc_info=sanitized_exc_info(exc),
+                                    )
+                                    _append_txt_attachment_message(
+                                        job, txt_name, image_name, False
+                                    )
+
+                                # Save job state periodically
+                                if attachment_count % 5 == 0:
+                                    _save_job(job)
+
+                        # Final save
+                        _save_job(job)
+                        logger.info(
+                            "Completed SEM EDX attachment processing for "
+                            "job %s: %d/%d processed",
+                            safe_job_id_for_log,
+                            attachment_count,
+                            total_attachments,
+                        )
+
                 except Exception as exc:
                     logger.error(
                         "SEM EDX txt attachment failed for job %s: %s",
@@ -10103,6 +10086,13 @@ def _process_import_job(job_id: str):
                         sanitize_log_value(exc),
                         exc_info=sanitized_exc_info(exc),
                     )
+
+                    _append_job_error(
+                        job, "SEM EDX: TXT attachment processing did not complete."
+                    )
+                    _save_job(job)
+                finally:
+                    connection_stack.close()
 
             job = _load_job(job_id) or job
             if job.get("errors"):
