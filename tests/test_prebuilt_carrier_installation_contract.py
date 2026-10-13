@@ -870,6 +870,50 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             self.assertIn("job-level", instruction_text)
             self.assertIn("`environment` blocks", instruction_text)
 
+    def test_every_release_requires_reference_safe_registry_reconciliation(
+        self,
+    ) -> None:
+        """Keep release cleanup mandatory without authorizing blind deletion.
+
+        Inputs: maintainer and agent instructions. Output: consistent safety contract.
+        """
+        for path in (
+            "AGENTS.md",
+            "README.md",
+            ".github/instructions/workflows.instructions.md",
+            "docs/reference/ai-agent-runtime-playbook.md",
+        ):
+            with self.subTest(path=path):
+                text = " ".join(self.read_text(path).split())
+                self.assertIn("With every release", text)
+                self.assertIn("registry cleanup", text.lower())
+                if path == "AGENTS.md":
+                    self.assertIn("runtime playbook's registry cleanup", text)
+                else:
+                    self.assertIn("Image Management", text)
+                    self.assertIn("referenced", text)
+                    self.assertIn("approval", text)
+        playbook = " ".join(
+            self.read_text("docs/reference/ai-agent-runtime-playbook.md").split()
+        )
+        for requirement in (
+            "all published releases and their recorded carrier digests",
+            "all registry tags",
+            "every Image Management page",
+            "Do not start cleanup while another publication is active",
+            "subject/referrer relationships",
+            "Retain uncertain objects",
+            "fresh separate approval for each deletion",
+            "Recheck tags and references immediately before deletion",
+            "Remove obsolete parents before their children",
+            "no remaining object references it",
+            "Never delete blobs directly",
+            "Verify all retained release tags, digests, manifest graphs, and referenced blobs again",
+            "do not claim cleanup is complete while it remains unverified",
+        ):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, playbook)
+
     def test_release_workflow_embedded_python_blocks_parse(self) -> None:
         """Verify workflow heredoc Python is syntactically valid.
 

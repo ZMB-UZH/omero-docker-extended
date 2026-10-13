@@ -123,12 +123,41 @@ temporary roots, permissions, and unrelated workloads. Remove only reviewed
 superseded images and owned verification artifacts. Finish with a second image
 inventory, unchanged persistent mounts/configuration, and healthy services.
 
+### Registry cleanup with every release
+
+With every release, reconcile Docker Hub Image Management after publication,
+restoration, or replacement. This is a required release-maintenance step, not
+optional housekeeping. A successful release workflow or matching tag count does
+not establish that the registry is free of obsolete objects.
+
+1. Save a private before-state: all published releases and their recorded carrier
+   digests, all registry tags, and every Image Management page. If an API cannot
+   enumerate untagged objects, inspect the authenticated UI; a tag list is not an
+   equivalent inventory. Do not start cleanup while another publication is active.
+2. Resolve every retained index recursively. Preserve referenced image manifests,
+   shared children, configurations, layers, SBOM/provenance attestations,
+   signatures, and subject/referrer relationships. An untagged object or an old
+   last-pulled date does not prove it is unused. Retain uncertain objects.
+3. Compare the full inventory with that protected reference graph. Review each
+   candidate by its full digest, with fresh separate approval for each deletion.
+   Recheck tags and references immediately before deletion; stop if they changed.
+   Remove obsolete parents before their children, and remove a child only after
+   confirming that no remaining object references it. Never delete blobs directly,
+   select all untagged entries, or use an object-count target as a cleanup rule.
+4. Verify all retained release tags, digests, manifest graphs, and referenced
+   blobs again. Reconcile every Image Management page with the before-state and
+   approved deletions. Preserve the evidence privately and report any unresolved
+   candidates; do not claim cleanup is complete while it remains unverified.
+
 For registry cleanup, count release tags separately from OCI manifest objects.
-Inspect each retained tag's index and its child image and provenance manifests;
-an untagged child referenced by a retained index is not stale. Preserve the full
-manifest graph and delete only independently verified orphans with the required
-approval. Never use the registry UI's object count as a deletion target. Verify
-the retained tags, digests, and complete reference graph again after cleanup.
+An untagged child referenced by a retained index is not stale. One release can
+require an index, a platform image, and one or more untagged attestations.
+Never use the registry UI's object count as a deletion target; preserve every
+needed component. Follow Docker's
+[Image Management](https://docs.docker.com/docker-hub/repos/manage/hub-images/manage/)
+and [Registry API](https://docs.docker.com/reference/api/registry/latest/)
+documentation; use bounded readback after an uncertain deletion response rather
+than blindly repeating a destructive request.
 
 ## Prebuilt carrier and easy installation
 

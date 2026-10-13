@@ -13,6 +13,7 @@ applyTo: ".github/workflows/*.yml"
   Keep notes curated and concise: include only notable operator or user impact, compatibility or required upgrade actions, and a brief verification summary; omit commit-by-commit detail, internal workflow or governance narration, agent activity, and exhaustive test inventories.
   They must also require automated disclosure validation and explicit human public-safety review; public notes must reject credentials, personal or host-specific information, private infrastructure, findings, vulnerability mechanics, and exploit-enabling detail.
 - Gate deletion of an existing GitHub release, Git tag, and Docker tag behind three separate fresh per-object confirmations. Earlier, blanket, same-version, replace, or recreate permission never carries forward to another deletion or run.
+- With every release, complete the runtime playbook's registry cleanup reconciliation, including all Docker Hub Image Management pages and post-cleanup verification. Preserve referenced manifests and attestations; untagged does not mean unused. Keep fresh separate approval for each deletion. Never treat workflow success or a matching tag count as proof of completed cleanup.
 - No workflow in this repository may create GitHub deployment records.
 - Do not add job-level `environment` blocks; GitHub Actions environments create
   deployment records. Keep release credentials in repository secrets with the

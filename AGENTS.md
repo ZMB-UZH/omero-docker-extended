@@ -51,11 +51,10 @@ Mandatory lower-token tools; no silent skips.
   [cocoindex-code-search](.agents/skills/cocoindex-code-search/SKILL.md).
   Confirm hits in source; exact symbols, strings, counts, and small scopes use `rg`.
   Never silently trust a stale index or install/refresh one through MCP search.
-- Apply [caveman](.agents/skills/caveman/SKILL.md) lite by default to internal AI
-  communication: remove repetition, not reasoning or evidence. Mandatory,
-  not opt-in. Public text, code, commands, exact errors, and user replies stay
-  normal prose and lossless. Expand for safety, approvals, ambiguity, incidents,
-  and ordered procedures. Required progress updates remain mandatory.
+- Apply [caveman](.agents/skills/caveman/SKILL.md) lite for internal AI, not opt-in: remove repetition,
+  never reasoning or evidence. Public text, code, commands, errors and replies
+  stay normal prose and lossless. Expand for safety, approvals, ambiguity, incidents and ordered
+  procedures; required progress updates remain mandatory.
 - Use the [context router](docs/reference/ai-agent-context-routing.md) only when
   the location is unknown; load one skill, not the catalog. Follow its numeric caps;
   explain escalation. Never use a budget to skip required analysis or tests.
@@ -63,10 +62,9 @@ Mandatory lower-token tools; no silent skips.
   identity, result, and evidence; reuse fresh evidence. Retry only changed inputs or
   hypotheses. Run the full matrix once on the stable final tree. Preserve
   logs and exit status; inspect complete failures, not just tails.
-- Do not reread files, dump trees/logs, poll unchanged jobs, load upstream
-  references, or rediscover schemas without need. Handoffs retain decisions,
-  changed files, evidence, risks, and next action.
-  Never compress user requests or claim billing savings from byte counts.
+- Avoid needless rereads, tree/log dumps, unchanged polling, upstream references
+  and schema rediscovery. Handoffs retain decisions, changed files, evidence,
+  risks and next action. Never compress user requests or equate bytes with billing.
 
 ## Before the matching action
 
@@ -98,5 +96,6 @@ Read matching [task contracts](docs/reference/ai-agent-task-contracts.md):
 - After every push, verify GitHub workflows and alert deltas for that exact
   commit. No suppression, scope reduction, or score manipulation to pass.
   Report untested areas and residual findings explicitly.
+- With every release, complete the runtime playbook's registry cleanup reconciliation.
 - Catalog: `docs/reference/ai-agent-skills.md`; hub: `docs/index.md`.
   Neither is a mandatory startup read.

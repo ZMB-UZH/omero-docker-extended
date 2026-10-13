@@ -514,6 +514,13 @@ storage available without changing the released image list. The
 `DOCKERHUB_TOKEN` value must be a docker hub access token with write access to
 the carrier repository; do not store a docker hub account password there.
 
+With every release, the maintainer must complete the
+[registry cleanup reconciliation](docs/reference/ai-agent-runtime-playbook.md#registry-cleanup-with-every-release).
+Inspect every Docker Hub Image Management page, remove only verified obsolete
+objects with separate approval, and reverify the retained releases. Preserve
+referenced manifests, including untagged platform images and attestations;
+their presence is necessary and is not evidence of stale release images.
+
 **5.** After a successful installation, run:
 
 - Portainer: `https://<host>:9443` by default
