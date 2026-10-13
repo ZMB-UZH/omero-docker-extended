@@ -1,0 +1,7 @@
+[
+  {"name": "database", "names": ["database"], "uid": 999, "gid": 999},
+  {"name": "database_plugin", "names": ["database-plugin"], "uid": 999, "gid": 999},
+  {"name": "grafana", "names": ["grafana", "localhost", "127.0.0.1", "::1"], "uid": 472, "gid": 0},
+  {"name": "loki", "names": ["loki", "localhost", "127.0.0.1", "::1"], "uid": 10001, "gid": 10001},
+  {"name": "prometheus", "names": ["prometheus", "localhost", "127.0.0.1", "::1"], "uid": 65534, "gid": 65534}
+]

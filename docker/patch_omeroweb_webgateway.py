@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Correct JSON value types and orphan-image lookup in OMERO.web 5.33.1."""
+"""Correct JSON value types and orphan-image lookup in OMERO.web 5.33.2."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ import hashlib
 from pathlib import Path
 
 
-# Exact upstream v5.33.1 file and the reviewed response/lookup corrections.
+# Exact upstream v5.33.2 file and the reviewed response/lookup corrections.
 # A future base-image update must review or remove this compatibility correction.
 # Public content hashes, not credentials; provenance: docs/operations/code-scanning.md.
-SOURCE_SHA256 = "834e059f3b8b9892e899cbf5e8ee57232903010cf7e99f3fc880a72698a8adb9"  # DevSkim: ignore DS173237 -- public upstream file SHA-256
-PATCHED_SHA256 = "423f500164d2ff2466d7db76e7718592573db4bb7905600a65ca79127ef2ea87"  # DevSkim: ignore DS173237 -- corrected file SHA-256
+SOURCE_SHA256 = "78ae1a39ccea70c003e21903bab1b255102f450cd168b712d4f74697f087a56a"  # DevSkim: ignore DS173237 -- public upstream file SHA-256
+PATCHED_SHA256 = "66d8a9f8e34e32761d9ed6e13eca98686714692a2df715a4b8492c3004123532"  # DevSkim: ignore DS173237 -- corrected file SHA-256
 REPLACEMENTS = {
     "save_image_rdef_json": (
         ('json_data = "false"', "json_data = False"),

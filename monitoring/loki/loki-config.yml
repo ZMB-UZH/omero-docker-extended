@@ -2,6 +2,10 @@ auth_enabled: false
 
 server:
   http_listen_port: 3100
+  tls_min_version: VersionTLS12
+  http_tls_config:
+    cert_file: /run/omero-tls/server/cert.pem
+    key_file: /run/omero-tls/server/key.pem
 
 common:
   path_prefix: /loki

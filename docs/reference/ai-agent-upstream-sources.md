@@ -18,9 +18,13 @@ This document records the pinned upstream AI Agent material vendored into this r
   examples. `tools/verify_agent_skill_provenance.py` strips only those
   standalone scanner annotations before comparing the vendored text with the
   pinned upstream release.
-- Latest upstream observed and reviewed on 2026-09-19: `v2.2.1`. All 16 selected
-  skill/reference blobs are unchanged from `v2.2.0`, verified against complete
-  recursive trees. The earlier `v2.0.0` to `v2.2.0` comparison found metadata changes across the selected
+- Latest upstream observed and reviewed on 2026-10-07: `v2.2.3`. Complete
+  recursive trees and exact source diffs show six selected files changed since
+  `v2.2.1`: discovery descriptions, an optional persisted-byte diagnostic, a
+  parameterized-SQL example, and a generic TDD artifact path. Existing overlays
+  already preserve SQL parameterization and distinguish bytes from billed tokens;
+  they retain this repo's verification and private-evidence paths. No upstream
+  installer or harness runtime is imported. The earlier `v2.0.0` to `v2.2.0` comparison found metadata changes across the selected
   skills and body changes in five of them. The repo overlays adopt applicable
   installer isolation, plan-input validation, and failure-preserving command
   guidance. Keep the reproducible `v2.0.0` reference snapshot: generic MIME
@@ -59,12 +63,24 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 - Upstream native installation command:
   `pipx install 'cocoindex-code[full]'`
 - Verified upstream release tag:
-  `v0.2.41` at `9fd2e7470a8b042a338dc3cc47fb9940ac5ebb59`
+  `v0.2.42` at `6bb17d001649fc0948a7300c2ce847b6218d174c`
 - Local path: `.agents/skills/cocoindex-code-search/`
 - Integration rule: keep one repository-local CocoIndex workflow and generate
   MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a
   client needs explicit stdio settings. Do not copy the upstream `ccc` skill
   into root dot-directories or per-agent skill directories.
+
+## Crawl4AI research
+
+- Source: [unclecode/crawl4ai 0.9.4](https://github.com/unclecode/crawl4ai/tree/v0.9.4).
+- Independent local implementation: `tools/crawl4ai_research.py`; mandatory
+  cross-agent routing: `.agents/skills/crawl4ai-research/`.
+- Packages are hash-pinned in `.github/requirements/crawl4ai.txt` and installed
+  only into an external Linux developer environment. No code or host-specific
+  configuration is copied from other repositories.
+- [Research operations](ai-agent-web-research-stack.md) documents attribution,
+  qualified behavior, dependencies and known limitations. The upstream license
+  has an additional attribution requirement; do not call it unmodified Apache 2.0.
 
 ## Karpathy baseline
 
@@ -89,10 +105,14 @@ Do not replace the local overlays with the upstream files verbatim unless the re
 
 - Repository: `JuliusBrussee/caveman`
 - Reviewed release notes: `v1.5.1` through `v1.9.1`, `v2.0.0`, `v2.1.0`, and
-  `v2.2.0`; the latest review also covers `v2.7.0`.
+  `v2.2.0`; subsequent reviews cover `v2.7.0` and `v3.1.0`.
 - caveman release tag: `v2.2.0`
 - caveman release commit: `9aa63945a349bef17206540650db48c30fafbdf2`
-- Latest upstream observed and reviewed on 2026-09-19: `v2.7.0`. The overlay
+- Latest upstream observed and reviewed on 2026-10-07: `v3.1.0`. Its skill split
+  and model-specific length evaluations do not justify automatic stronger
+  compression or a repo-wide token-savings claim. The existing overlay already
+  preserves exact evidence, normal persisted prose, and host-required updates;
+  the new upstream mode migration and session hooks remain disabled. The overlay
   adopts explicit reply-language precedence and removes unmeasured savings
   claims. The `v2.2.0` vendor snapshot remains a reproducible historical
   reference, not a claim of the latest installed runtime. Installer, hook,

@@ -389,28 +389,28 @@ def test_repository_lock_keeps_dependency_families_aligned():
     assert len(converter) == 24
     netty = [item for item in converter.values() if item.group == "io.netty"]
     assert len(netty) == 10
-    assert {item.version for item in netty} == {"4.1.138.Final"}
+    assert {item.version for item in netty} == {"4.1.139.Final"}
     assert (
         converter["logback-core"].version
         == converter["logback-classic"].version
         == client["logback-core"].version
         == client["logback-classic"].version
-        == "1.6.3"
+        == "1.6.5"
     )
     for profile in (server, converter):
         assert (
             profile["jackson-core"].version
             == profile["jackson-databind"].version
-            == "2.21.6"
+            == "2.22.3"
         )
-        assert profile["jackson-annotations"].version == "2.21"
+        assert profile["jackson-annotations"].version == "2.22"
     assert server["json-smart"].version == server["accessors-smart"].version == "2.6.0"
-    assert server["slf4j-api"].version == converter["slf4j-api"].version == "2.0.18"
+    assert server["slf4j-api"].version == converter["slf4j-api"].version == "2.0.20"
     assert client["pdfbox"].version == client["fontbox"].version == "2.0.37"
     assert client["postgresql"].version == "42.7.13"
-    assert server["snakeyaml"].version == "2.5"
+    assert server["snakeyaml"].version == "2.7"
     assert server["httpclient5"].version == "5.6.4"
-    assert server["httpcore5"].version == server["httpcore5-h2"].version == "5.4.3"
+    assert server["httpcore5"].version == server["httpcore5-h2"].version == "5.4.4"
     assert server["junit"].version == "4.13.2"
     assert server["asm"].version == "9.10.1"
     assert converter["ion-java"].group == "com.amazon.ion"
@@ -422,7 +422,7 @@ def test_repository_lock_keeps_dependency_families_aligned():
     assert (
         server["commons-lang3"].version
         == converter["commons-lang3"].version
-        == "3.20.0"
+        == "3.21.0"
     )
     for filename, profile in (
         ("omero-server.Dockerfile", "server"),

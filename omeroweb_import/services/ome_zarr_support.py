@@ -91,9 +91,9 @@ def inspect_ome_zarr_image(store_root: Path) -> OMEZarrImageInspection:
 
 
 def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
-    """Normalize the native OME Zarr copy.
+    """Normalize only an owned staging copy, never the uploaded original.
 
-    Inputs: `store_root` (Path). Output: `Optional[str]`.
+    Inputs: symlink-free `store_root`. Output: an error message or None on success.
     """
     inspection = inspect_ome_zarr_image(store_root)
     if not inspection.supported:
@@ -557,7 +557,7 @@ def _normalize_zarr_relative_path(raw_path) -> tuple[str, Optional[str]]:
     path_text = path_text.strip("/")
     pure_path = PurePosixPath(path_text)
     parts = pure_path.parts
-    if any(part in {"", ".", ".."} for part in parts):
+    if not parts or any(part in {"", ".", ".."} for part in parts):
         return "", f"{path_text!r} contains an unsafe path component."
     return "/".join(parts), None
 
@@ -781,7 +781,7 @@ def _extract_dataset_relative_paths(
 
     Inputs: `metadata_payload` (dict). Output: `(paths, error)`.
     """
-    paths = []
+    paths: list[str] = []
     for multiscale_entry in metadata_payload.get("multiscales") or []:
         if not isinstance(multiscale_entry, dict):
             return (), "OME-Zarr multiscale metadata is malformed."
@@ -796,10 +796,21 @@ def _extract_dataset_relative_paths(
                     (),
                     f"OME-Zarr multiscale dataset path is invalid: {path_error}",
                 )
+            candidate = PurePosixPath(dataset_path)
+            if any(
+                candidate == PurePosixPath(existing)
+                or candidate in PurePosixPath(existing).parents
+                or PurePosixPath(existing) in candidate.parents
+                for existing in paths
+            ):
+                return (
+                    (),
+                    "OME-Zarr dataset paths must be distinct and non-overlapping.",
+                )
             paths.append(dataset_path)
     if not paths:
         return (), "OME-Zarr metadata is missing multiscale dataset paths."
-    return tuple(dict.fromkeys(paths)), None
+    return tuple(paths), None
 
 
 def _extract_physical_sizes(
@@ -1121,6 +1132,12 @@ def _rewrite_problematic_native_image_arrays(
         array_dir = store_root / safe_relative_path
         zarray_path = array_dir / ".zarray"
         if not zarray_path.is_file():
+            metadata, error = _read_array_metadata_payload(
+                store_root, safe_relative_path
+            )
+            if error is None and metadata and metadata.get("zarr_format") == 3:
+                # V3 codecs are a typed pipeline, not a v2 byte compressor.
+                continue
             return (
                 "OME-Zarr dataset path is missing its .zarray metadata: "
                 f"{safe_relative_path}"
@@ -1221,28 +1238,33 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
     z_axis_index = axis_names.index("z")
     yx_indices = [axis_names.index("y"), axis_names.index("x")]
 
-    if not isinstance(datasets[0], dict) or not isinstance(datasets[1], dict):
+    if not isinstance(datasets[0], dict):
         return None
     s0_path, path_error = _normalize_zarr_relative_path(datasets[0].get("path"))
     if path_error:
         return None
-    s1_path, path_error = _normalize_zarr_relative_path(datasets[1].get("path"))
-    if path_error:
-        return None
-
     ndim = len(axis_names)
     s0_metadata, _ = _read_array_metadata_payload(store_root, s0_path)
-    s1_metadata, _ = _read_array_metadata_payload(store_root, s1_path)
-    if s0_metadata is None or s1_metadata is None:
+    if s0_metadata is None:
         return None
     s0_shape, shape_error = _extract_array_shape(s0_metadata, ndim)
     if shape_error:
         return None
-    s1_shape, shape_error = _extract_array_shape(s1_metadata, ndim)
-    if shape_error:
-        return None
-
-    if s0_shape[z_axis_index] == s1_shape[z_axis_index]:
+    z_downsampled = False
+    for dataset in datasets[1:]:
+        if not isinstance(dataset, dict):
+            return None
+        path, path_error = _normalize_zarr_relative_path(dataset.get("path"))
+        if path_error:
+            return None
+        metadata, _ = _read_array_metadata_payload(store_root, path)
+        if metadata is None:
+            return None
+        shape, shape_error = _extract_array_shape(metadata, ndim)
+        if shape_error:
+            return None
+        z_downsampled |= shape[z_axis_index] != s0_shape[z_axis_index]
+    if not z_downsampled:
         return None
 
     return {
@@ -1454,10 +1476,18 @@ def _regenerate_xy_only_pyramid(
     ndim = len(axes)
 
     s0_zarray_path = store_root / s0_path / ".zarray"
+    v3_array = None
     try:
-        s0_meta = json.loads(s0_zarray_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return f"Failed to read s0 .zarray metadata: {exc}"
+        if s0_zarray_path.is_file():
+            s0_meta = json.loads(s0_zarray_path.read_text(encoding="utf-8"))
+        else:
+            v3_array = _open_native_zarr_v3_array(store_root / s0_path)
+            s0_meta = {
+                "chunks": list(v3_array.chunks),
+                "dtype": v3_array.dtype,
+            }
+    except Exception as exc:
+        return f"Failed to read full-resolution array metadata: {exc}"
 
     s0_chunks = s0_meta["chunks"]
     s0_dtype = np.dtype(s0_meta["dtype"])
@@ -1484,7 +1514,11 @@ def _regenerate_xy_only_pyramid(
     s0_translation, _ = _extract_translation_values(s0_transforms, ndim)
 
     try:
-        s0_data = _read_zarr_v2_array(store_root / s0_path, s0_meta)
+        s0_data = (
+            v3_array[:]
+            if v3_array is not None
+            else _read_zarr_v2_array(store_root / s0_path, s0_meta)
+        )
     except Exception as exc:
         return f"Failed to read full-resolution data: {exc}"
 
@@ -1537,8 +1571,12 @@ def _regenerate_xy_only_pyramid(
         if path_error:
             return f"Cannot regenerate pyramid: dataset path is invalid: {path_error}"
         level_dir = store_root / level_path
-        error = _write_zarr_v2_level(
-            level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec
+        error = (
+            _write_zarr_v3_level(level_dir, downsampled, v3_array)
+            if v3_array is not None
+            else _write_zarr_v2_level(
+                level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec
+            )
         )
         if error:
             return error
@@ -1547,7 +1585,11 @@ def _regenerate_xy_only_pyramid(
         if s0_translation is not None:
             transforms.append({"type": "translation", "translation": new_translation})
         new_datasets.append(
-            {"path": level_path, "coordinateTransformations": transforms}
+            dict(
+                datasets[level_idx],
+                path=level_path,
+                coordinateTransformations=transforms,
+            )
         )
 
         current_data = downsampled
@@ -1561,10 +1603,68 @@ def _regenerate_xy_only_pyramid(
     payload = detection["metadata_payload"]
     payload["multiscales"] = [ms]
     try:
-        (store_root / ".zattrs").write_text(json.dumps(payload), encoding="utf-8")
+        if v3_array is not None:
+            metadata_path = store_root / "zarr.json"
+            root_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            root_metadata["attributes"]["ome"] = payload
+            # Embedded indexes describe the previous levels and must not survive.
+            root_metadata.pop("consolidated_metadata", None)
+            metadata_path.write_text(json.dumps(root_metadata), encoding="utf-8")
+        else:
+            (store_root / ".zattrs").write_text(json.dumps(payload), encoding="utf-8")
     except OSError as exc:
         return f"Failed to write updated .zattrs: {exc}"
 
+    return None
+
+
+def _open_native_zarr_v3_array(array_dir: Path):
+    """Bound decoded allocations before reading a local v3 array.
+
+    Inputs: `array_dir`. Output: a read-only array; raises on invalid bounds.
+    """
+    import zarr
+
+    array = zarr.open_array(str(array_dir), mode="r", zarr_format=3)
+    _validate_native_array_bounds(
+        array.shape, array.chunks, array.dtype, "native OME-Zarr"
+    )
+    # A physical chunk/shard can exceed the logical shape at the array edge.
+    physical_shape = array.shards or array.chunks
+    _validate_native_array_bounds(
+        physical_shape, array.chunks, array.dtype, "native OME-Zarr chunk"
+    )
+    return array
+
+
+def _write_zarr_v3_level(output_dir: Path, data, source) -> Optional[str]:
+    """Reuse the validated v3 pipeline, including sharding and dimension names.
+
+    Inputs: `output_dir`, pixel `data`, reference `source` array. Output: an error
+    message or None after writing the level.
+    """
+    import zarr
+
+    try:
+        _validate_native_array_bounds(
+            data.shape, source.chunks, data.dtype, "native OME-Zarr"
+        )
+        metadata = source.metadata
+        result = zarr.create(
+            store=str(output_dir),
+            shape=data.shape,
+            dtype=source.dtype,
+            chunk_shape=metadata.chunk_grid.chunk_shape,
+            chunk_key_encoding=metadata.chunk_key_encoding,
+            codecs=metadata.codecs,
+            fill_value=metadata.fill_value,
+            dimension_names=metadata.dimension_names,
+            attributes=metadata.attributes,
+            zarr_format=3,
+        )
+        result[:] = data
+    except Exception as exc:
+        return f"Failed to write Zarr v3 pyramid level: {exc}"
     return None
 
 

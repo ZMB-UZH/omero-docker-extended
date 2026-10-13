@@ -5,7 +5,9 @@ from iter_test_helpers import next_or_fail
 import sys
 import types
 from contextlib import contextmanager, nullcontext
+from itertools import product
 from pathlib import Path
+import pytest
 
 from omeroweb_import.views import core_functions
 
@@ -1528,8 +1530,12 @@ def test_verify_import_and_cleanup_imported_images_cover_dataset_and_admin_paths
     assert admin_conn.closed is True
 
 
+@pytest.mark.parametrize("spectrum_folder", ["spectra", "images"])
+@pytest.mark.parametrize(
+    "create_tables,attachments,images", list(product((False, True), repeat=3))
+)
 def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, spectrum_folder, create_tables, attachments, images
 ):
     """Verify process import job handles SEM EDX associations and plot imports.
 
@@ -1545,12 +1551,14 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     monkeypatch.setattr(core_functions.time, "time", lambda: 3000.0)
 
     job_id = "d" * 32
-    staged_txt = upload_root / job_id / "_staged" / "spectra" / "sample.txt"
+    txt_relative = f"{spectrum_folder}/sample.txt"
+    staged_txt = upload_root / job_id / "_staged" / txt_relative
     staged_txt.parent.mkdir(parents=True, exist_ok=True)
-    staged_txt.write_text("energy,count\n1,2\n", encoding="utf-8")
+    spectrum_text = "#SPECTRUM : counts\n1.0, 2\n2.0, 5\n3.0, 1\n#ENDOFDATA\n"
+    staged_txt.write_text(spectrum_text, encoding="utf-8")
 
-    plot_source = tmp_path / "sample_plot.png"
-    plot_source.write_bytes(b"\x89PNG\r\n\x1a\n")
+    uploaded_plot = staged_txt.with_name("sample_edx.png")
+    uploaded_plot.write_bytes(b"original uploaded PNG must not be overwritten")
 
     job = {
         "job_id": job_id,
@@ -1568,8 +1576,8 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
                 "errors": [],
             },
             {
-                "relative_path": "spectra/sample.txt",
-                "staged_path": "_staged/spectra/sample.txt",
+                "relative_path": txt_relative,
+                "staged_path": f"_staged/{txt_relative}",
                 "status": "uploaded",
                 "size": 3,
                 "errors": [],
@@ -1585,9 +1593,9 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "total_bytes": 8,
         "sem_edx_associations": {},
         "sem_edx_settings": {
-            "create_tables": True,
-            "create_figures_attachments": True,
-            "create_figures_images": True,
+            "create_tables": create_tables,
+            "create_figures_attachments": attachments,
+            "create_figures_images": images,
         },
         "special_upload": "sem_edx_spectra",
     }
@@ -1614,7 +1622,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     monkeypatch.setattr(
         core_functions,
         "_build_sem_edx_associations_from_entries",
-        lambda entries: {"images/sample.ome.tif": ["spectra/sample.txt"]},
+        lambda entries: {"images/sample.ome.tif": [txt_relative]},
     )
 
     class _ImportedImage:
@@ -1689,14 +1697,6 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "_resolve_staged_target_path",
         lambda root, staged_path: (root / staged_path, None),
     )
-    sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
-    sem_edx_parser.create_edx_spectrum_plot = lambda txt_path: plot_source
-    monkeypatch.setitem(
-        sys.modules,
-        "omeroweb_import.services.omero.sem_edx_parser",
-        sem_edx_parser,
-    )
-
     attached = []
     monkeypatch.setattr(
         core_functions,
@@ -1768,20 +1768,35 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     assert any(
         "Txt attachment success" in message for message in state["job"]["messages"]
     )
-    assert any("sample_plot.png" in message for message in state["job"]["messages"])
+    assert (
+        any("sample_edx.png" in message for message in state["job"]["messages"])
+        is images
+    )
     assert batch_lookup_calls[0] == (("sample.ome.tif",), 22)
     assert len(attached) == 1
     assert attached[0]["image_id"] == 301
     assert attached[0]["txt_path"] == staged_txt
-    assert attached[0]["plot_path"] == plot_source
+    assert attached[0]["create_tables"] is create_tables
+    generated = list((upload_root / job_id / "_derived").rglob("*.png"))
+    assert len(generated) == int(attachments or images)
+    if generated:
+        plot_source = generated[0]
+        assert plot_source.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+        assert plot_source.stat().st_size > 1000
+        plot_relative = plot_source.relative_to(upload_root / job_id).as_posix()
+        assert plot_relative.startswith("_derived/sem-edx/")
+        assert attached[0]["plot_path"] == (plot_source if attachments else None)
+    else:
+        assert attached[0]["plot_path"] is None
+    assert (
+        uploaded_plot.read_bytes() == b"original uploaded PNG must not be overwritten"
+    )
+    assert staged_txt.read_text(encoding="utf-8") == spectrum_text
     assert not attached[0]["kwargs"].get("session_key")
-    assert plot_imports == [
-        (
-            "images/sample_plot.png",
-            88,
-            core_functions._build_staged_relative_path("images/sample_plot.png"),
-        )
-    ]
+    if images:
+        assert plot_imports == [("images/sample_edx.png", 88, plot_relative)]
+    else:
+        assert plot_imports == []
     assert removed_jobs == [(job_id, upload_root)]
     assert deferred_jobs == []
 
@@ -1812,7 +1827,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         "spectra/staged-error.txt",
         "spectra/missing-file.txt",
         "spectra/plot-stage-error.txt",
-        "spectra/plot-copy-error.txt",
+        "spectra/plot-write-error.txt",
         "spectra/plot-import-error.txt",
         "spectra/attach-error.txt",
         "spectra/attach-ok-1.txt",
@@ -1994,7 +2009,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
             return None, "Rejected staged text path"
         if name == "missing-file.txt":
             return target, None
-        if name == "plot-stage-error.png":
+        if name == "plot-stage-error_edx.png":
             return None, "Rejected staged plot path"
         return target, None
 
@@ -2002,14 +2017,15 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
 
     sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
 
-    def _create_plot(txt_path):
+    def _create_plot(txt_path, output_path, *, output_stream):
         """Create the plot.
 
-        Inputs: `txt_path`. Output: `plot_path`.
+        Inputs: `txt_path`, output metadata and stream. Output: `output_path`.
         """
-        plot_path = tmp_path / f"{txt_path.stem}.png"
-        plot_path.write_bytes(b"\x89PNG\r\n\x1a\n")
-        return plot_path
+        if txt_path.name == "plot-write-error.txt":
+            raise OSError("output device full")
+        output_stream.write(b"\x89PNG\r\n\x1a\n")
+        return output_path
 
     sem_edx_parser.create_edx_spectrum_plot = _create_plot
     monkeypatch.setitem(
@@ -2017,22 +2033,6 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
         "omeroweb_import.services.omero.sem_edx_parser",
         sem_edx_parser,
     )
-
-    copied_plots = []
-
-    def _copy2(src, dst):
-        """Record the copy2 call on the test double for later assertions.
-
-        Inputs: `src`, `dst`. Output: None. Raises: RuntimeError when validation or
-        external operations fail.
-        """
-        copied_plots.append(dst.name)
-        if dst.name == "plot-copy-error.png":
-            raise RuntimeError("copy failed")
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(src.read_bytes())
-
-    monkeypatch.setattr(core_functions.shutil, "copy2", _copy2)
 
     id_values = iter((None, 301, 301, 301, 301, 301, 301, 301, 301, 301))
     monkeypatch.setattr(
@@ -2086,7 +2086,7 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
                 "rel_path": relative_path,
             }
         plot_imports.append(relative_path)
-        if relative_path.endswith("plot-import-error.png"):
+        if relative_path.endswith("plot-import-error_edx.png"):
             return {
                 "status": "error",
                 "job_error": "plot import failed",
@@ -2127,10 +2127,10 @@ def test_process_import_job_handles_sem_edx_reconnect_and_attachment_edge_cases(
     assert any("Rejected staged text path" in error for error in state["job"]["errors"])
     assert any("Rejected staged plot path" in error for error in state["job"]["errors"])
     assert any(
-        "Failed to stage SEM-EDX plot PNG for import: plot-copy-error.png" in error
+        "Failed to generate SEM-EDX plot for plot-write-error.txt." in error
         for error in state["job"]["errors"]
     )
     assert any(name == "attach-error.txt" for name, _plot in attached)
-    assert "images/plot-import-error.png" in plot_imports
+    assert "images/plot-import-error_edx.png" in plot_imports
     assert removed_jobs == []
     assert deferred_jobs == [job_id]

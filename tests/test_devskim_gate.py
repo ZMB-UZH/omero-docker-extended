@@ -6,10 +6,12 @@ import configparser
 import csv
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 import zipfile
 
 import pytest
@@ -112,7 +114,8 @@ def test_verified_cache_avoids_network_and_rejects_changed_content(
 
     Inputs: real ZIP cache, then altered bytes. Output: reuse followed by rejection.
     """
-    package = make_package(tmp_path / "microsoft.cst.devskim.cli.1.0.90.nupkg")
+    version = gate.read_tooling(gate.REPO_ROOT / "tools/devskim_tooling.ini")["version"]
+    package = make_package(tmp_path / f"microsoft.cst.devskim.cli.{version}.nupkg")
     settings = package_settings(package)
     monkeypatch.setattr(
         gate.subprocess,
@@ -303,6 +306,63 @@ def test_snapshot_rejects_external_links(tmp_path):
         gate.snapshot_candidate(repo, tmp_path / "snapshot")
 
 
+def test_empty_candidate_and_missing_runtime_fail_closed(tmp_path):
+    """Inputs: empty real Git repository and incomplete ZIP. Output: no valid scan artifact."""
+    repo = tmp_path / "empty-repo"
+    repo.mkdir()
+    subprocess.run([gate.executable("git"), "init", "--quiet", str(repo)], check=True)
+    with pytest.raises(ValueError, match="non-empty Git candidate"):
+        gate.snapshot_candidate(repo, tmp_path / "snapshot")
+    package = make_package(
+        tmp_path / "incomplete.nupkg", {"tools/net8.0/any/readme.txt": b"not a CLI"}
+    )
+    original = package.read_bytes()
+    with pytest.raises(ValueError, match="does not contain the selected CLI"):
+        gate.extract_engine(package, "net8.0", tmp_path / "engine")
+    assert package.read_bytes() == original
+    assert not (tmp_path / "engine" / "devskim.dll").exists()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("fixture I/O failed"),
+        ValueError("fixture validation failed"),
+        configparser.Error("fixture manifest failed"),
+        subprocess.CalledProcessError(7, ["fixture scanner"]),
+        zipfile.BadZipFile("fixture package failed"),
+    ],
+)
+def test_scanner_failures_propagate_nonzero_status(
+    tmp_path, monkeypatch, capsys, failure
+):
+    """Inputs: failure at each admitted scanner boundary. Output: nonzero exit and retained diagnostic."""
+
+    def fail(*_args):
+        """Inputs: scanner request. Output: explicit engine or artifact failure."""
+        raise failure
+
+    monkeypatch.setattr(gate, "scan", fail)
+    assert gate.main(["--artifact-dir", str(tmp_path)]) == 1
+    assert "DevSkim gate failed:" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_native_entrypoint_rejects_missing_prerequisite_without_network(tmp_path):
+    """Inputs: native CLI with an empty executable path. Output: early failure and no report."""
+    result = subprocess.run(
+        [sys.executable, str(Path(gate.__file__)), "--artifact-dir", str(tmp_path)],
+        env={**os.environ, "PATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert "DevSkim requires curl" in result.stderr
+    assert not list(tmp_path.rglob("*.sarif"))
+
+
 @pytest.mark.parametrize(
     "results,status",
     [
@@ -334,8 +394,9 @@ def test_entrypoint_uses_real_guard_without_modifying_report(
 
 
 @pytest.mark.parametrize("artifact_name", ["artifacts", 'artifacts, with "quotes"'])
+@pytest.mark.parametrize("report_kind", ["regular", "missing", "symlink"])
 def test_scan_is_offline_readonly_and_keeps_raw_results(
-    tmp_path, monkeypatch, artifact_name
+    tmp_path, monkeypatch, artifact_name, report_kind
 ):
     """Exercise real package extraction and source copying around the container boundary.
 
@@ -373,12 +434,22 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
                 if field.startswith("source=")
             )
         )
-        (output / "devskim-results.sarif").write_bytes(raw_report)
+        report_path = output / "devskim-results.sarif"
+        if report_kind == "regular":
+            report_path.write_bytes(raw_report)
+        elif report_kind == "symlink":
+            report_path.symlink_to(repo / "tracked.py")
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(gate.subprocess, "run", run)
-    report = gate.scan(repo, artifact_dir)
-    assert report.read_bytes() == raw_report
+    if report_kind == "regular":
+        report = gate.scan(repo, artifact_dir)
+        assert report.read_bytes() == raw_report
+    else:
+        with pytest.raises(ValueError, match="regular SARIF report"):
+            gate.scan(repo, artifact_dir)
+        assert not list(artifact_dir.rglob("*.sarif"))
+        assert (repo / "tracked.py").read_text() == "VALUE = 1\n"
     command = commands[0]
     assert command[command.index("--network") + 1] == "none"
     assert "--read-only" in command

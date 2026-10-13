@@ -15,6 +15,14 @@ from pathlib import Path
 BASH_BIN = "/bin/bash"
 
 
+def _traced_env(values):
+    """Inputs: isolated child environment. Output: same values plus active coverage tracing."""
+    environment = dict(values)
+    if config := os.environ.get("COVERAGE_PROCESS_CONFIG"):
+        environment["COVERAGE_PROCESS_CONFIG"] = config
+    return environment
+
+
 class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     """Test cases for OMERO web startup script regression tests."""
 
@@ -165,7 +173,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             "OMERO_WEB_RUNTIME_DIR": str(runtime_dir),
             "OMERO_WEB_WSGI_ARGS": wsgi_args,
         }
-        subprocess.run([BASH_BIN, str(self.web_server_script)], check=True, env=env)
+        subprocess.run(
+            [BASH_BIN, str(self.web_server_script)], check=True, env=_traced_env(env)
+        )
         return calls_file.read_text(encoding="utf-8").splitlines(), runtime_dir
 
     def test_web_server_launcher_upgrades_legacy_wsgi_arguments(self) -> None:
@@ -287,7 +297,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [sys.executable, str(self.config_script)], check=True, env=env
+                [sys.executable, str(self.config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
@@ -319,7 +331,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [sys.executable, str(self.config_script)], check=True, env=env
+                [sys.executable, str(self.config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
@@ -366,7 +380,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [sys.executable, str(self.config_script)], check=True, env=env
+                [sys.executable, str(self.config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
@@ -404,7 +420,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [sys.executable, str(self.config_script)], check=True, env=env
+                [sys.executable, str(self.config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             self.assertEqual(
@@ -463,7 +481,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [sys.executable, str(self.config_script)], check=True, env=env
+                [sys.executable, str(self.config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             self.assertEqual(
@@ -511,7 +531,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(self.config_script)],
                 check=False,
-                env=env,
+                env=_traced_env(env),
                 capture_output=True,
                 text=True,
             )
@@ -545,7 +565,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [BASH_BIN, str(self.default_config_script)], check=True, env=env
+                [BASH_BIN, str(self.default_config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
@@ -586,7 +608,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [BASH_BIN, str(self.default_config_script)], check=True, env=env
+                [BASH_BIN, str(self.default_config_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             self.assertEqual(
@@ -704,7 +728,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [BASH_BIN, str(self.cleanprevious_script)], check=True, env=env
+                [BASH_BIN, str(self.cleanprevious_script)],
+                check=True,
+                env=_traced_env(env),
             )
 
             self.assertFalse(pid_file.exists())

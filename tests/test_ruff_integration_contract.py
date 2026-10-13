@@ -74,7 +74,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.16.8", doc_text)
+        self.assertIn("0.16.10", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -133,7 +133,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.16.8", config["required-version"])
+        self.assertEqual("==0.16.10", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["third_party"], config["extend-exclude"])
         self.assertEqual(["F", "E7", "E9", "B904", "LOG014"], config["lint"]["select"])
@@ -145,8 +145,21 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in pre commit uses pinned ruff hooks.
         """
         config = yaml.safe_load(self.read_text(".pre-commit-config.yaml"))
-        self.assertEqual(1, len(config["repos"]))
-        repo = config["repos"][0]
+        self.assertEqual(2, len(config["repos"]))
+        local, repo = config["repos"]
+        self.assertEqual("local", local["repo"])
+        self.assertEqual(1, len(local["hooks"]))
+        preflight = local["hooks"][0]
+        self.assertEqual(
+            {"id", "name", "entry", "language", "always_run", "pass_filenames"},
+            set(preflight),
+        )
+        self.assertEqual("agent-tool-preflight", preflight["id"])
+        self.assertEqual("Verify mandatory agent-tool execution", preflight["name"])
+        self.assertEqual("python3 tools/agent_preflight.py check", preflight["entry"])
+        self.assertEqual("system", preflight["language"])
+        self.assertIs(preflight["always_run"], True)
+        self.assertIs(preflight["pass_filenames"], False)
         self.assertEqual("https://github.com/astral-sh/ruff-pre-commit", repo["repo"])
         self.assertRegex(repo["rev"], r"^[0-9a-f]{40}$")
         version = tomllib.loads(self.read_text(".ruff.toml"))[
@@ -198,7 +211,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.16.8", install_step["with"]["version"])
+        self.assertEqual("0.16.10", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

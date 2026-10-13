@@ -562,6 +562,93 @@ def test_ensure_job_user_rejects_ldap_backed_name_collision(helper_module):
         )
 
 
+@pytest.mark.parametrize(
+    "create_error", [None, FakeValidationException("concurrent creation")]
+)
+def test_created_or_racing_directory_account_is_never_granted_service_memberships(
+    helper_module,
+    monkeypatch,
+    create_error,
+):
+    """Inputs: directory identity on readback. Output: immediate rejection without retry or grants."""
+    module = helper_module
+    admin = FakeAdmin(
+        [], [], existing_user=False, existing_ldap=True, create_exception=create_error
+    )
+    sleeps = []
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+    with pytest.raises(module.UnsafeExistingJobUserError):
+        module.ensure_job_user(
+            admin, FakeQuery(admin), "job-service", "fixture", retries=3
+        )
+    assert sleeps == []
+    assert admin.added_groups == []
+
+
+def test_creation_without_readback_fails_after_bounded_retries(
+    helper_module, monkeypatch
+):
+    """Inputs: successful create but invisible user. Output: bounded retry and preserved cause."""
+    module = helper_module
+    admin = FakeAdmin([], [], existing_user=False)
+    query = types.SimpleNamespace(findByString=lambda *_args: None)
+    sleeps = []
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+    with pytest.raises(RuntimeError, match="failed to ensure") as failure:
+        module.ensure_job_user(admin, query, "job-service", "fixture", retries=2)
+    assert "could not read it back" in str(failure.value.__cause__)
+    assert sleeps == [2]
+    assert len(admin.created_users) == 2
+
+
+def test_race_followup_lookup_failure_preserves_cause(helper_module):
+    """Inputs: failed duplicate-account lookup. Output: bounded failure with original cause."""
+    module = helper_module
+    admin = FakeAdmin(
+        [], [], existing_user=False, create_exception=FakeValidationException("race")
+    )
+    results = iter((None, RuntimeError("query unavailable")))
+
+    def lookup(*_args):
+        """Inputs: user lookup. Output: initial absence, then a readback error."""
+        result = next(results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    with pytest.raises(RuntimeError, match="failed to ensure") as failure:
+        module.ensure_job_user(
+            admin,
+            types.SimpleNamespace(findByString=lookup),
+            "job-service",
+            "fixture",
+            retries=1,
+        )
+    assert str(failure.value.__cause__) == "query unavailable"
+
+
+@pytest.mark.parametrize(
+    "flag,expected", [("true", True), (" 0 ", False), ("YES", True)]
+)
+def test_directory_identity_flag_handles_wrapped_text(helper_module, flag, expected):
+    """Inputs: textual LDAP flag. Output: conservative normalized account classification."""
+    assert (
+        helper_module._is_ldap_experimenter(
+            types.SimpleNamespace(ldap=FakeRValue(flag))
+        )
+        is expected
+    )
+
+
+def test_invalid_network_port_is_rejected_before_connection(helper_module):
+    """Inputs: port above TCP range. Output: argument error before gateway access."""
+    with pytest.raises(SystemExit) as failure:
+        helper_module.main(
+            ["--host", "localhost", "--port", "65536", "--job-user", "job"]
+        )
+    assert failure.value.code == 2
+
+
 def test_main_does_not_convert_keyboard_interrupt(helper_module, monkeypatch):
     """Verify main does not convert keyboard interrupt.
 

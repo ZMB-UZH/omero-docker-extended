@@ -214,6 +214,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     DOCKER_BUILD_PROVENANCE=0
                     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
                     OMERO_DROPBOX_VERSION=5.7.0
+                    OMERO_FIGURE_VERSION=8.0.1
                     OMERO_CLI_ZARR_VERSION=0.8.0
                     OME_ZARR_PY_VERSION=0.16.0
                     BIOFORMATS2RAW_VERSION=0.12.1
@@ -310,6 +311,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     DOCKER_BUILD_LOCAL_CACHE_ENABLED=1
                     DOCKER_BUILD_LOCAL_CACHE_MODE=min
                     OMERO_DROPBOX_VERSION=5.7.0
+                    OMERO_FIGURE_VERSION=8.0.1
                     OMERO_CLI_ZARR_VERSION=0.8.0
                     OME_ZARR_PY_VERSION=0.16.0
                     BIOFORMATS2RAW_VERSION=0.12.1

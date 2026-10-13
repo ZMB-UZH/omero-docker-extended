@@ -3,6 +3,7 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import importlib.util
+import secrets
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ security_delta_guard = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = security_delta_guard
 SPEC.loader.exec_module(security_delta_guard)
 
-TEST_GITHUB_CREDENTIAL = "-".join(("placeholder", "credential"))
+TEST_GITHUB_CREDENTIAL = secrets.token_urlsafe(24)
 TEST_SARIF_ID = "00000000-0000-0000-0000-000000000001"
 TEST_COMMIT_SHA = "a" * 40
 

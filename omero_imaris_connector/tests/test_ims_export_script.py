@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import builtins
 import importlib.util
 import pathlib
 import runpy
@@ -61,6 +62,34 @@ def _write_file(path: pathlib.Path, payload: bytes) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
+
+
+@pytest.mark.parametrize("dependency", ["numpy", "tifffile"])
+def test_pixel_export_missing_dependency_fails_before_writing(
+    monkeypatch, tmp_path, dependency
+):
+    """Inputs: missing native export dependency. Output: clear failure and untouched output file."""
+    module = _load_script_module()
+    original_import = builtins.__import__
+
+    def import_dependency(name, *args, **kwargs):
+        """Inputs: import request. Output: injected failure for only the selected dependency."""
+        if name == dependency:
+            raise ImportError("dependency unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_dependency)
+    image = types.SimpleNamespace(
+        getPrimaryPixels=lambda: types.SimpleNamespace(getPlane=lambda *args: None)
+    )
+    path = tmp_path / "export.ome.tif"
+    with (
+        path.open("wb") as handle,
+        pytest.raises(RuntimeError, match="tifffile and numpy are required") as error,
+    ):
+        module._write_ome_tiff_from_pixels(image, handle)
+    assert isinstance(error.value.__cause__, ImportError)
+    assert path.read_bytes() == b""
 
 
 def _write_sha256(path: pathlib.Path, payload: bytes) -> None:

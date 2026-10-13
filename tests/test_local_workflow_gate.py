@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import re
 import subprocess
@@ -38,6 +39,81 @@ class LocalWorkflowGateTests(unittest.TestCase):
         Inputs: unittest supplies the instance. Output: prepares isolated fixtures for one check.
         """
         self.tool = _load_tool()
+
+    def test_main_keep_going_runs_all_gates_and_preserves_failures(self) -> None:
+        """Collect independent failures without hiding them behind later success.
+
+        Inputs: failing and passing gates. Output: all run, both errors retained.
+        """
+        first = unittest.mock.Mock(side_effect=self.tool.GateError("first failed"))
+        middle = unittest.mock.Mock()
+        last = unittest.mock.Mock(side_effect=self.tool.GateError("last failed"))
+        with (
+            unittest.mock.patch.dict(self.tool.PROFILES, {"ci": (first, middle, last)}),
+            unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as output,
+            unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as errors,
+        ):
+            result = self.tool.main(["--profile", "ci", "--keep-going"])
+        self.assertEqual(result, 1)
+        for runner in (first, middle, last):
+            runner.assert_called_once()
+        self.assertIn("first failed", errors.getvalue())
+        self.assertIn("last failed", errors.getvalue())
+        self.assertNotIn("Local workflow gates passed", output.getvalue())
+
+    def test_main_remains_fail_fast_without_keep_going(self) -> None:
+        """Preserve the default early-stop policy.
+
+        Inputs: a failed first gate. Output: nonzero status without later calls.
+        """
+        first = unittest.mock.Mock(side_effect=self.tool.GateError("first failed"))
+        last = unittest.mock.Mock()
+        with (
+            unittest.mock.patch.dict(self.tool.PROFILES, {"ci": (first, last)}),
+            unittest.mock.patch("sys.stdout", new_callable=io.StringIO),
+            unittest.mock.patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            self.assertEqual(self.tool.main(["--profile", "ci"]), 1)
+        first.assert_called_once()
+        last.assert_not_called()
+
+    def test_main_does_not_run_gates_after_failed_setup(self) -> None:
+        """A broken tool environment is not an independent gate failure.
+
+        Inputs: failed setup with keep-going. Output: no verification runs.
+        """
+        runner = unittest.mock.Mock()
+        with (
+            unittest.mock.patch.dict(self.tool.PROFILES, {"ci": (runner,)}),
+            unittest.mock.patch.object(
+                self.tool,
+                "_install_python_workflow_dependencies",
+                side_effect=self.tool.GateError("setup failed"),
+            ),
+            unittest.mock.patch("sys.stdout", new_callable=io.StringIO),
+            unittest.mock.patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            self.assertEqual(
+                self.tool.main(["--profile", "ci", "--setup", "--keep-going"]), 1
+            )
+        runner.assert_not_called()
+
+    def test_main_success_with_keep_going_is_reported_once(self) -> None:
+        """An all-pass profile succeeds after every selected gate runs.
+
+        Inputs: two successful gates. Output: zero status and one success summary.
+        """
+        first, last = unittest.mock.Mock(), unittest.mock.Mock()
+        with (
+            unittest.mock.patch.dict(self.tool.PROFILES, {"ci": (first, last)}),
+            unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as output,
+            unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as errors,
+        ):
+            self.assertEqual(self.tool.main(["--profile", "ci", "--keep-going"]), 0)
+        first.assert_called_once()
+        last.assert_called_once()
+        self.assertEqual(output.getvalue().count("Local workflow gates passed."), 1)
+        self.assertEqual(errors.getvalue(), "")
 
     def test_scan_discovery_covers_all_first_party_locations(self) -> None:
         """Keep tools, hooks and future packages in scope.
@@ -242,8 +318,26 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 self.tool.run_hadolint,
                 self.tool.run_devskim,
                 self.tool.run_super_linter,
+                self.tool.run_redis,
             ),
             self.tool.PROFILES["all"],
+        )
+
+    def test_redis_container_gate_is_explicit_and_mandatory_in_hosted_tests(
+        self,
+    ) -> None:
+        """Inputs: gate and hosted workflow. Output: lifecycle checks cannot be silently skipped."""
+        context = self.tool.GateContext(
+            REPO_ROOT, REPO_ROOT / ".cache", REPO_ROOT / ".venv", sys.executable, False
+        )
+        with unittest.mock.patch.object(self.tool, "_run") as run:
+            self.tool.run_redis(context)
+        command = run.call_args.args[0]
+        self.assertIn("tests/container_redis_persistence.py", command)
+        self.assertEqual(command[:3], (sys.executable, "-m", "pytest"))
+        self.assertEqual(self.tool.PROFILES["redis"], (self.tool.run_redis,))
+        self.assertIn(
+            "--profile redis", (REPO_ROOT / ".github/workflows/tests.yml").read_text()
         )
 
     def test_hadolint_gate_uses_compatible_pinned_engine(self) -> None:
@@ -344,6 +438,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 keep_going=False,
             )
             calls: list[tuple[str, tuple[str, ...]]] = []
+            coverage_paths: list[Path] = []
 
             def record_run(
                 command: tuple[str, ...],
@@ -359,16 +454,22 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 `env` (dict[str, str] | None) environment mapping, `label` (str),
                 `check` (bool). Output: `subprocess.CompletedProcess[str]`.
                 """
-                _ = (cwd, env, check)
+                _ = (cwd, check)
+                if env and "COVERAGE_FILE" in env and "pytest" in command:
+                    coverage_paths.append(Path(env["COVERAGE_FILE"]))
+                elif label.startswith("coverage "):
+                    self.assertEqual(
+                        Path(env["COVERAGE_FILE"]).parent, coverage_paths[0].parent
+                    )
                 calls.append((label, tuple(command)))
                 return subprocess.CompletedProcess(command, 0)
 
             with unittest.mock.patch.object(self.tool, "_run", side_effect=record_run):
                 self.tool.run_tests(context)
 
-            self.assertFalse((repo_root / ".coverage.root").exists())
-            self.assertFalse((repo_root / ".coverage.common").exists())
-            self.assertFalse((repo_root / ".coverage").exists())
+            self.assertTrue((repo_root / ".coverage.root").exists())
+            self.assertTrue((repo_root / ".coverage.common").exists())
+            self.assertEqual((repo_root / ".coverage").read_text(), "stale")
             self.assertFalse((repo_root / "coverage.xml").exists())
             self.assertTrue((repo_root / ".coverage.unrelated").exists())
 
@@ -377,8 +478,13 @@ class LocalWorkflowGateTests(unittest.TestCase):
             (),
         )
         self.assertTrue(combine_command, "coverage combine command was not recorded")
-        self.assertIn(".coverage.root", combine_command)
-        self.assertIn(".coverage.zarr", combine_command)
+        self.assertEqual(len(coverage_paths), 8)
+        self.assertEqual(len({path.parent for path in coverage_paths}), 1)
+        self.assertEqual(coverage_paths[0].name, ".coverage.root")
+        self.assertEqual(coverage_paths[-1].name, ".coverage.zarr")
+        self.assertTrue(coverage_paths[0].parent.is_relative_to(context.artifact_dir))
+        self.assertEqual(combine_command[-1], str(coverage_paths[0].parent))
+        self.assertIn("--keep", combine_command)
         self.assertNotIn(".coverage.unrelated", combine_command)
 
     def test_super_linter_image_matches_workflow_pin(self) -> None:
@@ -391,7 +497,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         image_matches = re.findall(
-            r"ghcr\.io/super-linter/super-linter:v8\.7\.0@sha256:[0-9a-f]{64}",
+            r"ghcr\.io/super-linter/super-linter:v9\.0\.0@sha256:[0-9a-f]{64}",
             workflow_text,
         )
         self.assertEqual(1, len(set(image_matches)))
@@ -443,7 +549,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in setup reads ruff version from repo config.
         """
-        self.assertEqual("0.16.8", self.tool._read_required_ruff_version(REPO_ROOT))
+        self.assertEqual("0.16.10", self.tool._read_required_ruff_version(REPO_ROOT))
 
     def test_default_branch_prefers_remote_head_metadata_over_stale_symbolic_ref(
         self,

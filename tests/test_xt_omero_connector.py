@@ -7,6 +7,7 @@ import email.message
 import hashlib
 import importlib.util
 import inspect
+import io
 import json
 import ntpath
 import os
@@ -14,11 +15,159 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 import types
 import urllib.parse
 from pathlib import Path, PureWindowsPath
 
 import pytest
+
+
+@pytest.mark.parametrize(
+    "mode,converter,expected",
+    [
+        ("selection", "OMERO", "at least two"),
+        ("bridge", "OMERO", "compatible Imaris bridge"),
+        ("bridge", "Imaris", "could not be discovered"),
+        ("unknown", "unknown", "Unsupported converter"),
+        ("identity", "OMERO", "missing an OMERO image id"),
+        ("missing", "OMERO", "Failed to download one selected file"),
+        ("invalid", "OMERO", "not a valid IMS"),
+        ("untracked", "Imaris", "not a readable TIFF"),
+        ("transfer", "OMERO", "fixture transfer failed"),
+        ("transfer", "Imaris", "fixture transfer failed"),
+        ("handoff", "OMERO", "did not accept the first"),
+        ("handoff", "Imaris", "did not accept the selected"),
+        ("cancel_before", "OMERO", None),
+        ("cancel_during", "OMERO", None),
+        ("stale", "OMERO", None),
+    ],
+)
+def test_batch_export_failure_never_opens_partial_data_or_damages_prior_files(
+    tmp_path, monkeypatch, mode, converter, expected
+):
+    """Inputs: real worker futures and failed batch boundaries. Output: no partial handoff or stale completion."""
+    module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, "1")
+    prior = tmp_path / "existing.ims"
+    prior.write_bytes(b"existing user bytes")
+    paths = {}
+    for image_id in (11, 12):
+        path = tmp_path / f"fixture-{image_id}.ims"
+        path.write_bytes(
+            b"invalid" if mode == "invalid" else b"\x89HDF\r\n\x1a\nfixture"
+        )
+        paths[image_id] = str(path)
+    dialog = object.__new__(module.OMEROBrowserDialog)
+    dialog.export_dir = str(tmp_path)
+    dialog.temp_files = []
+    event = threading.Event()
+    dialog._operation_cancel_event = event
+    dialog._operation_generation = 1
+    dialog._load_in_progress = True
+    handoffs, failures, completions, successes, downloads, statuses = (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
+
+    def download(image_id, *_args, **_kwargs):
+        """Inputs: planned image identity. Output: real prepared path or a controlled transport failure."""
+        downloads.append(image_id)
+        if mode in {"transfer", "stale"}:
+            raise RuntimeError("fixture transfer failed")
+        if mode == "cancel_during":
+            event.set()
+            raise module._ConnectorOperationCancelled("fixture cancellation")
+        return None if mode == "missing" else paths[image_id]
+
+    dialog.client = types.SimpleNamespace(download_ims_export=download)
+    dialog._download_selected_image_with_imaris_converter = download
+    dialog._ensure_native_open_ready_before_export = lambda: mode != "bridge"
+    dialog._ensure_imaris_converter_handoff_ready_before_export = lambda: (
+        mode != "bridge"
+    )
+    dialog._is_tracked_selected_image_export_file = lambda _path: mode != "untracked"
+    dialog._set_status = lambda *args: statuses.append(args)
+    dialog._show_error = lambda _title, message: failures.append(message)
+    dialog._show_info = lambda *args: successes.append(args)
+    dialog._invoke_on_ui_thread = lambda callback, wait=True: callback()
+    dialog._finish_load_workflow = lambda *args: completions.append(args)
+
+    def handoff(selected, **options):
+        """Inputs: completed batch paths. Output: recorded final handoff that deliberately fails."""
+        handoffs.append((selected, options))
+        return False
+
+    dialog._open_downloaded_files_in_imaris = handoff
+    images = [{"id": 11, "name": "first"}, {"id": 12, "name": "second"}]
+    if mode == "selection":
+        images = images[:1]
+    elif mode == "identity":
+        images[1].pop("id")
+    elif mode == "cancel_before":
+        event.set()
+    dialog._load_multiple_worker(
+        images,
+        converter,
+        operation_event=event,
+        operation_generation=0 if mode == "stale" else 1,
+    )
+    assert prior.read_bytes() == b"existing user bytes"
+    assert all(Path(path).is_file() for path in paths.values())
+    assert not successes
+    assert len(handoffs) == (1 if mode == "handoff" else 0)
+    if expected:
+        assert len(failures) == 1 and expected in failures[0]
+    else:
+        assert failures == []
+    assert completions == (
+        [] if mode == "stale" else [(False, mode.startswith("cancel_"))]
+    )
+    if mode in {"selection", "bridge", "unknown", "identity", "cancel_before"}:
+        assert not downloads
+    if mode.startswith("cancel_"):
+        assert any("stopped by user" in status[0] for status in statuses)
+    if mode == "handoff":
+        assert handoffs[0][0] == (
+            [paths[11]] if converter == "OMERO" else [paths[11], paths[12]]
+        )
+
+
+@pytest.mark.parametrize(
+    "selected,configured,cpu,expected",
+    [
+        (None, "", None, 1),
+        ([], "", 4, 1),
+        ("bad", "", 4, 1),
+        ({"invalid": True}, "", 4, 1),
+        (9, "", None, 1),
+        (9, "", "raises", 1),
+        (9, "", 4, 4),
+        (9, "invalid", 4, 9),
+        (9, "0", 4, 1),
+        (9, "-1", 4, 1),
+        (9, "100", 4, 9),
+    ],
+)
+def test_download_parallelism_remains_bounded_for_invalid_runtime_values(
+    monkeypatch, selected, configured, cpu, expected
+):
+    """Inputs: invalid settings or unavailable CPU count. Output: at least one worker, never more than selected images."""
+    module = _load_xt_module()
+    monkeypatch.setenv(module.MULTI_DOWNLOAD_WORKERS_ENV, configured)
+
+    def cpu_count():
+        """Inputs: fixture platform. Output: available count or platform failure."""
+        if cpu == "raises":
+            raise OSError("CPU enumeration unavailable")
+        return cpu
+
+    monkeypatch.setattr(module.os, "cpu_count", cpu_count)
+    assert module._multi_download_worker_count(selected) == expected
 
 
 @pytest.mark.parametrize(
@@ -246,7 +395,13 @@ class _FakeHTTPError(Exception):
         """
         super().__init__(f"HTTP {code} {msg}")
         self.code = code
+        self.reason = msg
+        self.closed = False
         self._body = body
+
+    def close(self):
+        """Inputs: no arguments. Output: records release of the simulated error response."""
+        self.closed = True
 
     def read(self, *_args, **_kwargs):
         """Read data from the resource.
@@ -836,6 +991,65 @@ def test_omero_web_client_uses_checkbox_scheme_and_rejects_scheme_in_host():
         module.OMEROWebClient._build_base_url("https://omero.example.org", 443, "https")
 
 
+@pytest.mark.parametrize(
+    "host,authority",
+    [
+        ("localhost", "localhost"),
+        ("omero.example.org", "omero.example.org"),
+        ("imaging-server", "imaging-server"),
+        ("192.0.2.10", "192.0.2.10"),
+        ("  localhost  ", "localhost"),
+        ("::1", "[::1]"),
+        ("[::1]", "[::1]"),
+        ("2001:DB8::1", "[2001:DB8::1]"),
+        ("[2001:DB8::1]", "[2001:DB8::1]"),
+    ],
+)
+def test_host_field_builds_exact_authority_without_changing_host(host, authority):
+    """Inputs: supported host forms. Output: unchanged host and a separate explicit port."""
+    module = _load_xt_module()
+    assert module._omero_web_host_input_error(host) == ""
+    for scheme in ("https", "http"):
+        url = module.OMEROWebClient._build_base_url(host, 8443, scheme)
+        assert url == f"{scheme}://{authority}:8443"
+        parsed = urllib.parse.urlsplit(url)
+        assert parsed.port == 8443
+        assert parsed.hostname == authority.strip("[]").lower()
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "[::1]:",
+        "[::1]suffix",
+        "[::1][::2]",
+        "[::1",
+        "[]",
+        "[localhost]",
+        "[192.0.2.10]",
+        "[::1]:8443",
+        "[::1]:65536",
+        "[::1]:bad",
+        "omero.example.org:8443",
+        "https://omero.example.org",
+        "//omero.example.org",
+        "omero.example.org/path",
+        "omero.example.org?value=1",
+        "omero.example.org#fragment",
+        "user@omero.example.org",
+        "omero.example.org\tother",
+        "omero.example.org\nother",
+        "omero.example.org other",
+    ],
+)
+def test_invalid_host_authority_is_rejected_before_url_construction(host):
+    """Inputs: malformed host-only fields. Output: validation failure, never an ambiguous URL."""
+    module = _load_xt_module()
+    assert module._omero_web_host_input_error(host)
+    with pytest.raises(ValueError):
+        module.OMEROWebClient._build_base_url(host, 8443, "https")
+
+
 def test_client_detects_omero_ims_export_capability():
     """Verify client detects OMERO IMS export capability.
 
@@ -1421,13 +1635,13 @@ def test_client_detects_folder_export_capability_from_start_endpoint():
     ]
 
 
-def test_client_marks_root_folder_export_capability_as_unavailable():
+def test_client_marks_root_folder_export_capability_as_unavailable(monkeypatch):
     """Verify client marks root folder export capability as unavailable.
 
     Inputs: repository fixtures. Output: fails on regressions in client marks root folder export capability as unavailable.
     """
     module = _load_xt_module()
-    module.urllib.error.HTTPError = _FakeHTTPError
+    monkeypatch.setattr(module.urllib.error, "HTTPError", _FakeHTTPError)
     client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_LOGIN_VALUE)
     client.session_id = "session-123"
 
@@ -4862,8 +5076,18 @@ def test_stale_connect_success_completion_clears_new_client_without_ui_mutation(
     assert cookie_jar.cleared is True
 
 
-def test_connect_rejects_scheme_in_host_before_client_creation(monkeypatch):
-    """Verify Host rejects URL schemes before any OMERO.web client is created.
+@pytest.mark.parametrize(
+    "host,error_name",
+    [
+        ("https://omero.example.org", "HOST_FIELD_SCHEME_ERROR_MESSAGE"),
+        ("[::1]:", "HOST_FIELD_INVALID_ERROR_MESSAGE"),
+        ("[::1]:8443", "HOST_FIELD_PORT_ERROR_MESSAGE"),
+    ],
+)
+def test_connect_rejects_invalid_host_before_client_creation(
+    monkeypatch, host, error_name
+):
+    """Verify Host validation runs before any OMERO.web client is created.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on host-field validation regressions.
     """
@@ -4873,7 +5097,7 @@ def test_connect_rejects_scheme_in_host_before_client_creation(monkeypatch):
     dialog._connected = False
     dialog._connection_in_progress = False
     dialog.client = None
-    dialog.host_entry = _FakeEntry("https://omero.example.org")
+    dialog.host_entry = _FakeEntry(host)
     dialog.port_entry = _FakeEntry("443")
     dialog.user_entry = _FakeEntry("alice")
     dialog.pass_entry = _FakeEntry("typed-secret")
@@ -4897,8 +5121,9 @@ def test_connect_rejects_scheme_in_host_before_client_creation(monkeypatch):
 
     module.OMEROBrowserDialog._connect(dialog)
 
-    assert errors == [("Invalid Host", module.HOST_FIELD_SCHEME_ERROR_MESSAGE)]
+    assert errors == [("Invalid Host", getattr(module, error_name))]
     assert dialog.client is None
+    assert dialog.pass_entry.value == "typed-secret"
 
 
 def test_omero_web_client_drops_password_after_connect_attempt(monkeypatch):
@@ -4999,10 +5224,12 @@ def test_omero_web_client_builds_direct_opener_for_configured_host(monkeypatch):
     opener = module.OMEROWebClient._build_direct_opener(cookie_jar)
 
     assert opener is sentinel_opener
-    assert len(captured_handlers) == 2
+    assert len(captured_handlers) == 3
     assert isinstance(captured_handlers[0], module.urllib.request.ProxyHandler)
     assert captured_handlers[0].proxies == {}
     assert isinstance(captured_handlers[1], module.urllib.request.HTTPCookieProcessor)
+    assert captured_handlers[1].cookiejar is cookie_jar
+    assert isinstance(captured_handlers[2], module._SameOriginRedirectHandler)
 
 
 def test_password_reveal_is_timed_and_clear_cancels_pending_timer():
@@ -9647,7 +9874,15 @@ def test_close_socket_quietly_logs_close_failures(monkeypatch):
     ]
 
 
-def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch):
+@pytest.mark.parametrize(
+    "minimum_name",
+    [
+        "MINIMUM_SUPPORTED",
+        "TLSv1_2",  # DevSkim: ignore DS440001 -- tests minimum policy
+        "TLSv1_3",  # DevSkim: ignore DS440001 -- tests stricter platform policy
+    ],
+)
+def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch, minimum_name):
     """Verify cancellable HTTPS uses an explicit secure TLS client minimum.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on insecure TLS regressions.
@@ -9718,7 +9953,7 @@ def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch):
 
             Inputs: none. Output: initialized context.
             """
-            self.minimum_version = None
+            self.minimum_version = getattr(module.ssl.TLSVersion, minimum_name)
 
         def wrap_socket(self, sock, *, server_hostname=None):
             """Record TLS settings and return wrapped socket.
@@ -9757,10 +9992,59 @@ def test_cancellable_https_get_sets_tls_minimum_before_wrap(monkeypatch):
 
     tls_floor = module.ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001
     assert observed == {
-        "minimum_version_at_wrap": tls_floor,
+        "minimum_version_at_wrap": max(
+            getattr(module.ssl.TLSVersion, minimum_name), tls_floor
+        ),
         "server_hostname": "omero.example.org",
     }
     assert fake_socket.closed is True
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "allowed"),
+    [
+        (
+            "https://omero.example.test/start",
+            "https://OMERO.example.test:443/end",
+            True,
+        ),
+        ("http://localhost/start", "http://localhost:80/end?next=1", True),
+        ("https://[::1]/start", "https://[::1]:443/end", True),
+        ("https://omero.example.test/", "https://other.example.test/", False),
+        ("https://omero.example.test/", "https://omero.example.test:8443/", False),
+        (
+            "https://omero.example.test/",
+            "http://omero.example.test/",  # DevSkim: ignore DS137138 -- rejected downgrade fixture
+            False,
+        ),
+        ("https://omero.example.test/", "https://user@omero.example.test/", False),
+        (
+            "https://omero.example.test/",
+            "https://user:fixture@omero.example.test/",
+            False,
+        ),
+        ("https://omero.example.test/", "https://omero.example.test:bad/", False),
+        ("https://omero.example.test/", "https:///missing-host", False),
+        ("https://omero.example.test/", "ftp://omero.example.test/", False),
+    ],
+)
+def test_redirect_origin_policy_handles_effective_ports_and_rejects_unsafe_targets(
+    source, target, allowed
+):
+    """Inputs: redirect origins. Output: compatible aliases allowed, changed or malformed origins rejected."""
+    module = _load_xt_module()
+    handler = module._SameOriginRedirectHandler()
+    request = module.urllib.request.Request(source)
+    with io.BytesIO(b"private fixture") as response:
+        if allowed:
+            redirected = handler.redirect_request(
+                request, response, 302, "Found", {}, target
+            )
+            assert redirected.full_url == target
+        else:
+            with pytest.raises(module.urllib.error.HTTPError) as caught:
+                handler.redirect_request(request, response, 302, "Found", {}, target)
+            caught.value.close()
 
 
 def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
@@ -9797,6 +10081,149 @@ def test_client_download_selected_image_ome_tiff_404_never_downloads_original(
 
     assert opened_urls == [f"{client.base_url}/webgateway/render_ome_tiff/i/17/"]
     assert "archived_files" not in opened_urls[0]
+
+
+@pytest.mark.parametrize(
+    "mode", ["disabled", "other_os", "bad_id", "missing_file", "empty"]
+)
+def test_multi_bridge_refuses_unusable_inputs_before_runtime_discovery(
+    tmp_path, monkeypatch, mode
+):
+    """Inputs: unavailable bridge or invalid handoff. Output: no subprocess or runtime discovery."""
+    module = _load_xt_module()
+    ims = tmp_path / "valid.ims"
+    ims.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    monkeypatch.setattr(
+        module,
+        "os",
+        types.SimpleNamespace(
+            **{**vars(os), "name": "nt" if mode != "other_os" else "posix"}
+        ),
+    )
+    monkeypatch.setattr(
+        module, "_native_imaris_bridge_enabled", lambda: mode != "disabled"
+    )
+
+    def unexpected_discovery():
+        """Inputs: none. Output: fail if a rejected request discovers runtimes."""
+        raise AssertionError("Invalid handoff must not discover or launch runtimes")
+
+    monkeypatch.setattr(
+        module, "_iter_native_bridge_python_executables", unexpected_discovery
+    )
+    paths = (
+        []
+        if mode == "empty"
+        else [tmp_path / "missing.ims"]
+        if mode == "missing_file"
+        else [ims]
+    )
+    assert not module._open_files_in_imaris_with_native_bridge_runner(
+        paths, None if mode == "bad_id" else "17"
+    )
+
+
+@pytest.mark.parametrize("single", [False, True])
+@pytest.mark.parametrize("succeeds", [False, True])
+def test_multi_bridge_deduplicates_runtimes_and_preserves_handoff_order(
+    tmp_path, monkeypatch, single, succeeds
+):
+    """Inputs: preferred, duplicate and missing runtimes. Output: each usable runtime tried once in order."""
+    module = _load_xt_module()
+    monkeypatch.setattr(
+        module, "os", types.SimpleNamespace(**{**vars(os), "name": "nt"})
+    )
+    paths = [tmp_path / "one.ims", tmp_path / "two.ims"]
+    for path in paths:
+        path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    if single:
+        paths = paths[:1]
+    runtimes = [
+        tmp_path / "preferred" / "python.exe",
+        tmp_path / "fallback" / "pythonw.exe",
+    ]
+    for runtime in runtimes:
+        runtime.parent.mkdir()
+        runtime.write_bytes(b"fixture interpreter")
+    preferred, fallback = map(str, runtimes)
+    monkeypatch.setattr(module, "_native_imaris_bridge_enabled", lambda: False)
+    monkeypatch.setattr(
+        module,
+        "_iter_native_bridge_python_executables",
+        lambda: iter([preferred, str(tmp_path / "missing.exe"), fallback, fallback]),
+    )
+    attempts = []
+
+    def handoff(runtime, selected, identifier, require_ims=True):
+        """Inputs: validated bridge arguments. Output: controlled native-protocol acceptance."""
+        attempts.append((runtime, selected, identifier, require_ims))
+        return succeeds and runtime == fallback
+
+    monkeypatch.setattr(module, "_run_native_bridge_open_many_helper", handoff)
+    monkeypatch.setattr(module, "_run_native_bridge_open_helper", handoff)
+    assert (
+        module._open_files_in_imaris_with_native_bridge_runner(
+            paths, "17", preferred_python_executable=preferred, allow_when_disabled=True
+        )
+        is succeeds
+    )
+    selected = paths[0] if single else paths
+    assert attempts == [
+        (runtime, selected, "17", True) for runtime in (preferred, fallback)
+    ]
+
+
+def test_multi_bridge_without_runtimes_has_no_false_success(tmp_path, monkeypatch):
+    """Inputs: valid IMS files but no compatible runtime. Output: false, with original inputs unchanged."""
+    module = _load_xt_module()
+    monkeypatch.setattr(
+        module, "os", types.SimpleNamespace(**{**vars(os), "name": "nt"})
+    )
+    monkeypatch.setattr(
+        module, "_iter_native_bridge_python_executables", lambda: iter(())
+    )
+    paths = [tmp_path / "one.ims", tmp_path / "two.ims"]
+    for path in paths:
+        path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    assert not module._open_files_in_imaris_with_native_bridge_runner(
+        paths, "17", allow_when_disabled=True
+    )
+    assert all(path.read_bytes() == b"\x89HDF\r\n\x1a\npayload" for path in paths)
+
+
+@pytest.mark.parametrize("value", [None, [], 4, "missing.ims"])
+def test_direct_multi_open_refuses_empty_or_missing_files(value, monkeypatch):
+    """Inputs: empty, malformed or missing files. Output: no native application calls."""
+    module = _load_xt_module()
+
+    def unexpected_open(*_args, **_kwargs):
+        """Inputs: handoff arguments. Output: fail if invalid files reach native code."""
+        raise AssertionError("Invalid files must not reach Imaris")
+
+    monkeypatch.setattr(module, "open_file_in_imaris", unexpected_open)
+    monkeypatch.setattr(module, "open_files_as_imaris_image_slots", unexpected_open)
+    assert not module.open_files_in_imaris(value, object(), require_ims=False)
+
+
+def test_direct_multi_open_always_enforces_ims_and_handles_pathlike(
+    tmp_path, monkeypatch
+):
+    """Inputs: valid and invalid files with compatibility flag disabled. Output: only validated IMS handed off."""
+    module = _load_xt_module()
+    path = tmp_path / "image.ims"
+    path.write_bytes(b"not HDF5")
+    calls = []
+    application = object()
+    monkeypatch.setattr(
+        module,
+        "open_file_in_imaris",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+    )
+    assert not module.open_files_in_imaris([path], application, require_ims=False)
+    assert not calls
+    path.write_bytes(b"\x89HDF\r\n\x1a\npayload")
+    assert module.open_files_in_imaris(path, application, require_ims=False)
+    assert calls == [((str(path), application), {"require_ims": True})]
 
 
 def test_native_bridge_runner_rejects_non_ims_before_subprocess(tmp_path, monkeypatch):
@@ -14030,8 +14457,10 @@ def test_health_ping_worker_stops_when_generation_changes(monkeypatch):
     assert finishes == []
 
 
-def test_health_ping_failure_returns_interface_to_connect_ready(monkeypatch):
-    """Verify repeated health-check failures reset the UI to connect-ready state.
+def test_health_ping_authentication_failure_returns_interface_to_connect_ready(
+    monkeypatch,
+):
+    """Verify confirmed authentication rejection resets the UI without a modal.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on health failure regressions.
     """
@@ -14057,23 +14486,20 @@ def test_health_ping_failure_returns_interface_to_connect_ready(monkeypatch):
         raising=False,
     )
 
-    module.OMEROBrowserDialog._handle_health_ping_failure(dialog, TimeoutError())
+    module.OMEROBrowserDialog._handle_health_ping_failure(
+        dialog, module._OMEROAuthenticationError("fixture-only rejection")
+    )
 
     clear_password_key = "clear_" + "password"
     assert disconnect_calls == [
         {
-            "status_text": "Connection lost - Ready to connect",
+            "status_text": "Authentication required - Please reconnect",
             "status_color": "#f8d7da",
             clear_password_key: False,
         }
     ]
-    assert errors == [
-        (
-            "Connection Lost",
-            "The OMERO connection was lost. Please reconnect to continue.",
-        )
-    ]
-    assert logs == ["Read-only OMERO health check failed after retries: TimeoutError"]
+    assert errors == []
+    assert logs == ["Read-only OMERO health check failed: _OMEROAuthenticationError"]
 
 
 def test_disconnect_preserves_password_only_when_requested():

@@ -51,7 +51,7 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.10.1-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
+- Version 8.10.2-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
@@ -67,15 +67,15 @@ Internal-only Ollama service for OMP's `Local` AI provider:
 
 ### Monitoring stack
 
-- **Prometheus** (v3.14.0): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
-- **Grafana** (13.2.2): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Prometheus** (v3.15.0): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
+- **Grafana** (13.2.3): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 - **Loki** (3.7.8): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.19.2): collects OMERO server/web internal log files and pushes them to Loki.
+- **Alloy** (v1.20.1): collects OMERO server/web internal log files and pushes them to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
 - **Node exporter** (v1.12.1): host-level metrics.
 - **cAdvisor** (v0.60.6): container resource metrics.
 - **Postgres exporters** (v0.20.1, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.91.1): Redis metrics.
+- **Redis exporter** (v1.93.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
 - **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing mounted host
   syslog and SSH auth logs. The firewall bouncer auto-detects

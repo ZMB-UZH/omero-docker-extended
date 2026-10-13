@@ -28,7 +28,7 @@ source "${SCRIPT_DIR}/omero-host-service-lib.sh"
 
 # Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
-    echo "Usage: $0 <OMERO_TMP_PATH>" >&2
+    echo "Usage: $0 <OMERO_TMP_PATH> [PERSISTENT_DIRECTORY_TO_PRESERVE]" >&2
     echo "  OMERO_TMP_PATH: Path to the OMERO temporary directory on the host" >&2
 }
 
@@ -41,7 +41,8 @@ render_unit() {
         "${source_file}" \
         "${dest_file}" \
         TMP_CLEANER_BIN "${TMP_CLEANER_BIN}" \
-        OMERO_TMP_PATH "${OMERO_TMP_DIR}"
+        OMERO_TMP_PATH "${OMERO_TMP_DIR}" \
+        OMERO_TMP_PRESERVE_DIR "${OMERO_TMP_PRESERVE_DIR:-}"
 }
 
 # Replace managed units. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -96,12 +97,17 @@ enable_timer() {
 main() {
 omero_require_root
 
-if [[ $# -ne 1 ]]; then
+if [[ $# -lt 1 || $# -gt 2 ]]; then
     usage
     exit 1
 fi
 
 OMERO_TMP_DIR="$(omero_canonical_existing_dir "$1" "OMERO_TMP_PATH")"
+OMERO_TMP_PRESERVE_DIR=""
+if [[ $# -eq 2 ]]; then
+    [[ "$2" = /* && -d "$2" ]] || omero_die "Preserved storage must be an existing absolute directory."
+    OMERO_TMP_PRESERVE_DIR="$(realpath -ms -- "$2")"
+fi
 
 echo "=== OMERO Tmp Cleaner Installer ==="
 echo ""

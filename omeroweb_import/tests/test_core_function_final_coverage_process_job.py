@@ -779,7 +779,15 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
         raise RuntimeError("reopen failed")
 
     fake_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
-    fake_parser.create_edx_spectrum_plot = lambda current_txt_path: plot_path
+    plot_calls = []
+
+    def render_plot(current_txt_path, output_path, *, output_stream):
+        """Inputs: source and output stream/path. Output: artifact and cache-miss record."""
+        plot_calls.append(current_txt_path)
+        output_stream.write(plot_path.read_bytes())
+        return output_path
+
+    fake_parser.create_edx_spectrum_plot = render_plot
     monkeypatch.setitem(
         sys.modules,
         "omeroweb_import.services.omero.sem_edx_parser",
@@ -799,6 +807,7 @@ def test_process_import_job_reuses_plot_cache_and_handles_reconnect_failures(
         message.startswith("spectra.txt:image-0.ome.tif:True")
         for message in saved_jobs[-1]["messages"]
     )
+    assert plot_calls == [txt_path]
 
 
 def test_process_import_job_logs_sem_edx_outer_exceptions(

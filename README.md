@@ -13,6 +13,7 @@
 [![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
 [![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
+[![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
 <!-- END GENERATED BADGES -->
 
@@ -139,7 +140,7 @@ has been validated.
 ├── SECURITY.md                        # Root security policy pointer
 ├── codecov.yml                        # Codecov status configuration
 ├── conftest.py                        # Pytest repository configuration
-├── docker-compose.yml                 # Compose topology: 21 services, 19 default runtime containers
+├── docker-compose.yml                 # Compose topology: 22 services, 20 default runtime containers
 ├── docker/                            # dockerfiles and image helper scripts
 │   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── firewall-bouncer.Dockerfile    #   CrowdSec firewall bouncer sidecar
@@ -237,9 +238,11 @@ has been validated.
 <details>
 <summary><h2>Service topology</h2></summary>
 
-`docker-compose.yml` declares **21 Compose services total** on a single docker
-bridge network (`omero`): **19 long-running runtime containers by default**,
-**20 when the profile-gated `crowdsec` service is enabled**. The one-shot
+`docker-compose.yml` declares **22 Compose services total**:
+**20 long-running runtime containers by default**,
+**21 when the profile-gated `crowdsec` service is enabled**. Application and
+monitoring traffic uses the `omero` bridge; the certificate issuer has no network
+and CrowdSec uses host networking. The one-shot
 `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the
 installation script persists `vm.overcommit_memory=1` on the host so it is not
 needed during normal `docker compose up` cycles.
@@ -248,24 +251,25 @@ The table below lists the long-running services available in the full profile se
 
 | Service | Image | Purpose | Port |
 | --- | --- | --- | --- |
+| internal-tls | custom | Offline issuance and automatic renewal of internal certificates | None |
 | `omeroserver` | Custom OMERO image | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
 | `omeroweb` | Custom OMERO image | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
 | `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
-| `redis` | redis:8.10.1-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.34.2 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `redis` | redis:8.10.2-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `ollama` | ollama/ollama:0.40.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.45.1-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
-| `prometheus` | prom/prometheus:v3.14.0 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.2.2 | Dashboards and visualization | 127.0.0.1:3000 |
+| `prometheus` | prom/prometheus:v3.15.0 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `grafana` | grafana/grafana:13.2.3 | Dashboards and visualization | 127.0.0.1:3000 |
 | `loki` | grafana/loki:3.7.8 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.19.2 | Log collection pipeline (file-based) | 12345 (internal) |
+| `alloy` | grafana/alloy:v1.20.1 | Log collection pipeline (file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.6 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.91.1-alpine | Redis metrics | 9121 (internal) |
+| `redis-exporter` | oliver006/redis_exporter:v1.93.0-alpine | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
@@ -334,8 +338,8 @@ OMERO image export to Imaris (.ims) format.
   session. User settings autosave stores host, port, username, HTTPS state,
   path, selected converter, and autosave state only, never the password. The
   password field clears after a successful login, and silent read-only health
-  checks return the UI to connect-ready state if the OMERO connection is lost
-  after retries.
+  checks preserve the session and selections during outages. Checks retry
+  automatically; only confirmed authentication rejection requires reconnection.
 - Container package inspection helper: `helper_scripts_debian/docker_image_analysis.sh`
 
 ### Shared Library (`omero_plugin_common`)
@@ -470,9 +474,10 @@ not use `latest`. For unattended runs, set both values explicitly instead of
 relying on prompts:
 
 ```bash
-PREBUILT_IMAGE_RELEASE=1.0.0-main.1 \
-PREBUILT_IMAGE_DIGEST=sha256:<64 lowercase hex characters> \
-sudo bash ./installation/easy_installation_script.sh
+sudo env \
+  PREBUILT_IMAGE_RELEASE='<release-tag>' \
+  PREBUILT_IMAGE_DIGEST='sha256:<64 lowercase hex characters>' \
+  bash ./installation/easy_installation_script.sh
 ```
 
 Carrier images are published with the manual `release-prebuilt-carrier` GitHub
@@ -652,7 +657,12 @@ Both operations are designed for online use. However, they may briefly acquire l
 <details open>
 <summary><h2>Documentation</h2></summary>
 
-Optional AI Agent compression is available to all supported agents via the
+AI agents must use the shared [preflight gate](docs/reference/ai-agent-web-research-stack.md):
+CocoIndex Code for code routing, Caveman for concise internal communication, and
+Crawl4AI to read public research sources. These are developer-only tools;
+application services and deployment credentials remain separate.
+
+AI Agent compression is required for all supported agents via the
 mandatory lite [`caveman`](https://github.com/JuliusBrussee/caveman) overlay for
 internal AI communication only. Repository documentation, comments, docstrings,
 function descriptions, and user-facing text stay in standard prose.
@@ -675,7 +685,7 @@ handshake, raw protocol probes, and tool listing with
 `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
 only against an existing active index. If it cold-indexes, agents tell the user
 once that the first search can take several minutes; later searches reuse the
-external cache. The mirror asks CocoIndex Code 0.2.41 to include every
+external cache. The mirror asks CocoIndex Code 0.2.42 to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

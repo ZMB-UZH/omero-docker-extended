@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from . import monitoring_tls
+
 import concurrent.futures
 import datetime as dt
 import glob
@@ -630,10 +632,12 @@ def _execute_loki_query(
         )
     )
     try:
-        response = requests.get(url, timeout=config.timeout_seconds)
+        response = requests.get(
+            url, timeout=config.timeout_seconds, **monitoring_tls.request_options(url)
+        )
     except (requests.Timeout, TimeoutError) as exc:
         raise RuntimeError(f"Loki request timed out: {exc}") from exc
-    except requests.RequestException as exc:
+    except (requests.RequestException, OSError, ValueError) as exc:
         raise RuntimeError(
             f"Loki request failed for {sanitize_url_for_logging(url)}: {sanitize_log_value(exc)}"
         ) from exc

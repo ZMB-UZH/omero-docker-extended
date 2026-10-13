@@ -36,6 +36,7 @@ from omero_plugin_common.logging_utils import (
 )
 
 from ..config import optional_log_config
+from ..services import monitoring_tls
 from ..services.log_query import (
     fetch_loki_logs,
     fetch_internal_log_labels,
@@ -162,9 +163,12 @@ def _internal_service_base_url(
     if configured_url:
         return configured_url
 
-    scheme = str(os.environ.get(scheme_env_name, "http") or "http").strip().lower()
+    default_scheme = (
+        "https" if os.environ.get("ADMIN_TOOLS_TLS_CA_FILE", "").strip() else "http"
+    )
+    scheme = str(os.environ.get(scheme_env_name, "") or default_scheme).strip().lower()
     if scheme not in {"http", "https"}:
-        scheme = "http"
+        scheme = default_scheme
 
     return urllib.parse.urlunparse(
         (
@@ -187,11 +191,11 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
         response = requests.get(
             _validated_http_url(url),
             timeout=timeout_seconds,
-            allow_redirects=True,
+            **({"allow_redirects": True} | monitoring_tls.request_options(url)),
         )
         status_code = int(response.status_code)
         return {"ok": 200 <= status_code < 400, "status": status_code, "error": ""}
-    except (ValueError, requests.RequestException) as exc:
+    except (ValueError, OSError, requests.RequestException) as exc:
         logger.warning(
             "HTTP probe failed for %s: %s",
             sanitize_url_for_logging(url),
@@ -506,7 +510,12 @@ def _send_proxy_backend_request(
     connection_class = (
         HTTPSConnection if base_parsed.scheme == "https" else HTTPConnection
     )
-    connection = connection_class(hostname, port=port, timeout=timeout_seconds)
+    connection = connection_class(
+        hostname,
+        port=port,
+        timeout=timeout_seconds,
+        **monitoring_tls.connection_options(base_url),
+    )
     try:
         connection.request(
             method,
@@ -620,7 +629,7 @@ def _proxy_http_request(
             {"error": "Backend timed out."},
             status=504,
         )
-    except (HTTPException, OSError) as exc:
+    except (HTTPException, OSError, ValueError) as exc:
         logger.warning(
             "Proxy backend unreachable target=%s reason=%s",
             sanitize_url_for_logging(target_url),
@@ -1840,6 +1849,7 @@ def _prometheus_instant_query(prometheus_base_url: str, expr: str) -> Optional[f
         f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/query",
         params={"query": expr},
         timeout=5.0,
+        **monitoring_tls.request_options(prometheus_base_url),
     )
     payload = response.json()
     results = payload.get("data", {}).get("result", [])
@@ -1898,6 +1908,7 @@ def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
         f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/query",
         params={"query": expr},
         timeout=5.0,
+        **monitoring_tls.request_options(prometheus_base_url),
     )
     payload = response.json()
 
@@ -2702,6 +2713,7 @@ def _prometheus_active_targets(prometheus_base_url: str) -> list[dict[str, objec
     response = requests.get(
         f"{_validated_http_url(prometheus_base_url).rstrip('/')}/api/v1/targets",
         timeout=5.0,
+        **monitoring_tls.request_options(prometheus_base_url),
     )
     payload = response.json()
     data_payload = payload.get("data", {}) if isinstance(payload, dict) else {}

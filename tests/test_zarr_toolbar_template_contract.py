@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 
 
@@ -66,6 +67,27 @@ class ZarrToolbarTemplateContractTests(unittest.TestCase):
             "{% if not share %}\n                function getOpenwithHtml()",
             self.template_text,
         )
+
+    def test_full_viewer_cannot_control_the_opener(self) -> None:
+        """Require browser isolation on the actual full-viewer link.
+
+        Inputs: tracked toolbar template. Output: parsed anchor attribute checks.
+        """
+        links = []
+
+        class Links(HTMLParser):
+            """Collect anchor attributes while ignoring template text."""
+
+            def handle_starttag(self, tag, attrs):
+                """Inputs: parsed HTML tag and attributes. Output: collected links."""
+                if tag == "a":
+                    links.append(dict(attrs))
+
+        Links().feed(self.template_text)
+        viewer = [link for link in links if link.get("id") == "open_full_viewer"]
+        self.assertEqual(len(viewer), 1)
+        self.assertEqual(viewer[0]["target"], "_blank")
+        self.assertEqual(set(viewer[0]["rel"].split()), {"noopener", "noreferrer"})
 
 
 if __name__ == "__main__":

@@ -215,6 +215,28 @@ def test_tmp_cleaner_installer_replaces_managed_units_without_host_paths(
     )
 
 
+def test_tmp_cleaner_unit_preserves_explicit_model_storage(tmp_path):
+    """Inputs: installation-selected model path. Output: escaped preservation setting in the unit."""
+    tmp_dir = tmp_path / "omero-temp"
+    model_dir = tmp_dir / "model files [%]"
+    model_dir.mkdir(parents=True)
+    destination = tmp_path / "cleaner.service"
+    result = _run_bash(
+        f"""
+        set -euo pipefail
+        source {_sh(TMP_INSTALLER)}
+        OMERO_TMP_DIR={_sh(tmp_dir)}
+        OMERO_TMP_PRESERVE_DIR={_sh(model_dir)}
+        render_unit "$SCRIPT_DIR/omero-tmp-cleaner.service" {_sh(destination)}
+        """,
+        {"PATH": os.environ["PATH"]},
+    )
+    assert result.returncode == 0, result.stderr
+    unit = destination.read_text()
+    assert f"Environment=OMERO_TMP_PRESERVE_DIR={_systemd_escape(model_dir)}" in unit
+    assert "__OMERO_TMP_PRESERVE_DIR__" not in unit
+
+
 def test_tmp_cleaner_full_installer_is_idempotent_and_purges_stale_artifacts(
     tmp_path: Path,
 ) -> None:

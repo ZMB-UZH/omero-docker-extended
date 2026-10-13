@@ -127,7 +127,7 @@ run_reindex() {
 
     # reindexdb --concurrently rebuilds every index with only a
     # SHARE UPDATE EXCLUSIVE lock — reads and writes continue normally.
-    # Available since PostgreSQL 12. The stack uses PostgreSQL 16.12.
+    # Available since PostgreSQL 12.
     if run_logged_command \
         reindexdb --host="$host" --port="$port" --username="$user" \
         --dbname="$dbname" --concurrently --verbose; then

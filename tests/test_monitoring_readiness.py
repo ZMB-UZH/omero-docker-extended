@@ -16,14 +16,18 @@ def _services():
     )["services"]
 
 
-def test_loki_uses_native_readiness_command():
-    """Inputs: Compose services. Output: asserts use of Loki's native readiness probe."""
+def test_loki_readiness_verifies_managed_tls():
+    """Inputs: Compose services. Output: verifies authenticated local HTTPS probing."""
     services = _services()
     assert services["loki"]["healthcheck"]["test"] == [
         "CMD",
         "/usr/bin/loki",
         "-health",
+        "-health.url=https://localhost:3100/ready",
     ]
+    assert services["loki"]["environment"]["SSL_CERT_FILE"] == (
+        "/run/omero-tls/trust/ca-bundle.pem"
+    )
 
 
 @pytest.mark.parametrize("status", [200, 302, 403, 503])

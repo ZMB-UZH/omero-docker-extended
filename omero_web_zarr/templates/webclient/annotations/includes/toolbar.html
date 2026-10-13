@@ -458,7 +458,7 @@
     <div style="position: absolute; left: 0">
       {% if image %}
       <a class="btn silver btn_text" style="height: 18px"
-              id="open_full_viewer" target="_blank"
+              id="open_full_viewer" target="_blank" rel="noopener noreferrer"
               {% if share and not share.share.isOwned %}
                   href="{% url 'web_image_viewer' share.share.id image.id %}"
               {% else %}

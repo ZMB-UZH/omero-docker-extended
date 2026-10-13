@@ -2,7 +2,8 @@
 
 This document defines the repository's complete cross-agent instruction surface.
 
-The goal is to support the major documented instruction systems without changing runtime code, Docker behavior, or CI logic.
+The goal is to support documented agent instruction systems with shared,
+testable gates, without adding developer tools to the application runtime.
 
 ## Precedence
 
@@ -34,15 +35,21 @@ It has one canonical definition so Claude, Gemini, Copilot, and
 Cursor inherit the same four-principle behavior without duplicating full prompt
 text in each adapter.
 
-## AI commit identity
+## GitHub publication
 
-Every AI-facing adapter inherits the commit-identity rule from `AGENTS.md`. Any AI tool that creates or rewrites a commit object must set both author and committer to `AI Agent <>`, using an empty email field. Any AI co-author trailer must be `Co-authored-by: AI Agent` with no email.
+Every AI-facing adapter inherits the official GitHub connector requirement from
+`AGENTS.md` and the [publication contract](ai-agent-task-contracts.md#github-publication).
+Verify the authenticated account and target repository permission before writes.
+Omit author and committer overrides; let GitHub supply its normal defaults.
+Never add AI co-author trailers or change Git identity to impersonate the user.
+No CLI/PAT fallback is allowed. A missing connector or permission blocks publication,
+not independent local inspection and testing.
 
-AI tools must not infer identity from global Git config, prior commits, GitHub accounts, host users, or human operators. If the active tool cannot create that exact empty-email identity or trailer, or would use a profile-mapped AI/tool address, it must stop before committing.
-
-Identity cleanup must check fresh branch-head authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`); a normal contributors check without anonymous entries is incomplete. GitHub PR-head refs are managed snapshots and must be reported separately from current branch heads.
-
-Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses. Host usernames, computer names, local account names, placeholder domains, generated fake names, and fake emails are invalid commit identities.
+The tool-execution gate is identity-independent: it must not infer whether a caller
+is an AI from commit names or email addresses. Connector publication requires an
+explicit passing preflight and tested source; it does not execute local Git hooks.
+Do not rewrite published history without explicit migration authorization and
+preservation checks, or erase legitimate contributor attribution by inference.
 
 ## Default-branch development
 
@@ -116,6 +123,14 @@ The upstream `caveman` hooks, plugin auto-loading, `.codex` hook config, natural
 
 ## Token and speed guidance
 
+Every supported adapter requires the shared `tools/agent_preflight.py` gate:
+Caveman policy delivery, a real current-index CocoIndex query, and mandatory
+Crawl4AI reads for public web research. Its private receipts are execution
+evidence, not model-quality claims. The repository pre-commit gate is
+editor-independent; native hooks are additional enforcement, never a separate
+policy. See [research operations](ai-agent-web-research-stack.md) for setup,
+failure behavior and the limits of client-side enforcement.
+
 `AGENTS.md` retains unconditional safeguards and action triggers. Conditional
 procedures live in `docs/reference/ai-agent-task-contracts.md`; native adapters
 must explicitly inherit AGENTS rather than copy its paragraphs. Tests validate
@@ -160,7 +175,7 @@ The [Caveman upstream guidance](https://github.com/JuliusBrussee/caveman)
 distinguishes style savings from tool-input compression. This integration uses
 the reviewed prompt overlay only: no proxy, telemetry, credential interception,
 or lossy rewriting of source, user prompts, or evidence. The
-[CocoIndex contract](https://github.com/cocoindex-io/cocoindex-code/tree/v0.2.41)
+[CocoIndex contract](https://github.com/cocoindex-io/cocoindex-code/tree/v0.2.42)
 remains pinned and supports scoped semantic retrieval rather than bulk reads.
 
 The adapter set is designed to improve accuracy first, then reduce wasted context:
@@ -199,7 +214,7 @@ edits with `rg`, file reads, and tests in the real checkout.
 
 When CocoIndex reports a cold semantic index, agents should tell the user once
 in one short sentence that the first search can take several minutes and later
-searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.41
+searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.42
 to include every Git-visible mirrored file pattern instead of upstream's
 extension list. CocoIndex indexes text-decodable content and skips undecodable
 binary files, so agents must not claim semantic search inside arbitrary binary
@@ -260,10 +275,12 @@ refuse to build or refresh one.
 | Event | Matcher | Action | Rule enforced |
 | --- | --- | --- | --- |
 | PostToolUse | Write\|Edit | Run `ruff check --fix` and `ruff format` on edited `.py` files | Ruff is the canonical Python formatter and lint gate |
-| PostToolUse | Write\|Edit | Run `npx --yes markdownlint-cli2@0.23.2` on edited `.md` files | Validate Markdown with a pinned package instead of tracking the unpinned latest package |
+| PostToolUse | Write\|Edit | Run `npx --yes markdownlint-cli2@0.23.3` on edited `.md` files | Validate Markdown with a pinned package instead of tracking the unpinned latest package |
 | PreToolUse | Bash | Run `python3 tools/env_safety_guard.py check` before `docker compose` commands | Verify deployment env files are intact before compose operations |
 
-These hooks are Claude Code-specific (other harnesses do not support hooks). The underlying rules are documented in `AGENTS.md` so all agents follow them regardless of automation.
+These hooks are optional harness-specific reinforcement, not the shared enforcement
+boundary. Every present and future agent must follow the same preflight and GitHub
+publication contract regardless of its name, editor or native hook capabilities.
 
 ## Maintenance rules
 

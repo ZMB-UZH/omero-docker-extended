@@ -14,7 +14,7 @@ import re
 import warnings
 from bisect import bisect_left
 from pathlib import Path
-from typing import Dict, List, Tuple, Any, Optional
+from typing import BinaryIO, Dict, List, Tuple, Any, Optional
 
 import matplotlib
 
@@ -877,10 +877,14 @@ def genetic_label_placement(
 def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
+    *,
+    output_stream: BinaryIO | None = None,
 ) -> Optional[Path]:
     """Create a PNG spectrum plot from parsed SEM-EDX text data.
 
-    Inputs: `txt_path`, `output_path`. Output: `Optional[Path]`.
+    Inputs: `txt_path`, optional `output_path` and caller-owned binary
+    `output_stream`. Output: the plot path, or None without spectrum data.
+    A supplied stream is written without reopening or creating its path.
     """
     parsed = parse_emsa_file(txt_path)
     spectrum = list(parsed.get("spectrum") or [])[: _sem_edx_max_spectrum_points()]
@@ -890,7 +894,8 @@ def create_edx_spectrum_plot(
 
     if output_path is None:
         output_path = txt_path.with_name(f"{txt_path.stem}_edx.png")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_stream is None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     energies = [point[0] for point in spectrum]
     counts = [point[1] for point in spectrum]
@@ -904,124 +909,132 @@ def create_edx_spectrum_plot(
 
     # Create figure with proper margins for axis labels
     fig, ax = plt.subplots(figsize=(8.5, 5.0), dpi=150)
-    fig.patch.set_facecolor("#1f4d7a")
-    ax.set_facecolor("#1f4d7a")
+    try:
+        fig.patch.set_facecolor("#1f4d7a")
+        ax.set_facecolor("#1f4d7a")
 
-    spectrum_color = "#ffe600"
-    label_text_color = "#0b3d1a"
-    label_fill_color = "#b8f0b0"
-    label_edge_color = "#ffffff"
-    label_line_color = "#ffffff"
+        spectrum_color = "#ffe600"
+        label_text_color = "#0b3d1a"
+        label_fill_color = "#b8f0b0"
+        label_edge_color = "#ffffff"
+        label_line_color = "#ffffff"
 
-    # Plot spectrum
-    ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
-    ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.38)
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(0, y_max_plot * 1.05)
+        # Plot spectrum
+        ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
+        ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.38)
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(0, y_max_plot * 1.05)
 
-    # IMPROVEMENT 2: Denser ticks (2x more frequent)
-    from matplotlib.ticker import MaxNLocator
+        # IMPROVEMENT 2: Denser ticks (2x more frequent)
+        from matplotlib.ticker import MaxNLocator
 
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=20))  # 2x density
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=10))  # 2x density
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=20))  # 2x density
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=10))  # 2x density
 
-    # Set axis labels with proper spacing
-    ax.set_xlabel("keV", color="white", fontsize=10, labelpad=2)
-    ax.set_ylabel("cps/eV", color="white", fontsize=10, labelpad=2)
-    ax.tick_params(colors="white", labelsize=8, pad=2)
+        # Set axis labels with proper spacing
+        ax.set_xlabel("keV", color="white", fontsize=10, labelpad=2)
+        ax.set_ylabel("cps/eV", color="white", fontsize=10, labelpad=2)
+        ax.tick_params(colors="white", labelsize=8, pad=2)
 
-    for spine in ax.spines.values():
-        spine.set_color("white")
+        for spine in ax.spines.values():
+            spine.set_color("white")
 
-    # Collect element labels
-    element_labels = []
-    for element in parsed.get("elements", []):
-        try:
-            energy = float(element.get("energy_kev"))
-        except (TypeError, ValueError):
-            continue
-        symbol = element.get("symbol") or ""
-        if not symbol:
-            continue
-        if energy < x_min or energy > x_max:
-            continue
-        element_labels.append((energy, symbol))
-        if len(element_labels) >= _sem_edx_max_plot_labels():
-            break
+        # Collect element labels
+        element_labels = []
+        for element in parsed.get("elements", []):
+            try:
+                energy = float(element.get("energy_kev"))
+            except (TypeError, ValueError):
+                continue
+            symbol = element.get("symbol") or ""
+            if not symbol:
+                continue
+            if energy < x_min or energy > x_max:
+                continue
+            element_labels.append((energy, symbol))
+            if len(element_labels) >= _sem_edx_max_plot_labels():
+                break
 
-    # Prepare labels data with spectrum y positions
-    labels_data = []
-    for energy, symbol in element_labels:
-        nearest = _nearest_spectrum_point(spectrum, energy)
-        if nearest:
-            _, spectrum_y = nearest
-            labels_data.append((energy, spectrum_y, symbol))
-
-    # Adjust subplot margins BEFORE calculating positions
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.10)
-
-    # Initial rendering to get axes bbox
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    axes_bbox_raw = ax.get_window_extent(renderer=renderer)
-    axes_bbox = BBox(
-        axes_bbox_raw.x0, axes_bbox_raw.y0, axes_bbox_raw.x1, axes_bbox_raw.y1
-    )
-
-    # Run genetic algorithm for label placement
-    final_positions = genetic_label_placement(labels_data, axes_bbox, fig, ax, renderer)
-
-    # Draw labels and connector lines
-    for (
-        center_energy,
-        spectrum_y,
-        symbol,
-        label_x,
-        label_y,
-        peak_energies,
-    ) in final_positions:
-        # Draw connector lines from EACH peak to the label
-        for peak_energy in peak_energies:
-            nearest = _nearest_spectrum_point(spectrum, peak_energy)
+        # Prepare labels data with spectrum y positions
+        labels_data = []
+        for energy, symbol in element_labels:
+            nearest = _nearest_spectrum_point(spectrum, energy)
             if nearest:
-                peak_x, peak_y = nearest
+                _, spectrum_y = nearest
+                labels_data.append((energy, spectrum_y, symbol))
 
-                ax.annotate(
-                    "",
-                    xy=(peak_x, peak_y),
-                    xytext=(label_x, label_y),
-                    xycoords="data",
-                    textcoords="figure pixels",
-                    arrowprops=dict(
-                        arrowstyle="-",
-                        color=label_line_color,
-                        linewidth=0.6,
-                        alpha=0.8,
-                    ),
-                )
+        # Adjust subplot margins BEFORE calculating positions
+        fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.10)
 
-        # Draw the label box
-        ax.annotate(
-            symbol,
-            xy=(center_energy, spectrum_y),
-            xytext=(label_x, label_y),
-            xycoords="data",
-            textcoords="figure pixels",
-            fontsize=7.5,
-            color=label_text_color,
-            bbox=dict(
-                boxstyle="round,pad=0.35",
-                facecolor=label_fill_color,
-                edgecolor=label_edge_color,
-                linewidth=0.8,
-            ),
-            ha="center",
-            va="center",
+        # Initial rendering to get axes bbox
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        axes_bbox_raw = ax.get_window_extent(renderer=renderer)
+        axes_bbox = BBox(
+            axes_bbox_raw.x0, axes_bbox_raw.y0, axes_bbox_raw.x1, axes_bbox_raw.y1
         )
 
-    # Save the figure
-    fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
-    plt.close(fig)
+        # Run genetic algorithm for label placement
+        final_positions = genetic_label_placement(
+            labels_data, axes_bbox, fig, ax, renderer
+        )
+
+        # Draw labels and connector lines
+        for (
+            center_energy,
+            spectrum_y,
+            symbol,
+            label_x,
+            label_y,
+            peak_energies,
+        ) in final_positions:
+            # Draw connector lines from EACH peak to the label
+            for peak_energy in peak_energies:
+                nearest = _nearest_spectrum_point(spectrum, peak_energy)
+                if nearest:
+                    peak_x, peak_y = nearest
+
+                    ax.annotate(
+                        "",
+                        xy=(peak_x, peak_y),
+                        xytext=(label_x, label_y),
+                        xycoords="data",
+                        textcoords="figure pixels",
+                        arrowprops=dict(
+                            arrowstyle="-",
+                            color=label_line_color,
+                            linewidth=0.6,
+                            alpha=0.8,
+                        ),
+                    )
+
+            # Draw the label box
+            ax.annotate(
+                symbol,
+                xy=(center_energy, spectrum_y),
+                xytext=(label_x, label_y),
+                xycoords="data",
+                textcoords="figure pixels",
+                fontsize=7.5,
+                color=label_text_color,
+                bbox=dict(
+                    boxstyle="round,pad=0.35",
+                    facecolor=label_fill_color,
+                    edgecolor=label_edge_color,
+                    linewidth=0.8,
+                ),
+                ha="center",
+                va="center",
+            )
+
+        # Save the figure
+        fig.savefig(
+            output_path if output_stream is None else output_stream,
+            format="png",
+            facecolor=fig.get_facecolor(),
+        )
+    finally:
+        plt.close(fig)
 
     logger.info("Created SEM EDX spectrum plot %s", output_path.name)
     return output_path

@@ -13,7 +13,8 @@ Use this skill when the user needs current public-web research, release/status c
 1. Search the repo, provided links, and known local docs first.
 2. Prefer official docs, release notes, source repositories, standards pages, and issue trackers before secondary coverage.
 3. Split broad questions into small queries with exact product names, versions, dates, errors, and domain filters where possible.
-4. Stop widening scope once the answer is supported by enough primary evidence.
+4. Use mandatory `crawl4ai-research` to read the selected sources; search snippets
+   are discovery only. Stop widening scope once primary evidence is sufficient.
 5. Hand the gathered sources to `source-audit` before making strong claims or recommendations.
 
 ## Rules

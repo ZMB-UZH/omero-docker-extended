@@ -705,6 +705,11 @@ run_image_build() {
         return 1
     fi
 
+    if [ -z "${OMERO_FIGURE_VERSION:-}" ]; then
+        echo "ERROR: Missing required configuration variable OMERO_FIGURE_VERSION in ${server_env_source}" >&2
+        return 1
+    fi
+
     if [ -z "${OME_ZARR_PY_VERSION:-}" ]; then
         echo "ERROR: Missing required configuration variable OME_ZARR_PY_VERSION in ${server_env_source}" >&2
         return 1
@@ -1007,6 +1012,7 @@ export_compose_interpolation_env() {
         GRAFANA_DATA_PATH
         LOKI_DATA_PATH
         ALLOY_DATA_PATH
+        OLLAMA_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
         NODE_EXPORTER_TEXTFILE_PATH
@@ -1025,6 +1031,7 @@ export_compose_interpolation_env() {
         PATH_USAGE_EXPORTER_IMAGE
         CROWDSEC_IMAGE
         OMERO_DROPBOX_VERSION
+        OMERO_FIGURE_VERSION
         OMERO_CLI_ZARR_VERSION
         OME_ZARR_PY_VERSION
         BIOFORMATS2RAW_VERSION
@@ -2124,6 +2131,7 @@ collect_bootstrap_sentinel_names() {
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
             "${ALLOY_DATA_PATH:-}" \
+            "${OLLAMA_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
@@ -2179,6 +2187,7 @@ collect_repo_data_dir_names() {
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
             "${ALLOY_DATA_PATH:-}" \
+            "${OLLAMA_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
@@ -2407,11 +2416,13 @@ PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 LOKI_DATA_PATH=${LOKI_DATA_PATH}
 ALLOY_DATA_PATH=${ALLOY_DATA_PATH}
+OLLAMA_DATA_PATH=${OLLAMA_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
 NODE_EXPORTER_TEXTFILE_PATH=${NODE_EXPORTER_TEXTFILE_PATH}
 CROWDSEC_DB_PATH=${CROWDSEC_DB_PATH}
 CROWDSEC_CONFIG_PATH=${CROWDSEC_CONFIG_PATH}
 OMERO_DROPBOX_VERSION=${OMERO_DROPBOX_VERSION}
+OMERO_FIGURE_VERSION=${OMERO_FIGURE_VERSION}
 OMERO_CLI_ZARR_VERSION=${OMERO_CLI_ZARR_VERSION}
 OME_ZARR_PY_VERSION=${OME_ZARR_PY_VERSION}
 BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}
@@ -2578,7 +2589,7 @@ quote_installation_env_value() {
 # Write installation paths environment. Inputs: shell arguments and environment. Output: command status and side effects.
 write_installation_paths_env() {
     local env_file_path="${1:?BUG: write_installation_paths_env requires a path}"
-    local q_installation_path q_database_path q_plugin_database_path q_data_path q_tmp_path q_data_dir
+    local q_installation_path q_database_path q_plugin_database_path q_data_path q_tmp_path q_data_dir q_ollama_data_path
 
     q_installation_path="$(quote_installation_env_value "${OMERO_INSTALLATION_PATH}")" || return 1
     q_database_path="$(quote_installation_env_value "${OMERO_DATABASE_PATH}")" || return 1
@@ -2586,6 +2597,7 @@ write_installation_paths_env() {
     q_data_path="$(quote_installation_env_value "${OMERO_DATA_PATH}")" || return 1
     q_tmp_path="$(quote_installation_env_value "${OMERO_TMP_PATH}")" || return 1
     q_data_dir="$(quote_installation_env_value "${OMERO_DATA_DIR}")" || return 1
+    q_ollama_data_path="$(quote_installation_env_value "${OLLAMA_DATA_PATH}")" || return 1
 
     mkdir -p "$(dirname "${env_file_path}")"
     cat > "${env_file_path}" <<ENVFILE
@@ -2615,6 +2627,7 @@ write_installation_paths_env() {
 #   GRAFANA_DATA_PATH
 #   LOKI_DATA_PATH
 #   ALLOY_DATA_PATH
+#   OLLAMA_DATA_PATH
 #   PG_MAINTENANCE_DATA_PATH
 #   BUILDX_DATA_PATH
 #   NODE_EXPORTER_TEXTFILE_PATH
@@ -2640,6 +2653,7 @@ PROMETHEUS_DATA_PATH="\${OMERO_DATA_PATH}/prometheus_data"
 GRAFANA_DATA_PATH="\${OMERO_DATA_PATH}/grafana_data"
 LOKI_DATA_PATH="\${OMERO_DATA_PATH}/loki_data"
 ALLOY_DATA_PATH="\${OMERO_DATA_PATH}/alloy_data"
+OLLAMA_DATA_PATH=${q_ollama_data_path}
 PG_MAINTENANCE_DATA_PATH="\${OMERO_DATA_PATH}/pg_maintenance_data"
 BUILDX_DATA_PATH="\${OMERO_DATA_PATH}/buildx_cache"
 NODE_EXPORTER_TEXTFILE_PATH="\${OMERO_DATA_PATH}/node_exporter_textfile"
@@ -2679,6 +2693,7 @@ verify_installation_paths_env_content() {
         PORTAINER_DATA_PATH
         LOKI_DATA_PATH
         ALLOY_DATA_PATH
+        OLLAMA_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
         NODE_EXPORTER_TEXTFILE_PATH
@@ -3391,6 +3406,11 @@ OMERO_PLUGIN_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_PLUGIN
 OMERO_DATA_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
 OMERO_TMP_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_TMP_PATH}" "OMERO tmp path")"
 
+# Older releases did not record this mount in the installation contract. Never
+# infer a replacement directory: the operator must retain the existing model path.
+require_path_config_var "OLLAMA_DATA_PATH" "${SCRIPT_ENV_FILE}"
+OLLAMA_DATA_PATH="$(prompt_for_preparable_path "${OLLAMA_DATA_PATH}" "Ollama model data path")"
+
 if ! bootstrap_installation_checkout_if_missing "${OMERO_INSTALLATION_PATH}"; then
     exit 1
 fi
@@ -3614,6 +3634,7 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO cer
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${ALLOY_DATA_PATH}" "Alloy data directory"; then exit 1; fi
+if ! ensure_data_path "${OLLAMA_DATA_PATH}" "Ollama model data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
 if is_crowdsec_enabled; then
@@ -4576,6 +4597,7 @@ chown_tree_or_die() {
 # Ensure OMERO temporary layout. Inputs: shell arguments and environment. Output: command status and side effects.
 ensure_omero_tmp_layout() {
     local tmp_root="$1"
+    tmp_root="$(realpath -m -- "${tmp_root}")" || return 1
     local web_uid="$2"
     local web_gid="$3"
     local server_uid="$4"
@@ -4587,6 +4609,23 @@ ensure_omero_tmp_layout() {
     local web_namespace_dir="${tmp_root%/}/${web_runtime_user}"
     local web_tmp_dir="${web_namespace_dir}/tmp"
     local top_level_entry=""
+    local owner="" model_path=""
+    local -a preserve_filter=()
+
+    if [ -n "${OLLAMA_DATA_PATH:-}" ]; then
+        if ! model_path="$(realpath -e -- "${OLLAMA_DATA_PATH}")" || [ ! -d "${model_path}" ]; then
+            echo "ERROR: Persistent model storage must exist before preparing temporary storage." >&2
+            return 1
+        fi
+        for top_level_entry in "${tmp_root}" "${server_namespace_dir}" "${server_tmp_dir}" "${web_namespace_dir}" "${web_tmp_dir}"; do
+            top_level_entry="$(realpath -m -- "${top_level_entry}")" || return 1
+            if [[ "${top_level_entry}" = "${model_path}" || "${tmp_root}" = "${model_path}"/* ]]; then
+                echo "ERROR: Persistent model storage conflicts with an OMERO temporary namespace." >&2
+                return 1
+            fi
+        done
+        preserve_filter=(-samefile "${model_path}" -o)
+    fi
 
     if [ -e "${tmp_root}" ] && [ ! -d "${tmp_root}" ]; then
         echo "ERROR: OMERO temp directory exists but is not a directory: ${tmp_root}" >&2
@@ -4606,23 +4645,25 @@ ensure_omero_tmp_layout() {
     fi
 
     while IFS= read -r -d '' top_level_entry; do
+        owner="${web_uid}:${web_gid}"
         if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then
-            continue
+            owner="${server_uid}:${server_gid}"
         fi
-
-        echo "chown -R ${web_uid}:${web_gid} ${top_level_entry}    (OMERO web/plugin temp subtree)"
-        if ! chown -R "${web_uid}:${web_gid}" "${top_level_entry}"; then
-            echo "ERROR: Failed chown for OMERO web/plugin temp subtree: ${top_level_entry}" >&2
+        if ! find -P "${top_level_entry}" \
+            \( "${preserve_filter[@]}" -type l \) -prune -o \
+            -exec chown --no-dereference "${owner}" -- {} +; then
+            echo "ERROR: Failed to set temporary subtree ownership." >&2
             return 1
         fi
-        chmod -R u+rwX "${top_level_entry}" || true
+        if [ "${top_level_entry}" != "${server_namespace_dir}" ]; then
+            if ! find -P "${top_level_entry}" \
+                \( "${preserve_filter[@]}" -type l \) -prune -o \
+                -exec chmod u+rwX -- {} +; then
+                echo "ERROR: Failed to set temporary subtree permissions." >&2
+                return 1
+            fi
+        fi
     done < <(find "${tmp_root}" -mindepth 1 -maxdepth 1 -print0)
-
-    echo "chown -R ${server_uid}:${server_gid} ${server_namespace_dir}    (OMERO.server temp namespace)"
-    if ! chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"; then
-        echo "ERROR: Failed to assign OMERO.server ownership for temp namespace: ${server_namespace_dir}" >&2
-        return 1
-    fi
 
     if ! chmod 0700 "${server_namespace_dir}" "${server_tmp_dir}"; then
         echo "ERROR: Failed to set secure permissions on OMERO.server temp namespace: ${server_tmp_dir}" >&2
@@ -4799,24 +4840,12 @@ else
 fi
 
 # Ensure .admin-tools directory exists and is writable by omeroweb container.
-# The quota enforcer installer creates this as root; the omeroweb container
-# (OMERO_WEB_UID) needs write access to persist quota state from the UI.
-admin_tools_dir="${OMERO_USER_DATA_PATH%/}/.admin-tools"
-if [ -d "${admin_tools_dir}" ]; then
-    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
-    if [ -d "${admin_tools_dir}/quota" ]; then
-        chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
-    fi
-    echo ""
-    echo "Ensured .admin-tools directory permissions for omeroweb container (mode 0777, no sticky bit)."
-else
-    # Create it even if the quota enforcer wasn't installed, so the omeroweb
-    # container can write the quota state file without permission errors.
-    mkdir -p "${admin_tools_dir}/quota"
-    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
-    chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
-    echo ""
-    echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
+# Match web startup: shared metadata root, private host-enforcer subdirectory.
+# Never widen permissions or recursively modify existing quota state.
+if ! python3 "${REPO_ROOT_DIR}/tools/prepare_quota_directories.py" \
+    "${OMERO_USER_DATA_PATH}" "${OMERO_WEB_GID}"; then
+    echo "ERROR: Could not prepare quota metadata safely; installation stopped." >&2
+    exit 1
 fi
 
 # =====================================================
@@ -4853,7 +4882,7 @@ install_tmp_cleaner_if_available() {
     fi
 
     chmod +x "${installer_path}"
-    if ! "${installer_path}" "${omero_tmp_dir}"; then
+    if ! "${installer_path}" "${omero_tmp_dir}" "${OLLAMA_DATA_PATH:?Persistent model storage must be configured}"; then
         echo ""
         echo "WARNING: Tmp cleaner installation encountered errors (non-blocking)." >&2
         echo "WARNING: You can install it manually later with:" >&2

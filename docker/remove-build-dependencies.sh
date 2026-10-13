@@ -9,6 +9,8 @@ readonly candidates=(
     python3-pip
     python3.11-pip
     python3.12-pip
+    python3.11-setuptools
+    python3.12-setuptools
 )
 inventory="$(rpm -qa --qf '%{NAME}\n')"
 installed=()

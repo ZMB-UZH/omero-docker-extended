@@ -15,13 +15,15 @@ BASH_BIN = shutil.which("bash") or "/bin/bash"
 GIT_BIN = shutil.which("git") or "/usr/bin/git"
 
 
-def _biop_fetch_commands() -> str:
+def _script_fetch_commands(source: str) -> str:
     """Inputs: repository Dockerfile. Output: its actual dependency-fetch commands."""
+    prefix = f"{source}_OMERO_SCRIPTS"
     section = SERVER_DOCKERFILE.read_text(encoding="utf-8").split(
-        "# Install BIOP OMERO script:", 1
+        f"ARG {prefix}_REPO=", 1
     )[1]
-    commands = section.split("RUN ", 1)[1].split("SCRIPT_SRC=", 1)[0]
-    assert 'BIOP_SOURCE="$(mktemp -d)"' in commands
+    end = 'if [[ ! -d "${OME_SOURCE}/omero" ]]' if source == "OME" else "SCRIPT_SRC="
+    commands = section.split("RUN ", 1)[1].split(end, 1)[0]
+    assert f'{source}_SOURCE="$(mktemp -d)"' in commands
     return commands.replace("\\\n", "")
 
 
@@ -50,13 +52,15 @@ def advanced_upstream(tmp_path):
     return source, pinned
 
 
-def test_biop_fetch_preserves_pin_after_upstream_branch_advances(
-    tmp_path, advanced_upstream
+@pytest.mark.parametrize("vendor", ["OME", "BIOP"])
+def test_script_fetch_preserves_pin_after_upstream_branch_advances(
+    tmp_path, advanced_upstream, vendor
 ):
     """Inputs: a real advanced upstream. Output: exact pinned content, without branch fallback."""
     source, pinned = advanced_upstream
     commands = (
-        _biop_fetch_commands() + '\n git -C "${BIOP_SOURCE}" show HEAD:fixture.txt\n'
+        _script_fetch_commands(vendor)
+        + f'\n git -C "${{{vendor}_SOURCE}}" show HEAD:fixture.txt\n'
     )
     result = subprocess.run(
         [BASH_BIN, "-c", commands],
@@ -66,9 +70,9 @@ def test_biop_fetch_preserves_pin_after_upstream_branch_advances(
         env={
             **os.environ,
             "TMPDIR": str(tmp_path),
-            "BIOP_OMERO_SCRIPTS_REPO": source.as_uri(),
-            "BIOP_OMERO_SCRIPTS_COMMIT": pinned,
-            "BIOP_OMERO_SCRIPTS_REF": "nonexistent-reference",
+            f"{vendor}_OMERO_SCRIPTS_REPO": source.as_uri(),
+            f"{vendor}_OMERO_SCRIPTS_COMMIT": pinned,
+            f"{vendor}_OMERO_SCRIPTS_REF": "nonexistent-reference",
         },
     )
     assert result.returncode == 0, result.stderr
@@ -77,20 +81,23 @@ def test_biop_fetch_preserves_pin_after_upstream_branch_advances(
 
 
 @pytest.mark.parametrize("pin", ["", "main", "--upload-pack=invalid", "a" * 40])
-def test_biop_fetch_rejects_invalid_or_missing_pin(tmp_path, advanced_upstream, pin):
+@pytest.mark.parametrize("vendor", ["OME", "BIOP"])
+def test_script_fetch_rejects_invalid_or_missing_pin(
+    tmp_path, advanced_upstream, pin, vendor
+):
     """Inputs: invalid or absent commit. Output: closed failure without fetching a branch."""
     source, _ = advanced_upstream
     result = subprocess.run(
-        [BASH_BIN, "-c", _biop_fetch_commands()],
+        [BASH_BIN, "-c", _script_fetch_commands(vendor)],
         check=False,
         capture_output=True,
         text=True,
         env={
             **os.environ,
             "TMPDIR": str(tmp_path),
-            "BIOP_OMERO_SCRIPTS_REPO": source.as_uri(),
-            "BIOP_OMERO_SCRIPTS_COMMIT": pin,
-            "BIOP_OMERO_SCRIPTS_REF": "main",
+            f"{vendor}_OMERO_SCRIPTS_REPO": source.as_uri(),
+            f"{vendor}_OMERO_SCRIPTS_COMMIT": pin,
+            f"{vendor}_OMERO_SCRIPTS_REF": "main",
         },
     )
     assert result.returncode != 0
@@ -118,7 +125,7 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             'ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"',
             self.dockerfile,
         )
-        self.assertIn('ARG OME_OMERO_FIGURE_REF="7.4.1"', self.dockerfile)
+        self.assertIn("ARG OME_OMERO_FIGURE_REF\n", self.dockerfile)
         self.assertIn(
             "/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py",
             self.dockerfile,
@@ -129,8 +136,8 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on a mutable or stale source pin.
         """
-        biop_commit = "".join(("3dd78c7420f42bca4275", "75dfdc3acf9192d4f12d"))
-        self.assertIn(f'ARG BIOP_OMERO_SCRIPTS_COMMIT="{biop_commit}"', self.dockerfile)
+        biop_commit = "2b6bba4dea968512a1bdac63bd4e913121226796"  # DevSkim: ignore DS173237 -- public BIOP source commit, not a credential
+        self.assertIn(f"ARG BIOP_OMERO_SCRIPTS_COMMIT={biop_commit}", self.dockerfile)
         self.assertIn(
             'if [[ "${actual_commit}" != "${BIOP_OMERO_SCRIPTS_COMMIT}" ]]',
             self.dockerfile,

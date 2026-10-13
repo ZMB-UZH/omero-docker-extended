@@ -5,6 +5,7 @@ from __future__ import annotations
 from iter_test_helpers import next_or_fail
 
 import unittest
+import configparser
 from pathlib import Path
 import re
 import shlex
@@ -796,9 +797,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             'if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text
         )
         self.assertIn(
-            'chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"',
+            'owner="${server_uid}:${server_gid}"',
             script_text,
         )
+        self.assertIn('-exec chown --no-dereference "${owner}" -- {} +', script_text)
+        self.assertIn('preserve_filter=(-samefile "${model_path}" -o)', script_text)
         self.assertNotIn('chown_tree_or_die "${OMERO_TMP_PATH}"', script_text)
 
     def test_installation_script_reports_binary_repository_cleanse_runtime_hook(
@@ -861,8 +864,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
         )
-        dockerfile_text = (
-            self.repo_root / "docker" / "omero-server.Dockerfile"
+        entrypoint_text = (
+            self.repo_root / "docker" / "omero-server-entrypoint.sh"
         ).read_text(encoding="utf-8")
         omero_db_pass_config_key = "CONFIG_" + "omero_db_pass"
 
@@ -885,8 +888,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             compose_text,
         )
         self.assertIn(
-            'export CONFIG_omero_db_pass=\\"\\$OMERO_DB_PASS\\"',
-            dockerfile_text,
+            'export CONFIG_omero_db_pass="$OMERO_DB_PASS"',
+            entrypoint_text,
         )
 
     def test_secret_derivation_entrypoints_are_tracked_and_executable(self) -> None:
@@ -1411,8 +1414,23 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "./omero_imaris_connector",
             "./omeroweb_tools",
             "./omero_web_zarr",
+            "./docker",
+            "./monitoring",
+            "./startup",
+            "./tools",
         ]
         coveragerc_text = (self.repo_root / ".coveragerc").read_text(encoding="utf-8")
+        config = configparser.ConfigParser()
+        config.read_string(coveragerc_text)
+        self.assertEqual(set(config["run"]["source"].split()), set(expected_dirs))
+        self.assertEqual(
+            set(config["run"]["omit"].split()), {"*/tests/*", "conftest.py"}
+        )
+        self.assertEqual(config["report"]["exclude_lines"].strip(), "")
+        self.assertEqual(config["run"]["patch"].strip(), "subprocess")
+        self.assertTrue(config.getboolean("run", "relative_files"))
+        self.assertTrue(config.getboolean("report", "include_namespace_packages"))
+        self.assertEqual(config.getint("report", "fail_under"), 100)
         for d in expected_dirs:
             self.assertIn(
                 d,
@@ -1441,10 +1459,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         ci_text = (self.repo_root / ".github" / "workflows" / "tests.yml").read_text(
             encoding="utf-8"
         )
+        self.assertIn(
+            "tools/run_local_workflow_gates.py --profile tests --keep-going", ci_text
+        )
+        self.assertNotIn("coverage combine", ci_text)
+        runner_text = (self.repo_root / "tools/run_local_workflow_gates.py").read_text()
         for suite in expected_suites:
             self.assertIn(
                 suite,
-                ci_text,
+                runner_text,
                 f"Test suite {suite!r} missing from CI workflow",
             )
 
@@ -1634,6 +1657,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omero_imaris_connector",
             "omeroweb_tools",
             "omero_web_zarr",
+            "docker",
+            "monitoring",
+            "startup",
+            "tools",
         }
         for prefix in expected_prefixes:
             self.assertIn(
@@ -1660,7 +1687,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "omeroweb_tools/",
         ):
             self.assertIn(package_root, operations_text)
-        for excluded_root in (
+        for operational_root in (
             "tools/",
             "startup/",
             "monitoring/",
@@ -1669,10 +1696,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "scripts/",
             "env/",
         ):
-            self.assertIn(excluded_root, operations_text)
-        self.assertIn(
-            "smaller than the repository's full Python footprint", operations_text
-        )
+            self.assertIn(operational_root, operations_text)
+        self.assertIn("zero missed Python statements", operations_text)
+        self.assertIn("all-language", operations_text)
 
     def test_ci_workflows_install_from_pinned_requirement_manifests(self) -> None:
         """Verify ci workflows install from pinned requirement manifests.
@@ -1703,11 +1729,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         import yaml  # noqa: F811  — available in CI
 
         expected_versions = {
-            ".github/workflows/docs-knowledge-base.yml": ["3.14.7"],
-            ".github/workflows/mypy.yml": ["3.14.7"],
-            ".github/workflows/tests.yml": ["3.14.7"],
-            ".github/workflows/vulture.yml": ["3.14.7"],
-            ".github/workflows/security-code-scanning.yml": ["3.14.7", "3.14.7"],
+            ".github/workflows/docs-knowledge-base.yml": ["3.14.8"],
+            ".github/workflows/mypy.yml": ["3.14.8"],
+            ".github/workflows/tests.yml": ["3.14.8"],
+            ".github/workflows/vulture.yml": ["3.14.8"],
+            ".github/workflows/security-code-scanning.yml": ["3.14.8", "3.14.8"],
         }
 
         for relative_path, expected in expected_versions.items():
@@ -1793,6 +1819,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             )
         self.assertTrue(expected)
         expected.add("--lockfile=docker/java-dependencies.cdx.xml")
+        expected.update(
+            "--lockfile=" + inventory.relative_to(self.repo_root).as_posix()
+            for pattern in ("*.cdx.json", "*.cdx.xml")
+            for inventory in (self.repo_root / ".github/requirements").rglob(pattern)
+        )
         self.assertEqual(
             expected, {arg for arg in args if arg.startswith("--lockfile")}
         )
@@ -1926,7 +1957,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("uses", lint_step)
         self.assertRegex(
             lint_step["run"],
-            r"ghcr\.io/super-linter/super-linter:v8\.7\.0@sha256:[0-9a-f]{64}\b",
+            r"ghcr\.io/super-linter/super-linter:v9\.0\.0@sha256:[0-9a-f]{64}\b",
         )
         self.assertNotIn("GITHUB_TOKEN", lint_step["env"])
         self.assertNotIn("MULTI_STATUS", lint_step["env"])
@@ -2034,7 +2065,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.177.0@sha256:acaac22ffc7b7cc5926de0751b223bce0b2491c33d18422fa72f632c78d81198",
+            "semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -2046,7 +2077,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
             trivy_step["uses"],
         )
-        self.assertEqual("v0.74.0", trivy_step["with"]["version"])
+        self.assertEqual("v0.75.0", trivy_step["with"]["version"])
 
         bandit_step = next_or_fail(
             step

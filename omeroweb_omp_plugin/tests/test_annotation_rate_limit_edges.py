@@ -1,12 +1,125 @@
 from __future__ import annotations
 
+import builtins
+import importlib.util
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from omeroweb_omp_plugin.constants import HASH_KEY
 from omeroweb_omp_plugin.services import rate_limit
 from omeroweb_omp_plugin.services.omero import annotation_service
+
+
+def test_missing_optional_dummy_cache_type_keeps_configured_cache(monkeypatch):
+    """Inputs: unavailable dummy-backend type. Output: configured cache is still used, not cleared."""
+    original_import = builtins.__import__
+
+    def import_without_dummy(name, *args, **kwargs):
+        """Inputs: import request. Output: only the optional dummy type is unavailable."""
+        if name == "django.core.cache.backends.dummy":
+            raise ImportError("dummy backend unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_dummy)
+    spec = importlib.util.spec_from_file_location(
+        "omeroweb_omp_plugin.services.rate_limit_without_dummy", rate_limit.__file__
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.DummyCache is None
+    assert not module._is_dummy_cache()
+    module.cache = SimpleNamespace(get=lambda key: {"existing": 7}[key])
+    assert module._cache_get("existing") == 7
+
+
+@pytest.mark.parametrize(
+    ("responses", "delete_failure", "count", "deleted_types"),
+    [
+        ([[31]], "ImageAnnotationLink", 0, ["ImageAnnotationLink"]),
+        ([[31], RuntimeError("verification failed")], None, 0, ["ImageAnnotationLink"]),
+        ([[31], [31]], None, 0, ["ImageAnnotationLink"]),
+        ([[31], [], RuntimeError("scope failed")], None, 0, ["ImageAnnotationLink"]),
+        ([[31], [], [31]], None, 0, ["ImageAnnotationLink"]),
+        ([[]], None, 0, []),
+        (
+            [[31], [], [], RuntimeError("global failed")],
+            None,
+            0,
+            ["ImageAnnotationLink"],
+        ),
+        ([[31], [], [], [99]], None, 1, ["ImageAnnotationLink"]),
+        ([[31], [], [], []], "Annotation", 0, ["ImageAnnotationLink", "Annotation"]),
+        (
+            [[31], [], [], [], RuntimeError("final verification failed")],
+            None,
+            0,
+            ["ImageAnnotationLink", "Annotation"],
+        ),
+        ([[31], [], [], [], [99]], None, 0, ["ImageAnnotationLink", "Annotation"]),
+        ([[31], [], [], [], []], None, 1, ["ImageAnnotationLink", "Annotation"]),
+    ],
+)
+def test_annotation_cleanup_never_claims_unverified_deletions(
+    monkeypatch,
+    responses,
+    delete_failure,
+    count,
+    deleted_types,
+):
+    """Inputs: failures at each deletion phase. Output: conservative counts and bounded deletion."""
+    monkeypatch.setattr(annotation_service, "ParametersI", _Params)
+    monkeypatch.setattr(annotation_service, "rlong", lambda value: value)
+    monkeypatch.setattr(annotation_service, "get_id", lambda obj: obj.id)
+    links = Mock(side_effect=responses)
+    monkeypatch.setattr(annotation_service, "find_annotation_link_ids", links)
+    calls = []
+    annotation = SimpleNamespace(getMapValue=lambda: [("a", "1"), ("b", "2")])
+
+    def delete(kind, ids, wait):
+        """Inputs: delete request. Output: recorded call and optional service failure."""
+        calls.append(kind)
+        assert ids == ([31] if kind == "ImageAnnotationLink" else [17])
+        assert wait is True
+        if kind == delete_failure:
+            raise RuntimeError("OMERO delete failed")
+
+    connection = SimpleNamespace(
+        getObject=lambda kind, _id: annotation if kind == "MapAnnotation" else None,
+        getQueryService=lambda: SimpleNamespace(
+            projection=Mock(side_effect=[[[17]], []])
+        ),
+        deleteObjects=delete,
+    )
+    result = annotation_service.delete_existing_annotations(
+        connection,
+        SimpleNamespace(),
+        SimpleNamespace(id=41),
+        [],
+        "all",
+        target_ids={17},
+    )
+    assert result == (count, count * 2, 1)
+    assert calls == deleted_types
+    assert links.call_count == len(responses)
+    assert links.call_args_list[0].kwargs == {"image_id": 41}
+
+
+def test_missing_ownership_secret_fails_closed(monkeypatch):
+    """Inputs: absent private secrets. Output: rejection instead of a forgeable public digest."""
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "")
+    monkeypatch.setattr(annotation_service.settings, "SECRET_KEY", "")
+    with pytest.raises(RuntimeError, match="Missing non-empty"):
+        annotation_service._effective_hash_secret()
+
+
+def test_unconfigured_settings_cannot_supply_an_ownership_secret(monkeypatch):
+    """Inputs: settings without SECRET_KEY. Output: explicit failure, never unsigned hashing."""
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: None)
+    monkeypatch.setattr(annotation_service, "settings", SimpleNamespace())
+    with pytest.raises(RuntimeError, match="Missing non-empty"):
+        annotation_service._effective_hash_secret()
 
 
 def test_replacement_snapshot_rejects_unknown_modes_before_reading_metadata():

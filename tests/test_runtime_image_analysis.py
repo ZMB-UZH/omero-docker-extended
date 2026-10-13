@@ -181,6 +181,65 @@ def test_every_required_image_is_accounted_for_and_identical_images_scan_once(
     assert scratch_paths and all(not path.exists() for path in scratch_paths)
 
 
+@pytest.mark.parametrize("mode", ["invalid", "changed"])
+def test_image_identity_failure_cannot_publish_a_complete_inventory(
+    monkeypatch, tmp_path, mode
+):
+    """Inputs: invalid or concurrently changed image identity. Output: explicit failure, never a coverage success receipt."""
+    image_id = "sha256:" + "a" * 64
+    inspections = []
+    analyses = []
+
+    def run(_docker, arguments, **_kwargs):
+        """Inputs: immutable scanner operations. Output: valid reports around a controlled identity failure."""
+        if arguments[:2] == ["image", "inspect"]:
+            inspections.append(arguments)
+            return (
+                "invalid identity"
+                if mode == "invalid"
+                else image_id
+                if len(inspections) == 1
+                else "sha256:" + "b" * 64
+            )
+        analyses.append(arguments)
+        output = Path(arguments[arguments.index("--output") + 1])
+        document = (
+            _sbom()
+            if arguments[1] == "sbom"
+            else {"version": "2.1.0", "runs": [{"results": []}]}
+        )
+        output.write_text(json.dumps(document))
+        return ""
+
+    monkeypatch.setattr(scanner.shutil, "which", lambda _name: "/usr/bin/docker")
+    monkeypatch.setattr(scanner, "_run", run)
+    expected = ValueError if mode == "invalid" else RuntimeError
+    with pytest.raises(expected, match="identity is invalid|changed during analysis"):
+        scanner.scan_images(["example/web:1"], tmp_path)
+    assert not (tmp_path / "coverage.json").exists()
+    assert len(inspections) == (1 if mode == "invalid" else 2)
+    assert len(analyses) == (0 if mode == "invalid" else 2)
+    if mode == "changed":
+        assert len(list(tmp_path.glob("*.scout.json"))) == 1
+        assert len(list(tmp_path.glob("*.sarif.json"))) == 1
+
+
+def test_cli_passes_exact_inventory_and_output_to_scanner(tmp_path, monkeypatch):
+    """Inputs: actual CLI argument parsing. Output: exact selected references and output directory."""
+    inventory = tmp_path / "images.txt"
+    inventory.write_text("example/web:1\nexample/server:2\n")
+    output = tmp_path / "reports"
+    calls = []
+    monkeypatch.setattr(scanner, "scan_images", lambda *args: calls.append(args))
+    assert (
+        scanner.main(
+            ["--required-images-file", str(inventory), "--output-dir", str(output)]
+        )
+        == 0
+    )
+    assert calls == [(["example/web:1", "example/server:2"], output)]
+
+
 def test_failed_image_analysis_cleans_only_its_output_local_scratch(
     monkeypatch, tmp_path
 ):

@@ -1,4 +1,4 @@
-"""Execute Vulture against tracked production Python files only."""
+"""Execute Vulture against tracked and non-ignored new production Python files."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def resolve_required_executable(name: str) -> str:
 
 
 def is_vulture_target(relative_path: PurePosixPath) -> bool:
-    """Return True when a tracked Python file belongs to the production scope.
+    """Return True when a Python source file belongs to the production scope.
 
     Inputs: `relative_path`. Output: `bool`.
     """
@@ -35,8 +35,6 @@ def is_vulture_target(relative_path: PurePosixPath) -> bool:
         return False
 
     parts = relative_path.parts
-    if not parts:
-        return False
     if parts[0] in EXCLUDED_TOP_LEVEL_DIRS:
         return False
     if "tests" in parts:
@@ -79,21 +77,30 @@ def list_vulture_targets(repo_root: Path) -> list[str]:
     Inputs: `repo_root` (Path). Output: `list[str]`. Raises: RuntimeError when validation or the
     called operation fails.
     """
-    tracked_files = _run_git(repo_root, "ls-files", "--", TRACKED_PYTHON_PATHSPEC)
-    targets = [
-        relative_path
-        for relative_path in tracked_files.splitlines()
-        if is_vulture_target(PurePosixPath(relative_path))
-    ]
+    source_files = _run_git(
+        repo_root,
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "--",
+        TRACKED_PYTHON_PATHSPEC,
+    )
+    targets = sorted(
+        {
+            relative_path
+            for relative_path in source_files.split("\0")
+            if is_vulture_target(PurePosixPath(relative_path))
+        }
+    )
     if not targets:
-        raise RuntimeError(
-            "No tracked production Python files matched the Vulture scope."
-        )
+        raise RuntimeError("No production Python files matched the Vulture scope.")
     return targets
 
 
 def build_vulture_command(paths: list[str], *, min_confidence: int) -> list[str]:
-    """The Vulture command for the given tracked paths.
+    """The Vulture command for the given source paths.
 
     Inputs: `paths`, `min_confidence`. Output: `list[str]`.
     """
@@ -123,12 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     Inputs: none. Output: `argparse.ArgumentParser`.
     """
     parser = argparse.ArgumentParser(
-        description="Run Vulture against tracked production Python files only."
+        description="Run Vulture against tracked and non-ignored new production Python files."
     )
     parser.add_argument(
         "--repo-root",
         default=".",
-        help="Repository root containing the tracked Python files.",
+        help="Repository root containing Python source files.",
     )
     parser.add_argument(
         "--min-confidence",
@@ -139,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--print-files",
         action="store_true",
-        help="Print the tracked production Python files that Vulture will scan.",
+        help="Print the production Python files that Vulture will scan.",
     )
     return parser
 

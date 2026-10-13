@@ -141,6 +141,13 @@ This repository expresses those OMERO properties in env files with the existing 
   `env/omeroserver.env`; the host port published by Compose is
   `OMERO_SERVER_HOST_PORT`. These values are validated during installation and
   at container startup instead of being embedded in bootstrap scripts.
+- Server termination requests an orderly IceGrid shutdown before stopping its
+  foreground CLI. Compose allows two minutes by default; operators can set
+  `OMERO_SERVER_STOP_GRACE_PERIOD` in the Compose environment when a different
+  shutdown budget is required. PostgreSQL maintenance supervises cron and log
+  forwarding together and exits if either process fails.
+  Scheduled database maintenance retains certificate-verified TLS settings in
+  its private cron environment and reads the current internal CA at connection time.
 - When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and
   both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script
   automatically adds the job-service account (`OMERO_JOB_SERVICE_USERNAME`) to
@@ -331,9 +338,14 @@ Paths declared in `installation_paths.env` map host storage into containers for:
 - temporary/working data (`OMERO_TMP_PATH`),
 - OMERO server/web logs,
 - monitoring state, including Prometheus, Loki, Alloy, and Grafana data,
+- persistent Ollama model storage (`OLLAMA_DATA_PATH`),
 - host-side installation/update transcripts under `${OMERO_DATA_PATH}/installation_logs`.
 
 Ensure host paths exist and are writable by container runtime users before startup.
+For an existing installation, retain the current model-data bind mount when
+adding `OLLAMA_DATA_PATH`; do not substitute the new-installation example path.
+See [installation permissions](../operations/installation-permissions.md#ollama_data_path)
+for legacy model directories under the temporary root.
 
 ### Centralized Temporary File Storage
 

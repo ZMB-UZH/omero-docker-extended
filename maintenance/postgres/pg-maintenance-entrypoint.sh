@@ -30,6 +30,8 @@ OPTIONAL_ENV_VARS=(
     PATH
     TZ
     PGTZ
+    PGSSLMODE
+    PGSSLROOTCERT
     PG_MAINTENANCE_LOCK_TIMEOUT
     PG_MAINTENANCE_VACUUM_STATEMENT_TIMEOUT
     PG_MAINTENANCE_REINDEX_STATEMENT_TIMEOUT
@@ -102,6 +104,31 @@ write_cron_env() {
     }
 }
 
+# Supervise both foreground services. Inputs: LOG_FILE. Output: exit status, reaped children.
+run_services() {
+    local cron_pid tail_pid status=0
+    cron -f &
+    cron_pid=$!
+    tail -F -- "$LOG_FILE" &
+    tail_pid=$!
+
+    # Stop only owned children. Inputs: captured PIDs. Output: both children reaped.
+    stop_services() {
+        trap '' TERM INT
+        kill -TERM "$cron_pid" "$tail_pid" 2>/dev/null || true
+        wait "$cron_pid" 2>/dev/null || true
+        wait "$tail_pid" 2>/dev/null || true
+    }
+    trap 'stop_services; exit 0' TERM INT
+    wait -n "$cron_pid" "$tail_pid" || status=$?
+    stop_services
+    # Losing either required service is a failure, even if it exited with zero.
+    if [ "$status" -eq 0 ]; then
+        status=1
+    fi
+    return "$status"
+}
+
 # Execute the command entrypoint. Inputs: shell arguments and environment. Output: command status and side effects.
 main() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -118,8 +145,7 @@ main() {
     log "Run manually:  docker exec pg-maintenance pg-maintenance.sh all"
     printf '\n'
 
-    cron
-    exec tail -F "$LOG_FILE"
+    run_services
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

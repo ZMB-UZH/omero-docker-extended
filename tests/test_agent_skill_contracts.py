@@ -114,6 +114,7 @@ SMOKE_CHECKS: tuple[SmokeCheck, ...] = (
                 "cocoindex-code-search",
                 "compliance-and-rate-limit",
                 "context-budget",
+                "crawl4ai-research",
                 "documentation-lookup",
                 "docs-knowledge-maintainer",
                 "frontend-preview",
@@ -624,7 +625,7 @@ class AgentSkillContractTests(unittest.TestCase):
         settings_text = (self.repo_root / ".claude" / "settings.json").read_text(
             encoding="utf-8"
         )
-        pinned_markdownlint = "npx --yes markdownlint-cli2@0.23.2"
+        pinned_markdownlint = "npx --yes markdownlint-cli2@0.23.3"
         self.assertNotIn("/home/itservice/.local/bin/ruff", settings_text)
         self.assertNotIn("/opt/omero/tools/env_safety_guard.py", settings_text)
         self.assertNotIn("npx markdownlint-cli2", settings_text)

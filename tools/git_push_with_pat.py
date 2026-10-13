@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Push to GitHub over HTTPS using a one-shot, no-echo PAT prompt."""
+"""Human maintenance push helper; AI agents must use the official GitHub connector."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description=(
+            "Human maintenance only, not an AI-agent connector fallback. "
             "Run git push with a socket-backed askpass helper so GitHub PATs "
             "never appear in argv, remotes, logs, temp files, or long-lived "
             "credential stores."

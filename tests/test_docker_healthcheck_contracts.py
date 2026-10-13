@@ -59,6 +59,20 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         cls.dot_env_example = (REPO_ROOT / ".env_example").read_text(encoding="utf-8")
 
+    def test_path_exporter_source_is_readable_with_restrictive_checkout_modes(self):
+        """Keep non-root startup independent of source checkout permissions.
+
+        Inputs: exporter image recipe. Output: explicit read-only source mode.
+        """
+        dockerfile = self.dockerfiles["path-usage-exporter"]
+        self.assertIn(
+            "COPY --chmod=0444 "
+            "monitoring/path-usage-exporter/path_usage_exporter.py "
+            "/opt/path_usage_exporter.py",
+            dockerfile,
+        )
+        self.assertEqual(self._last_user(dockerfile), "USER omero-path-exporter")
+
     @staticmethod
     def _last_user(dockerfile_text: str) -> str:
         """Return the last user for `DockerHealthcheckContractTests`.
@@ -73,6 +87,24 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         if not users:
             return ""
         return users[-1]
+
+    def test_auxiliary_scripts_have_explicit_runtime_permissions(self):
+        """Require readable executable scripts, not only inherited execute bits.
+
+        Inputs: auxiliary image recipes. Output: deterministic non-root modes.
+        """
+        for name, scripts in (
+            ("firewall-bouncer", "/usr/local/bin/custom-entrypoint.sh"),
+            ("crowdsec", "/usr/local/bin/custom-entrypoint.sh"),
+            (
+                "pg-maintenance",
+                "/usr/local/bin/pg-maintenance.sh "
+                "/usr/local/bin/pg-maintenance-cron-runner",
+            ),
+            ("pg-maintenance", "/usr/local/bin/entrypoint.sh"),
+        ):
+            with self.subTest(image=name, scripts=scripts):
+                self.assertIn(f"RUN chmod 0555 {scripts}", self.dockerfiles[name])
 
     @staticmethod
     def _compose_service_text(compose_text: str, service_name: str) -> str:
@@ -212,7 +244,9 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         """
         dockerfile_text = self.dockerfiles["omero-server"]
         self.assertEqual("USER omero-server", self._last_user(dockerfile_text))
-        self.assertIn("skipping root startup bootstrap", dockerfile_text)
+        entrypoint = (REPO_ROOT / "docker/omero-server-entrypoint.sh").read_text()
+        self.assertIn("skipping root startup bootstrap", entrypoint)
+        self.assertIn("COPY docker/omero-server-entrypoint.sh", dockerfile_text)
         self.assertIn("runuser -p -m -u omero-server", dockerfile_text)
         self.assertIn("USER=omero-server LOGNAME=omero-server", dockerfile_text)
         self.assertIn("admin start --foreground", dockerfile_text)
@@ -288,14 +322,16 @@ class DockerHealthcheckContractTests(unittest.TestCase):
             "REDIS_APPENDONLY",
             "REDIS_MAXMEMORY",
             "REDIS_MAXMEMORY_POLICY",
-            "REDIS_DATA_TMPFS_SIZE",
         ):
             self.assertIn(f"Set {variable} in .env", service_text)
         self.assertNotIn("${REDIS_SAVE_POLICY:-", service_text)
         self.assertNotIn("${REDIS_APPENDONLY:-", service_text)
         self.assertNotIn("${REDIS_MAXMEMORY:-", service_text)
         self.assertNotIn("${REDIS_MAXMEMORY_POLICY:-", service_text)
-        self.assertNotIn("${REDIS_DATA_TMPFS_SIZE:-", service_text)
+        self.assertNotIn("REDIS_DATA_TMPFS_SIZE", service_text)
+        self.assertNotIn("tmpfs:", service_text)
+        self.assertIn("redis-data:/data:rw", service_text)
+        self.assertIn("/usr/local/bin/redis-healthcheck.sh", service_text)
 
     def test_installer_writes_redis_tuning_from_tracked_dot_env_template(
         self,
@@ -305,10 +341,10 @@ class DockerHealthcheckContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in installer writes redis tuning from tracked dot env template.
         """
         self.assertIn("REDIS_SAVE_POLICY=\n", self.dot_env_example)
-        self.assertIn("REDIS_APPENDONLY=no\n", self.dot_env_example)
+        self.assertIn("REDIS_APPENDONLY=yes\n", self.dot_env_example)
         self.assertIn("REDIS_MAXMEMORY=512mb\n", self.dot_env_example)
-        self.assertIn("REDIS_MAXMEMORY_POLICY=allkeys-lru\n", self.dot_env_example)
-        self.assertIn("REDIS_DATA_TMPFS_SIZE=512m\n", self.dot_env_example)
+        self.assertIn("REDIS_MAXMEMORY_POLICY=noeviction\n", self.dot_env_example)
+        self.assertNotIn("REDIS_DATA_TMPFS_SIZE", self.dot_env_example)
         self.assertIn("PORTAINER_HOST_BIND=0.0.0.0\n", self.dot_env_example)
         self.assertIn(
             'dot_env_template_path="${REPO_ROOT_DIR}/.env_example"',

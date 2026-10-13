@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable, Sequence
@@ -370,6 +371,11 @@ def run_regression_guard(context: GateContext) -> None:
         cwd=context.repo_root,
         label="regression-guard selfcheck",
     )
+    _run(
+        (context.python, "-m", "tools.source_advisory_guard", "check"),
+        cwd=context.repo_root,
+        label="source advisory exception boundary",
+    )
 
 
 def run_ruff(context: GateContext) -> None:
@@ -436,16 +442,14 @@ def run_tests(context: GateContext) -> None:
         (".coverage.tools", "omeroweb_tools/tests/", "omeroweb_tools/tests/"),
         (".coverage.zarr", "omero_web_zarr/tests/", "omero_web_zarr/tests/"),
     )
-    coverage_files = tuple(coverage_file for coverage_file, _, _ in suites)
-    for coverage_file in coverage_files:
-        (context.repo_root / coverage_file).unlink(missing_ok=True)
-    for combined_artifact in (".coverage", "coverage.xml"):
-        (context.repo_root / combined_artifact).unlink(missing_ok=True)
+    context.artifact_dir.mkdir(parents=True, exist_ok=True)
+    coverage_dir = Path(tempfile.mkdtemp(prefix="coverage-", dir=context.artifact_dir))
+    (context.repo_root / "coverage.xml").unlink(missing_ok=True)
 
     failures: list[str] = []
     for coverage_file, suite_label, suite_path in suites:
         env = os.environ.copy()
-        env["COVERAGE_FILE"] = coverage_file
+        env["COVERAGE_FILE"] = str(coverage_dir / coverage_file)
         try:
             _run(
                 (
@@ -481,18 +485,39 @@ def run_tests(context: GateContext) -> None:
                 "coverage",
                 "combine",
                 "--rcfile=.coveragerc",
-                *coverage_files,
+                "--keep",
+                str(coverage_dir),
             ),
         ),
-        ("coverage xml", (python, "-m", "coverage", "xml", "--rcfile=.coveragerc")),
+        (
+            "coverage xml",
+            (
+                python,
+                "-m",
+                "coverage",
+                "xml",
+                "--rcfile=.coveragerc",
+                "--keep-combined",
+            ),
+        ),
         (
             "coverage report",
-            (python, "-m", "coverage", "report", "--rcfile=.coveragerc"),
+            (
+                python,
+                "-m",
+                "coverage",
+                "report",
+                "--rcfile=.coveragerc",
+                "--keep-combined",
+            ),
         ),
     )
+    # Reporting implicitly combines sibling data files in coverage.py >= 7.14.
+    # Keep its destination beside this run's inputs, never beside stale runs.
+    report_env = os.environ | {"COVERAGE_FILE": str(coverage_dir / ".coverage")}
     for label, command in combine_steps:
         try:
-            _run(command, cwd=context.repo_root, label=label)
+            _run(command, cwd=context.repo_root, env=report_env, label=label)
         except GateError as exc:
             failures.append(str(exc))
 
@@ -816,6 +841,25 @@ def run_super_linter(context: GateContext) -> None:
     )
 
 
+def run_redis(context: GateContext) -> None:
+    """Inputs: Linux Docker context. Output: verified Redis migration and persistence lifecycle."""
+    _run(
+        (
+            context.python,
+            "-m",
+            "pytest",
+            "tests/container_redis_persistence.py",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-W",
+            "error",
+        ),
+        cwd=context.repo_root,
+        label="Redis persistence container tests",
+    )
+
+
 GateRunner = Callable[[GateContext], None]
 
 PROFILES: dict[str, tuple[GateRunner, ...]] = {
@@ -827,6 +871,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
     "bandit": (run_bandit,),
     "hadolint": (run_hadolint,),
     "devskim": (run_devskim,),
+    "redis": (run_redis,),
     "regression-guard": (run_regression_guard,),
     "super-linter": (run_super_linter,),
     "python": (run_ruff, run_mypy, run_vulture),
@@ -850,6 +895,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
         run_hadolint,
         run_devskim,
         run_super_linter,
+        run_redis,
     ),
 }
 
@@ -958,8 +1004,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.setup_only:
             print("\nLocal workflow Python tools are installed.")
             return 0
+        failures = []
         for runner in PROFILES[args.profile]:
-            runner(context)
+            try:
+                runner(context)
+            except GateError as exc:
+                if not context.keep_going:
+                    raise
+                failures.append(str(exc))
+        if failures:
+            joined = "\n".join(f"- {failure}" for failure in failures)
+            raise GateError(f"One or more workflow gates failed:\n{joined}")
     except GateError as exc:
         print(f"\nFAILED: {exc}", file=sys.stderr)
         return 1

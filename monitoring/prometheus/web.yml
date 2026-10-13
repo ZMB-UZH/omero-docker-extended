@@ -1,0 +1,4 @@
+tls_server_config:
+  cert_file: /run/omero-tls/server/cert.pem
+  key_file: /run/omero-tls/server/key.pem
+  min_version: TLS12

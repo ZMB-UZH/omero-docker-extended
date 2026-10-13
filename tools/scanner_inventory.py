@@ -227,8 +227,13 @@ def fetch_json(
         result = subprocess.run(
             [
                 curl_bin,
+                "--disable",
                 "--silent",
                 "--show-error",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
                 "--location",
                 "--fail-with-body",
                 "--config",
@@ -243,7 +248,7 @@ def fetch_json(
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SystemExit(f"{service} request failed: {exc}") from None
     if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
+        detail = result.stderr.strip() or f"curl exited with status {result.returncode}"
         raise SystemExit(f"{service} request failed: {detail}")
     try:
         return json.loads(result.stdout)

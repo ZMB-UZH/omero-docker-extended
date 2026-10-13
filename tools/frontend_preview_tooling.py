@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -550,7 +551,7 @@ def print_node_install_status(
         "node_version": version,
         "node_dir": str(node_dir),
         "bin_dir": str(bin_dir),
-        "path_export": f'export PATH="{bin_dir}:$PATH"',
+        "path_export": f'export PATH={shlex.quote(str(bin_dir))}:"$PATH"',
     }
     if args.print_bin:
         print(payload["bin_dir"])

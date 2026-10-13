@@ -125,6 +125,10 @@ class _ConnectorOperationCancelled(RuntimeError):
     """Raised when the user stops the current connector operation."""
 
 
+class _OMEROAuthenticationError(RuntimeError):
+    """Raised when an API request requires a new OMERO.web login."""
+
+
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
 # because this script runs inside Imaris on the user's machine.
@@ -151,6 +155,7 @@ CANCEL_POLL_INTERVAL = 0.1
 CANCELLABLE_HTTP_CONNECT_TIMEOUT_SECONDS = 2.0
 CANCELLABLE_HTTP_POLL_INTERVAL_SECONDS = 0.1
 CANCELLABLE_HTTP_MAX_HEADER_BYTES = 256 * 1024
+CANCELLABLE_HTTP_MAX_LINE_BYTES = 64 * 1024
 IMS_EXPORT_CANCEL_TIMEOUT_SECONDS = 5
 HTTP_TRANSIENT_RETRY_ATTEMPTS_ENV = "OMERO_IMARIS_HTTP_RETRY_ATTEMPTS"
 HTTP_TRANSIENT_RETRY_DELAY_ENV = "OMERO_IMARIS_HTTP_RETRY_DELAY_SECONDS"
@@ -195,6 +200,7 @@ ACTION_BUTTON_GAP = 4
 STATUS_TEXT_PAD = ACTION_ROW_HORIZONTAL_PAD + ACTION_BUTTON_PAD
 CONNECTION_LABEL_WIDTH = len("Local path:")
 STATUS_NEUTRAL_BG = "#dfe5eb"
+HEALTH_CHECK_UNAVAILABLE_STATUS = "Connection check failed; retrying automatically"
 CONNECTOR_HELP_ICON_BG = "#b9e4ff"
 CONNECTOR_HELP_ICON_ACTIVE_BG = "#9ed7f6"
 CONNECTOR_HELP_ICON_FG = "#174a63"
@@ -1573,10 +1579,7 @@ def _is_structurally_valid_folder_path(path_value):
     candidate = _coerce_path(path_value)
     if candidate is None:
         return False
-    try:
-        path_text = os.fspath(candidate)
-    except (TypeError, ValueError):
-        return False
+    path_text = os.fspath(candidate)
     if not path_text or path_text != path_text.strip():
         return False
 
@@ -1664,11 +1667,8 @@ def _folder_path_write_error(path_value):
 
     Inputs: `path_value`. Output: empty string or user-facing error text.
     """
-    if not _is_structurally_valid_folder_path(path_value):
-        return LOCAL_PATH_WRITE_ERROR_MESSAGE
-
     candidate = _coerce_path(path_value)
-    if candidate is None:
+    if candidate is None or not _is_structurally_valid_folder_path(candidate):
         return LOCAL_PATH_WRITE_ERROR_MESSAGE
 
     probe_path = None
@@ -1721,8 +1721,6 @@ def _connector_user_home():
 
     for candidate, is_absolute_path in candidates:
         home_text = str(candidate or "").strip()
-        if not home_text:
-            continue
         if is_absolute_path(home_text):
             return _NATIVE_PATH_CLASS(home_text)
     raise OSError("Unable to detect an absolute user home directory")
@@ -1828,10 +1826,7 @@ def _connector_settings_target_safety_error(target, allow_missing_file=True):
 
     Inputs: `target`, `allow_missing_file`. Output: `str` or empty.
     """
-    try:
-        target = _coerce_path(target)
-    except TypeError:
-        return "Connector settings path is invalid"
+    target = _coerce_path(target)
     if target is None:
         return "Connector settings path is invalid"
     if not target.is_absolute():
@@ -1891,6 +1886,9 @@ def _rotate_connector_settings_backups(target):
 
     Inputs: `target`. Output: None. Raises: OSError.
     """
+    target = _coerce_path(target)
+    if target is None:
+        raise OSError("Connector settings path is invalid")
     safety_error = _connector_settings_target_safety_error(
         target, allow_missing_file=False
     )
@@ -1907,10 +1905,7 @@ def _rotate_connector_settings_backups(target):
     first_backup_path = _connector_settings_backup_path(target, 1)
     if _path_kind_without_follow(first_backup_path) != "missing":
         raise OSError("Connector settings backup destination already exists")
-    target_path = _coerce_path(target)
-    if target_path is None:
-        raise OSError("Connector settings path is invalid")
-    target_path.rename(first_backup_path)
+    target.rename(first_backup_path)
 
 
 def _prepare_connector_settings_for_current_version(settings_path=None):
@@ -2314,8 +2309,7 @@ def _multipart_form_body(fields, file_field_name, file_name, file_bytes):
 
     Inputs: `fields`, `file_field_name`, `file_name`, `file_bytes`. Output: `tuple`.
     """
-    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    boundary = f"----OMEROConnector{timestamp}{os.getpid()}{int(time.time() * 1000000)}"
+    boundary = f"----OMEROConnector{uuid.uuid4().hex}"
     body = bytearray()
 
     def append_text(value):
@@ -2402,9 +2396,7 @@ def _collect_local_folder_entries(folder_path):
                     f"Failed to inspect a selected file or folder: {type(exc).__name__}"
                 ) from exc
 
-            item_path = _coerce_path(item.path)
-            if item_path is None:
-                raise RuntimeError("A selected file or folder path is invalid.")
+            item_path = _NATIVE_PATH_CLASS(item.path)
             relative_path = item_path.relative_to(root_path).as_posix()
             if item.is_symlink() or _is_windows_reparse_point(item_stat):
                 raise RuntimeError(
@@ -2619,7 +2611,9 @@ def _bracketed_omero_web_host_error(host_text):
         return HOST_FIELD_INVALID_ERROR_MESSAGE
     if parsed_port is not None:
         return HOST_FIELD_PORT_ERROR_MESSAGE
-    return "" if parsed.hostname else HOST_FIELD_INVALID_ERROR_MESSAGE
+    if not parsed.hostname or not re.fullmatch(r"\[[^\[\]]+\]", host_text):
+        return HOST_FIELD_INVALID_ERROR_MESSAGE
+    return ""
 
 
 def _colon_omero_web_host_error(host_text):
@@ -3661,12 +3655,14 @@ def _normalized_browser_panel_fractions(fractions):
     """
     try:
         values = [float(value) for value in fractions]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         values = []
-    if len(values) != 3 or any(value <= 0 for value in values):
+    if len(values) != 3 or any(
+        not math.isfinite(value) or value <= 0 for value in values
+    ):
         return tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
     total = sum(values)
-    if total <= 0:
+    if not math.isfinite(total):
         return tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
     normalized = [value / total for value in values]
     minimum = BROWSER_PANEL_MIN_FRACTION
@@ -4359,9 +4355,11 @@ class _ConverterDropdown:
 
         Inputs: `options`. Output: None.
         """
-        self._options = [str(option) for option in options or []]
-        if not self._options:
-            self.close_popup()
+        updated = [str(option) for option in options or []]
+        if updated == self._options:
+            return
+        self.close_popup()
+        self._options = updated
 
     def _apply_style(self):
         """Apply normal, hover, or open visual state.
@@ -4535,8 +4533,6 @@ class _ConverterDropdown:
         """
         event_widget = getattr(event, "widget", None)
         if _widget_is_or_descendant(event_widget, self._frame):
-            return None
-        if _widget_is_or_descendant(event_widget, self._popup):
             return None
         self.close_popup()
         return None
@@ -5131,13 +5127,10 @@ def _append_imaris_arena_observed_folder(
                 last_error = exc
             finally:
                 _imaris_arena_close_registry_key(key)
-        if last_error is not None:
-            _xt_debug(
-                "Imaris Arena observed-folder append failed: "
-                f"{type(last_error).__name__}: {last_error}"
-            )
-        else:
-            _xt_debug("Imaris Arena observed-folder append failed: no key opened")
+        _xt_debug(
+            "Imaris Arena observed-folder append failed: "
+            f"{type(last_error).__name__}: {last_error}"
+        )
         return False
     except OSError as exc:
         _xt_debug(
@@ -6213,7 +6206,7 @@ def _safe_download_filename(filename, fallback_name, default_extension=None):
     if not safe:
         safe = "download"
 
-    root_name = os.path.splitext(safe)[0].upper()
+    root_name = safe.split(".", 1)[0].upper()
     if root_name in _WINDOWS_RESERVED_FILENAMES:
         safe = f"_{safe}"
 
@@ -6222,8 +6215,12 @@ def _safe_download_filename(filename, fallback_name, default_extension=None):
 
     if len(safe) > 180:
         stem, ext = os.path.splitext(safe)
-        keep = max(1, 180 - len(ext))
-        safe = stem[:keep].rstrip(" .") + ext
+        ext = ext[:179]
+        keep = 180 - len(ext)
+        stem = stem[:keep].rstrip(" .")
+        if stem.split(".", 1)[0].upper() in _WINDOWS_RESERVED_FILENAMES:
+            stem = f"_{stem}"
+        safe = stem[:keep] + ext
     return safe
 
 
@@ -6364,6 +6361,57 @@ def _raise_if_cancelled(cancel_event, context="Operation"):
         raise _ConnectorOperationCancelled(f"{context} stopped by user.")
 
 
+def _save_download_response(
+    response,
+    download_dir,
+    filename,
+    duplicate_policy,
+    *,
+    validator,
+    cancel_event,
+    context,
+):
+    """Publish a complete HTTP download through the atomic target boundary.
+
+    Inputs: response, destination policy, format validator and cancellation state.
+    Output: local path; malformed or incomplete transfers leave existing files intact.
+    """
+    raw_length = response.headers.get("Content-Length")
+    if raw_length is None:
+        raw_length = response.headers.get("content-length")
+    expected_size = None
+    if raw_length is not None:
+        if not re.fullmatch(r"[0-9]+", str(raw_length).strip()):
+            raise http.client.HTTPException("Invalid HTTP Content-Length.")
+        if response.headers.get("Transfer-Encoding") or response.headers.get(
+            "transfer-encoding"
+        ):
+            raise http.client.HTTPException("Ambiguous HTTP response framing.")
+        expected_size = int(raw_length)
+    downloaded = 0
+    progress = _DownloadProgressReporter(expected_size or 0)
+    chunk_size = _download_chunk_size_bytes()
+    with _open_download_target(
+        download_dir,
+        filename,
+        duplicate_policy,
+        validator=validator,
+        cancel_event=cancel_event,
+    ) as (local_path, handle):
+        while True:
+            _raise_if_cancelled(cancel_event, context)
+            chunk = response.read(chunk_size)
+            if not chunk:
+                break
+            handle.write(chunk)
+            downloaded += len(chunk)
+            progress.report(downloaded)
+        if expected_size is not None and downloaded != expected_size:
+            raise http.client.HTTPException("Incomplete HTTP response body.")
+    progress.finish(downloaded)
+    return local_path
+
+
 def _safe_remove_partial_download(path_value):
     """Remove a partial connector download file after cancellation.
 
@@ -6403,11 +6451,18 @@ def _header_value_is_safe(value):
 
 
 def _socket_wait(
-    sock, *, readable=False, writable=False, cancel_event=None, deadline=0
+    sock,
+    *,
+    readable=False,
+    writable=False,
+    buffered_read=False,
+    cancel_event=None,
+    deadline=0,
 ):
     """Wait for a socket readiness state while observing connector cancellation.
 
-    Inputs: socket, readiness flags, optional cancel event, deadline. Output: None.
+    Inputs: socket, readiness flags, optional buffered-read permission,
+    cancel event and deadline. Output: None.
     Raises: _ConnectorOperationCancelled or socket.timeout.
     """
     while True:
@@ -6415,6 +6470,13 @@ def _socket_wait(
         remaining = deadline - time.time()
         if remaining <= 0:
             raise socket.timeout("Timed out waiting for OMERO.web response.")
+        if (
+            buffered_read
+            and readable
+            and isinstance(sock, ssl.SSLSocket)
+            and sock.pending()
+        ):
+            return
         wait_time = min(CANCELLABLE_HTTP_POLL_INTERVAL_SECONDS, remaining)
         read_list = [sock] if readable else []
         write_list = [sock] if writable else []
@@ -6435,15 +6497,27 @@ def _socket_send_all(sock, payload, cancel_event, deadline):
     """
     view = memoryview(payload)
     sent = 0
+    wait_for_read = False
     while sent < len(view):
-        _socket_wait(sock, writable=True, cancel_event=cancel_event, deadline=deadline)
+        _socket_wait(
+            sock,
+            readable=wait_for_read,
+            writable=not wait_for_read,
+            cancel_event=cancel_event,
+            deadline=deadline,
+        )
         try:
             chunk_sent = sock.send(view[sent:])
-        except (BlockingIOError, ssl.SSLWantWriteError, ssl.SSLWantReadError):
+        except ssl.SSLWantReadError:
+            wait_for_read = True
+            continue
+        except (BlockingIOError, ssl.SSLWantWriteError):
+            wait_for_read = False
             continue
         if chunk_sent <= 0:
             raise OSError("Socket closed while sending OMERO.web request.")
         sent += chunk_sent
+        wait_for_read = False
 
 
 def _socket_recv(sock, max_bytes, cancel_event, deadline):
@@ -6451,11 +6525,23 @@ def _socket_recv(sock, max_bytes, cancel_event, deadline):
 
     Inputs: socket, max bytes, cancel event, deadline. Output: bytes.
     """
+    wait_for_write = False
     while True:
-        _socket_wait(sock, readable=True, cancel_event=cancel_event, deadline=deadline)
+        _socket_wait(
+            sock,
+            readable=not wait_for_write,
+            writable=wait_for_write,
+            buffered_read=True,
+            cancel_event=cancel_event,
+            deadline=deadline,
+        )
         try:
             return sock.recv(max_bytes)
-        except (BlockingIOError, ssl.SSLWantReadError, ssl.SSLWantWriteError):
+        except ssl.SSLWantWriteError:
+            wait_for_write = True
+            continue
+        except (BlockingIOError, ssl.SSLWantReadError):
+            wait_for_write = False
             continue
 
 
@@ -6537,6 +6623,14 @@ class _CancellableHTTPResponse:
         """
         return self._url
 
+    @property
+    def closed(self):
+        """Expose stream closure to urllib response and HTTPError wrappers.
+
+        Inputs: none. Output: whether this response has released its socket.
+        """
+        return self._closed
+
     def close(self):
         """Close the response socket.
 
@@ -6585,24 +6679,25 @@ class _CancellableHTTPResponse:
     def _read_wire_line(self):
         """Read one undecoded HTTP line.
 
-        Inputs: none. Output: line bytes including newline when present.
+        Inputs: none. Output: a bounded framing line including its newline.
         """
         line = bytearray()
         while True:
             if self._buffer:
                 newline_index = self._buffer.find(b"\n")
+                end = newline_index + 1 if newline_index >= 0 else len(self._buffer)
+                if len(line) + end > CANCELLABLE_HTTP_MAX_LINE_BYTES:
+                    raise http.client.HTTPException("HTTP framing line was too large.")
+                line.extend(self._buffer[:end])
+                del self._buffer[:end]
                 if newline_index >= 0:
-                    line.extend(self._buffer[: newline_index + 1])
-                    del self._buffer[: newline_index + 1]
                     return bytes(line)
-                line.extend(self._buffer)
-                self._buffer.clear()
-            chunk = self._read_wire(1)
+            chunk = self._read_wire(
+                min(65536, CANCELLABLE_HTTP_MAX_LINE_BYTES + 1 - len(line))
+            )
             if not chunk:
                 raise http.client.HTTPException("Incomplete HTTP response framing.")
-            line.extend(chunk)
-            if chunk == b"\n":
-                return bytes(line)
+            self._buffer.extend(chunk)
 
     def _read_plain(self, size):
         """Read a non-chunked response body.
@@ -6641,8 +6736,14 @@ class _CancellableHTTPResponse:
 
         Inputs: none. Output: None.
         """
+        total_bytes = 0
         while True:
             line = self._read_wire_line()
+            total_bytes += len(line)
+            if total_bytes > CANCELLABLE_HTTP_MAX_HEADER_BYTES:
+                raise http.client.HTTPException(
+                    "HTTP response trailers were too large."
+                )
             if line == b"\r\n":
                 return
             if not line.endswith(b"\r\n") or b":" not in line:
@@ -6676,12 +6777,7 @@ class _CancellableHTTPResponse:
                     rb"[0-9a-fA-F]+", chunk_size_text
                 ):
                     raise http.client.HTTPException("Invalid HTTP chunk size.")
-                try:
-                    self._chunk_remaining = int(chunk_size_text, 16)
-                except ValueError as chunk_size_error:
-                    raise http.client.HTTPException(
-                        "Invalid chunked response from OMERO.web."
-                    ) from chunk_size_error
+                self._chunk_remaining = int(chunk_size_text, 16)
                 if self._chunk_remaining == 0:
                     self._consume_chunk_trailers()
                     self._chunk_done = True
@@ -6910,6 +7006,49 @@ def _log_direct_imaris_resolution_failure(error):
 # =============================================================================
 
 
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep authenticated OMERO requests within the selected web endpoint."""
+
+    @staticmethod
+    def _origin(url):
+        """Validate an HTTP endpoint and return its effective origin.
+
+        Inputs: URL. Output: scheme, hostname and effective port.
+        """
+        parsed = urllib.parse.urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("Invalid OMERO.web redirect endpoint.")
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme == "https" else 80
+        return parsed.scheme, parsed.hostname, port
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Follow same-origin redirects without forwarding authentication elsewhere.
+
+        Inputs: urllib redirect context. Output: redirected request or HTTPError.
+        """
+        try:
+            same_origin = self._origin(req.full_url) == self._origin(newurl)
+        except ValueError:
+            same_origin = False
+        if not same_origin:
+            raise urllib.error.HTTPError(
+                req.full_url,
+                code,
+                "OMERO.web redirected outside the configured endpoint. "
+                "Connect using its final address instead.",
+                headers,
+                fp,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class OMEROWebClient:
     """Client for OMERO.web API."""
 
@@ -6996,6 +7135,8 @@ class OMEROWebClient:
         Inputs: parsed URL. Output: host header.
         """
         host = parsed_url.hostname or ""
+        if ":" in host:
+            host = f"[{host}]"
         port = parsed_url.port
         default_port = 443 if parsed_url.scheme == "https" else 80
         if port and port != default_port:
@@ -7034,7 +7175,7 @@ class OMEROWebClient:
             if parsed.scheme == "https":
                 context = ssl.create_default_context()
                 tls_floor = ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001
-                context.minimum_version = tls_floor
+                context.minimum_version = max(context.minimum_version, tls_floor)
                 sock = context.wrap_socket(sock, server_hostname=parsed.hostname)
             sock.setblocking(False)
 
@@ -7075,14 +7216,22 @@ class OMEROWebClient:
             header_bytes, separator, body_prefix = bytes(raw_response).partition(
                 b"\r\n\r\n"
             )
+            if len(header_bytes) + len(separator) > CANCELLABLE_HTTP_MAX_HEADER_BYTES:
+                raise http.client.HTTPException(
+                    "OMERO.web response headers were too large."
+                )
             if not separator:
                 raise http.client.HTTPException(
                     "OMERO.web closed the response before sending headers."
                 )
             header_lines = header_bytes.split(b"\r\n")
             status_line = header_lines[0].decode("iso-8859-1", errors="replace")
-            status_parts = status_line.split(" ", 2)
-            if len(status_parts) < 2 or not status_parts[1].isdigit():
+            status_parts = status_line.split(None, 2)
+            if (
+                len(status_parts) < 2
+                or re.fullmatch(r"HTTP/1\.[0-9]+", status_parts[0]) is None
+                or re.fullmatch(r"[1-9][0-9]{2}", status_parts[1]) is None
+            ):
                 raise http.client.HTTPException(
                     f"Invalid OMERO.web status line: {status_line}"
                 )
@@ -7110,12 +7259,12 @@ class OMEROWebClient:
                     cast(BinaryIO, response),
                 )
             return response
-        except _ConnectorOperationCancelled:
-            _close_socket_quietly(sock)
+        except urllib.error.HTTPError:
             raise
         except OSError as exc:
-            _close_socket_quietly(sock)
             raise urllib.error.URLError(exc) from exc
+        finally:
+            _close_socket_quietly(sock)
 
     def _open_request_response(self, req, timeout, cancel_event=None):
         """Open a urllib request, using cancellable sockets for live GETs.
@@ -7138,6 +7287,7 @@ class OMEROWebClient:
         return urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(cookie_jar),
+            _SameOriginRedirectHandler(),
         )
 
     def _extract_cookies_from_jar(self):
@@ -7166,17 +7316,27 @@ class OMEROWebClient:
         final_url = getattr(response, "geturl", lambda: "")()
         redirect_location = ""
         headers = getattr(response, "headers", None)
-        if headers is not None:
+        if headers is not None and getattr(response, "status", None) in {
+            301,
+            302,
+            303,
+            307,
+            308,
+        }:
             redirect_location = headers.get("Location") or ""
-        if "/webclient/login/" in str(final_url) or "/webclient/login/" in str(
-            redirect_location
-        ):
-            _xt_debug(
-                "Authentication failed during "
-                f"{context}: redirected to "
-                f"{_safe_url_for_log(redirect_location or final_url)}"
-            )
-            return True
+        for target in (final_url, redirect_location):
+            try:
+                path = urllib.parse.urlsplit(str(target)).path.rstrip("/")
+            except ValueError:
+                _xt_debug("Response contained an invalid redirect URL")
+                continue
+            if path.endswith("/webclient/login"):
+                _xt_debug(
+                    "Authentication failed during "
+                    f"{context}: redirected to "
+                    f"{_safe_url_for_log(target)}"
+                )
+                return True
         return False
 
     @staticmethod
@@ -7235,11 +7395,13 @@ class OMEROWebClient:
         req = self._create_request_with_cookies(login_url, data=data, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         try:
-            response = self.opener.open(req, timeout=30)
-            raw_body = response.read()
+            with self.opener.open(req, timeout=30) as response:
+                raw_body = response.read()
             self._extract_cookies_from_jar()
             payload = json.loads(raw_body.decode("utf-8"))
         except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError):
+                exc.close()
             _xt_debug(
                 f"Current OMERO user context lookup failed: {type(exc).__name__}: {exc}"
             )
@@ -7377,8 +7539,10 @@ class OMEROWebClient:
             # First GET to obtain CSRF token
             req = urllib.request.Request(login_url)
             req.add_header("User-Agent", "OMERO-ImarisXT/1.0")
-            response = self.opener.open(req, timeout=30)
-            _xt_debug(f"Login GET response={getattr(response, 'status', 'unknown')}")
+            with self.opener.open(req, timeout=30) as response:
+                _xt_debug(
+                    f"Login GET response={getattr(response, 'status', 'unknown')}"
+                )
 
             # Extract CSRF token from cookies
             self._extract_cookies_from_jar()
@@ -7403,19 +7567,20 @@ class OMEROWebClient:
             req.add_header("X-CSRFToken", self.csrf_token)
             req.add_header("User-Agent", "OMERO-ImarisXT/1.0")
 
-            response = self.opener.open(req, timeout=30)
-            _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
-            raw_body = response.read()
-            post_url = getattr(response, "geturl", lambda: "")()
+            with self.opener.open(req, timeout=30) as response:
+                _xt_debug(
+                    f"Login POST response={getattr(response, 'status', 'unknown')}"
+                )
+                raw_body = response.read()
+                post_url = getattr(response, "geturl", lambda: "")()
+                login_redirect = self._check_login_redirect(response, "login POST")
             if post_url:
                 _xt_debug(f"Login POST final endpoint={_safe_url_for_log(post_url)}")
 
             # Extract session cookie from response
             self._extract_cookies_from_jar()
 
-            if self._check_login_redirect(
-                response, "login POST"
-            ) or self._looks_like_login_page(raw_body):
+            if login_redirect or self._looks_like_login_page(raw_body):
                 _xt_debug("Login failed: still on login page after POST")
                 return False
 
@@ -7438,6 +7603,7 @@ class OMEROWebClient:
             return True
 
         except urllib.error.HTTPError as e:
+            e.close()
             _xt_debug(f"Login HTTP error {e.code}: {e.reason}")
             return False
         except urllib.error.URLError as e:
@@ -7457,7 +7623,9 @@ class OMEROWebClient:
         external operations fail.
         """
         if raise_on_error:
-            raise RuntimeError("Not authenticated to OMERO.web. Please connect again.")
+            raise _OMEROAuthenticationError(
+                "Not authenticated to OMERO.web. Please connect again."
+            )
 
     @staticmethod
     def _should_retry_transient(attempt, attempts, retry_transient, error):
@@ -7477,18 +7645,45 @@ class OMEROWebClient:
         Inputs: `url`, `timeout`, `raise_on_error`. Output: `json.loads` result or None.
         """
         req = self._create_request_with_cookies(url)
-        response = self.opener.open(req, timeout=timeout)
-        if self._check_login_redirect(response, "API request"):
-            self._api_auth_failure(raise_on_error)
-            return None
-        _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
-        content_type = (response.headers.get("Content-Type") or "").lower()
-        raw = response.read()
+        with self.opener.open(req, timeout=timeout) as response:
+            if self._check_login_redirect(response, "API request"):
+                self._api_auth_failure(raise_on_error)
+                return None
+            _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
+            content_type = (response.headers.get("Content-Type") or "").lower()
+            raw = response.read()
         if "text/html" in content_type and self._looks_like_login_page(raw):
             _xt_debug("API request returned login HTML instead of JSON")
             self._api_auth_failure(raise_on_error)
             return None
         return json.loads(raw.decode("utf-8"))
+
+    @staticmethod
+    def _api_http_auth_rejection(error):
+        """Recognize OMERO's authentication response without treating all 403s as logout.
+
+        Inputs: HTTPError with its response stream. Output: bool; reads at most 4097 bytes.
+        """
+        if error.code == 401:
+            return True
+        headers = error.headers or {}
+        media_type = (
+            (headers.get("Content-Type") or "").partition(";")[0].strip().lower()
+        )
+        if error.code != 403 or media_type != "application/json":
+            return False
+        try:
+            raw = error.read(4097)
+            if len(raw) > 4096:
+                return False
+            length = headers.get("Content-Length")
+            if length is not None and int(length) != len(raw):
+                return False
+            payload = json.loads(raw.decode("utf-8"))
+        except (OSError, http.client.HTTPException, UnicodeError, ValueError) as exc:
+            _xt_debug(f"Could not classify API error response: {type(exc).__name__}")
+            return False
+        return isinstance(payload, dict) and payload.get("message") == "Not logged in"
 
     @staticmethod
     def _api_error_result(error, *, raise_on_error):
@@ -7497,6 +7692,10 @@ class OMEROWebClient:
         Inputs: `error`, `raise_on_error`. Output: None. Raises: RuntimeError when validation or
         the called operation fails.
         """
+        if isinstance(error, _OMEROAuthenticationError):
+            if raise_on_error:
+                raise error
+            return None
         if isinstance(error, json.JSONDecodeError):
             _xt_debug(f"API error: invalid JSON response ({error})")
             if raise_on_error:
@@ -7505,6 +7704,12 @@ class OMEROWebClient:
                 ) from error
             return None
         if isinstance(error, urllib.error.HTTPError):
+            try:
+                authentication_rejected = OMEROWebClient._api_http_auth_rejection(error)
+            finally:
+                error.close()
+            if authentication_rejected:
+                return OMEROWebClient._api_auth_failure(raise_on_error)
             _xt_debug(f"API error ({error.code}): {error.reason}")
             if raise_on_error:
                 raise RuntimeError(
@@ -7550,6 +7755,8 @@ class OMEROWebClient:
                 if self._should_retry_transient(
                     attempt, attempts, retry_transient, exc
                 ):
+                    if isinstance(exc, urllib.error.HTTPError):
+                        exc.close()
                     _xt_debug(
                         "API request transient failure "
                         f"(attempt {attempt}/{attempts}): {exc}"
@@ -7557,8 +7764,6 @@ class OMEROWebClient:
                     time.sleep(delay)
                     continue
                 return self._api_error_result(exc, raise_on_error=raise_on_error)
-
-        return None
 
     def _api_post(self, endpoint, payload=None):
         """POST JSON to OMERO.web API with explicit cookie handling.
@@ -7578,16 +7783,14 @@ class OMEROWebClient:
         req.add_header("Content-Type", "application/json")
 
         try:
-            response = self.opener.open(req, timeout=30)
-
-            if self._check_login_redirect(response, "API POST"):
-                return None
-
-            _xt_debug(
-                "API POST endpoint="
-                f"{_safe_url_for_log(url)} response={getattr(response, 'status', 'unknown')}"
-            )
-            raw = response.read()
+            with self.opener.open(req, timeout=30) as response:
+                if self._check_login_redirect(response, "API POST"):
+                    return None
+                _xt_debug(
+                    "API POST endpoint="
+                    f"{_safe_url_for_log(url)} response={getattr(response, 'status', 'unknown')}"
+                )
+                raw = response.read()
             if not raw:
                 return None
             try:
@@ -7595,15 +7798,8 @@ class OMEROWebClient:
             except Exception:
                 return None
         except urllib.error.HTTPError as e:
+            e.close()
             _xt_debug(f"API POST error ({e.code}): {e.reason}")
-            try:
-                body_length = len(e.read())
-                _xt_debug(f"API POST error body omitted length={body_length}")
-            except Exception as exc:
-                logger.debug(
-                    "Suppressed non-fatal exception in XTOmeroConnector.py",
-                    exc_info=exc,
-                )
             return None
         except Exception as e:
             _xt_debug(f"API POST error: {e}")
@@ -7702,6 +7898,8 @@ class OMEROWebClient:
                 return exc.code, exc.read()
             except Exception:
                 return exc.code, b""
+            finally:
+                exc.close()
 
     def _request_json_url(
         self,
@@ -7755,19 +7953,27 @@ class OMEROWebClient:
                     continue
                 raise RuntimeError(f"{context} failed: {exc}") from exc
 
-        raise RuntimeError(f"{context} failed after {attempts} attempts")
-
     def get_image_metadata(self, image_id):
         """Return image metadata.
 
         Inputs: `image_id` OMERO image ID. Output: metadata mapping.
         """
         data = self._api_request(self._with_all_groups(f"m/images/{image_id}/"))
-        if not data:
+        if not isinstance(data, dict):
+            return {}
+        data = data.get("data", data)
+        if not isinstance(data, dict):
+            return {}
+        reported_id = data.get("@id", data.get("id"))
+        if (
+            type(reported_id) is not int
+            or reported_id <= 0
+            or str(reported_id) != str(image_id)
+        ):
             return {}
 
         result = {
-            "id": image_id,
+            "id": reported_id,
             "name": data.get("Name") or data.get("name") or "",
         }
         return result
@@ -7818,18 +8024,34 @@ class OMEROWebClient:
         return None
 
     def run_script(self, script_id, inputs):
-        """A script with.
+        """Submit a script, falling back only after explicit input rejection.
 
-        Inputs: `script_id`, `inputs`. Output: `response` or None.
+        Inputs: script ID and input values. Output: response or None. An ambiguous
+        response must not replay a submission that might already have created a job.
         """
         payloads = [
             {"inputs": inputs},
             {"inputs": {key: {"value": value} for key, value in inputs.items()}},
         ]
         for payload in payloads:
-            response = self._api_post(f"scripts/{script_id}/run/", payload)
-            if response:
-                return response
+            try:
+                status, response, _text = self._request_json_url(
+                    f"{self.api_url}/scripts/{script_id}/run/",
+                    payload=payload,
+                    context="Script submission",
+                )
+            except RuntimeError as exc:
+                _xt_debug(
+                    "Script submission outcome is unknown; not retrying "
+                    f"({type(exc.__cause__ or exc).__name__})."
+                )
+                return None
+            if status == 400:
+                continue
+            if 200 <= status < 300:
+                return response or None
+            _xt_debug(f"Script submission returned HTTP {status}; not retrying.")
+            return None
         return None
 
     def has_omero_ims_export_capability(self, *, log_unavailable=False):
@@ -7851,6 +8073,7 @@ class OMEROWebClient:
                 raw_body = response.read().decode("utf-8", errors="replace")
                 payload = json.loads(raw_body)
         except urllib.error.HTTPError as exc:
+            exc.close()
             if log_unavailable:
                 _xt_debug(
                     "OMERO converter: custom server-side capability not advertised "
@@ -7907,7 +8130,9 @@ class OMEROWebClient:
                 ):
                     return False
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError):
+                exc.close()
             return False
         return (
             isinstance(payload, dict)
@@ -8187,7 +8412,7 @@ class OMEROWebClient:
     def cancel_folder_export_job(self, job_payload):
         """Best-effort cancellation for a folder export upload/import job.
 
-        Inputs: job payload. Output: bool indicating whether a cancel request was sent.
+        Inputs: job payload. Output: bool indicating whether cancellation was accepted.
         """
         if not isinstance(job_payload, dict):
             return False
@@ -8202,7 +8427,11 @@ class OMEROWebClient:
                     timeout=30,
                     context="folder export cancellation",
                 )
-                if status_code < 400 and isinstance(payload, dict):
+                if (
+                    status_code < 400
+                    and isinstance(payload, dict)
+                    and payload.get("ok") is True
+                ):
                     _xt_debug(
                         "Folder export server-side staged files pruned after stop"
                     )
@@ -8432,6 +8661,24 @@ class OMEROWebClient:
             out.append(item)
         return out
 
+    @staticmethod
+    def _read_export_json_object(response, context):
+        """Validate an export response without disclosing its body.
+
+        Inputs: open response and operation context. Output: JSON object.
+        Raises: RuntimeError for malformed JSON or a non-object response.
+        """
+        try:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"{context} failed: server returned a non-JSON response. "
+                "Please verify the OMERO.web Imaris connector is healthy."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"{context} requires a JSON object response.")
+        return payload
+
     def download_ims_export(
         self,
         image_id,
@@ -8513,20 +8760,15 @@ class OMEROWebClient:
                         _reauth_attempted=True,
                     )
 
-                raw_body = response.read().decode("utf-8", errors="replace")
-                try:
-                    payload = json.loads(raw_body)
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(
-                        "OMERO converter IMS export failed: server returned a non-JSON response. "
-                        "Please verify the OMERO.web Imaris connector is healthy."
-                    ) from exc
-
+                payload = self._read_export_json_object(
+                    response, "OMERO converter IMS export"
+                )
                 job_id = payload.get("job_id")
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
                     raise RuntimeError(
-                        f"Unexpected OMERO converter response from server: {payload}"
+                        "OMERO converter IMS export response is missing its job ID "
+                        "or status URL."
                     )
 
                 status_url = self._normalize_url(status_url, base)
@@ -8581,20 +8823,13 @@ class OMEROWebClient:
                                 "Session may have expired. Please try again."
                             )
 
-                        poll_body = poll_response.read().decode(
-                            "utf-8", errors="replace"
+                        poll_payload = self._read_export_json_object(
+                            poll_response, "OMERO converter IMS export poll"
                         )
-                        try:
-                            poll_payload = json.loads(poll_body)
-                        except json.JSONDecodeError as exc:
-                            raise RuntimeError(
-                                "OMERO converter IMS export poll failed: server returned "
-                                "a non-JSON response. "
-                                "Please verify the OMERO.web Imaris connector is healthy."
-                            ) from exc
 
                 except urllib.error.HTTPError as e:
-                    if e.code in (401, 403):
+                    if self._api_http_auth_rejection(e):
+                        e.close()
                         if not reauth_attempted:
                             reauth_attempted = True
                             if self._attempt_reauth(
@@ -8624,8 +8859,11 @@ class OMEROWebClient:
 
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
-                    if download_url:
-                        download_url = self._normalize_url(download_url, base)
+                    if not download_url:
+                        raise RuntimeError(
+                            "OMERO converter IMS export finished without a download URL."
+                        )
+                    download_url = self._normalize_url(download_url, base)
                     break
 
                 _wait_for_cancel_or_timeout(
@@ -8667,34 +8905,18 @@ class OMEROWebClient:
                     fallback_name,
                     default_extension=".ims",
                 )
-                total_size = int(response.headers.get("content-length", 0) or 0)
-                downloaded = 0
-                chunk_size = _download_chunk_size_bytes()
-                progress = _DownloadProgressReporter(total_size)
-
                 _xt_debug(
                     "OMERO converter: downloading IMS to selected local connector path"
                 )
-                with _open_download_target(
+                local_path = _save_download_response(
+                    response,
                     download_dir,
                     safe_filename,
                     duplicate_policy,
                     validator=is_ims_file,
                     cancel_event=cancel_event,
-                ) as (local_path, f):
-                    while True:
-                        _raise_if_cancelled(
-                            cancel_event,
-                            "OMERO converter IMS export download",
-                        )
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        progress.report(downloaded)
-
-                progress.finish(downloaded)
+                    context="OMERO converter IMS export download",
+                )
 
             if not os.path.exists(local_path):
                 raise RuntimeError(
@@ -8714,18 +8936,7 @@ class OMEROWebClient:
             self.cancel_ims_export(status_url)
             raise
         except urllib.error.HTTPError as e:
-            try:
-                body_length = len(e.read())
-            except Exception as exc:
-                body_length = 0
-                logger.debug(
-                    "Suppressed non-fatal exception in XTOmeroConnector.py",
-                    exc_info=exc,
-                )
-            _xt_debug(
-                "OMERO converter: IMS export HTTP error body omitted "
-                f"length={body_length}"
-            )
+            e.close()
             raise RuntimeError(
                 f"OMERO converter IMS export HTTPError {e.code}: {e.reason}"
             ) from e
@@ -8784,12 +8995,15 @@ class OMEROWebClient:
                         "Not authenticated to OMERO.web while starting selected Image "
                         "OME-TIFF export."
                     )
-                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+                payload = self._read_export_json_object(
+                    response, "Selected Image OME-TIFF export"
+                )
             job_id = payload.get("job_id")
             status_url = payload.get("status_url")
             if not job_id or not status_url:
                 raise RuntimeError(
-                    f"Unexpected Imaris converter async export response: {payload}"
+                    "Selected Image OME-TIFF export response is missing its job ID "
+                    "or status URL."
                 )
             status_url = self._normalize_url(status_url, base)
             self._remember_active_ims_export(status_url)
@@ -8811,8 +9025,16 @@ class OMEROWebClient:
                     timeout=30,
                     cancel_event=cancel_event,
                 ) as poll_response:
-                    poll_payload = json.loads(
-                        poll_response.read().decode("utf-8", errors="replace")
+                    if self._check_login_redirect(
+                        poll_response,
+                        "Imaris converter async selected Image export poll",
+                    ):
+                        raise RuntimeError(
+                            "Not authenticated to OMERO.web while polling selected Image "
+                            "OME-TIFF export. Please login again."
+                        )
+                    poll_payload = self._read_export_json_object(
+                        poll_response, "Selected Image OME-TIFF export poll"
                     )
                 last_state = poll_payload.get("state")
                 _xt_debug(
@@ -8829,8 +9051,11 @@ class OMEROWebClient:
                     )
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
-                    if download_url:
-                        download_url = self._normalize_url(download_url, base)
+                    if not download_url:
+                        raise RuntimeError(
+                            "Selected Image OME-TIFF export finished without a download URL."
+                        )
+                    download_url = self._normalize_url(download_url, base)
                     break
                 _wait_for_cancel_or_timeout(
                     cancel_event,
@@ -8852,6 +9077,13 @@ class OMEROWebClient:
                 timeout=EXPORT_TIMEOUT + 60,
                 cancel_event=cancel_event,
             ) as response:
+                if self._check_login_redirect(
+                    response, "Imaris converter async selected Image export download"
+                ):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web while downloading selected Image "
+                        "OME-TIFF export. Please login again."
+                    )
                 cd = response.headers.get("Content-Disposition", "")
                 filename = _extract_content_disposition_filename(cd)
                 safe_filename = _safe_download_filename(
@@ -8864,29 +9096,15 @@ class OMEROWebClient:
                     ".tf8",
                 }:
                     safe_filename = f"{safe_filename}.ome.tif"
-                total_size = int(response.headers.get("content-length", 0) or 0)
-                progress = _DownloadProgressReporter(total_size)
-                downloaded = 0
-                chunk_size = _download_chunk_size_bytes()
-                with _open_download_target(
+                local_path = _save_download_response(
+                    response,
                     download_dir,
                     safe_filename,
                     duplicate_policy,
                     validator=is_tiff_file,
                     cancel_event=cancel_event,
-                ) as (local_path, f):
-                    while True:
-                        _raise_if_cancelled(
-                            cancel_event,
-                            "Imaris converter selected Image download",
-                        )
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        progress.report(downloaded)
-                progress.finish(downloaded)
+                    context="Imaris converter selected Image download",
+                )
             if not os.path.exists(local_path):
                 raise RuntimeError(
                     f"Download completed but file not found at {local_path}"
@@ -8902,6 +9120,11 @@ class OMEROWebClient:
         except _ConnectorOperationCancelled:
             self.cancel_ims_export(status_url)
             raise
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            raise RuntimeError(
+                f"Selected Image OME-TIFF export HTTPError {exc.code}"
+            ) from exc
         finally:
             self._forget_active_ims_export(status_url)
 
@@ -8967,12 +9190,6 @@ class OMEROWebClient:
 
                 status = getattr(response, "status", 200)
                 if 300 <= int(status or 0) < 400:
-                    location = response.headers.get("Location") or ""
-                    if "/webclient/login/" in location:
-                        raise RuntimeError(
-                            "Not authenticated to OMERO.web while exporting selected "
-                            "Image as OME-TIFF."
-                        )
                     raise RuntimeError(
                         "OMERO.web redirected instead of returning an OME-TIFF export "
                         "for the selected Image ID."
@@ -9003,34 +9220,18 @@ class OMEROWebClient:
                     ".tf8",
                 }:
                     safe_filename = f"{safe_filename}.ome.tif"
-                total_size = int(response.headers.get("content-length", 0) or 0)
-                downloaded = 0
-                chunk_size = _download_chunk_size_bytes()
-                progress = _DownloadProgressReporter(total_size)
-
                 _xt_debug(
                     "Imaris converter: downloading selected Image OME-TIFF export"
                 )
-                with _open_download_target(
+                local_path = _save_download_response(
+                    response,
                     download_dir,
                     safe_filename,
                     duplicate_policy,
                     validator=is_tiff_file,
                     cancel_event=cancel_event,
-                ) as (local_path, f):
-                    while True:
-                        _raise_if_cancelled(
-                            cancel_event,
-                            "Imaris converter selected Image download",
-                        )
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        progress.report(downloaded)
-
-                progress.finish(downloaded)
+                    context="Imaris converter selected Image download",
+                )
 
             if not os.path.exists(local_path):
                 raise RuntimeError(
@@ -9048,18 +9249,7 @@ class OMEROWebClient:
         except _ConnectorOperationCancelled:
             raise
         except urllib.error.HTTPError as e:
-            try:
-                body_length = len(e.read())
-            except Exception as exc:
-                body_length = 0
-                logger.debug(
-                    "Suppressed non-fatal exception in XTOmeroConnector.py",
-                    exc_info=exc,
-                )
-            _xt_debug(
-                "Imaris converter: selected Image OME-TIFF export HTTP error body omitted "
-                f"length={body_length}"
-            )
+            e.close()
             if e.code == 404:
                 raise RuntimeError(
                     "OMERO.web did not export an OME-TIFF for the selected Image ID. "
@@ -9115,6 +9305,63 @@ class OMEROWebClient:
         return result
 
 
+def _dispatch_ui_callback(dialog, callback, *, wait=True):
+    """Dispatch a Tk callback without stranding workers during window shutdown.
+
+    Inputs: dialog, callback and synchronous-wait flag. Output: callback result
+    for synchronous calls; None for asynchronous calls. A closed window cancels
+    synchronous work and discards asynchronous presentation updates.
+    """
+    closed = getattr(dialog, "_ui_closed", None)
+    if closed is not None and closed.is_set():
+        if wait:
+            raise _ConnectorOperationCancelled("The connector window is closed.")
+        return None
+    if wait and threading.get_ident() == getattr(dialog, "_ui_thread_id", None):
+        return callback()
+
+    value: Any = None
+    error: Optional[BaseException] = None
+    completed = threading.Event()
+
+    def runner():
+        """Execute on Tk's owner thread and release any synchronous caller.
+
+        Inputs: captured callback and completion state. Output: None.
+        """
+        nonlocal error, value
+        try:
+            if closed is not None and closed.is_set():
+                error = _ConnectorOperationCancelled("The connector window is closed.")
+                return
+            value = callback()
+        except Exception as exc:
+            error = exc
+            if not wait:
+                raise
+        finally:
+            completed.set()
+
+    try:
+        dialog.root.after(0, runner)
+    except Exception:
+        if closed is None or not closed.is_set():
+            raise
+        if wait:
+            raise _ConnectorOperationCancelled(
+                "The connector window is closed."
+            ) from None
+        return None
+    if not wait:
+        return None
+    while not completed.wait(0.1):
+        if closed is not None and closed.is_set():
+            raise _ConnectorOperationCancelled("The connector window is closed.")
+    if error is not None:
+        raise error
+    return value
+
+
 class OMEROBrowserDialog:
     """UI dialog for browsing OMERO data and loading IMS into Imaris."""
 
@@ -9154,6 +9401,7 @@ class OMEROBrowserDialog:
         self._folder_export_reason = "Connect to OMERO first."
         self._folder_export_in_progress = False
         self._operation_cancel_event = threading.Event()
+        self._ui_closed = threading.Event()
         self._operation_generation = 0
         self._active_folder_export_job = None
         self._folder_export_initial_path_hint_consumed = False
@@ -9163,6 +9411,7 @@ class OMEROBrowserDialog:
         self._health_ping_generation = 0
         self._health_ping_in_progress = False
         self._health_ping_after_id: Optional[str] = None
+        self._health_ping_failed = False
         self._browser_panel_fractions = tuple(BROWSER_PANEL_DEFAULT_FRACTIONS)
         self._browser_panel_layout_widths = None
         self._browser_sash_drag_index = None
@@ -9236,13 +9485,24 @@ class OMEROBrowserDialog:
     def _on_close(self):
         """Handle close event.
 
-        Inputs: no caller arguments. Output: performs the documented action and returns None.
+        Inputs: no caller arguments. Output: cancels this window's Tcl timers,
+        destroys its widgets and returns None. Destroying Tk widgets alone does
+        not remove pending Tcl callbacks.
         """
-        self._request_stop_current_operation()
-        self._cancel_password_reveal_timer()
-        self._cancel_health_ping()
-        self._cancel_indicator_blink()
-        self.root.destroy()
+        if self._ui_closed.is_set():
+            return
+        self._ui_closed.set()
+        try:
+            self._request_stop_current_operation()
+            self._cancel_password_reveal_timer()
+            self._cancel_health_ping()
+            self._cancel_indicator_blink()
+        finally:
+            try:
+                for callback_id in self.root.tk.call("after", "info"):
+                    self.root.after_cancel(callback_id)
+            finally:
+                self.root.destroy()
 
     @staticmethod
     def _connection_label(parent, text):
@@ -9919,9 +10179,6 @@ class OMEROBrowserDialog:
             max(1, int(round(available_width * fraction))) for fraction in fractions
         ]
         widths[-1] = max(1, available_width - widths[0] - widths[1])
-        if widths[-1] < 1:
-            widths[-1] = 1
-            widths[1] = max(1, available_width - widths[0] - widths[2])
         layout_widths = tuple(widths)
         if getattr(self, "_browser_panel_layout_widths", None) == layout_widths:
             return
@@ -10752,14 +11009,11 @@ class OMEROBrowserDialog:
         )
         if not _is_existing_supported_imaris_executable_path(imaris_executable):
             settings_file_path = getattr(self, "_settings_file_path", None)
-            try:
-                settings_target = (
-                    _coerce_path(settings_file_path)
-                    if settings_file_path is not None
-                    else None
-                )
-            except TypeError:
-                settings_target = None
+            settings_target = (
+                _coerce_path(settings_file_path)
+                if settings_file_path is not None
+                else None
+            )
             if (
                 settings_target is not None
                 and not _connector_settings_target_safety_error(settings_target)
@@ -11762,6 +12016,7 @@ class OMEROBrowserDialog:
         Inputs: optional status text/color and password-clear flag. Output: None.
         """
         self._cancel_health_ping()
+        self._health_ping_failed = False
         if self.client is not None:
             try:
                 if self.client.cookie_jar is not None:
@@ -11890,7 +12145,7 @@ class OMEROBrowserDialog:
             """
             self.status.config(text=text, bg=color)
 
-        self.root.after(0, update)
+        _dispatch_ui_callback(self, update, wait=False)
 
     def _draw_connection_indicator(self, state):
         """Draw a compact status indicator in the bottom status row.
@@ -11923,7 +12178,9 @@ class OMEROBrowserDialog:
             and root is not None
             and hasattr(root, "after")
         ):
-            self.root.after(0, lambda: self._set_connection_indicator(state))
+            _dispatch_ui_callback(
+                self, lambda: self._set_connection_indicator(state), wait=False
+            )
             return
         self._indicator_state = state
         self._indicator_blink_on = state == "busy" and getattr(
@@ -11981,7 +12238,9 @@ class OMEROBrowserDialog:
         Inputs: no caller arguments. Output: performs the documented action and returns None.
         """
         if getattr(self, "_connected", False):
-            self._set_connection_indicator("connected")
+            self._set_connection_indicator(
+                "error" if getattr(self, "_health_ping_failed", False) else "connected"
+            )
         else:
             self._set_connection_indicator("disconnected")
 
@@ -12106,7 +12365,7 @@ class OMEROBrowserDialog:
 
         Inputs: `generation`. Output: None.
         """
-        error = None
+        error: Optional[Exception] = None
         client = self.client
         attempts = _health_ping_retry_attempts()
         retry_delay = _health_ping_retry_delay_seconds()
@@ -12114,8 +12373,12 @@ class OMEROBrowserDialog:
             if generation != self._health_ping_generation:
                 return
             try:
-                client.ping(timeout=_health_ping_timeout_seconds())
+                if not client.ping(timeout=_health_ping_timeout_seconds()):
+                    raise RuntimeError("OMERO.web health check returned no result.")
                 error = None
+                break
+            except _OMEROAuthenticationError as exc:
+                error = exc
                 break
             except Exception as exc:
                 error = exc
@@ -12127,7 +12390,7 @@ class OMEROBrowserDialog:
         )
 
     def _finish_health_ping(self, generation, error):
-        """Apply the health-check result without reconnecting or disconnecting.
+        """Apply health results without discarding a session for transport failures.
 
         Inputs: `generation`, `error`. Output: None.
         """
@@ -12139,44 +12402,54 @@ class OMEROBrowserDialog:
             self._set_connection_indicator("disconnected")
             return
         if error is None:
+            was_unavailable = getattr(self, "_health_ping_failed", False)
+            self._health_ping_failed = False
             if self._indicator_state != "busy":
                 self._set_connection_indicator("connected")
+                if (
+                    was_unavailable
+                    and self.status.cget("text") == HEALTH_CHECK_UNAVAILABLE_STATUS
+                ):
+                    self._set_status("Connection restored", "#d4edda")
         else:
             self._handle_health_ping_failure(error)
-            return
         self._schedule_health_ping()
 
     def _handle_health_ping_failure(self, error):
-        """Report a verified lost OMERO connection and return to connect-ready UI.
+        """Keep uncertain sessions intact; reset only after authentication rejection.
 
         Inputs: `error`. Output: None.
         """
-        _xt_debug(
-            f"Read-only OMERO health check failed after retries: {type(error).__name__}"
-        )
-        self._disconnect(
-            status_text="Connection lost - Ready to connect",
-            status_color="#f8d7da",
-            clear_password=False,
-        )
-        self._show_error_dialog(
-            "Connection Lost",
-            "The OMERO connection was lost. Please reconnect to continue.",
-        )
+        _xt_debug(f"Read-only OMERO health check failed: {type(error).__name__}")
+        if isinstance(error, _OMEROAuthenticationError):
+            self._disconnect(
+                status_text="Authentication required - Please reconnect",
+                status_color="#f8d7da",
+                clear_password=False,
+            )
+            return
+        self._health_ping_failed = True
+        if self._indicator_state != "busy":
+            self._set_connection_indicator("error")
+            self._set_status(HEALTH_CHECK_UNAVAILABLE_STATUS, "#fff3cd")
 
     def _show_error(self, title, message):
         """Show the error for `OMEROBrowserDialog`.
 
         Inputs: `title`, `message`. Output: None.
         """
-        self.root.after(0, lambda: self._show_error_dialog(title, message))
+        _dispatch_ui_callback(
+            self, lambda: self._show_error_dialog(title, message), wait=False
+        )
 
     def _show_info(self, title, message):
         """Show the info for `OMEROBrowserDialog`.
 
         Inputs: `title`, `message`. Output: None.
         """
-        self.root.after(0, lambda: self._show_info_dialog(title, message))
+        _dispatch_ui_callback(
+            self, lambda: self._show_info_dialog(title, message), wait=False
+        )
 
     def _show_connector_help(self):
         """Show the modal OMERO connector help window.
@@ -12388,30 +12661,7 @@ class OMEROBrowserDialog:
         Inputs: `callback`, `wait`. Output: invoke on ui thread result. Raises: error
         when validation or the called operation fails.
         """
-        value: Any = None
-        error: Optional[BaseException] = None
-        completed = threading.Event()
-
-        def runner():
-            """The callback and capture its result.
-
-            Inputs: no caller arguments. Output: performs the documented action and returns None.
-            """
-            nonlocal error, value
-            try:
-                value = callback()
-            except Exception as exc:
-                error = exc
-            finally:
-                completed.set()
-
-        self.root.after(0, runner)
-        if not wait:
-            return None
-        completed.wait()
-        if error is not None:
-            raise error
-        return value
+        return _dispatch_ui_callback(self, callback, wait=wait)
 
     def _get_native_bridge_python_executable(self):
         """Return native bridge python executable.
@@ -12557,19 +12807,17 @@ class OMEROBrowserDialog:
                 "Direct Imaris handle remains unavailable in this Python; "
                 "trying compatible native bridge runner for final same-session open"
             )
-            if self._open_with_native_bridge_runner(
+            return self._open_with_native_bridge_runner(
                 downloaded_file,
                 require_ims=require_ims,
                 allow_when_disabled=not native_bridge_enabled,
-            ):
-                return True
-            if not native_bridge_enabled:
-                return False
+            )
         elif self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle remains unavailable and no numeric XT "
                 "application id is available for same-session handoff"
             )
+            return False
         else:
             _xt_debug(
                 f"Using Imaris handle type={type(self.imaris).__name__} for file open"
@@ -12666,19 +12914,17 @@ class OMEROBrowserDialog:
                 "Direct Imaris handle remains unavailable in this Python; "
                 "trying compatible native bridge runner for final batch open"
             )
-            if self._open_files_with_native_bridge_runner(
+            return self._open_files_with_native_bridge_runner(
                 downloaded_files,
                 require_ims=require_ims,
                 allow_when_disabled=not native_bridge_enabled,
-            ):
-                return True
-            if not native_bridge_enabled:
-                return False
+            )
         elif self.imaris is None:
             _xt_debug(
                 "Direct Imaris handle remains unavailable and no numeric XT "
                 "application id is available for batch handoff"
             )
+            return False
 
         if self.imaris is not None and open_files_in_imaris(
             downloaded_files,
@@ -13108,6 +13354,7 @@ class OMEROBrowserDialog:
         try:
             self.client = client
             self._connected = True
+            self._health_ping_failed = False
             self._clear_password_entry()
             self._set_password_entry_interactive(False)
             client.password = CLEARED_CREDENTIAL_TEXT
@@ -14127,24 +14374,15 @@ class OMEROBrowserDialog:
                     break
                 except Exception as exc:
                     last_error = exc
-                    if attempt >= attempts:
+                    if (
+                        isinstance(exc, _OMEROAuthenticationError)
+                        or attempt >= attempts
+                    ):
                         break
                     _xt_debug(
                         "Refresh attempt "
-                        f"{attempt}/{attempts} failed; attempting re-authentication: {exc}"
+                        f"{attempt}/{attempts} failed; retrying read-only requests: {exc}"
                     )
-                    try:
-                        if self.client is not None:
-                            reauthenticate = getattr(
-                                self.client, "reauthenticate", None
-                            )
-                            if callable(reauthenticate):
-                                reauthenticate("browser refresh")
-                    except Exception as reauth_exc:
-                        _xt_debug(
-                            "Refresh re-authentication attempt failed: "
-                            f"{type(reauth_exc).__name__}: {reauth_exc}"
-                        )
                     time.sleep(delay)
 
             if last_error is not None:
@@ -14273,6 +14511,13 @@ class OMEROBrowserDialog:
         Inputs: `generation`, `refresh_error`. Output: None.
         """
         if generation != self._refresh_generation:
+            return
+        if isinstance(refresh_error, _OMEROAuthenticationError):
+            self._disconnect(
+                status_text="Authentication required - Please reconnect",
+                status_color="#f8d7da",
+                clear_password=False,
+            )
             return
         self._set_status("Refresh failed", "#f8d7da")
         self._set_connection_indicator("error")
@@ -14761,7 +15006,7 @@ class OMEROBrowserDialog:
                 success_status = "Opened IMS in current Imaris session"
                 success_message = "IMS file opened in the current Imaris session."
                 failure_message = "Failed to open IMS in the current Imaris session."
-            elif converter == "Imaris":
+            else:
                 downloaded_file = self._download_selected_image_with_imaris_converter(
                     image_id,
                     download_dir,
@@ -14781,9 +15026,6 @@ class OMEROBrowserDialog:
                     "Failed to submit the selected Image export to "
                     "Imaris File Converter."
                 )
-            else:
-                raise RuntimeError(f"Unsupported converter: {converter}")
-
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download file from OMERO.")
             self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
@@ -15045,12 +15287,8 @@ class OMEROBrowserDialog:
                     raise
 
             downloaded_files = [
-                downloaded_by_index[index]
-                for index in range(1, count + 1)
-                if index in downloaded_by_index
+                downloaded_by_index[index] for index in range(1, count + 1)
             ]
-            if len(downloaded_files) != count:
-                raise RuntimeError("Not all selected files were downloaded from OMERO.")
 
             self._raise_if_current_operation_cancelled("Load into Imaris", cancel_event)
             if require_ims:
@@ -15139,7 +15377,10 @@ class OMEROBrowserDialog:
 
         Inputs: no caller arguments. Output: starts the described state and returns None.
         """
-        self.root.mainloop()
+        try:
+            self.root.mainloop()
+        finally:
+            self._on_close()
 
 
 # =============================================================================
@@ -15363,8 +15604,12 @@ def XTOmeroConnector(aImarisId):
         _restore_xt_console_interrupt_guard(previous_interrupt_handlers)
 
 
-if __name__ == "__main__":
-    # Manual debug mode (outside Imaris): keep the console open on error.
+def main():
+    """Launch the standalone connector with its console error boundary.
+
+    Inputs: none. Output: None; fatal startup errors remain visible when the
+    console is enabled, without escaping after a closed input stream.
+    """
     try:
         XTOmeroConnector(None)
     except Exception as e:
@@ -15377,3 +15622,7 @@ if __name__ == "__main__":
                     "Suppressed non-fatal exception in XTOmeroConnector.py",
                     exc_info=exc,
                 )
+
+
+if __name__ == "__main__":
+    main()

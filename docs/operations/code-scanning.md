@@ -65,6 +65,11 @@ uploads, report rewriting, analysis deletion, or scanner-scope changes.
 
 ## Scanner Execution And Scope
 
+The local regression guard inspects complete applicable source files, including
+large connector modules. Its bounded reader permits up to 8 MiB per source;
+larger, unreadable, non-UTF-8 or unparseable Python inputs fail the scan instead
+of being silently omitted. A failed or incomplete scan is never a clean result.
+
 The current advanced CodeQL setup uses `build-mode: none` for the Python and JavaScript/TypeScript matrix, which matches GitHub's interpreted-language guidance and avoids an unnecessary `autobuild` step. The same workflow also enables CodeQL dependency caching, and the Bandit job restores and stores `pip` downloads keyed to `.github/requirements/security-code-scanning.txt`.
 
 OSV scans the repository recursively and explicitly parses every CI lockfile in
@@ -74,6 +79,15 @@ workflow contract requires a scanner argument for every CI requirement source;
 new or renamed lockfiles must update the scan arguments too. Before changing
 this scope or the scanner version, inspect an `--all-packages` report from the
 exact engine and verify that each lockfile contributes its resolved packages.
+
+The source-pinned NLTK inventory has one explicitly reviewed, hash-bound OSV
+exception for the isolated research tool. `tools/source_advisory_guard.py`
+verifies its archive, locks, package scope and expiry. The prerequisite scope
+audit scans it again with an empty explicit configuration, preserving the
+unfiltered JSON, diagnostics, exit status and hashes as workflow artifacts.
+Only the reviewed advisory may match; additional findings block the normal
+scan. This exception cannot apply to sibling inventories or Java dependencies.
+See [research qualification](../reference/ai-agent-web-research-stack.md#qualification).
 
 Bandit and Hadolint share file discovery with the local workflow gate. Bandit
 includes first-party Python in tools, startup, monitoring, Docker helpers,
@@ -166,8 +180,7 @@ ref (`refs/tags/<tag>^{}`), not the tag object SHA.
 ## Codecov Coverage Scope
 
 Codecov receives the `coverage.xml` generated from `.coveragerc`. Its statement
-denominator is therefore the executable Python inside these runtime package
-roots only:
+denominator includes executable first-party Python in these implementation roots:
 
 - `omero_plugin_common/`
 - `omero_web_zarr/`
@@ -176,21 +189,37 @@ roots only:
 - `omeroweb_import/`
 - `omeroweb_omp_plugin/`
 - `omeroweb_tools/`
+- `docker/`
+- `monitoring/`
+- `startup/`
+- `tools/`
 
-The standalone Imaris XT client
-`omero_imaris_connector/XTOmeroConnector.py` is scanned and tested by the root
-test suite, but it is excluded from the Codecov denominator because it is a
-host-side entrypoint rather than the server-side Django/Celery package measured
-by the `imaris-connector` component. The root `tests/` suite still runs under
-coverage because it exercises scripts, startup helpers, workflow contracts,
-docs checks, and other repository boundaries, but those files are not counted
-in the Codecov denominator unless they import one of the package roots above.
-`codecov.yml` intentionally ignores `tools/`, `startup/`, `monitoring/`,
-`docker/`, `docs/`, `scripts/`, `env/`, templates, static assets,
-`conftest.py`, `omero_imaris_connector/XTOmeroConnector.py`, and test files.
-That is why the Codecov line total is smaller than the repository's full Python footprint.
-Broaden the denominator only as a deliberate policy change, with
-matching `.coveragerc`, `codecov.yml`, component-status, and test updates.
+The standalone Imaris XT client and operational helpers are included. Tests,
+fixtures, and test harnesses are not production statements. Empty marker files
+have no executable lines; executable package wiring is measured. Namespace
+packages and Python subprocesses are included, with fresh per-run data combined
+across the separate test suites. Legacy coverage-exclusion pragmas do not remove
+implementation lines from the report.
+
+CI and local checks use the same split-suite runner. Both collection and reporting
+use a unique artifact directory per run: coverage.py reporting can implicitly
+combine sibling files, so pointing reports at a shared directory can import stale
+results. Raw data is retained with the combined database for diagnosis. The
+pipeline regression test runs real child interpreters and verifies that an
+unexecuted function remains uncovered even when an earlier run covered it.
+
+The target remains 100%, with zero missed Python statements. Expanding the scope
+can reveal existing gaps; keep those failures visible and add behavioral tests,
+never lower the threshold or exclude inconvenient code. A covered line does not
+prove that its assertions, branch combinations, concurrency, or failure recovery
+are sufficient. Test these behaviors explicitly and retain live integration
+evidence separately.
+
+Python coverage does not measure shell, JavaScript, Dockerfile, workflow YAML,
+templates, or configuration. `docs/`, `scripts/`, `env/`, templates, and static
+assets are not represented as Python coverage. Their syntax, contract and runtime
+checks remain mandatory; do not describe this percentage as all-language or
+bug-free proof.
 
 ## Scanner Upgrade Compatibility Gate
 
@@ -284,7 +313,7 @@ workspace with sufficient free space, not a quota-limited temporary filesystem.
 ### DevSkim Engine Parity And Public Fingerprints
 
 `tools/devskim_gate.py` is the shared local and GitHub runner. Its reviewed
-`tools/devskim_tooling.ini` pins the DevSkim 1.0.90 NuGet package by full SHA-256
+`tools/devskim_tooling.ini` pins the DevSkim 1.0.100 NuGet package by full SHA-256
 and the .NET SDK 8.0.425 runtime image by digest. A pinned action alone was not
 reproducible: DevSkim action 1.0.16 installed whichever CLI NuGet supplied at
 build time. Both environments now run identical verified engine bytes over
@@ -306,6 +335,20 @@ The proof retained the original six-result report and recomputed these values:
   `docker/omero-server.Dockerfile` at tags `1.1.2-main.1`, `1.1.1-main.1`,
   `1.1.0-main.1`, and `1.0.1-main.1`, in that order.
 
+The current webgateway adapter targets
+[v5.33.2](https://github.com/ome/omero-web/blob/v5.33.2/omeroweb/webgateway/views.py).
+Its replacement source and output fingerprints were recomputed from the exact
+upstream file; unexpected source still fails closed before patching.
+
+The isolated research tool's source review uses TOML so public commit and
+archive/lock hashes can carry the same native, line-specific annotations.
+Its CycloneDX XML inventory preserves the real package version, source URL and
+complete archive hash; the source guard rejects any changed component or
+provenance. This follows the Java inventory format without encoding or splitting
+hashes. The raw OSV audit still records the approved source advisory. Rejected
+HTTP test inputs have line-specific transport annotations and must never reach
+the network. These are false-positive classifications, not vulnerability fixes.
+
 An actual-engine sentinel test confirmed that the same value without its
 annotation still produces a finding. Native annotations affect scanner output;
 a clean report therefore means no **unsuppressed** findings, not no heuristics
@@ -317,6 +360,24 @@ uses a properties-format file. An isolated scan reproduces its XML parse warning
 an injected sentinel in a disposable copy proves generic rules still scan the
 file. Keep the warning visible and do not rename or exclude the runtime config
 to conceal this scanner limitation. XML-specific rules do not apply to that file.
+
+Transport annotations follow the same evidence rule. A test URL that must be
+rejected is not a permitted production connection. TLS client/server negotiation
+constants and minimum-version settings are not fixed protocol ceilings. The
+[Python SSL API](https://docs.python.org/3/library/ssl.html),
+[curl TLS options](https://curl.se/docs/manpage.html#--tlsv12), and
+[PostgreSQL TLS settings](https://www.postgresql.org/docs/current/runtime-config-connection.html#GUC-SSL-MIN-PROTOCOL-VERSION)
+define those distinctions. Keep negative URL tests, peer/hostname verification,
+stricter-platform-policy tests, and actual TLS handshakes in the verification
+matrix. Native annotations belong on the exact matched line, including after
+formatting; retain the unannotated control report to prove rule detection.
+
+Public source commits remain complete literal Docker `ARG` values, verified
+against their upstream Git objects and checked again during fetch. Do not split
+or encode fingerprints to evade heuristics. Docker `ARG` does not support an
+inline shell comment: it changes the argument value. Use native Docker syntax
+and verify the resulting build arguments. Shell annotations inside a Docker
+heredoc are ordinary shell comments and must pass shell and image-build checks.
 
 ### Hadolint compatibility recheck
 
@@ -409,6 +470,9 @@ python3 tools/scanner_inventory.py deepsource-issues \
 `DEEPSOURCE_TOKEN` when present; otherwise it prompts without echo on a TTY.
 Each API request defaults to a 120-second timeout; use `--request-timeout N`
 only when a scanner API is slower than that, then report the value used.
+Requests and redirects are HTTPS-only and use explicit curl settings, without
+loading a user's curl configuration. Transport failures report diagnostics or
+exit status, never partial API response bodies.
 Never paste PATs into command arguments, remotes, repo files, or logs.
 If a GitHub PAT is required and unavailable, ask the user for the exact
 credential immediately and pause for input. Do not keep retrying GitHub
@@ -416,19 +480,13 @@ operations that cannot authenticate. If DeepSource auth, subscription, or
 repository access is unavailable, record DeepSource as skipped or unavailable
 and continue all other local and GitHub workflow checks instead of blocking the
 verification path.
-GitHub HTTPS Git operations require a PAT or credential manager, never an
-account password. For TTY pushes, use:
-
-```bash
-default_branch=$(git remote show origin | sed -n 's/.*HEAD branch: //p')
-test -n "${default_branch}" || { echo "default branch not found" >&2; exit 1; }
-python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"
-```
-
-This helper disables stale GitHub credential helpers for the command and keeps
-the PAT out of argv, remotes, logs, temp files, and long-lived git config.
-In non-TTY agent shells, set a short-lived `GITHUB_TOKEN` only for that helper
-invocation instead of retrying the prompt path.
+These credentials authorize read-only scanner inventory, not agent publication.
+Every AI agent must use the official GitHub connector for commits, pushes and
+merges, following the [publication contract](../reference/ai-agent-task-contracts.md#github-publication).
+Verify the connector account, repository write permission and expected head;
+omit identity overrides and AI co-author trailers. Missing connector access
+blocks publication; no CLI/PAT fallback is allowed. Keep any scanner credentials
+out of temp files and long-lived Git configuration.
 If a documented scanner command or helper causes a proven avoidable retry/error
 loop, first establish the correct scanner workflow end to end, then update the
 runbook or tool concisely with regression coverage.

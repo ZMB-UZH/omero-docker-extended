@@ -1,6 +1,6 @@
 # Python Style and Linting
 
-This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical Python formatter and lightweight correctness lint gate, [Mypy](https://github.com/python/mypy) as the static type-check gate for tracked production Python files, and [Vulture](https://github.com/jendrikseipp/vulture) as the dead-code gate for tracked production Python files.
+This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical Python formatter and lightweight correctness lint gate, [Mypy](https://github.com/python/mypy) as the static type-check gate, and [Vulture](https://github.com/jendrikseipp/vulture) as the dead-code gate. Mypy and Vulture cover tracked production Python files and non-ignored new source files before commit.
 
 ## CI workflow
 
@@ -11,7 +11,7 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 - These workflows intentionally avoid hard-coded branch names in `on:` filters.
   The default-branch guard lives at the job level so a maintainer can rename
   the default branch without editing workflow YAML.
-- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.16.8`).
+- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.16.10`).
 - The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`. The current Mypy CI pin is `2.3.1`.
 - The Vulture workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/vulture-ci.txt` lockfile as its cache key, then runs `python3 tools/vulture_check.py`.
 - CI runs:
@@ -121,10 +121,10 @@ See the [upstream release notes](https://github.com/ome/ome-zarr-py/releases/tag
   and prevent misleading `NoneType: None` output.
 - The current repository baseline does not use `per-file-ignores` in `.ruff.toml`.
 - Do not reintroduce file-level Ruff exceptions casually. Prefer fixing the underlying code and covering it with targeted tests.
-- The Mypy gate scans tracked production Python files only. Tests, docs, vendored third-party content, hidden harness folders, `conftest.py`, and test-named modules stay out of scope by design.
+- The Mypy gate scans tracked and non-ignored new production Python files. Tests, docs, vendored third-party content, hidden harness folders, `conftest.py`, and test-named modules stay out of scope by design.
 - Mypy is configured to use the active CI Python interpreter, check untyped function bodies, report redundant casts, report unused ignores, reject implicit optionals, and apply strict equality checks.
 - Runtime-only APIs that do not publish usable type information are stubbed under `typings/` and loaded through `mypy_path`; do not add global missing-import ignores for those dependencies.
-- The Vulture dead-code gate scans tracked production Python files only. Tests, docs, vendored third-party content, hidden harness folders, `conftest.py`, and test-named modules stay out of scope by design.
+- The Vulture dead-code gate uses the same source selection as Mypy, including new files before staging. Git inventory is NUL-delimited so spaces, Unicode, and line breaks in filenames do not omit source or split one path into several targets.
 
 ## Agent guidance
 

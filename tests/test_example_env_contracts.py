@@ -301,6 +301,7 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "GRAFANA_DATA_PATH",
             "LOKI_DATA_PATH",
             "ALLOY_DATA_PATH",
+            "OLLAMA_DATA_PATH",
             "PG_MAINTENANCE_DATA_PATH",
             "BUILDX_DATA_PATH",
             "NODE_EXPORTER_TEXTFILE_PATH",

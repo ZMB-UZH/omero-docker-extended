@@ -38,7 +38,7 @@ RUN set -eu; \
     rm -rf /var/cache/apk/*
 
 COPY docker/crowdsec-entrypoint.sh /usr/local/bin/custom-entrypoint.sh
-RUN chmod +x /usr/local/bin/custom-entrypoint.sh
+RUN chmod 0555 /usr/local/bin/custom-entrypoint.sh
 
 HEALTHCHECK --interval=10s --timeout=10s --start-period=30s --retries=30 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1

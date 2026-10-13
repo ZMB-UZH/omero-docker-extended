@@ -24,7 +24,7 @@ from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
-PACKAGE_VERSION = "0.2.41"
+PACKAGE_VERSION = "0.2.42"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
 MCP_PYTHON_COMMAND = "python3"
@@ -1041,17 +1041,25 @@ def ensure_installed(context: CocoIndexContext) -> None:
     """
     require_disk_budget(context, "install")
     with FileLock(lock_path(context.artifact_root, "install")):
-        if context.ccc_bin.exists():
+        if context.venv_dir.exists() or context.venv_dir.is_symlink():
+            refusal = (
+                f"Existing CocoIndex runtime is preserved: {context.venv_dir}. "
+                "Inspect it and obtain separate cleanup authorization before retrying."
+            )
+            if (
+                context.venv_dir.is_symlink()
+                or not context.venv_dir.is_dir()
+                or not context.ccc_bin.is_file()
+            ):
+                raise RuntimeError(refusal)
             try:
                 verify_install(context)
-                return
-            except RuntimeError:
-                shutil.rmtree(context.venv_dir)
+            except RuntimeError as exc:
+                raise RuntimeError(refusal) from exc
+            return
 
-        context.venv_dir.parent.mkdir(parents=True, exist_ok=True)
-        if context.venv_dir.exists():
-            shutil.rmtree(context.venv_dir)
-        venv.EnvBuilder(with_pip=True, clear=True).create(context.venv_dir)
+        context.venv_dir.mkdir(parents=True, exist_ok=False)
+        venv.EnvBuilder(with_pip=True).create(context.venv_dir)
         pip = context.venv_dir / "bin" / "python"
         install_env = os.environ.copy()
         install_env["PIP_CACHE_DIR"] = str(context.pip_cache)
@@ -1093,18 +1101,58 @@ def verify_install(context: CocoIndexContext) -> None:
     )
 
 
+def existing_mirror_ready(context: CocoIndexContext) -> bool:
+    """Admit a complete mirror without mutating unproven pre-existing state.
+
+    Inputs: the resolved mirror context. Output: whether an intact manifest exists;
+    incomplete, unreadable or mismatched state raises instead of authorizing reuse.
+    """
+    directory = context.mirror_repo.parent
+    if not directory.exists() and not directory.is_symlink():
+        return False
+    manifest_path = directory / "manifest.json"
+    if (
+        directory.is_symlink()
+        or not directory.is_dir()
+        or context.mirror_repo.is_symlink()
+        or not context.mirror_repo.is_dir()
+        or manifest_path.is_symlink()
+        or not manifest_path.is_file()
+    ):
+        raise RuntimeError(
+            "Existing CocoIndex mirror is incomplete; preserve and inspect it "
+            "before any separately authorized cleanup."
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Existing CocoIndex mirror manifest is invalid.") from exc
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema") != MIRROR_SCHEMA_VERSION
+        or manifest.get("digest") != context.mirror_digest
+        or manifest.get("package") != PACKAGE_REQUIREMENT
+        or type(manifest.get("mirrored_files")) is not int
+        or type(manifest.get("git_visible_non_ignored_files")) is not int
+        or not 0
+        <= manifest["mirrored_files"]
+        <= manifest["git_visible_non_ignored_files"]
+    ):
+        raise RuntimeError("Existing CocoIndex mirror manifest is invalid.")
+    return True
+
+
 def ensure_mirror(
     context: CocoIndexContext,
     excluded_paths: frozenset[PurePosixPath] = frozenset(),
 ) -> None:
-    """Ensure the mirror.
+    """Publish a verified mirror and its manifest in one atomic directory move.
 
     Inputs: `context` (CocoIndexContext), `excluded_paths` (frozenset[PurePosixPath]).
     Output: None. Raises: RuntimeError when validation or the called operation fails.
     """
     require_disk_budget(context, "mirror")
-    manifest_path = context.mirror_repo.parent / "manifest.json"
-    if manifest_path.exists() and context.mirror_repo.exists():
+    if existing_mirror_ready(context):
         return
 
     paths = tracked_files(context.repo_root, excluded_paths)
@@ -1117,34 +1165,35 @@ def ensure_mirror(
         )
 
     with FileLock(lock_path(context.artifact_root, f"mirror-{context.mirror_digest}")):
-        if manifest_path.exists() and context.mirror_repo.exists():
+        if existing_mirror_ready(context):
             return
-        build_root = context.mirror_repo.parent / f".build-{os.getpid()}"
-        if build_root.exists():
-            shutil.rmtree(build_root)
-        repo_build = build_root / "repo"
-        repo_build.mkdir(parents=True, exist_ok=True)
-        copied_digest, copied_files = copy_repo_files(
-            context.repo_root, paths, repo_build
-        )
-        if copied_digest != context.mirror_digest:
-            raise RuntimeError(
-                "Repository contents changed while building the mirror copy."
+        mirror_parent = context.mirror_repo.parent.parent
+        mirror_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".build-{context.mirror_digest}-", dir=mirror_parent
+        ) as temporary:
+            build_root = Path(temporary)
+            repo_build = build_root / "repo"
+            repo_build.mkdir()
+            copied_digest, copied_files = copy_repo_files(
+                context.repo_root, paths, repo_build
             )
-
-        if context.mirror_repo.parent.exists():
-            context.mirror_repo.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(repo_build, context.mirror_repo)
-        shutil.rmtree(build_root, ignore_errors=True)
-        manifest = {
-            "schema": MIRROR_SCHEMA_VERSION,
-            "digest": context.mirror_digest,
-            "source_repo": str(context.repo_root),
-            "git_visible_non_ignored_files": len(paths),
-            "mirrored_files": copied_files,
-            "package": PACKAGE_REQUIREMENT,
-        }
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            if copied_digest != context.mirror_digest:
+                raise RuntimeError(
+                    "Repository contents changed while building the mirror copy."
+                )
+            manifest = {
+                "schema": MIRROR_SCHEMA_VERSION,
+                "digest": context.mirror_digest,
+                "source_repo": str(context.repo_root),
+                "git_visible_non_ignored_files": len(paths),
+                "mirrored_files": copied_files,
+                "package": PACKAGE_REQUIREMENT,
+            }
+            (build_root / "manifest.json").write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            os.replace(build_root, context.mirror_repo.parent)
 
 
 def ensure_project_initialized(context: CocoIndexContext) -> None:
@@ -1350,6 +1399,8 @@ def require_existing_search_artifacts(context: CocoIndexContext) -> None:
         raise IndexRequiredError(
             "CocoIndex search artifacts are incomplete; missing " + ", ".join(missing)
         )
+    if not existing_mirror_ready(context):
+        raise IndexRequiredError(INDEX_REQUIRED_MESSAGE)
 
 
 def run_ccc_existing(
@@ -1601,6 +1652,7 @@ def run_focused_rg(
                 "-n",
                 "-i",
                 "--no-heading",
+                "--with-filename",
                 case.rg,
                 *existing_coco_files,
             ],
@@ -1810,6 +1862,13 @@ def command_search(args: argparse.Namespace) -> None:
         context = resolve_context(repo_root=repo_root)
     else:
         context = resolve_active_index_context()
+        if getattr(args, "require_current", False):
+            current = resolve_context(repo_root=context.repo_root)
+            if current.mirror_digest != context.mirror_digest:
+                raise IndexRequiredError(
+                    "CocoIndex is stale for this worktree. Explicitly refresh with "
+                    "index --allow-dirty-index before mandatory preflight."
+                )
     output = run_search(
         context,
         query=args.query,
@@ -2141,8 +2200,7 @@ def handle_mcp_request(message: dict[str, object]) -> dict[str, object] | None:
     Inputs: `message` (dict[str, object]). Output: `dict[str, object] | None`. Raises:
     JsonRpcError when validation or the called operation fails.
     """
-    request_id = message.get("id")
-    if request_id is None:
+    if "id" not in message:
         return None
     method = message.get("method")
     if method == "initialize":
@@ -2173,7 +2231,10 @@ def run_lightweight_mcp_server(
         try:
             message = json.loads(raw_line)
             if not isinstance(message, dict):
-                raise JsonRpcError(-32600, "JSON-RPC message must be an object.")
+                write_jsonrpc_error(
+                    output_stream, None, -32600, "JSON-RPC message must be an object."
+                )
+                continue
             has_request_id = "id" in message
             request_id = message.get("id")
             result = handle_mcp_request(message)
@@ -2638,7 +2699,10 @@ def update_toml_table_lines(
             continue
         updated.append(rendered[key])
         seen.add(key)
-    updated.extend(rendered[key] for key in keys if key not in seen)
+    missing = [rendered[key] for key in keys if key not in seen]
+    if missing and updated and not updated[-1].endswith(("\n", "\r")):
+        updated[-1] += "\n"
+    updated.extend(missing)
     return updated
 
 
@@ -2928,6 +2992,8 @@ def parse_mcp_response_lines(stdout: str) -> dict[int, dict[str, Any]]:
             payload = json.loads(line)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"MCP server emitted non-JSON stdout: {line!r}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("MCP server response must be an object.")
         if "error" in payload:
             raise RuntimeError(f"MCP server returned an error response: {payload}")
         response_id = payload.get("id")
@@ -3149,6 +3215,11 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--path", help="Optional CocoIndex file path glob.")
     search.add_argument("--lang", action="append", default=[])
+    search.add_argument(
+        "--require-current",
+        action="store_true",
+        help="Reject a stale active index without implicitly refreshing it.",
+    )
     search.add_argument(
         "--index-if-missing",
         action="store_true",

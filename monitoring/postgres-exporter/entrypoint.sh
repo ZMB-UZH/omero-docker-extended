@@ -40,7 +40,15 @@ if [ -z "$db_password" ]; then
     die "Missing required environment variable: $password_var"
 fi
 
-export DATA_SOURCE_NAME="postgresql://${db_user}:${db_password}@${db_host}:${db_port}/${db_name}?sslmode=disable"
+: "${PGSSLROOTCERT:?A PostgreSQL TLS authority file is required}"
+test -r "$PGSSLROOTCERT" || die "PostgreSQL TLS authority file is unreadable"
+# Use the driver's credential fields, not URI interpolation. The exporter parses
+# DSNs again for metric labels and errors; passwords must never enter that path.
+export DATA_SOURCE_NAME="postgresql://${db_host}:${db_port}/${db_name}?sslmode=verify-full"
+export PGUSER="$db_user"
+export PGPASSWORD="$db_password"
+unset DATA_SOURCE_URI DATA_SOURCE_USER DATA_SOURCE_PASS
+unset DATA_SOURCE_URI_FILE DATA_SOURCE_USER_FILE DATA_SOURCE_PASS_FILE
 unset db_password
 
 exec /bin/postgres_exporter "$@"

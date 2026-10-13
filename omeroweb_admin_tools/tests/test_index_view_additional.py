@@ -136,7 +136,7 @@ def test_proxy_helpers_cover_request_failures_and_cookie_edge_cases(
     headers = HTTPMessage()
     headers.add_header("Content-Type", "text/html; charset=utf-8")
     headers.add_header(
-        "Set-Cookie",
+        "Set-Cookie",  # DevSkim: ignore DS610001 -- malformed backend-response fixture exercising parser recovery
         "grafana_session=value; Path=/nested; Max-Age=invalid; HttpOnly",
     )
     headers.add_header("Location", "mailto:admin@example.test")

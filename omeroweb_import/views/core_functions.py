@@ -3106,10 +3106,26 @@ def _prepare_request_job_import_datasets(
             )
             return None, generic_error
 
-    if not _save_job(job_dict):
+    def persist_destinations(current_job):
+        """Merge destinations without overwriting concurrent worker progress.
+
+        Inputs: locked current job. Output: job with existing targets preserved.
+        """
+        current_job["dataset_map"] = {
+            **dataset_map,
+            **(current_job.get("dataset_map") or {}),
+        }
+        current_job["orphan_dataset_name"] = (
+            current_job.get("orphan_dataset_name") or orphan_dataset_name
+        )
+        current_job["updated"] = time.time()
+        return current_job
+
+    prepared_job = _update_job(job_id, persist_destinations)
+    if prepared_job is None:
         return None, errors.unable_update_upload_job_state()
 
-    return job_dict, None
+    return prepared_job, None
 
 
 def _prepare_uploaded_job_for_request_path_import(
@@ -4366,7 +4382,7 @@ def _validate_session(conn):
 
 
 def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
-    """A new connection or reconnect.
+    """Reconnect a borrowed OMERO session without terminating it during cleanup.
 
     Inputs: `session_key`, `host`, `port`, `old_conn`. Output: `conn` or None.
 
@@ -4381,7 +4397,7 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     """
     if old_conn:
         try:
-            old_conn.close()
+            old_conn.close(hard=False)
         except Exception as exc:
             logger.debug(
                 "Failed to close stale OMERO connection before reconnect: %s", exc
@@ -4397,7 +4413,7 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
         if not _validate_session(conn):
             logger.error("Newly created session is invalid")
             try:
-                conn.close()
+                conn.close(hard=False)
             except Exception as exc:
                 logger.warning(
                     "Failed to close invalid OMERO session during reconnect: %s", exc
@@ -5953,6 +5969,58 @@ def _managed_parent_directory_fd(
     except Exception:
         os.close(dir_fd)
         raise
+
+
+def _create_job_edx_plot(upload_root: Path, txt_path: Path) -> Path | None:
+    """Render a spectrum into an exclusive, job-owned generated file.
+
+    Inputs: job `upload_root` and validated `txt_path`. Output: the generated
+    PNG path, or None without spectrum data. Uploaded files are never replaced;
+    failed renders remove only the newly created output. I/O errors propagate.
+    """
+    from ..services.omero.sem_edx_parser import create_edx_spectrum_plot
+
+    stem = txt_path.stem
+    while len(os.fsencode(f"{stem}_edx.png")) > MAX_UPLOAD_PATH_COMPONENT_BYTES:
+        stem = stem[:-1]
+    parts = ("_derived", "sem-edx", uuid.uuid4().hex, f"{stem}_edx.png")
+    plot_path = upload_root.joinpath(*parts)
+    with ExitStack() as resources:
+        parent_fd, file_name = _managed_parent_directory_fd(
+            upload_root,
+            parts,
+            max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+            create_parents=True,
+        )
+        resources.callback(os.close, parent_fd)
+        file_fd = _open_managed_upload_file_fd(
+            parent_fd,
+            file_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            "/".join(parts),
+        )
+        resources.callback(os.close, file_fd)
+        complete = False
+        try:
+            with os.fdopen(file_fd, "wb", closefd=False) as stream:
+                result = create_edx_spectrum_plot(
+                    txt_path, plot_path, output_stream=stream
+                )
+                if result is None:
+                    return None
+                stream.flush()
+                os.fsync(file_fd)
+            complete = True
+            return plot_path
+        finally:
+            if not complete:
+                try:
+                    os.unlink(file_name, dir_fd=parent_fd)
+                except OSError as exc:
+                    logger.warning(
+                        "Could not remove incomplete SEM-EDX plot: %s",
+                        sanitize_log_value(exc),
+                    )
 
 
 def _managed_child_path(root_path: Path, normalized_parts: tuple[str, ...]) -> Path:
@@ -7577,7 +7645,12 @@ def _copy_file_descriptor(source_fd: int, destination: Path) -> None:
             chunk = os.read(source_fd, 1024 * 1024)
             if not chunk:
                 break
-            os.write(destination_fd, chunk)
+            remaining = memoryview(chunk)
+            while remaining:
+                written = os.write(destination_fd, remaining)
+                if written <= 0:
+                    raise OSError(errno.EIO, "Staging copy write made no progress")
+                remaining = remaining[written:]
         os.fsync(destination_fd)
     finally:
         os.close(destination_fd)
@@ -9742,11 +9815,6 @@ def _process_import_job(job_id: str):
                         plot_cache: dict[str, Path | None] = {}
                         plot_rel_cache: dict[str, str] = {}
                         imported_plots: set[str] = set()
-                        if create_figures_attachments or create_figures_images:
-                            from ..services.omero.sem_edx_parser import (
-                                create_edx_spectrum_plot,
-                            )
-
                         # Now process attachments using cached images
                         for attachment_idx, (image_rel, txt_paths) in enumerate(
                             sem_edx_associations.items()
@@ -9913,7 +9981,25 @@ def _process_import_job(job_id: str):
                                         plot_path = plot_cache.get(txt_rel)
                                         plot_rel = plot_rel_cache.get(txt_rel)
                                     else:
-                                        plot_path = create_edx_spectrum_plot(txt_path)
+                                        try:
+                                            plot_path = _create_job_edx_plot(
+                                                upload_root, txt_path
+                                            )
+                                        except Exception as exc:
+                                            logger.error(
+                                                "Failed to generate SEM-EDX plot: %s",
+                                                sanitize_log_value(txt_rel),
+                                                exc_info=sanitized_exc_info(exc),
+                                            )
+                                            _append_job_error(
+                                                job,
+                                                "Failed to generate SEM-EDX plot "
+                                                f"for {txt_name}.",
+                                            )
+                                            _append_txt_attachment_message(
+                                                job, txt_name, image_name, False
+                                            )
+                                            continue
                                         plot_cache[txt_rel] = plot_path
                                         if plot_path:
                                             plot_rel = str(
@@ -9934,9 +10020,9 @@ def _process_import_job(job_id: str):
                                             PurePosixPath(plot_rel).name
                                         )
                                     )
-                                    plot_staged_rel = _build_staged_relative_path(
-                                        plot_import_rel
-                                    )
+                                    plot_staged_rel = plot_path.relative_to(
+                                        upload_root
+                                    ).as_posix()
 
                                     staged_plot_path, staged_plot_error = (
                                         _resolve_staged_target_path(
@@ -9957,30 +10043,8 @@ def _process_import_job(job_id: str):
                                         _append_job_error(job, staged_plot_error)
                                         imported_plots.add(txt_rel)
                                         continue
-                                    try:
-                                        staged_plot_path.parent.mkdir(
-                                            parents=True, exist_ok=True
-                                        )
-                                        shutil.copy2(plot_path, staged_plot_path)
-                                    except Exception as exc:
-                                        logger.error(
-                                            "Failed to stage SEM-EDX plot PNG "
-                                            "for import: src=%s dst=%s error=%s",
-                                            sanitize_log_value(plot_path),
-                                            sanitize_log_value(staged_plot_path),
-                                            sanitize_log_value(exc),
-                                            exc_info=sanitized_exc_info(exc),
-                                        )
-                                        _append_job_error(
-                                            job,
-                                            "Failed to stage SEM-EDX plot PNG "
-                                            f"for import: {staged_plot_path.name}",
-                                        )
-                                        imported_plots.add(txt_rel)
-                                        continue
-
                                     logger.info(
-                                        "SEM-EDX: plot staged for import: "
+                                        "SEM-EDX: generated plot ready for import: "
                                         "rel=%s staged=%s exists=%s",
                                         sanitize_log_value(plot_import_rel),
                                         sanitize_log_value(staged_plot_path),

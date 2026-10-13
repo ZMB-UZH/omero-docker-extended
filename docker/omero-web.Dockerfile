@@ -5,7 +5,7 @@ FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62f
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.33.1@sha256:d50ce7a8cf150313813a4cffc5da5d80a4a2913a435e0346a8ab30fb05439d7a
+FROM openmicroscopy/omero-web-standalone:5.33.2@sha256:0ed9880841da97b06db1268d6f28e4bc52dbc25f6217a32eee622e7403f9503b
 
 # Run image build steps as root
 # -----------------------------
@@ -43,7 +43,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.48.0
-ARG CRYPTOGRAPHY_VERSION=50.0.1
+ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0
 ARG CERTIFI_VERSION=2026.7.22
 ARG IDNA_VERSION=3.20
@@ -214,12 +214,14 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
+ARG OMERO_FIGURE_VERSION
 ARG OMERO_CLI_ZARR_VERSION
 ARG OME_ZARR_PY_VERSION
 ARG BIOFORMATS2RAW_VERSION
 ARG BIOFORMATS2RAW_SHA256
 ARG TIFFFILE_VERSION
 RUN set -euo pipefail; \
+    : "${OMERO_FIGURE_VERSION:?OMERO_FIGURE_VERSION must be provided from env/omeroserver.env}"; \
     : "${OMERO_CLI_ZARR_VERSION:?OMERO_CLI_ZARR_VERSION must be provided from env/omeroserver.env}"; \
     : "${OME_ZARR_PY_VERSION:?OME_ZARR_PY_VERSION must be provided from env/omeroserver.env}"; \
     : "${BIOFORMATS2RAW_VERSION:?BIOFORMATS2RAW_VERSION must be provided from env/omeroserver.env}"; \
@@ -259,15 +261,16 @@ RUN set -euo pipefail; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        django==5.2.17 \
+        django==5.2.18 \
         matplotlib==3.11.2 \
         pytest==9.1.1 \
-        portalocker==4.3.2 \
+        portalocker==4.4.0 \
         psycopg2-binary==2.9.13 \
         celery==5.6.3 \
         redis==8.1.0 \
         django-redis==7.0.0 \
         omero-fpbioimage==0.4.1 \
+        "omero-figure==${OMERO_FIGURE_VERSION}" \
         omero-gallery==3.4.3 \
         omero-parade==0.2.4 \
         omero-web-zarr==0.1.1 \
@@ -426,9 +429,10 @@ ARG OMEZARR_READER_VERSION=0.6.0
 ARG JZARR_VERSION=0.5.0
 ARG OMEZARR_READER_SHA256=26e5b2e99a64abd1ba83ee52eeb5fcbd560190fed1097afb404c38bf24579e55
 ARG JZARR_SHA256=5426e3b4bdde0474907e1cf32453ce3d69e71f1b32ff4773a43d366e1f5aef9d
+# SciJava mirrors OME releases; retain the exact upstream artifact checksum.
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/zarr-jar-upgrade; \
-    OMEZARR_URL="https://artifacts.openmicroscopy.org/artifactory/ome.releases/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
+    OMEZARR_URL="https://maven.scijava.org/content/groups/public/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
     JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
     echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION}"; \
     curl -fsSL -o /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar "${OMEZARR_URL}"; \

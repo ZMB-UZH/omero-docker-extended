@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 import stat
 import sys
 import types
@@ -11,19 +10,17 @@ from pathlib import Path
 import pytest
 
 
-TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
+TEST_RUNTIME_ROOT: Path | None = None
 TEST_SERVICE_AUTH_VALUE = "job-auth-fixture"
 
 
 @pytest.fixture(autouse=True)
-def _clean_test_runtime_root():
-    """Remove generated runtime files around each test.
+def _isolate_test_runtime_root(tmp_path, monkeypatch):
+    """Keep runtime fixtures private to each test, outside the source checkout.
 
-    Inputs: none. Output: yields for test execution.
+    Inputs: pytest temporary directory and monkeypatch. Output: isolated runtime root.
     """
-    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
-    yield
-    shutil.rmtree(TEST_RUNTIME_ROOT, ignore_errors=True)
+    monkeypatch.setitem(globals(), "TEST_RUNTIME_ROOT", tmp_path / "runtime")
 
 
 def _install_omero_stubs() -> None:
@@ -720,7 +717,7 @@ def test_run_ome_tiff_export_task_materializes_outputs_and_closes_connection(
     tasks = _import_tasks(monkeypatch)
     closed = []
     state_updates = []
-    conn = types.SimpleNamespace(close=lambda: closed.append(True))
+    conn = types.SimpleNamespace(close=lambda hard=True: closed.append(hard))
     monkeypatch.setattr(
         tasks,
         "_open_export_connection",
@@ -1036,7 +1033,7 @@ def test_run_ims_export_task_updates_failure_meta_and_closes_connections(
     closed = []
 
     conn = types.SimpleNamespace(
-        close=lambda: closed.append(True),
+        close=lambda hard=True: closed.append(hard),
         SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
     )
 
@@ -1181,7 +1178,7 @@ def test_task_helpers_cover_cli_resolution_connection_errors_and_success(
     updates = []
     closed = []
     conn = types.SimpleNamespace(
-        close=lambda: closed.append(True),
+        close=lambda hard=True: closed.append(hard),
         SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
     )
 
@@ -1350,7 +1347,7 @@ def test_task_helpers_cover_security_validation_and_close_warning_paths(
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
     conn = types.SimpleNamespace(
-        close=lambda: (_ for _ in ()).throw(RuntimeError("close failed")),
+        close=lambda hard=True: (_ for _ in ()).throw(RuntimeError("close failed")),
         SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
     )
     updates = []
@@ -1733,53 +1730,30 @@ def test_ims_task_result_excludes_non_json_script_outputs(monkeypatch, tmp_path)
     assert json.loads(json.dumps(result, allow_nan=False)) == result
 
 
-def test_close_export_connection_accepts_gateway_close_signature_variants(
-    monkeypatch,
+@pytest.mark.parametrize("preserve_session", [False, True])
+@pytest.mark.parametrize("failure", [TypeError, RuntimeError])
+def test_close_export_connection_never_retries_with_a_destructive_default(
+    monkeypatch, preserve_session, failure
 ):
-    """Verify gateway cleanup handles supported OMERO.py close signatures.
-
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions that would
-    leak or hard-close the wrong session when gateway versions differ.
-    """
+    """Inputs: gateway cleanup failure. Output: one explicit close; never a hard-close fallback."""
     tasks = _import_tasks(monkeypatch)
-
     tasks._close_export_connection(types.SimpleNamespace())
+    calls = []
 
-    positional_calls = []
-
-    class _PositionalClose:
-        """Gateway double whose close method only accepts a positional hard flag."""
-
-        @staticmethod
-        def close(*args, **kwargs):
-            """Record close calls or reject keyword usage.
-
-            Inputs: close args and kwargs. Output: None.
-            """
-            if kwargs:
-                raise TypeError("no keyword close")
-            positional_calls.append(args)
-
-    tasks._close_export_connection(_PositionalClose())
-    assert positional_calls == [(True,)]
-
-    no_arg_calls = []
-
-    class _NoArgClose:
-        """Gateway double whose close method accepts no arguments."""
+    class Gateway:
+        """The supported OMERO.py gateway signature with a failing resource cleanup."""
 
         @staticmethod
-        def close(*args, **kwargs):
-            """Record no-argument close calls.
+        def close(hard=True):
+            """Inputs: session ownership flag. Output: recorded cleanup attempt and its error."""
+            calls.append(hard)
+            raise failure("proxy cleanup failed")
 
-            Inputs: close args and kwargs. Output: None.
-            """
-            if args or kwargs:
-                raise TypeError("no close arguments")
-            no_arg_calls.append(True)
-
-    tasks._close_export_connection(_NoArgClose())
-    assert no_arg_calls == [True]
+    connection = Gateway()
+    setattr(connection, tasks._PRESERVE_JOINED_SESSION_ATTR, preserve_session)
+    with pytest.raises(failure, match="proxy cleanup failed"):
+        tasks._close_export_connection(connection)
+    assert calls == [not preserve_session]
 
 
 def test_ome_tiff_task_uses_format_specific_public_failure_contract(monkeypatch):

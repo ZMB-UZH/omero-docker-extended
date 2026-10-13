@@ -38,6 +38,7 @@ The mandatory caveman lite policy never overrides risk handling, safety warnings
 | `verification-loop` | `.agents/skills/verification-loop/SKILL.md` | after non-trivial changes and before commit/push | verification states exactly what was checked and what was blocked |
 | `caveman` | `.agents/skills/caveman/SKILL.md` | mandatory lite compression for internal AI communication on every task | output tokens drop without losing technical substance or safety |
 | `cocoindex-code-search` | `.agents/skills/cocoindex-code-search/SKILL.md` | when broad repo navigation needs semantic routing before exact validation | context drops by routing to fewer candidate files without replacing `rg` |
+| `crawl4ai-research` | `.agents/skills/crawl4ai-research/SKILL.md` | every web research task | actual upstream source reading with attributable results and explicit failures |
 | `docs-knowledge-maintainer` | `.agents/skills/docs-knowledge-maintainer/SKILL.md` | when behavior, env contracts, topology, or troubleshooting guidance changes | docs stay aligned with the code and routing model |
 | `plugin-regression-triager` | `.agents/skills/plugin-regression-triager/SKILL.md` | when selecting the correct split pytest suites | the narrowest correct regression set is chosen |
 | `omero-runtime-verifier` | `.agents/skills/omero-runtime-verifier/SKILL.md` | for live runtime debugging, service checks, or OMERO CLI work | runtime triage follows the documented safe procedure |
@@ -64,6 +65,12 @@ The mandatory caveman lite policy never overrides risk handling, safety warnings
 
 ## Usage notes
 
+- Every agent runs `python3 tools/agent_preflight.py begin --query "<task>"`
+  before edits, adding `--research-url "<source>"` for web research. The gate
+  loads Caveman and executes CocoIndex and Crawl4AI. Check the private execution
+  receipt with `python3 tools/agent_preflight.py check` before an AI commit.
+  Tool failure is a blocker for dependent work, not permission to skip the tool.
+
 - Start with `AGENTS.md` and `docs/reference/ai-agent-context-routing.md` to find the right domain docs.
 - Use the nearest skill before falling back to a generic workflow.
 - Keep every skill workflow in one session only; skills must not introduce
@@ -87,7 +94,7 @@ The mandatory caveman lite policy never overrides risk handling, safety warnings
   worktrees unless the caller uses the matching explicit dirty flag. If it
   cold-indexes, tell the user once that the first search can take several
   minutes and then uses the external cache. Its mirror asks CocoIndex Code
-  0.2.41 to include every Git-visible mirrored file pattern; CocoIndex indexes
+  0.2.42 to include every Git-visible mirrored file pattern; CocoIndex indexes
   text-decodable content and skips undecodable binary files, so do not add
   repo-specific language rewrites or file-type exclusions without a tested,
   documented configuration contract. Use direct `rg` first only for precise

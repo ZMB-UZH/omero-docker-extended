@@ -48,6 +48,7 @@ Host-side installer:
   - keeps the root traversable with `u+rwx,go+rx`,
   - recursively re-owns top-level non-server temp subtrees to `OMERO_WEB_UID:GID`,
   - recursively restores `${OMERO_TMP_PATH}/omero-server` to `OMERO_SERVER_UID:GID`,
+  - excludes explicitly configured persistent model storage and never follows symlinks during ownership or mode changes,
   - sets `${OMERO_TMP_PATH}/omero-server` and `${OMERO_TMP_PATH}/omero-server/tmp` to `0700`.
 - `scripts/install-tmp-cleaner.sh`
   - fully replaces the repo-managed `omero-tmp-cleaner` systemd service and
@@ -59,8 +60,11 @@ Host-side installer:
   - installs a timer that schedules from activation and from the previous
     service run so reinstalling the timer cannot leave it active with no next
     trigger,
-  - protects only real namespace directories at the temp root; stale
-    root-level files and symlinks remain eligible for cleanup.
+  - protects real namespace directories at the temp root and the explicit
+    `OLLAMA_DATA_PATH`; unrelated stale root-level files and symlinks remain
+    eligible for cleanup,
+  - preserves both an explicitly protected directory alias and its resolved
+    target; an invalid protection boundary stops cleanup before deletion.
 
 Server bootstrap:
 
@@ -83,6 +87,26 @@ Operational risk:
 
 - repeated reinstall/update flows can corrupt OMERO.server temp ownership if the installer recursively normalizes the whole temp root to the OMERO.web UID.
 - stale `omero_omero-server/.../.lock` trees can trigger `PermissionError` on restart if ownership is wrong.
+
+### `OLLAMA_DATA_PATH`
+
+Use persistent storage outside `OMERO_TMP_PATH` for new installations. The tracked
+path example defaults to `${OMERO_DATA_PATH}/ollama_data`; Compose never guesses
+a host directory. Before upgrading an older deployment, inspect the selected
+Ollama container's existing `/root/.ollama` bind mount and retain that exact source
+in `installation_paths.env` and its `.env` mirror. Follow the environment backup
+and authorization procedure before changing either operator-owned file.
+
+Legacy model directories beneath the temporary root remain supported: installer
+permission changes skip that subtree and the generated cleanup service carries
+its preservation boundary. A model directory cannot simultaneously be an active
+OMERO temporary namespace. Moving model data is a separate, verified operation,
+not an automatic side effect of updating the repository.
+
+Manual cleanup can supply repeatable `--preserve-dir` arguments. The installed
+service uses `OMERO_TMP_PRESERVE_DIR` for the model path. Keep this setting when
+invoking the cleaner outside systemd; direct commands do not read operator env
+files implicitly.
 
 ### `OMERO_USER_DATA_PATH`
 
@@ -109,12 +133,21 @@ DropBox external writers:
   `OMERO_DROPBOX_USER_DIR_OWNER`, `OMERO_DROPBOX_USER_DIR_GROUP`, and
   `OMERO_DROPBOX_USER_DIR_MODE`; empty owner/group values inherit the DropBox
   root UID/GID.
+- Directory permissions are applied through opened directory handles without
+  following symlinks. Existing payload files and nested directories are not
+  traversed or modified; an unchanged directory needs no parent write access.
 - For multiple external hosts, keep UID/GID/ACL mapping consistent on the
   shared export. Do not introduce a `<group>/<user>` DropBox convention; that
   layout belongs to `CONFIG_omero_fs_repo_path`, not the DropBox acceptor.
 
 Quota helper:
 
+- The main installer calls [prepare_quota_directories.py](../../tools/prepare_quota_directories.py)
+  with the configured data root and detected web GID. It applies the same
+  directory policy as web startup: `.admin-tools` is owned by root and the web
+  group with mode `1770`; its host-enforcer `quota` subdirectory is root-owned
+  with mode `0700`. Descriptor-relative operations reject linked metadata
+  directories and leave existing state files and repository payloads unchanged.
 - `scripts/install-quota-enforcer.sh`
   - fully replaces the repo-managed `omero-quota-enforcer` service, timer, and
     path units on every run before enabling the current units,
@@ -460,12 +493,20 @@ Relevant Dockerfiles:
 - `docker/pg-maintenance.Dockerfile`
 - `docker/crowdsec.Dockerfile`
 - `docker/firewall-bouncer.Dockerfile`
+- `docker/path-usage-exporter.Dockerfile`
+- `docker/redis-sysctl-init.Dockerfile`
 
 These Dockerfiles mostly:
 
 - `chown` image-internal runtime directories to their service user,
 - set scripts to executable (`0555` or `0755`),
 - set static files such as branding assets to fixed read-only modes.
+
+Use explicit modes for copied runtime files: `chmod +x` alone can leave a
+root-owned script unreadable by its non-root interpreter when the build
+checkout has restrictive permissions. Helper scripts use `0555`; the
+Python path-usage exporter uses `0444` and is started through its interpreter.
+Verify these permissions as the image's configured runtime user.
 
 They do not replace host-side bind-mount normalization.
 

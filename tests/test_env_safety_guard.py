@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import env_safety_guard
@@ -85,6 +90,264 @@ class EnvSafetyGuardTests(unittest.TestCase):
         (repo / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # ---- check command ----
+
+    def test_dot_env_diagnostics_never_print_project_values(self):
+        """Reject a mismatched project without disclosing deployment values.
+
+        Inputs: complete generated env fixtures. Output: redacted failure and unchanged files.
+        """
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                name: "PLACEHOLDER=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        private_project = "operator-private-project"
+        self._write_compose_mirror(
+            repo,
+            include_project_name=False,
+            dot_overrides={"COMPOSE_PROJECT_NAME": private_project},
+        )
+        before = (repo / ".env").read_bytes()
+        diagnostics = io.StringIO()
+        with redirect_stderr(diagnostics):
+            self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 1)
+        self.assertIn("COMPOSE_PROJECT_NAME", diagnostics.getvalue())
+        self.assertNotIn(private_project, diagnostics.getvalue())
+        self.assertNotIn(repo.name, diagnostics.getvalue())
+        self.assertEqual((repo / ".env").read_bytes(), before)
+
+    def test_dot_env_check_reports_missing_installation_metadata(self):
+        """Fail cleanly when the canonical installation identity is unavailable.
+
+        Inputs: an env mirror without installation metadata. Output: failure, not an exception.
+        """
+        repo = self._make_repo([], {".env": "COMPOSE_PROJECT_NAME=private-project\n"})
+        before = (repo / ".env").read_bytes()
+        diagnostics = io.StringIO()
+        with redirect_stderr(diagnostics):
+            self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 1)
+        self.assertIn("installation_paths.env", diagnostics.getvalue())
+        self.assertNotIn("private-project", diagnostics.getvalue())
+        self.assertEqual((repo / ".env").read_bytes(), before)
+
+    def test_dot_env_check_redacts_read_failures(self):
+        """Report unreadable and undecodable files without echoing exception details.
+
+        Inputs: isolated read failures. Output: controlled failure and unchanged env files.
+        """
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                name: "PLACEHOLDER=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        self._write_compose_mirror(repo)
+        dot_env = repo / ".env"
+        before = dot_env.read_bytes()
+        read_text = Path.read_text
+        for error in (
+            PermissionError("private-exception-detail"),
+            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "private-exception-detail"),
+        ):
+            with self.subTest(error=type(error).__name__):
+
+                def fail_dot_env(path, *args, **kwargs):
+                    """Fail the selected fixture read; preserve all other file behavior.
+
+                    Inputs: path and read options. Output: original read or injected error.
+                    """
+                    if path == dot_env:
+                        raise error
+                    return read_text(path, *args, **kwargs)
+
+                diagnostics = io.StringIO()
+                with mock.patch.object(Path, "read_text", fail_dot_env):
+                    with redirect_stderr(diagnostics):
+                        self.assertEqual(env_safety_guard.cmd_dot_env_check(repo), 1)
+                self.assertIn(".env could not be read", diagnostics.getvalue())
+                self.assertNotIn("private-exception-detail", diagnostics.getvalue())
+                self.assertEqual(dot_env.read_bytes(), before)
+
+    def test_project_normalization_always_produces_a_valid_compose_name(self):
+        """Normalize punctuation-only and mixed installation names consistently.
+
+        Inputs: portable path components. Output: nonempty ASCII names with a valid prefix.
+        """
+        for name in ("---", "___", "!!!", " A Name! ", "-9_data", "_UPPER", "a.b"):
+            with self.subTest(name=name):
+                normalized = env_safety_guard.derive_compose_project_name(Path(name))
+                self.assertRegex(normalized, r"^[a-z0-9][a-z0-9_-]*$")
+                self.assertEqual(
+                    env_safety_guard.derive_compose_project_name(normalized), normalized
+                )
+        self.assertEqual(env_safety_guard.derive_compose_project_name("!!!"), "omero")
+
+    def test_dot_env_cli_rejects_invalid_encoding_without_a_traceback(self):
+        """Exercise the real CLI against an invalid UTF-8 deployment file.
+
+        Inputs: temporary invalid file bytes. Output: redacted nonzero result, no file rewrite.
+        """
+        repo = self._make_repo([], {".env": "placeholder"})
+        payload = b"CONFIG=private-marker\xff\n"
+        (repo / ".env").write_bytes(payload)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(env_safety_guard.__file__).resolve()),
+                "--repo-root",
+                str(repo),
+                "dot-env-check",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(".env could not be read as UTF-8", result.stderr)
+        self.assertNotIn("private-marker", result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+        self.assertEqual((repo / ".env").read_bytes(), payload)
+
+    def test_empty_manifest_blocks_check_compose_and_backup(self):
+        """Reject an empty safety manifest before creating or changing files.
+
+        Inputs: an empty temporary manifest. Output: three failures and no backup directory.
+        """
+        repo = self._make_repo([])
+        for command in (
+            env_safety_guard.cmd_check,
+            env_safety_guard.cmd_compose_guard,
+            env_safety_guard.cmd_backup,
+        ):
+            with self.subTest(command=command.__name__):
+                self.assertEqual(command(repo), 1)
+        self.assertFalse((repo / env_safety_guard.BACKUP_DIR_NAME).exists())
+
+    def test_backup_directory_rejects_files_and_symlinks_without_modifying_targets(
+        self,
+    ):
+        """Prevent the backup directory helper from following an unsafe target.
+
+        Inputs: a regular file and a symlink. Output: rejection with original bytes and modes.
+        """
+        repo = self._make_repo([])
+        original = repo / "original"
+        original.write_text("preserved", encoding="utf-8")
+        link = repo / "alias"
+        link.symlink_to(original)
+        before_mode = original.stat().st_mode
+        for path in (original, link):
+            with self.subTest(path=path.name):
+                with self.assertRaisesRegex(RuntimeError, "unsafe backup directory"):
+                    env_safety_guard.ensure_private_dir(path)
+        self.assertEqual(original.read_text(encoding="utf-8"), "preserved")
+        self.assertEqual(original.stat().st_mode, before_mode)
+        self.assertTrue(link.is_symlink())
+
+    def test_backup_timestamp_collision_preserves_both_snapshots(self):
+        """Create distinct private snapshots when two backups share a timestamp.
+
+        Inputs: two fixture versions and a fixed clock. Output: unchanged first backup and new second backup.
+        """
+        repo = self._make_repo(
+            ["env/service.env"], {"env/service.env": "VALUE=first\n"}
+        )
+        source = repo / "env/service.env"
+        source.chmod(0o640)
+        fixed = env_safety_guard.datetime.now(env_safety_guard.timezone.utc)
+        with mock.patch.object(env_safety_guard, "datetime") as clock:
+            clock.now.return_value = fixed
+            self.assertEqual(env_safety_guard.cmd_backup(repo), 0)
+            source.write_text("VALUE=second\n", encoding="utf-8")
+            source.chmod(0o600)
+            self.assertEqual(env_safety_guard.cmd_backup(repo), 0)
+        snapshots = sorted((repo / env_safety_guard.BACKUP_DIR_NAME).iterdir())
+        self.assertEqual(len(snapshots), 2)
+        self.assertEqual(snapshots[1].name, f"{snapshots[0].name}_1")
+        for snapshot, (value, mode) in zip(
+            snapshots, (("first", 0o640), ("second", 0o600)), strict=True
+        ):
+            saved = snapshot / "env/service.env"
+            self.assertEqual(saved.read_text(encoding="utf-8"), f"VALUE={value}\n")
+            self.assertEqual(saved.stat().st_mode & 0o777, mode)
+            self.assertEqual(saved.parent.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(snapshot.stat().st_mode & 0o777, 0o700)
+
+    def test_concurrent_backups_allocate_distinct_private_snapshots(self):
+        """Keep simultaneous backups separate even when their timestamps match.
+
+        Inputs: synchronized backups of an isolated fixture. Output: two complete snapshots.
+        """
+        repo = self._make_repo(["service.env"], {"service.env": "VALUE=preserved\n"})
+        backup_root = repo / env_safety_guard.BACKUP_DIR_NAME
+        fixed = env_safety_guard.datetime.now(env_safety_guard.timezone.utc)
+        barrier = threading.Barrier(2)
+        ensure_private_dir = env_safety_guard.ensure_private_dir
+
+        def synchronized_parent(path):
+            """Synchronize allocation without replacing actual filesystem operations.
+
+            Inputs: directory path. Output: original private-directory preparation.
+            """
+            if path == backup_root:
+                barrier.wait(timeout=5)
+            return ensure_private_dir(path)
+
+        with mock.patch.object(env_safety_guard, "datetime") as clock:
+            clock.now.return_value = fixed
+            with mock.patch.object(
+                env_safety_guard, "ensure_private_dir", synchronized_parent
+            ):
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    futures = [
+                        workers.submit(env_safety_guard.cmd_backup, repo)
+                        for _ in range(2)
+                    ]
+                    self.assertEqual(
+                        [future.result(timeout=10) for future in futures], [0, 0]
+                    )
+        snapshots = list(backup_root.iterdir())
+        self.assertEqual(len(snapshots), 2)
+        for snapshot in snapshots:
+            self.assertEqual(snapshot.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(
+                (snapshot / "service.env").read_text(encoding="utf-8"),
+                "VALUE=preserved\n",
+            )
+        self.assertEqual(
+            (repo / "service.env").read_text(encoding="utf-8"), "VALUE=preserved\n"
+        )
+
+    def test_template_check_reports_missing_files_and_duplicate_keys_only(self):
+        """Report shape errors without disclosing actual or example values.
+
+        Inputs: complete templates with missing or duplicate deployment keys. Output: redacted failures.
+        """
+        repo = self._make_repo(
+            [],
+            {
+                example: "VALUE=private-example\n"
+                for example, _ in env_safety_guard.ENV_TEMPLATE_PAIRS
+            },
+        )
+        diagnostics = io.StringIO()
+        with redirect_stderr(diagnostics):
+            self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
+        self.assertIn("Missing deployment env file:", diagnostics.getvalue())
+        for _, actual in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            target = repo / actual
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                "VALUE=private-first\nVALUE=private-second\n", encoding="utf-8"
+            )
+        diagnostics = io.StringIO()
+        with redirect_stderr(diagnostics):
+            self.assertEqual(env_safety_guard.cmd_template_check(repo), 1)
+        self.assertIn("Duplicate keys: VALUE", diagnostics.getvalue())
+        self.assertNotIn("private-", diagnostics.getvalue())
 
     def test_check_passes_when_all_manifest_entries_exist(self):
         """Verify check passes when all manifest entries exist.
@@ -275,6 +538,48 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
 
         self.assertEqual(env_safety_guard.cmd_compose_guard(repo), 1)
+
+    def test_optional_figure_mirror_preserves_old_installations(self):
+        """Reject stale optional build pins without requiring an env migration.
+
+        Inputs: complete temporary env fixtures. Output: presence and value checks.
+        """
+        for source, mirror, expected_error in (
+            (None, None, None),
+            ("8.0.1", None, None),
+            ("8.0.1", "8.0.1", None),
+            ("8.0.1", "7.4.1", "does not match"),
+            ("8.0.1", "", "does not match"),
+            (None, "8.0.1", "source deployment env is missing"),
+        ):
+            with self.subTest(source=source, mirror=mirror):
+                repo = self._make_repo(
+                    list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+                    {
+                        relative_path: "CONFIG=value\n"
+                        for relative_path in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+                    },
+                )
+                self._write_compose_mirror(
+                    repo,
+                    source_overrides=(
+                        {"OMERO_FIGURE_VERSION": source} if source is not None else {}
+                    ),
+                    dot_overrides=(
+                        {"OMERO_FIGURE_VERSION": mirror} if mirror is not None else {}
+                    ),
+                )
+                errors = env_safety_guard.validate_dot_env_mirror_values(
+                    repo, env_safety_guard.parse_active_env_assignments(repo / ".env")
+                )
+                if expected_error is None:
+                    self.assertEqual(errors, [])
+                else:
+                    self.assertEqual(len(errors), 1)
+                    self.assertIn(expected_error, errors[0])
+                    self.assertIn("OMERO_FIGURE_VERSION", errors[0])
+                    self.assertNotIn("8.0.1", errors[0])
+                    self.assertNotIn("7.4.1", errors[0])
 
     def test_compose_guard_fails_when_dot_env_mirror_is_stale(self):
         """Reject a stale generated build pin before Compose can consume it.
@@ -876,6 +1181,204 @@ class EnvSafetyGuardTests(unittest.TestCase):
         )
         (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
         self.assertEqual([], env_safety_guard.validate_dot_env_values(repo, {}))
+
+    def test_mirror_rejects_missing_generated_key_without_mutating_sources(self):
+        """Inputs: incomplete mirror. Output: exact missing-key error with unchanged files."""
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                name: "CONFIG=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        self._write_compose_mirror(repo)
+        values = env_safety_guard.parse_active_env_assignments(repo / ".env")
+        del values["OMERO_INSTALLATION_PATH"]
+        before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+        self.assertEqual(
+            [".env is missing mirrored key OMERO_INSTALLATION_PATH"],
+            env_safety_guard.validate_dot_env_mirror_values(repo, values),
+        )
+        self.assertEqual(before, {path: path.read_bytes() for path in before})
+
+    def test_mirror_and_monitoring_reject_unsafe_reference_expansions(self):
+        """Inputs: shell expressions and cycles. Output: key-only errors and no execution."""
+        for unsafe in ("$(echo forbidden)", "${MISSING:-fallback}", "$CYCLE"):
+            with self.subTest(expression=unsafe):
+                repo = self._make_repo(
+                    list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+                    {
+                        name: "CONFIG=value\n"
+                        for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+                    },
+                )
+                self._write_compose_mirror(repo)
+                web = repo / "env/omeroweb.env"
+                web.write_text(
+                    f"CYCLE=$CYCLE\nADMIN_TOOLS_LOKI_URL={unsafe}\n",
+                    encoding="utf-8",
+                )
+                values = env_safety_guard.parse_active_env_assignments(repo / ".env")
+                values["OMERO_INSTALLATION_PATH"] = unsafe
+                mirror_errors = env_safety_guard.validate_dot_env_mirror_values(
+                    repo, values
+                )
+                self.assertEqual(1, len(mirror_errors))
+                self.assertTrue(
+                    mirror_errors[0].startswith(
+                        ".env mirror for OMERO_INSTALLATION_PATH cannot be safely resolved:"
+                    )
+                )
+                self.assertNotIn(unsafe, mirror_errors[0])
+                self.assertEqual(
+                    ["ADMIN_TOOLS_LOKI_URL cannot be resolved safely"],
+                    env_safety_guard.validate_monitoring_tls_urls(repo),
+                )
+
+    def test_compose_guard_rejects_missing_installation_identity(self):
+        """Inputs: readable files without installation identity. Output: no Compose authorization."""
+        repo = self._make_repo(
+            ["installation_paths.env"],
+            {"installation_paths.env": "UNRELATED=value\n"},
+        )
+        self.assertEqual(1, env_safety_guard.cmd_compose_guard(repo))
+        self.assertEqual(
+            "UNRELATED=value\n", (repo / "installation_paths.env").read_text()
+        )
+
+    def test_compose_guard_rejects_duplicate_generated_assignment(self):
+        """Inputs: duplicate mirror assignment. Output: failure without normalizing either value."""
+        repo = self._make_repo(
+            list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+            {
+                name: "CONFIG=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        self._write_compose_mirror(repo)
+        with (repo / ".env").open("a", encoding="utf-8") as stream:
+            stream.write("COMPOSE_PROJECT_NAME=duplicate\n")
+        before = (repo / ".env").read_bytes()
+        self.assertEqual(1, env_safety_guard.cmd_compose_guard(repo))
+        self.assertEqual(before, (repo / ".env").read_bytes())
+        self.assertTrue(
+            any(
+                "COMPOSE_PROJECT_NAME more than once" in error
+                for error in env_safety_guard.validate_dot_env_values(repo, {})
+            )
+        )
+
+    def test_required_mirror_value_cannot_expand_to_empty_or_shell_expression(self):
+        """Inputs: syntactically nonempty but unusable values. Output: semantic rejection."""
+        for value, expected in (
+            ("$UNDEFINED", ".env: OMERO_CLI_PORT must not be empty"),
+            ("$(echo forbidden)", ".env: OMERO_CLI_PORT has an unsafe value:"),
+        ):
+            with self.subTest(value=value):
+                repo = self._make_repo(
+                    list(env_safety_guard.EXPECTED_COMPOSE_ENV_FILES),
+                    {
+                        name: "CONFIG=value\n"
+                        for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+                    },
+                )
+                self._write_compose_mirror(
+                    repo, dot_overrides={"OMERO_CLI_PORT": value}
+                )
+                before = (repo / ".env").read_bytes()
+                errors = env_safety_guard.validate_dot_env_values(repo, {})
+                self.assertTrue(any(error.startswith(expected) for error in errors))
+                self.assertTrue(all(value not in error for error in errors))
+                self.assertEqual(before, (repo / ".env").read_bytes())
+
+    def test_group_list_allows_empty_segments_but_rejects_missing_permissions(self):
+        """Inputs: installer-compatible empty entries. Output: valid groups retained, malformed ones rejected."""
+        self.assertEqual([], env_safety_guard.validate_group_list(""))
+        self.assertEqual(
+            [], env_safety_guard.validate_group_list(",research:read-only,,")
+        )
+        self.assertEqual(
+            ["OMERO_INSTALL_GROUP_LIST entries must be name:permission"],
+            env_safety_guard.validate_group_list(",research,,"),
+        )
+
+    def test_env_pair_rejects_unsafe_references_and_preserves_optional_empty_values(
+        self,
+    ):
+        """Inputs: recursive or shell-like fixture values. Output: redacted errors without file mutation."""
+        for value in ("${OMERO_CLI_PORT}", "$(echo private-fixture-detail)"):
+            with self.subTest(value=value):
+                repo = self._make_repo(
+                    [],
+                    {
+                        "env/example.env": "OMERO_CLI_PORT=4064\nREDIS_SAVE_POLICY=\n",
+                        "env/actual.env": f"OMERO_CLI_PORT={value}\nREDIS_SAVE_POLICY=\n",
+                    },
+                )
+                actual = repo / "env/actual.env"
+                before = actual.read_bytes()
+                context = {}
+                errors = env_safety_guard.validate_env_file_pair(
+                    repo, "env/example.env", "env/actual.env", context
+                )
+                self.assertEqual(1, len(errors))
+                self.assertTrue(
+                    errors[0].startswith(
+                        "env/actual.env: OMERO_CLI_PORT has an unsafe value:"
+                    )
+                )
+                self.assertNotIn(value, errors[0])
+                self.assertNotIn("private-fixture-detail", errors[0])
+                self.assertEqual("", context["REDIS_SAVE_POLICY"])
+                self.assertNotIn("OMERO_CLI_PORT", context)
+                self.assertEqual(before, actual.read_bytes())
+
+    def test_source_assignment_read_failure_does_not_expose_exception_detail(self):
+        """Inputs: an unreadable source env file. Output: filename-only failure with unchanged bytes."""
+        repo = self._make_repo(
+            [],
+            {
+                name: "FIXTURE=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        first = env_safety_guard.EXPECTED_COMPOSE_ENV_FILES[0]
+        before = (repo / first).read_bytes()
+        with mock.patch.object(
+            env_safety_guard,
+            "parse_active_env_assignments",
+            side_effect=PermissionError("private-fixture-detail"),
+        ):
+            with self.assertRaisesRegex(ValueError, "could not be read") as error:
+                env_safety_guard.load_compose_source_assignments(repo)
+        self.assertNotIn("private-fixture-detail", str(error.exception))
+        self.assertEqual(before, (repo / first).read_bytes())
+
+    def test_dot_env_checks_reject_duplicate_keys_and_missing_project_metadata(self):
+        """Inputs: duplicate keys and missing canonical project metadata. Output: read-only rejection."""
+        repo = self._make_repo(
+            [],
+            {
+                name: "FIXTURE=value\n"
+                for name in env_safety_guard.EXPECTED_COMPOSE_ENV_FILES
+            },
+        )
+        self._write_compose_mirror(repo)
+        with (repo / ".env").open("a", encoding="utf-8") as stream:
+            stream.write("COMPOSE_PROJECT_NAME=private-fixture-detail\n")
+        before = (repo / ".env").read_bytes()
+        captured = io.StringIO()
+        with redirect_stderr(captured):
+            self.assertEqual(1, env_safety_guard.cmd_dot_env_check(repo))
+        self.assertIn("COMPOSE_PROJECT_NAME more than once", captured.getvalue())
+        self.assertNotIn("private-fixture-detail", captured.getvalue())
+        self.assertEqual(before, (repo / ".env").read_bytes())
+        self._write_compose_mirror(repo)
+        (repo / "installation_paths.env").write_text("FIXTURE=value\n")
+        errors = env_safety_guard.validate_dot_env_values(repo, {})
+        self.assertIn(
+            ".env: Missing OMERO_INSTALLATION_PATH in installation_paths.env", errors
+        )
 
     # ---- backup command ----
 

@@ -8,6 +8,8 @@ import types
 from contextlib import nullcontext
 from pathlib import Path
 
+import pytest
+
 from omeroweb_import.views import core_functions
 
 
@@ -1557,6 +1559,61 @@ def test_has_import_candidates_in_output_matches_directory_groups(tmp_path: Path
     )
 
 
+@pytest.mark.parametrize("has_old_connection", [False, True])
+@pytest.mark.parametrize("valid_session", [False, True])
+def test_reconnect_session_does_not_destroy_the_session_it_reuses(
+    monkeypatch, has_old_connection, valid_session
+):
+    """Inputs: protocol-faithful gateways. Output: reconnection preserves the borrowed session."""
+    events = []
+    session_alive = True
+
+    class BorrowedGateway:
+        """Gateway double with the supported destructive default close behavior."""
+
+        def __init__(self, client_obj=None):
+            """Inputs: optional client. Output: a gateway exposing group selection."""
+            self.SERVICE_OPTS = types.SimpleNamespace(
+                setOmeroGroup=lambda group: events.append(("group", group))
+            )
+
+        def close(self, hard=True):
+            """Inputs: gateway close flag. Output: destroys only explicitly hard-closed sessions."""
+            nonlocal session_alive
+            events.append(("close", hard))
+            if hard:
+                session_alive = False
+
+    def join(client, session_key):
+        """Inputs: client and borrowed key. Output: refuses a destroyed session."""
+        if not session_alive:
+            raise RuntimeError("Session was destroyed before reconnection")
+        events.append(("join", session_key))
+
+    monkeypatch.setattr(core_functions.omero, "client", lambda **kwargs: object())
+    monkeypatch.setattr(core_functions, "_join_detached_session", join)
+    monkeypatch.setattr(core_functions, "BlitzGateway", BorrowedGateway)
+    monkeypatch.setattr(core_functions, "_validate_session", lambda conn: valid_session)
+
+    replacement = core_functions._reconnect_session(
+        "test-borrowed-session",
+        "omero.invalid",
+        12345,
+        old_conn=BorrowedGateway() if has_old_connection else None,
+    )
+
+    assert (replacement is not None) is valid_session
+    assert session_alive is True
+    expected = [("close", False)] if has_old_connection else []
+    expected += [
+        ("join", "test-borrowed-session"),
+        ("group", "-1"),
+    ]
+    if not valid_session:
+        expected.append(("close", False))
+    assert events == expected
+
+
 def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions(
     monkeypatch,
 ):
@@ -1571,11 +1628,12 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
         """Test double for old conn behavior in this module."""
 
         @staticmethod
-        def close():
+        def close(hard=True):
             """Close `_OldConn`'s fake resource handle.
 
-            Inputs: caller provides no extra arguments. Output: records the fake side effect.
+            Inputs: ownership flag. Output: requires soft cleanup and records the call.
             """
+            assert hard is False
             events.append("old-close")
 
     class _NewConn:
@@ -1590,11 +1648,12 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
             self.groups = []
             self.SERVICE_OPTS = types.SimpleNamespace(setOmeroGroup=self.groups.append)
 
-        def close(self):
+        def close(self, hard=True):
             """Close `_NewConn`'s fake resource handle.
 
-            Inputs: caller provides no extra arguments. Output: records the fake side effect.
+            Inputs: ownership flag. Output: requires soft cleanup and records the call.
             """
+            assert hard is False
             self.closed = True
             events.append("new-close")
 
@@ -1654,21 +1713,23 @@ def test_reconnect_session_closes_stale_connections_and_rejects_invalid_sessions
         """Test double for exploding old conn behavior in this module."""
 
         @staticmethod
-        def close():
+        def close(hard=True):
             """Close `_ExplodingOldConn`'s fake resource handle.
 
-            Inputs: caller provides no extra arguments. Output: records the fake side effect.
+            Inputs: ownership flag. Output: verifies soft cleanup before a controlled error.
             """
+            assert hard is False
             raise RuntimeError("stale close exploded")
 
     class _ExplodingInvalidConn(_NewConn):
         """Test double for exploding invalid conn behavior in this module."""
 
-        def close(self):
+        def close(self, hard=True):
             """Close `_ExplodingInvalidConn`'s fake resource handle.
 
-            Inputs: caller provides no extra arguments. Output: records the fake side effect.
+            Inputs: ownership flag. Output: verifies soft cleanup before a controlled error.
             """
+            assert hard is False
             self.closed = True
             raise RuntimeError("invalid close exploded")
 

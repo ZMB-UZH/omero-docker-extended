@@ -32,7 +32,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 ARG PIP_VERSION=26.2.1
 ARG SETUPTOOLS_VERSION=80.10.2
 ARG WHEEL_VERSION=0.48.0
-ARG CRYPTOGRAPHY_VERSION=50.0.1
+ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0
 ARG CERTIFI_VERSION=2026.7.22
 ARG IDNA_VERSION=3.20
@@ -40,7 +40,7 @@ ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 ARG PYOPENSSL_VERSION=26.4.0
 ARG REPORTLAB_VERSION=5.0.1
-ARG MARKDOWN_VERSION=3.10.3
+ARG MARKDOWN_VERSION=3.11
 ARG OMERO_CLI_RENDER_VERSION=0.8.1
 ARG OMERO_METADATA_VERSION=0.14.0
 ARG OMERO_CLI_DUPLICATE_VERSION=0.4.0
@@ -77,13 +77,14 @@ ARG OMEZARR_READER_VERSION=0.6.0
 ARG JZARR_VERSION=0.5.0
 ARG OMEZARR_READER_SHA256=26e5b2e99a64abd1ba83ee52eeb5fcbd560190fed1097afb404c38bf24579e55
 ARG JZARR_SHA256=5426e3b4bdde0474907e1cf32453ce3d69e71f1b32ff4773a43d366e1f5aef9d
+# SciJava mirrors OME releases; retain the exact upstream artifact checksum.
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
         echo "ERROR: Could not find OMERO.server directory" >&2; \
         exit 1; \
     fi; \
-    OMEZARR_URL="https://artifacts.openmicroscopy.org/artifactory/ome.releases/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
+    OMEZARR_URL="https://maven.scijava.org/content/groups/public/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
     JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
     echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION} from ${OMEZARR_URL}"; \
     curl -fsSL -o /tmp/OMEZarrReader.jar "${OMEZARR_URL}"; \
@@ -375,27 +376,28 @@ ARG TEMURIN_JDK_VERSION=11.0.32.1_1
 ARG TEMURIN_JDK_SHA256=5c3f68887c325d36d852ba534303e1f5f1f5cae7d6cc1e951d73e0d8e98a058d
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
-RUN set -euo pipefail; \
-    if [[ "$(uname -m)" != "x86_64" ]]; then \
-        echo "ERROR: The pinned OMERO.server base and JDK require linux/amd64." >&2; \
-        exit 1; \
-    fi; \
-    archive="$(mktemp)"; \
-    curl --fail --location --retry 3 --connect-timeout 20 --max-time 600 \
-        --proto '=https' --tlsv1.2 \
-        "https://github.com/adoptium/temurin11-binaries/releases/download/jdk-${TEMURIN_JDK_VERSION/_/%2B}/OpenJDK11U-jdk_x64_linux_hotspot_${TEMURIN_JDK_VERSION}.tar.gz" \
-        --output "${archive}"; \
-    printf '%s  %s\n' "${TEMURIN_JDK_SHA256}" "${archive}" | sha256sum --check --strict; \
-    mkdir -p "${JAVA_HOME}"; \
-    tar --extract --gzip --file "${archive}" --directory "${JAVA_HOME}" \
-        --strip-components 1 --no-same-owner; \
-    rm -f "${archive}"; \
-    test -s /etc/pki/java/cacerts; \
-    ln -sfn /etc/pki/java/cacerts "${JAVA_HOME}/lib/security/cacerts"; \
-    dnf -y --disablerepo='*' --setopt=clean_requirements_on_remove=False \
-        remove java-11-openjdk java-11-openjdk-devel java-11-openjdk-headless; \
-    java -version; \
-    javac -version
+RUN <<'INSTALL_TEMURIN'
+set -euo pipefail
+if [[ "$(uname -m)" != "x86_64" ]]; then
+    echo "ERROR: The pinned OMERO.server base and JDK require linux/amd64." >&2
+    exit 1
+fi
+archive="$(mktemp)"
+curl --fail --location --retry 3 --connect-timeout 20 --max-time 600 \
+    "https://github.com/adoptium/temurin11-binaries/releases/download/jdk-${TEMURIN_JDK_VERSION/_/%2B}/OpenJDK11U-jdk_x64_linux_hotspot_${TEMURIN_JDK_VERSION}.tar.gz" \
+    --output "${archive}" --proto '=https' --tlsv1.2 # DevSkim: ignore DS440001,DS440016 -- minimum only; TLS negotiation remains enabled
+printf '%s  %s\n' "${TEMURIN_JDK_SHA256}" "${archive}" | sha256sum --check --strict
+mkdir -p "${JAVA_HOME}"
+tar --extract --gzip --file "${archive}" --directory "${JAVA_HOME}" \
+    --strip-components 1 --no-same-owner
+rm -f "${archive}"
+test -s /etc/pki/java/cacerts
+ln -sfn /etc/pki/java/cacerts "${JAVA_HOME}/lib/security/cacerts"
+dnf -y --disablerepo='*' --setopt=clean_requirements_on_remove=False \
+    remove java-11-openjdk java-11-openjdk-devel java-11-openjdk-headless
+java -version
+javac -version
+INSTALL_TEMURIN
 
 # Prepare writable paths for startup-installed tools
 # --------------------------------------------------
@@ -410,32 +412,37 @@ RUN set -euo pipefail; \
 # Install official OMERO scripts (ome/omero-scripts)
 # --------------------------------------------------
 ARG OME_OMERO_SCRIPTS_REPO="https://github.com/ome/omero-scripts.git"
-ARG OME_OMERO_SCRIPTS_REF="develop" # Recommended branch: "develop"; change to "master" for old/stable scripts
-ARG OME_OMERO_SCRIPTS_COMMIT="5b4d76862a7141257c9ff221ff7f009f7ec416c0"
+ARG OME_OMERO_SCRIPTS_REF="develop"
+ARG OME_OMERO_SCRIPTS_COMMIT=5b4d76862a7141257c9ff221ff7f009f7ec416c0
+# The commit selects the source; the ref is descriptive and may advance upstream.
 RUN set -euo pipefail; \
-    echo "Installing official OMERO scripts from ${OME_OMERO_SCRIPTS_REPO} @ ${OME_OMERO_SCRIPTS_REF}"; \
-    \
-    rm -rf /tmp/ome-omero-scripts; \
-    git clone --depth 1 --branch "${OME_OMERO_SCRIPTS_REF}" \
-        "${OME_OMERO_SCRIPTS_REPO}" \
-        /tmp/ome-omero-scripts; \
-    actual_commit="$(git -C /tmp/ome-omero-scripts rev-parse HEAD)"; \
+    echo "Installing official OMERO scripts from ${OME_OMERO_SCRIPTS_REPO} @ ${OME_OMERO_SCRIPTS_COMMIT} (${OME_OMERO_SCRIPTS_REF})"; \
+    if [[ ! "${OME_OMERO_SCRIPTS_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then \
+        echo "ERROR: OME_OMERO_SCRIPTS_COMMIT must be a full Git commit identifier." >&2; \
+        exit 1; \
+    fi; \
+    OME_SOURCE="$(mktemp -d)"; \
+    git init --quiet "${OME_SOURCE}"; \
+    git -C "${OME_SOURCE}" remote add origin "${OME_OMERO_SCRIPTS_REPO}"; \
+    git -C "${OME_SOURCE}" fetch --depth 1 --no-tags origin "${OME_OMERO_SCRIPTS_COMMIT}"; \
+    git -C "${OME_SOURCE}" checkout --detach FETCH_HEAD; \
+    actual_commit="$(git -C "${OME_SOURCE}" rev-parse HEAD)"; \
     if [[ "${actual_commit}" != "${OME_OMERO_SCRIPTS_COMMIT}" ]]; then \
         echo "ERROR: omero-scripts commit mismatch: expected=${OME_OMERO_SCRIPTS_COMMIT} actual=${actual_commit}" >&2; \
         exit 1; \
     fi; \
     \
-    if [[ ! -d /tmp/ome-omero-scripts/omero ]]; then \
+    if [[ ! -d "${OME_SOURCE}/omero" ]]; then \
         echo "ERROR: Expected path 'omero/' not found in omero-scripts repo" >&2; \
         echo "Repo layout:" >&2; \
-        find /tmp/ome-omero-scripts -maxdepth 2 -type d -print >&2 || true; \
+        find "${OME_SOURCE}" -maxdepth 2 -type d -print >&2 || true; \
         exit 1; \
     fi; \
     \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero; \
     \
     echo "Copying official OMERO scripts into OMERO.server lib/scripts/omero"; \
-    cp -a /tmp/ome-omero-scripts/omero/. \
+    cp -a "${OME_SOURCE}/omero/." \
         /opt/omero/server/OMERO.server/lib/scripts/omero/; \
     \
     if [[ ! -d /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts ]]; then \
@@ -450,14 +457,15 @@ RUN set -euo pipefail; \
     find /opt/omero/server/OMERO.server/lib/scripts/omero -type d -exec chmod 0755 {} \; ; \
     find /opt/omero/server/OMERO.server/lib/scripts/omero -type f -exec chmod 0644 {} \; ; \
     \
-    rm -rf /tmp/ome-omero-scripts
+    rm -rf "${OME_SOURCE}"
 
 # Install the OMERO.Figure PDF export script at build time.
 # Relying on a runtime download here makes PDF export nondeterministic and can
 # leave OMERO.figure without Figure_To_Pdf.py when outbound network access fails.
 ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"
-ARG OME_OMERO_FIGURE_REF="7.4.1"
+ARG OME_OMERO_FIGURE_REF
 RUN set -euo pipefail; \
+    : "${OME_OMERO_FIGURE_REF:?OMERO_FIGURE_VERSION must be provided from env/omeroserver.env}"; \
     echo "Installing OMERO.Figure Figure_To_Pdf.py from ${OME_OMERO_FIGURE_REPO} @ ${OME_OMERO_FIGURE_REF}"; \
     rm -rf /tmp/ome-omero-figure; \
     git clone --depth 1 --branch "v${OME_OMERO_FIGURE_REF#v}" "${OME_OMERO_FIGURE_REPO}" /tmp/ome-omero-figure \
@@ -479,7 +487,7 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
 ARG BIOP_OMERO_SCRIPTS_REF="main"
-ARG BIOP_OMERO_SCRIPTS_COMMIT="3dd78c7420f42bca427575dfdc3acf9192d4f12d"
+ARG BIOP_OMERO_SCRIPTS_COMMIT=2b6bba4dea968512a1bdac63bd4e913121226796
 # The commit selects the source; the ref is descriptive and may advance upstream.
 RUN set -euo pipefail; \
     echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_COMMIT} (${BIOP_OMERO_SCRIPTS_REF})"; \
@@ -574,7 +582,7 @@ RUN set -euo pipefail; \
         echo "ERROR: BIOFORMATS_SHA256 must be provided from env/omeroserver.env" >&2; \
         exit 1; \
     fi; \
-    BIOFORMATS_VERSION="${BIOFORMATS_VERSION}" BIOFORMATS_SHA256="${BIOFORMATS_SHA256}" /startup/51-install-imarisconvert.sh --install-build-time; \
+    /startup/51-install-imarisconvert.sh --install-build-time; \
     chown -R omero-server:omero-server /opt/omero/imarisconvert
 
 RUN set -euo pipefail; \
@@ -669,35 +677,10 @@ RUN set -euo pipefail; \
 # Wrap entrypoint so root startup can repair bind mounts before privilege drop.
 # Direct non-root image runs skip root-only bootstrap and launch the requested command.
 # --------------------------------------------------------------------------------
+COPY docker/omero-server-entrypoint.sh /usr/local/bin/entrypoint-managed.sh
 RUN set -euo pipefail; \
     mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
-    printf '%s\n' \
-        "#!/bin/bash" \
-        "set -e" \
-        "if [ \"\$(id -u)\" -ne 0 ]; then" \
-        "    printf 'Running unprivileged; skipping root startup bootstrap and launching: %s\n' \"\$*\"" \
-        "    exec \"\$@\"" \
-        "fi" \
-        "VENV_ACTIVATE=\$(find /opt/omero/server -maxdepth 1 -type d -name \"venv*\" | sort -V | tail -n 1)/bin/activate" \
-        "if [ ! -f \"\$VENV_ACTIVATE\" ]; then" \
-        "    echo \"FATAL: OMERO virtualenv activate script not found at \$VENV_ACTIVATE\" >&2" \
-        "    exit 127" \
-        "fi" \
-        "source \"\$VENV_ACTIVATE\"" \
-        "if [ -z \"\${CONFIG_omero_db_pass+x}\" ] && [ -n \"\${OMERO_DB_PASS:-}\" ]; then" \
-        "    export CONFIG_omero_db_pass=\"\$OMERO_DB_PASS\"" \
-        "fi" \
-        "for f in /startup/*; do" \
-        "    if [ -f \"\$f\" ] && [ -x \"\$f\" ]; then" \
-        "        printf 'Running %s %s\n' \"\$f\" \"\$*\"" \
-        "        if [[ \"\$f\" == *.py ]] || [[ \"\$f\" == *60-database.sh ]]; then" \
-        "            env USER=omero-server LOGNAME=omero-server LNAME=omero-server USERNAME=omero-server HOME=/opt/omero/server runuser -p -m -u omero-server -- \"\$f\" \"\$@\"" \
-        "        else" \
-        "            \"\$f\" \"\$@\"" \
-        "        fi" \
-        "    fi" \
-        "done" \
-        > /usr/local/bin/entrypoint.sh; \
+    mv /usr/local/bin/entrypoint-managed.sh /usr/local/bin/entrypoint.sh; \
     chmod 0755 /usr/local/bin/entrypoint.sh
 
 # Keep the image healthcheck valid for both managed root-bootstrap starts and
@@ -713,7 +696,7 @@ HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
 ARG PILLOW_VERSION=12.3.0
-ARG MSGPACK_VERSION=1.2.2
+ARG MSGPACK_VERSION=1.2.3
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
         echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \

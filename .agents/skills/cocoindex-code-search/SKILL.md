@@ -1,18 +1,19 @@
 ---
 name: cocoindex-code-search
 description: Mandatory semantic routing for broad repository navigation; use exact rg for known symbols and keep all index state external.
-origin: repo-local skill based on verified cocoindex-code 0.2.41 behavior
+origin: repo-local skill based on verified cocoindex-code 0.2.42 behavior
 ---
 
 # CocoIndex Code Search
 
 Use semantic output as routing only. Confirm paths, symbols, and behavior in
-current source before editing. Exact strings, symbols, scanner counts, and
-already-small scopes use `rg` directly without semantic-search overhead.
+current source before editing. The mandatory `tools/agent_preflight.py begin` runs
+one CLI routing query per task and retains execution evidence. After that,
+exact strings, symbols, scanner counts, and small scopes use `rg` directly.
 
 ## Required workflow
 
-1. Broad navigation is mandatory MCP-first: check for an MCP server or tool named
+1. After task preflight, broad navigation is MCP-first: check for an MCP server or tool named
    `cocoindex-code`. Verify its repository binding; never trust another checkout's
    results or overwrite another repository's registration.
 2. Query a current active index with a specific natural-language question and
@@ -37,18 +38,25 @@ already-small scopes use `rg` directly without semantic-search overhead.
    after identifying a subtree; avoid `--lang` on mixed-language files unless
    proven safe. Follow `context-budget`; save complete evidence outside source.
 
-If indexing is genuinely unavailable (access, resources, or tool failure), state
-the limitation once and use bounded `rg` temporarily. Do not claim CocoIndex
-ran successfully, discard relevant files, or block exact-file work on an index.
+If indexing is unavailable, diagnose the failure once and restore it before
+dependent navigation or edits. Never substitute `rg` or claim a successful run.
+Independent read-only diagnosis can continue. Do not discard
+relevant files merely because retrieval is unavailable.
 
 ## State and quality boundaries
 
-- Keep pinned `cocoindex-code[full]==0.2.41`; never run `ccc init` directly
+- Keep pinned `cocoindex-code[full]==0.2.42`; never run `ccc init` directly
   in the live checkout. Use one host install under XDG/`AGENT_COCOINDEX_HOME`.
+- Reuse a verified runtime. Failed, incomplete or symlinked existing runtimes
+  must remain untouched; inspect the exact path and authorize cleanup separately.
 - The wrapper indexes an external mirror of Git-visible non-ignored files.
   Per-repo content digests isolate mirrors, databases, runtime files, and locks.
   Settings, model caches, and `.cocoindex_code/` stay outside the live checkout.
   Never index real deployment env files; only example env contracts are allowed.
+- Mirror contents and their manifest publish atomically. Invalid or incomplete
+  existing mirrors block indexing and search without automatic deletion. Inspect
+  that exact cache directory and obtain its separate cleanup authorization;
+  never remove a shared cache tree to repair one failed mirror.
 - Include every mirrored file pattern. CocoIndex indexes text-decodable content;
   binary formats are not semantically searchable. Do not add file-type
   exclusions or language rewrites without a tested configuration contract.

@@ -76,8 +76,12 @@ def image_reference_from_listing(image_listing: dict[str, str]) -> str | None:
 
     Inputs: docker image listing JSON object. Output: image ref or `None`.
     """
+    if not isinstance(image_listing, dict):
+        raise RuntimeError("docker image ls returned a non-object entry.")
     repository = image_listing.get("Repository", "")
     tag = image_listing.get("Tag", "")
+    if not isinstance(repository, str) or not isinstance(tag, str):
+        raise RuntimeError("docker image ls returned invalid reference fields.")
     if not repository or not tag or repository == "<none>" or tag == "<none>":
         return None
     return validate_image_reference(f"{repository}:{tag}", allow_latest=True)
@@ -120,9 +124,12 @@ def list_named_local_images(runner: DockerRunner) -> list[LocalImage]:
         except json.JSONDecodeError as exc:
             raise RuntimeError("docker image ls returned invalid JSON.") from exc
         reference = image_reference_from_listing(image_listing)
-        image_id = image_listing.get("ID", "").strip()
         if reference is None:
             continue
+        image_id = image_listing.get("ID", "")
+        if not isinstance(image_id, str):
+            raise RuntimeError("docker image ls returned an invalid image ID.")
+        image_id = image_id.strip()
         if not image_id:
             raise RuntimeError(f"docker image ls returned no ID for {reference}.")
         images.append(LocalImage(reference=reference, image_id=image_id))

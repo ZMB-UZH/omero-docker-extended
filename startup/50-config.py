@@ -153,7 +153,7 @@ def config_env_to_property(env_name: str) -> str:
     Inputs: `env_name`. Output: `str`.
     """
     prop = env_name[7:]
-    prop = re.sub(r"([^_])_([^_])", r"\1.\2", prop)
+    prop = re.sub(r"(?<=[^_])_(?=[^_])", ".", prop)
     prop = re.sub(r"__", "_", prop)
     return prop
 
@@ -163,7 +163,13 @@ def run_omero_command(omero_bin: str, *args: str) -> None:
 
     Inputs: `omero_bin` (str), `*args` (str) positional arguments. Output: None.
     """
-    subprocess.run([omero_bin, *args], check=True)
+    try:
+        subprocess.run([omero_bin, *args], check=True)
+    except subprocess.CalledProcessError as exc:
+        # CalledProcessError includes argv, which may contain configured secrets.
+        raise RuntimeError(
+            f"OMERO configuration command failed (exit status {exc.returncode})."
+        ) from None
 
 
 def run_omero_config_set(omero_bin: str, property_name: str, value: str) -> None:

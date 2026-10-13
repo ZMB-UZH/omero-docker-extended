@@ -7,12 +7,46 @@ from pathlib import Path
 import tarfile
 import shutil
 import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from tools import restore_prebuilt_carrier as recovery
+
+
+def test_carrier_cli_help_does_not_require_registry_or_repository_access():
+    """Inputs: real CLI help invocation. Output: documented arguments and zero exit without publication."""
+    result = subprocess.run(
+        [sys.executable, recovery.__file__, "--help"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+    assert "--authorize-replace-manifest" in result.stdout
+    assert "--authorize-replace-digest" in result.stdout
+    assert result.stderr == ""
+
+
+def test_published_archive_rejects_missing_extraction_stream(tmp_path):
+    """Inputs: valid metadata but unavailable archive stream. Output: failure and child termination, not false verification."""
+    archive = tmp_path / "runtime-images.tar.gz"
+    archive.write_bytes(b"verified content")
+    process = MagicMock()
+    process.__enter__.return_value = process
+    process.stdout = archive_stream(b"verified content")
+    process.wait.return_value = 0
+    with (
+        patch.object(recovery.subprocess, "Popen", return_value=process),
+        patch.object(recovery, "executable", return_value=str(tmp_path / "docker")),
+        patch.object(tarfile.TarFile, "extractfile", return_value=None),
+        pytest.raises(ValueError, match="content is unavailable"),
+    ):
+        recovery.verify_archive("fixture-container", archive)
+    process.terminate.assert_called_once()
+    assert archive.read_bytes() == b"verified content"
 
 
 def original():

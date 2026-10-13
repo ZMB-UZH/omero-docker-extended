@@ -216,6 +216,43 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             with self.subTest(service_name=service_name):
                 self.assertEqual(image_ref, services[service_name]["image"])
 
+    def test_documented_unattended_install_survives_sudo_environment_reset(
+        self,
+    ) -> None:
+        """Run the documented command with sudo's environment-reset boundary.
+
+        Inputs: README example and a synthetic installation. Output: selected release
+        and digest reach the real easy-installer entrypoint without prompting.
+        """
+        examples = [
+            block.split("```", 1)[0].strip()
+            for block in self.read_text("README.md").split("```bash\n")[1:]
+            if "PREBUILT_IMAGE_RELEASE=" in block.split("```", 1)[0]
+        ]
+        self.assertEqual(len(examples), 1)
+        example = (
+            examples[0]
+            .replace("<release-tag>", VALID_RELEASE_VERSION)
+            .replace("sha256:<64 lowercase hex characters>", VALID_CARRIER_DIGEST)
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.write_synthetic_easy_root(root)
+            command = 'sudo() { env -i PATH="$PATH" "$@"; }\n' + example
+            result = subprocess.run(
+                [self.bash_path, "-c", command],
+                cwd=root,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("mode=require", result.stdout)
+        self.assertIn(f"release={VALID_RELEASE_VERSION}", result.stdout)
+        self.assertIn(f"digest={VALID_CARRIER_DIGEST}", result.stdout)
+
     def test_easy_install_script_only_enables_required_prebuilt_mode(self) -> None:
         """Verify the easy installer only selects strict prebuilt mode.
 
@@ -700,14 +737,14 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             step for step in steps if step["name"] == "Install Docker Scout CLI"
         )
         self.assertEqual(
-            "1.24.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
+            "1.26.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
         )
         expected_scout_sha256 = "".join(
             (
-                "f4e2814bd6104036",
-                "5153d5b964b144cb",
-                "2dc6ee536a68b5ba",
-                "c4cadf00fc0ec34b",
+                "47daa9ac44281631",
+                "6c65389f516b8471",
+                "46bb9f45e8d6afdc",
+                "bb9ce835c4e138bd",
             )
         )
         self.assertEqual(

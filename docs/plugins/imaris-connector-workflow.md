@@ -22,6 +22,12 @@ standard OMERO.web installations that can export the selected OMERO Image ID.
 
 ## Top-level workflow
 
+Connect using the final OMERO.web address and its configured port. The client
+supports localhost, IP addresses, and domain names; HTTPS requires a trusted
+certificate covering the chosen address. Redirects may change paths within that
+endpoint, but not its scheme, hostname, or port. If a reverse proxy redirects an
+alias to a canonical address, enter the canonical address in the connector.
+
 ```mermaid
 flowchart TD
     A[Start Imaris XT extension] --> B[Load connector settings.env]
@@ -341,8 +347,14 @@ the selected folder even though only the first one is opened automatically.
   is started.
 - Stale or closed Imaris application handle: the stale handle is cleared and no
   new Imaris process is opened implicitly.
-- User Stop request: current client-side work is cancelled, partial downloads
-  are removed, and server-side OMERO converter work is revoked and cleaned.
+- Stop or window close: current client-side work is cancelled, incomplete local
+  downloads are cleaned up, and server-side cancellation is requested. A network
+  outage can prevent server acknowledgement; check the job status after recovery.
+- Window close releases workers waiting for UI callbacks. Late callbacks cannot
+  reopen dialogs or update the closed window.
+- Login redirect during export polling or download: the operation reports an
+  authentication failure without replaying credentials or saving a login page
+  as an image. Reconnect explicitly before starting another export.
 - No discoverable `ImarisFileConverter.exe` for `Imaris`: no selected Image
   export is started.
 - Selected Image export endpoint unavailable: the `Imaris` path fails without

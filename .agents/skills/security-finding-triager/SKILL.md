@@ -21,9 +21,9 @@ Use this skill for any security-relevant code change or scanner-driven remediati
 3. Do not look for `.deepsource.toml`; DeepSource repo-file configuration is retired for this repository, and GitHub PATs do not authenticate to DeepSource.
    If DeepSource auth, subscription, repository access, or API availability is unavailable, report DeepSource counts as skipped or unavailable, not zero, and continue the rest of the local and GitHub workflow verification.
    If it is available, distinguish grouped issues from issue occurrences and check `latest_commit_oid`; if it does not match the commit under review, report the count as a lagged snapshot.
-4. For GitHub HTTPS Git operations, use a PAT or credential manager, never an account password; use the socket-backed `tools/git_push_with_pat.py`, prompting on a TTY or setting short-lived `GITHUB_TOKEN` for non-TTY shells.
+4. Follow the GitHub publication contract in `docs/reference/ai-agent-task-contracts.md`: use the official GitHub connector, verify its account and write permission, retain GitHub identity defaults, and never add AI co-author trailers or use a PAT push fallback.
 5. Keep scanner remediation on the current remote default branch unless the user explicitly names another branch; do not create branches or draft PRs just to run scanners.
-6. If GitHub auth is required and no valid credential is available, ask for it immediately and pause; do not retry auth failures. DeepSource auth or subscription failures are non-blocking for the rest of verification: report the skipped/unavailable DeepSource status and continue the local and GitHub checks.
+6. If connector identity or permission is unavailable, ask immediately for the connection to be repaired and pause publication; do not retry auth failures. DeepSource auth or subscription failures are non-blocking for the rest of verification: report the skipped/unavailable DeepSource status and continue the local and GitHub checks.
 7. Classify the boundary: path/file, logging, SQL, outbound HTTP, CSRF/response, subprocess, Docker/workflow, or secrets.
 8. Name the helper or boundary you will harden.
 9. Name the regression tests you will run before editing code.

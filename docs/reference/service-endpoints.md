@@ -11,9 +11,13 @@ running containers or `docker compose config`; do not assume these host ports.
 | OMERO.server | `${OMERO_CLI_HOST}:${OMERO_CLI_PORT}` inside the stack; `${OMERO_SERVER_HOST_PORT}` on the host | OMERO API (Ice protocol) |
 | OMERO.web | `http://localhost:4090` | Web frontend and plugin UIs |
 | Portainer | `https://<host>:9443` on `${PORTAINER_HOST_BIND:-0.0.0.0}` | Container management |
-| Prometheus | `http://localhost:9090` on `127.0.0.1` | Metrics and targets |
-| Grafana | `http://localhost:3000` on `127.0.0.1` | Dashboards |
-| Loki | `http://localhost:3100` on `127.0.0.1` | Log query API |
+| Prometheus | `https://localhost:9090` on `127.0.0.1` | Metrics and targets |
+| Grafana | `https://localhost:3000` on `127.0.0.1` | Dashboards |
+| Loki | `https://localhost:3100` on `127.0.0.1` | Log query API |
+
+Prefer the authenticated Admin Tools proxy links for monitoring. Direct clients
+must trust the installation's public CA as described in
+[Monitoring and Observability](../operations/monitoring.md#internal-tls-lifecycle).
 
 Portainer's first-run certificate is self-signed. A production external URL
 needs an operator-supplied PEM certificate whose subject alternative names
@@ -165,9 +169,10 @@ Base: `/omero_imaris_connector/`
 | Service | Health check method |
 | --- | --- |
 | `portainer` | container-local TCP readiness probe to `127.0.0.1:9443`; Prometheus blackbox performs the HTTPS `/api/system/status` probe |
-| `loki` | `loki -version` |
-| `alloy` | `alloy --help` |
-| `prometheus` | `wget http://localhost:9090/-/ready` |
+| `internal-tls` | read-only certificate, key, identity and issuer-heartbeat validation |
+| `loki` | `loki -health -health.url=https://localhost:3100/ready` with managed trust |
+| `alloy` | bounded HTTP `/-/ready` request through the image's Bash TCP support |
+| `prometheus` | `promtool check ready --url=https://localhost:9090` with managed trust |
 | `blackbox-exporter` | `wget http://localhost:9115/-/healthy` |
 | `node-exporter` | `wget -O /dev/null http://localhost:9100/` |
 | `path-usage-exporter` | `test -f /textfile/omero_paths.prom` |
@@ -175,7 +180,7 @@ Base: `/omero_imaris_connector/`
 | `postgres-exporter` | `wget http://localhost:9187/metrics` |
 | `postgres-exporter-plugin` | `wget http://localhost:9187/metrics` |
 | `redis-exporter` | `wget http://localhost:9121/metrics` |
-| `grafana` | `wget http://localhost:3000/api/health` |
+| `grafana` | `curl` to `https://localhost:3000/api/health` with the managed CA |
 | `database` | `pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -p 5432` |
 | `omeroserver` | OMERO CLI admin login |
 | `omeroweb` | container-local `curl` to `/webgateway/` on the configured OMERO.web port |

@@ -83,9 +83,8 @@ HASH_PREFIX = "omphash_v1:"
 # Stable plugin identifier used in the hash payload
 PLUGIN_ID = "omeroweb_omp_plugin"
 
-# Optional secret for hashing. If unset/empty, hashing falls back to plain
-# SHA256, which anyone could theoretically forge.
-# Recommended: set this as an environment variable for OMERO.web container.
+# Explicit ownership-marker secret; unset values use Django's private SECRET_KEY.
+# Annotation creation fails closed when neither secret is available.
 HASH_HMAC_KEY_ENV = "FMP_HASH_SECRET"
 
 # Major action per-user rate limiter parameters

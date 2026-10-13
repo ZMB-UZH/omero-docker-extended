@@ -13,8 +13,11 @@ walk payload trees and never changes files below existing user directories.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack, contextmanager
+import errno
 import grp
 import logging
+import math
 import os
 import pwd
 import re
@@ -24,7 +27,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 
 LOGGER = logging.getLogger(__name__)
@@ -327,6 +330,38 @@ def filter_usernames(usernames: Iterable[str]) -> tuple[list[str], int]:
     return eligible, skipped
 
 
+@contextmanager
+def directory_handle(
+    path: Path | str, *, parent_fd: int | None = None
+) -> Iterator[int]:
+    """Inputs: directory and optional parent handle. Output: owned no-follow directory descriptor."""
+    try:
+        descriptor = os.open(
+            path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd
+        )
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise SyncError(
+                "DropBox directory must not be a symlink or non-directory"
+            ) from None
+        raise
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+def verify_directory_entry(
+    parent_fd: int, name: str, descriptor: int
+) -> os.stat_result:
+    """Inputs: pinned directory and its name. Output: current metadata, rejecting replaced entries."""
+    expected = os.fstat(descriptor)
+    current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    if (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+        raise SyncError("DropBox directory was replaced during synchronization")
+    return expected
+
+
 def ensure_root(root: Path, *, create_root: bool, mode: int) -> RootState:
     """Ensure the root.
 
@@ -334,37 +369,32 @@ def ensure_root(root: Path, *, create_root: bool, mode: int) -> RootState:
     Raises: SyncError when validation or the called operation fails.
     """
     try:
-        root_lstat = root.lstat()
+        with directory_handle(root) as descriptor:
+            return RootState(os.fstat(descriptor), created=False)
     except FileNotFoundError:
         if not create_root:
             raise SyncError(f"DropBox root does not exist: {root}") from None
-        parent = root.parent
         try:
-            parent_lstat = parent.lstat()
+            with directory_handle(root.parent) as parent_fd:
+                parent_stat = os.fstat(parent_fd)
+                os.mkdir(root.name, mode=mode, dir_fd=parent_fd)
+                with directory_handle(root.name, parent_fd=parent_fd) as descriptor:
+                    current = os.fstat(descriptor)
+                    if (current.st_uid, current.st_gid) != (
+                        parent_stat.st_uid,
+                        parent_stat.st_gid,
+                    ):
+                        os.fchown(descriptor, parent_stat.st_uid, parent_stat.st_gid)
+                    if stat.S_IMODE(os.fstat(descriptor).st_mode) != mode:
+                        os.fchmod(descriptor, mode)
+                    return RootState(
+                        verify_directory_entry(parent_fd, root.name, descriptor),
+                        created=True,
+                    )
         except FileNotFoundError:
-            raise SyncError(f"DropBox root parent does not exist: {parent}") from None
-        if not stat.S_ISDIR(parent_lstat.st_mode):
             raise SyncError(
-                f"DropBox root parent is not a directory: {parent}"
+                "DropBox root parent does not exist or changed during creation"
             ) from None
-        root.mkdir(mode=mode, exist_ok=False)
-        root_lstat = root.lstat()
-        if (root_lstat.st_uid, root_lstat.st_gid) != (
-            parent_lstat.st_uid,
-            parent_lstat.st_gid,
-        ):
-            os.chown(root, parent_lstat.st_uid, parent_lstat.st_gid)
-            root_lstat = root.lstat()
-        if stat.S_IMODE(root_lstat.st_mode) != mode:
-            os.chmod(root, mode)
-        root_lstat = root.lstat()
-        return RootState(root_lstat, created=True)
-
-    if stat.S_ISLNK(root_lstat.st_mode):
-        raise SyncError(f"DropBox root must not be a symlink: {root}")
-    if not stat.S_ISDIR(root_lstat.st_mode):
-        raise SyncError(f"DropBox root is not a directory: {root}")
-    return RootState(root_lstat, created=False)
 
 
 def ensure_user_directory(
@@ -381,34 +411,37 @@ def ensure_user_directory(
     (SyncConfig) configuration, `uid` (int), `gid` (int). Output: `str`. Raises:
     SyncError when validation or the called operation fails.
     """
-    target = root / username
-    if target.parent.resolve(strict=True) != root_real:
+    if validate_username_component(username) is not None:
+        raise SyncError("Unsafe DropBox username directory component")
+    if root.resolve(strict=True) != root_real:
         raise SyncError(
             f"resolved username directory escaped DropBox root: {sanitize_for_log(username)!r}"
         )
 
-    created = False
-    try:
-        target_lstat = target.lstat()
-    except FileNotFoundError:
-        target.mkdir(mode=config.mode)
-        created = True
-        target_lstat = target.lstat()
-
-    if stat.S_ISLNK(target_lstat.st_mode):
-        raise SyncError(
-            f"username directory is a symlink and will not be modified: {target}"
-        )
-    if not stat.S_ISDIR(target_lstat.st_mode):
-        raise SyncError(f"username path exists but is not a directory: {target}")
-
-    if (target_lstat.st_uid, target_lstat.st_gid) != (uid, gid):
-        os.chown(target, uid, gid)
-        target_lstat = target.lstat()
-
-    if stat.S_IMODE(target_lstat.st_mode) != config.mode:
-        os.chmod(target, config.mode)
-    return "created" if created else "existing"
+    with ExitStack() as handles:
+        parent_fd = handles.enter_context(directory_handle(root))
+        created = False
+        try:
+            descriptor = handles.enter_context(
+                directory_handle(username, parent_fd=parent_fd)
+            )
+        except FileNotFoundError:
+            try:
+                os.mkdir(username, mode=config.mode, dir_fd=parent_fd)
+                created = True
+            except FileExistsError:
+                # Another initializer may have created the entry; validate it below.
+                created = False
+            descriptor = handles.enter_context(
+                directory_handle(username, parent_fd=parent_fd)
+            )
+        current = os.fstat(descriptor)
+        if (current.st_uid, current.st_gid) != (uid, gid):
+            os.fchown(descriptor, uid, gid)
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != config.mode:
+            os.fchmod(descriptor, config.mode)
+        verify_directory_entry(parent_fd, username, descriptor)
+        return "created" if created else "existing"
 
 
 def write_status(path: Path, values: dict[str, str | int]) -> None:
@@ -518,10 +551,15 @@ def config_from_args(args: argparse.Namespace) -> SyncConfig:
     allow_world_writable = parse_bool(
         args.allow_world_writable, name="allow-world-writable"
     )
+    if not 1 <= args.port <= 65535:
+        raise SyncError("port must be between 1 and 65535")
     if args.connect_retries < 1:
         raise SyncError("connect retries must be at least 1")
-    if args.connect_retry_delay_seconds < 0:
-        raise SyncError("connect retry delay must be non-negative")
+    if (
+        not math.isfinite(args.connect_retry_delay_seconds)
+        or args.connect_retry_delay_seconds < 0
+    ):
+        raise SyncError("connect retry delay must be finite and non-negative")
     return SyncConfig(
         host=args.host,
         port=args.port,

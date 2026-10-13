@@ -381,7 +381,7 @@ def test_proxy_http_request_strips_browser_auth_and_unlisted_cookies(
             200,
             headers={
                 "Content-Type": "application/json",
-                "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",
+                "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",  # DevSkim: ignore DS610001 -- backend-response fixture, not a browser cookie policy
             },
             payload=b'{"status":"ok"}',
         )
@@ -2245,7 +2245,7 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
                 200,
                 headers={
                     "Content-Type": "text/html; charset=utf-8",
-                    "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",
+                    "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",  # DevSkim: ignore DS610001 -- test incomplete upstream attributes without changing the fixture
                 },
                 payload=b"<html><body>ok</body></html>",
             )

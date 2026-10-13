@@ -347,7 +347,7 @@ def test_regenerate_xy_only_pyramid_covers_metadata_and_runtime_failures(
         lambda _store_root: detection,
     )
 
-    assert "Failed to read s0 .zarray metadata" in (
+    assert "Failed to read full-resolution array metadata" in (
         support._regenerate_xy_only_pyramid(store) or ""
     )
 
@@ -471,7 +471,7 @@ def test_ome_zarr_support_additional_metadata_helpers_cover_edge_failures(
     )
     assert support._extract_dataset_relative_paths(
         {"multiscales": [{"datasets": [{"path": "0"}, {"path": "0"}]}]}
-    ) == (("0",), None)
+    ) == ((), "OME-Zarr dataset paths must be distinct and non-overlapping.")
     paths, error = support._extract_dataset_relative_paths(
         {"multiscales": ["bad-multiscale"]}
     )

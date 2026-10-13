@@ -25,6 +25,12 @@ CAVEMAN_BADGE_IMAGE_URL = (
     "&logo=github&logoColor=white"
 )
 CAVEMAN_BADGE_TARGET_URL = "https://github.com/JuliusBrussee/caveman"
+CRAWL4AI_BADGE_TITLE = "crawl4ai"
+CRAWL4AI_BADGE_IMAGE_URL = (
+    "https://img.shields.io/static/v1?label=&message=crawl4ai&color=555"
+    "&logo=github&logoColor=white"
+)
+CRAWL4AI_BADGE_TARGET_URL = "https://github.com/unclecode/crawl4ai"
 KARPATHY_BADGE_TITLE = "andrej-karpathy-skills"
 KARPATHY_BADGE_IMAGE_URL = (
     "https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills"
@@ -77,14 +83,18 @@ def _load_canonical_repo_metadata(repo_root: Path) -> RepoMetadata | None:
         return None
 
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{CANONICAL_METADATA_PATH} must contain a JSON object.")
     required_fields = ("host", "owner", "repo", "branch_name")
     missing_fields = [
-        field for field in required_fields if not str(payload.get(field, "")).strip()
+        field
+        for field in required_fields
+        if not isinstance(payload.get(field), str) or not payload[field].strip()
     ]
     if missing_fields:
         missing = ", ".join(sorted(missing_fields))
         raise RuntimeError(
-            f"{CANONICAL_METADATA_PATH} is missing required field(s): {missing}"
+            f"{CANONICAL_METADATA_PATH} requires non-empty string field(s): {missing}"
         )
 
     remote_name = str(payload.get("remote_name", "canonical")).strip() or "canonical"
@@ -172,7 +182,7 @@ def _resolve_branch_name(repo_root: Path, remote_name: str) -> str:
     except subprocess.CalledProcessError:
         symbolic_ref = ""
     if symbolic_ref.startswith(f"refs/remotes/{remote_name}/"):
-        return symbolic_ref.rsplit("/", 1)[-1]
+        return symbolic_ref.removeprefix(f"refs/remotes/{remote_name}/")
 
     remote_description = _run_git(repo_root, "remote", "show", remote_name)
     for line in remote_description.splitlines():
@@ -298,6 +308,7 @@ def render_badge_block(
             f"({upstream_sources.badge_image_url})]({upstream_sources.repo_url})"
         ),
         f"[![{CAVEMAN_BADGE_TITLE}]({CAVEMAN_BADGE_IMAGE_URL})]({CAVEMAN_BADGE_TARGET_URL})",
+        f"[![{CRAWL4AI_BADGE_TITLE}]({CRAWL4AI_BADGE_IMAGE_URL})]({CRAWL4AI_BADGE_TARGET_URL})",
         f"[![{KARPATHY_BADGE_TITLE}]({KARPATHY_BADGE_IMAGE_URL})]({KARPATHY_BADGE_TARGET_URL})",
         BADGE_BLOCK_END,
     ]
@@ -312,10 +323,15 @@ def extract_badge_block(readme_text: str) -> str:
     """
     start = readme_text.find(BADGE_BLOCK_BEGIN)
     end = readme_text.find(BADGE_BLOCK_END)
-    if start == -1 or end == -1:
+    if (
+        start == -1
+        or end < start
+        or readme_text.count(BADGE_BLOCK_BEGIN) != 1
+        or readme_text.count(BADGE_BLOCK_END) != 1
+    ):
         raise RuntimeError(
-            "README.md is missing the generated badge markers. "
-            "Run the tool with --write after inserting them once."
+            "README.md must contain exactly one ordered pair of generated badge markers. "
+            "Correct the markers before running the tool with --write."
         )
     end += len(BADGE_BLOCK_END)
     return readme_text[start:end]

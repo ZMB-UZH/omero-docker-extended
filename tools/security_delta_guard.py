@@ -122,7 +122,10 @@ def parse_iso8601(timestamp: str | None) -> datetime | None:
         return None
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
-    return datetime.fromisoformat(normalized).astimezone(UTC)
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("Scan timestamps must include an explicit timezone")
+    return parsed.astimezone(UTC)
 
 
 def _first_non_empty(*values: Any) -> str:

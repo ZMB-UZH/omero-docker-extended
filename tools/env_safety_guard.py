@@ -4,10 +4,10 @@
 This tool maintains a manifest of critical untracked files that must survive
 any file-sync, rsync, or tree-replacement operation.  It can:
 
-  --check     Verify every manifest entry exists and is non-empty.  Exit 1 on failure.
-  --backup    Create a timestamped backup of all manifest entries.
-  --restore   Restore the most recent backup (or a named one via --backup-name).
-  --list      List available backups.
+  check     Verify every manifest entry exists and is non-empty. Exit 1 on failure.
+  backup    Create a uniquely allocated timestamped backup of manifest entries.
+  restore   Restore the most recent backup (or a named one via --backup-name).
+  list      List available backups.
 
 The manifest lives at .env_manifest in the repository root.  Each non-comment,
 non-blank line is a path relative to the repo root that MUST exist on the host
@@ -25,18 +25,26 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import os
 import re
 import shutil
+import stat
 import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit
 
 MANIFEST_NAME = ".env_manifest"
 BACKUP_DIR_NAME = ".env_backups"
 INSTALLATION_PATHS_ENV_NAME = "installation_paths.env"
 DOT_ENV_NAME = ".env"
 PRIVATE_DIR_MODE = 0o700
+MONITORING_TLS_URL_KEYS = (
+    "ADMIN_TOOLS_GRAFANA_URL",
+    "ADMIN_TOOLS_PROMETHEUS_URL",
+    "ADMIN_TOOLS_LOKI_URL",
+)
 EXPECTED_COMPOSE_ENV_FILES = (
     "installation_paths.env",
     "env/omero_secrets.env",
@@ -83,6 +91,7 @@ DOT_ENV_REQUIRED_KEYS = (
     "GRAFANA_DATA_PATH",
     "LOKI_DATA_PATH",
     "ALLOY_DATA_PATH",
+    "OLLAMA_DATA_PATH",
     "PG_MAINTENANCE_DATA_PATH",
     "NODE_EXPORTER_TEXTFILE_PATH",
     "CROWDSEC_DB_PATH",
@@ -116,6 +125,9 @@ DOT_ENV_DIRECT_KEYS = frozenset(
 DOT_ENV_MIRRORED_KEYS = tuple(
     key for key in DOT_ENV_REQUIRED_KEYS if key not in DOT_ENV_DIRECT_KEYS
 )
+# Older generated .env files predate this build pin; explicit env-file loading
+# still supplies it. Validate a mirror when present without requiring migration.
+DOT_ENV_OPTIONAL_MIRRORED_KEYS = ("OMERO_FIGURE_VERSION",)
 REQUIRED_NONEMPTY_ENV_KEYS = frozenset(
     {
         "OMERO_DB_PASS",
@@ -261,6 +273,7 @@ ABSOLUTE_PATH_KEYS = frozenset(
         "GRAFANA_DATA_PATH",
         "LOKI_DATA_PATH",
         "ALLOY_DATA_PATH",
+        "OLLAMA_DATA_PATH",
         "PG_MAINTENANCE_DATA_PATH",
         "BUILDX_DATA_PATH",
         "NODE_EXPORTER_TEXTFILE_PATH",
@@ -511,7 +524,10 @@ def validate_dot_env_mirror_values(
         return [f".env mirror sources cannot be validated: {exc}"]
 
     errors: list[str] = []
-    for key in DOT_ENV_MIRRORED_KEYS:
+    mirrored_keys = DOT_ENV_MIRRORED_KEYS + tuple(
+        key for key in DOT_ENV_OPTIONAL_MIRRORED_KEYS if key in dot_env
+    )
+    for key in mirrored_keys:
         if key not in source_assignments:
             errors.append(f"source deployment env is missing mirrored key {key}")
             continue
@@ -615,6 +631,25 @@ def validate_assignment_value(
     """
     errors: list[str] = []
     value = resolved_value
+
+    if key in MONITORING_TLS_URL_KEYS:
+        try:
+            parsed = urlsplit(value)
+            valid = (
+                parsed.scheme == "https"
+                and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and not parsed.query
+                and not parsed.fragment
+                and (parsed.port is None or 0 < parsed.port <= 65535)
+                and not any(character.isspace() for character in value)
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            errors.append(f"{key} must be an HTTPS endpoint without URL credentials")
+        return errors
 
     if key in BOOL_KEYS:
         if not is_bool_value(value):
@@ -724,8 +759,6 @@ def derive_compose_project_name(installation_path: str | Path) -> str:
     normalized = re.sub(r"[^a-z0-9_-]+", "-", stem.lower()).strip("-_")
     if not normalized:
         normalized = "omero"
-    if not normalized[0].isalnum():
-        normalized = f"omero-{normalized}"
     return normalized
 
 
@@ -761,15 +794,25 @@ def cmd_check(repo_root: Path) -> int:
 
     missing: list[str] = []
     empty: list[str] = []
+    non_regular: list[str] = []
 
     for entry in entries:
         rel = entry.relative_to(repo_root)
         if not entry.exists():
             missing.append(str(rel))
+        elif not entry.is_file():
+            non_regular.append(str(rel))
         elif entry.stat().st_size == 0:
             empty.append(str(rel))
 
-    if missing or empty:
+    if missing or empty or non_regular:
+        if non_regular:
+            print(
+                f"CRITICAL: {len(non_regular)} manifest entries are not regular files:",
+                file=sys.stderr,
+            )
+            for entry_name in non_regular:
+                print(f"  - {entry_name}", file=sys.stderr)
         if missing:
             print(
                 f"CRITICAL: {len(missing)} manifest file(s) MISSING:",
@@ -788,6 +831,26 @@ def cmd_check(repo_root: Path) -> int:
 
     print(f"OK: All {len(entries)} manifest entries present and non-empty.")
     return 0
+
+
+def validate_monitoring_tls_urls(repo_root: Path) -> list[str]:
+    """Inputs: repository env files. Output: TLS preflight errors without file edits."""
+    try:
+        assignments = load_compose_source_assignments(repo_root)
+        web = parse_active_env_assignments(repo_root / "env/omeroweb.env")
+    except ValueError:
+        return ["Monitoring TLS settings cannot be parsed safely"]
+    errors = []
+    for key in MONITORING_TLS_URL_KEYS:
+        if key not in web:
+            continue
+        try:
+            value = resolve_env_references(web[key], assignments)
+        except ValueError:
+            errors.append(f"{key} cannot be resolved safely")
+            continue
+        errors.extend(validate_assignment_value(key, web[key], value))
+    return errors
 
 
 def cmd_compose_guard(repo_root: Path) -> int:
@@ -828,18 +891,19 @@ def cmd_compose_guard(repo_root: Path) -> int:
             f"{configured_project_name or '<missing>'} != {expected_project_name}"
         )
     errors.extend(validate_dot_env_mirror_values(repo_root, dot_env))
+    errors.extend(validate_monitoring_tls_urls(repo_root))
 
     if errors:
         print(
-            "CRITICAL: Refusing docker compose from this checkout because it can "
-            "target the live bind mounts with a second compose project.",
+            "CRITICAL: Refusing docker compose because deployment configuration "
+            "does not satisfy the installation and transport contracts.",
             file=sys.stderr,
         )
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         print(
-            "Run compose only from the declared OMERO_INSTALLATION_PATH after "
-            "regenerating the installation .env if needed.",
+            "Resolve the listed settings before starting services. Operator-owned "
+            "environment files require explicit approval for each change.",
             file=sys.stderr,
         )
         return 1
@@ -864,16 +928,25 @@ def cmd_dot_env_check(repo_root: Path) -> int:
     failures: list[str] = []
     try:
         dot_env = parse_active_env_assignments(dot_env_path)
+    except (OSError, UnicodeError):
+        dot_env = {}
+        failures.append(f"{DOT_ENV_NAME} could not be read as UTF-8")
     except ValueError as exc:
         dot_env = {}
         failures.append(f"{DOT_ENV_NAME}: {exc}")
-    expected_project_name = expected_compose_project_name(repo_root)
-    configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
-    if configured_project_name != expected_project_name:
+    try:
+        expected_project_name = expected_compose_project_name(repo_root)
+    except (OSError, ValueError):
         failures.append(
-            ".env COMPOSE_PROJECT_NAME does not match the canonical project name: "
-            f"{configured_project_name or '<missing>'} != {expected_project_name}"
+            "Cannot determine the canonical project name from "
+            f"{INSTALLATION_PATHS_ENV_NAME}."
         )
+    else:
+        configured_project_name = dot_env.get("COMPOSE_PROJECT_NAME", "").strip()
+        if configured_project_name != expected_project_name:
+            failures.append(
+                ".env COMPOSE_PROJECT_NAME does not match the canonical project name"
+            )
 
     if "COMPOSE_ENV_FILES" in dot_env:
         configured_env_files = parse_compose_env_files(dot_env["COMPOSE_ENV_FILES"])
@@ -1158,12 +1231,7 @@ def cmd_backup(repo_root: Path) -> int:
     backups_root = repo_root / BACKUP_DIR_NAME
     backup_dir = backups_root / timestamp
 
-    # Avoid collisions when called in rapid succession
     suffix = 0
-    while backup_dir.exists():
-        suffix += 1
-        backup_dir = repo_root / BACKUP_DIR_NAME / f"{timestamp}_{suffix}"
-
     missing_count = 0
     backed_up = 0
     backup_started = False
@@ -1177,6 +1245,14 @@ def cmd_backup(repo_root: Path) -> int:
 
         if not backup_started:
             ensure_private_dir(backups_root)
+            # Reserve the name atomically; a prior existence check races.
+            while True:
+                try:
+                    backup_dir.mkdir(mode=PRIVATE_DIR_MODE)
+                    break
+                except FileExistsError:
+                    suffix += 1
+                    backup_dir = backups_root / f"{timestamp}_{suffix}"
             ensure_private_dir(backup_dir)
             backup_started = True
         dest = backup_dir / rel
@@ -1195,12 +1271,51 @@ def cmd_backup(repo_root: Path) -> int:
     return 0
 
 
+def restore_plan(repo_root: Path, target: Path) -> list[tuple[Path, Path]]:
+    """Validate the entire private backup before changing deployment files.
+
+    Inputs: `repo_root`, backup `target`. Output: source/destination pairs; raises
+    on an unreadable tree, unsafe backup entry, or incompatible destination.
+    """
+
+    def walk_error(error: OSError) -> None:
+        """Fail closed on unreadable subtrees. Inputs: `error`. Output: raises it."""
+        raise error
+
+    plan = []
+    for directory, directories, files in os.walk(target, onerror=walk_error):
+        for name in sorted(directories + files):
+            source = Path(directory) / name
+            mode = source.lstat().st_mode
+            if stat.S_ISDIR(mode):
+                continue
+            if not stat.S_ISREG(mode):
+                raise ValueError(f"Refusing non-regular backup entry: {source}")
+            destination = repo_root / source.relative_to(target)
+            if destination.exists() and not destination.is_file():
+                raise ValueError(f"Refusing non-file restore target: {destination}")
+            # Operator-managed env files and parent directories may be symlinks.
+            # Preserve them, but reject an unusable parent before any file copy.
+            for parent in destination.parents:
+                if (parent.exists() or parent.is_symlink()) and not parent.is_dir():
+                    raise ValueError(f"Refusing non-directory restore parent: {parent}")
+                if parent == repo_root:
+                    break
+            plan.append((source, destination))
+    return plan
+
+
 def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
     """Restore from a backup.
 
     Inputs: `repo_root`, `backup_name`. Output: `int`.
     """
     backups_root = repo_root / BACKUP_DIR_NAME
+    if backups_root.is_symlink() or (
+        backups_root.exists() and not backups_root.is_dir()
+    ):
+        print("ERROR: Refusing unsafe backups directory.", file=sys.stderr)
+        return 1
     if not backups_root.exists():
         print("ERROR: No backups directory found.", file=sys.stderr)
         return 1
@@ -1227,15 +1342,18 @@ def cmd_restore(repo_root: Path, backup_name: str | None = None) -> int:
     else:
         target = available[0]
 
+    if target.is_symlink():
+        print("ERROR: Refusing symlinked backup directory.", file=sys.stderr)
+        return 1
+    try:
+        plan = restore_plan(repo_root, target)
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: Cannot restore backup: {exc}", file=sys.stderr)
+        return 1
+
     restored = 0
-    for backup_file in target.rglob("*"):
-        if backup_file.is_symlink():
-            print(f"ERROR: Refusing symlink in backup: {backup_file}", file=sys.stderr)
-            return 1
-        if not backup_file.is_file():
-            continue
+    for backup_file, dest in plan:
         rel = backup_file.relative_to(target)
-        dest = repo_root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(backup_file, dest)
         restored += 1

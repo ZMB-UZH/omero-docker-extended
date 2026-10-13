@@ -95,8 +95,13 @@ def test_fetch_json_keeps_authorization_out_of_curl_argv(monkeypatch) -> None:
     assert payload == {"ok": True}
     assert calls[0]["command"] == [
         "/usr/bin/curl",
+        "--disable",
         "--silent",
         "--show-error",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
         "--location",
         "--fail-with-body",
         "--config",

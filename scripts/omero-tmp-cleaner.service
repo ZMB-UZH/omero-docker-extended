@@ -5,6 +5,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+Environment=OMERO_TMP_PRESERVE_DIR=__OMERO_TMP_PRESERVE_DIR__
 ExecStart=__TMP_CLEANER_BIN__ --tmp-dir __OMERO_TMP_PATH__ --max-age-seconds 86400
 Nice=10
 IOSchedulingClass=best-effort

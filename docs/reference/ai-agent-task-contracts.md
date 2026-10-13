@@ -36,11 +36,43 @@ single-session, identity, configuration, security, live-verification, or workflo
 - Codex Security exception: multi-worker vulnerability scanning is on-demand only. Before opening or launching a Codex Security scan, pause and clearly ask the user to authorize the exact scan target, mode, and worker/subagent use.
 - Continue only after explicit user approval or the Codex Security UI Start Scan handoff. Use minimum required subagents only when the user explicitly asks for that workflow and the loaded security skill requires them; all edits, commits, pushes, releases, and reconciliation stay in the parent session.
 
-## AI commit identity
+## GitHub publication
 
-- AI Agents that create, amend, merge, cherry-pick, squash, rebase, or rewrite commits must use `AI Agent <>` for author and committer, and any AI co-author trailer must be `Co-authored-by: AI Agent` with no email. Use command-scoped config such as `git -c user.name='AI Agent' -c user.email= commit ...`; never reuse human, host, GitHub, previous-commit, or global identity.
-- If a tool cannot produce the empty email field shown as `<>`, or would insert a named AI tool, host, local account, fake address, vendor identity, or profile-mapped AI/tool address, stop before committing. Human contributors are not required to use the AI identity.
-- Identity audits must check authors, committers, `Co-authored-by` trailers, and GitHub anonymous contributors (`contributors?anon=1`) from fresh branch-head fetches; report PR-head refs separately. Non-AI commit identities must be real human GitHub identities or actual human author names with real email addresses, never host/local placeholders or fake emails.
+Every AI agent uses the official GitHub connector for commits, branch updates
+and merges. Local Git remains available for inspection, diffs, staging, fetches
+and source verification, not as an alternative publication identity or transport.
+
+1. Before publication, use the connector to retrieve its authenticated account,
+   the exact target repository, current default branch, expected head and effective
+   write permission. Public read access is not write authorization. Repository
+   permissions returned for that account can establish access when a separate
+   collaborator endpoint is unavailable. Keep account details private, not in source.
+2. Run `python3 tools/agent_preflight.py check` and all applicable verification
+   gates before any remote write. Publish only the reviewed, tested tree; include
+   intended new files, file modes and deletions. Preserve unrelated work.
+3. Omit author and committer overrides, including names, emails and timestamps.
+   Let GitHub use the authenticated account and its normal defaults.
+   Never add AI co-author trailers, vendor attribution, invented emails or signing identities.
+   Do not change local or global Git identity to impersonate that account.
+4. For an atomic multi-file change, use the connector's blob/tree/commit operations
+   with the verified parent. Verify the returned commit's tree, parents, author,
+   committer and message before updating the branch. Require account attribution
+   consistent with the connector identity; stop on missing or unexpected identity.
+   Do not mistake account verification for a verified cryptographic signature.
+5. Update the branch through the connector with the expected head and no force.
+   If the head moved, re-read it, reconcile and rerun invalidated checks; never
+   overwrite concurrent work or disable protection. Then fetch and verify the
+   published source and workflows for that exact commit.
+6. Missing connector, account identity, permission or required write capability
+   blocks publication. Ask for the official connection or permission to be repaired;
+   no CLI/PAT fallback, personal-token helper, guessed identity or retry loop.
+7. This policy is prospective. Do not rewrite published history or modify release
+   tags without separate, explicit migration scope and verified preservation checks.
+   Preserve legitimate human/upstream credit; never infer permission to erase it.
+   Merges retain existing contributor history and use GitHub's default merge identity.
+
+GitHub documents these defaults in its
+[Git commits API](https://docs.github.com/en/rest/git/commits#create-a-commit).
 
 ## Default-branch development rule
 
@@ -103,7 +135,9 @@ invalidate affected checks. The full required final-tree matrix still applies.
 - Use Ruff as the canonical Python formatter and lint gate; host `ruff` must match the repo-pinned version, then run `ruff check .` and `ruff format --check .`; if only the module is available, use `python3 -m ruff check .` and `python3 -m ruff format --check .`.
 - Run split `pytest` suites separately; never combine the repo into one giant `pytest` process.
 - Do not search for, create, restore, or edit `.deepsource.toml`; DeepSource counts need explicit credentials and can be unavailable for auth, subscription, or access.
-  GitHub HTTPS Git operations require a PAT/credential manager, never an account password; use `tools/git_push_with_pat.py`. If a GitHub PAT is unavailable, ask immediately and pause for input; do not retry auth failures except local tasks.
+  GitHub publication requires the official GitHub connector above. If its account or
+  permission is unavailable, ask immediately and pause publication; do not retry auth
+  failures or request a PAT to bypass the connector. Independent local tasks can continue.
   If DeepSource scanning is skipped or unavailable, report it as unavailable, not zero, and continue the rest of the local and GitHub workflow verification instead of treating it as a blocking failure.
 - After every push, verify GitHub workflows are green and compare DeepSource grouped issues and issue occurrences for the pushed commit against the pre-push baseline when DeepSource auth and repository access are available; if either count increased, fetch grouped issue details, fix the regression root cause, rerun targeted tests, and repeat post-push verification.
   When many unrelated workflows fail at once, check official GitHub Status and
@@ -111,7 +145,7 @@ invalidate affected checks. The full required final-tree matrix still applies.
   regression.
 - Prefer focused unit/contract tests first; when live testing makes sense or the user explicitly requests it for functional OMERO/install/Compose/startup/plugin/env-contract changes, reconcile the live root, preserve unrelated dirty work non-destructively, match the exact checkout, run env guards, rebuild/inject/restart affected containers, and test mechanisms end to end before commit/push.
 - Pin image tags and dependency versions; never use `:latest`. Before changing OMERO.web or OMERO.server, review tagged release notes, tagged `UPGRADING.md` when present, and the official server upgrade guide, then test every applicable migration or compatibility requirement.
-- Validate Markdown with `npx --yes markdownlint-cli2@0.23.2` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
+- Validate Markdown with `npx --yes markdownlint-cli2@0.23.3` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
 - Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` to mirror the Docker-backed Hadolint, DevSkim, and Super-Linter gates locally; use `--profile devskim` for focused DevSkim iteration.
 - `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates.
   GitHub-only services such as SARIF upload, OIDC publishing, CodeQL hosted analysis, repository Scorecard checks, and Codecov upload still require the post-push workflow result. Before pushing any scanner/action update, inspect its embedded scanner version and run `--profile all` with that exact engine.
@@ -123,9 +157,17 @@ invalidate affected checks. The full required final-tree matrix still applies.
 
 ## CocoIndex
 
-- For broad repo navigation, the CocoIndex Code gate is mandatory: check for a `cocoindex-code` MCP server or tool first, then use `.agents/skills/cocoindex-code-search/` as semantic routing before exact `rg`. Use direct `rg` first only for precise string, symbol, scanner-count, or already-small searches.
+Every task starts with `python3 tools/agent_preflight.py begin --query "<task>"`.
+Add `--research-url "<source>"` for public web research. This loads the mandatory
+Caveman overlay and invokes real CocoIndex/Crawl4AI commands. Before AI commits
+run `python3 tools/agent_preflight.py check`; never bypass a failed gate or forge
+receipts. Install the repository pre-commit configuration in development clones;
+do not replace an existing Git hook without the required separate authorization.
+Future adapters must inherit these requirements and be covered by policy tests.
+
+- After preflight, the CocoIndex Code gate is mandatory for broad repo navigation: check for a `cocoindex-code` MCP server or tool first, then use `.agents/skills/cocoindex-code-search/` as semantic routing before exact `rg`. Use direct `rg` for precise string, symbol, scanner-count, or already-small searches.
   It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors/DB/runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
-  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. It indexes text-decodable mirrored files through CocoIndex Code 0.2.41; do not claim binary semantic search, add repo-specific language rewrites or file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
+  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. It indexes text-decodable mirrored files through CocoIndex Code 0.2.42; do not claim binary semantic search, add repo-specific language rewrites or file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
   Keep embedding-device selection automatic unless an intentional `--device` or `AGENT_COCOINDEX_DEVICE` override is needed; unavailable explicit GPUs must fail closed and CPU fallback must work.
   After MCP install or launcher changes, prove `initialize`, `list_tools`, and probes with `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search` only against an active index. For current edits run `python3 tools/cocoindex_agent_search.py index --allow-dirty-index` or `search --refresh "<query>"`; MCP search itself never refreshes and can return stale active-index text.
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.
@@ -164,7 +206,7 @@ probes. Never run OMERO CLI as `root` inside OMERO containers.
 
 ## Topology facts
 
-- This deployment has `21 Compose services` total and runs `19 long-running runtime containers by default`; 20 when the profile-gated `crowdsec` service is enabled.
+- This deployment has `22 Compose services` total and runs `20 long-running runtime containers by default`; 21 when the profile-gated `crowdsec` service is enabled. The offline internal certificate issuer stores installation PKI in dedicated persistent volumes; never treat them as cache.
 - The `redis-sysctl-init` helper is a one-shot profile-gated service, not a long-running runtime container.
 - The `omeroweb` container runs OMERO.web, Imaris and Tools Celery workers, and the storage-quota reconciliation loop under `supervisord`.
 

@@ -59,6 +59,19 @@ updates:
     commit-message:
       prefix: "deps(pip)"
 
+  - package-ecosystem: "pip"
+    directory: "/monitoring/tls"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:10"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps(tls)"
+
   # Dependabot's Docker updater scans Dockerfiles, not Compose manifests.
   # Compose image tags remain explicit and are refreshed through audited bumps.
   - package-ecosystem: "docker"

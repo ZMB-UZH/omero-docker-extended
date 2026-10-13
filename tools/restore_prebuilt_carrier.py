@@ -630,10 +630,11 @@ def restore(version: str, docker_repository: str) -> None:
             *(str(dist / name) for name in names),
         ]
     )
+    expected_body = release["body"]
     if references:
-        body = release["body"].replace(references[0], digest)
+        expected_body = expected_body.replace(references[0], digest)
         body_path = work / "public-body.md"
-        body_path.write_text(body, encoding="utf-8")
+        body_path.write_text(expected_body, encoding="utf-8")
         run(
             [
                 "gh",
@@ -650,6 +651,7 @@ def restore(version: str, docker_repository: str) -> None:
     if (
         after["id"] != release["id"]
         or after["published_at"] != release["published_at"]
+        or after["body"] != expected_body
         or source_assets(after) != source_assets(release)
         or source_commit(repository, version) != sha
     ):

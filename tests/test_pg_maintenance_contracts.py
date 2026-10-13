@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import stat
 import subprocess
 from pathlib import Path
@@ -67,6 +68,8 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
         PG_MAINTENANCE_ENV_FILE=str(env_file),
         EXPECTED_OMERO_DB_VALUE=omero_auth_value,
         EXPECTED_PLUGIN_DB_VALUE=plugin_auth_value,
+        PGSSLMODE="verify-full",
+        PGSSLROOTCERT=str(tmp_path / "private trust" / "ca.pem"),
         **{
             OMERO_DB_AUTH_ENV: omero_auth_value,
             PLUGIN_DB_AUTH_ENV: plugin_auth_value,
@@ -81,6 +84,8 @@ def test_entrypoint_writes_private_shell_quoted_cron_env(tmp_path: Path) -> None
         source {env_file}
         [[ "$OMERO_DB_PASS" == "$EXPECTED_OMERO_DB_VALUE" ]]
         [[ "$PLUGIN_DB_PASS" == "$EXPECTED_PLUGIN_DB_VALUE" ]]
+        [[ "$PGSSLMODE" == "verify-full" ]]
+        [[ "$PGSSLROOTCERT" == {shlex.quote(str(tmp_path / "private trust" / "ca.pem"))} ]]
         """,
         env,
     )

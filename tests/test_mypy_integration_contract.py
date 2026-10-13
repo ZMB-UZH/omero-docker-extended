@@ -70,15 +70,15 @@ class MypyIntegrationContractTests(TestCase):
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
-        self.assertIn("mypy==2.3.1", source)
-        self.assertIn("django==5.2.17", source)
-        self.assertIn("django-stubs==6.1.1", source)
-        self.assertIn("django-stubs-ext==6.1.1", source)
+        self.assertIn("mypy==2.4.0", source)
+        self.assertIn("django==5.2.18", source)
+        self.assertIn("django-stubs==6.1.2", source)
+        self.assertIn("django-stubs-ext==6.1.2", source)
         self.assertIn("pip-compile", compiled)
-        self.assertIn("mypy==2.3.1", compiled)
-        self.assertIn("django==5.2.17", compiled)
-        self.assertIn("django-stubs==6.1.1", compiled)
-        self.assertIn("django-stubs-ext==6.1.1", compiled)
+        self.assertIn("mypy==2.4.0", compiled)
+        self.assertIn("django==5.2.18", compiled)
+        self.assertIn("django-stubs==6.1.2", compiled)
+        self.assertIn("django-stubs-ext==6.1.2", compiled)
         self.assertIn("requests==2.34.2", compiled)
         self.assertNotIn("types-requests==", compiled)
         self.assertIn("types-atheris==3.1.0.20260630", compiled)
@@ -136,7 +136,7 @@ class MypyIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.7", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.8", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         cache_dependency_paths = setup_step["with"][
             "cache-dependency-path"
@@ -202,7 +202,7 @@ class MypyIntegrationContractTests(TestCase):
         Inputs: repository fixtures. Output: fails on regressions in list mypy targets uses git ls files and safe directory.
         """
         repo_root = self.repo_root
-        tracked_files = "\n".join(
+        tracked_files = "\0".join(
             [
                 "tests/test_mypy_integration_contract.py",
                 "tools/mypy_check.py",
@@ -223,8 +223,8 @@ class MypyIntegrationContractTests(TestCase):
         ):
             self.assertEqual(
                 [
-                    "tools/mypy_check.py",
                     "omeroweb_import/views/core_functions.py",
+                    "tools/mypy_check.py",
                 ],
                 mypy_check.list_mypy_targets(repo_root),
             )
@@ -235,6 +235,10 @@ class MypyIntegrationContractTests(TestCase):
                 "-c",
                 f"safe.directory={repo_root.resolve()}",
                 "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
                 "--",
                 "*.py",
             ],

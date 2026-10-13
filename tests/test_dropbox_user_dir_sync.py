@@ -318,8 +318,8 @@ class DropBoxUserDirSyncTests(TestCase):
 
             with (
                 mock.patch.object(helper, "connect", return_value=conn),
-                mock.patch.object(helper.os, "chown") as chown_mock,
-                mock.patch.object(helper.os, "chmod") as chmod_mock,
+                mock.patch.object(helper.os, "fchown") as chown_mock,
+                mock.patch.object(helper.os, "fchmod") as chmod_mock,
             ):
                 result = helper.sync(config)
 

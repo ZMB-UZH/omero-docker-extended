@@ -1,0 +1,7 @@
+interface:
+  display_name: "Crawl4AI Research"
+  short_description: "Mandatory public-source reading with attributable evidence"
+  brand_color: "#246B57"
+  default_prompt: "Use mandatory Crawl4AI research across agents to read official sources; preserve URLs and failures."
+policy:
+  allow_implicit_invocation: true

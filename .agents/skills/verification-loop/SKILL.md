@@ -7,34 +7,33 @@ upstream: third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md
 
 # Verification Loop
 
-Use this skill after any non-trivial change and before committing, pushing, or opening a user-explicit PR.
+Use after non-trivial changes and before commits, pushes, or user-requested PRs.
 
 ## Upstream baseline
 
-`third_party/ecc-v2.0.0/skills/verification-loop/SKILL.md` is provenance. Load upstream detail only when this overlay lacks task-specific guidance.
+Load the frontmatter's upstream reference only for missing task-specific guidance.
 
 ## Verification order
 
 ### Efficiency and invalidation
 
 - Record the exact command, relevant tree state, result, and artifact in a verification ledger.
-- Before validating a source copy, compare its complete intended file inventory
-  and content hashes with the candidate, including intended new files. A clean
-  scanner result from a tracked-only copy that omitted new source is incomplete.
-- Do not repeat a passing command until one of its inputs changes. A final
-  repository-wide matrix supersedes earlier unchanged targeted runs.
-- Key image evidence by immutable image ID and build inputs, not mutable tags.
-  Docs-only edits preserve image evidence; dependency or runtime configuration changes invalidate affected live checks.
+- Before validating a source copy, verify its full intended inventory and hashes,
+  including new files. A clean scan of an incomplete copy is not valid evidence.
+- Git-aware tests require an isolated Git index matching that inventory, including tracked-ignored files, and a real existing HEAD for history-aware fixtures.
+  Transfer history with a verified Git bundle when needed; never fabricate commits. Verify its tree first; an extracted archive alone is insufficient.
+  Never borrow a live installation's `.git` directory.
+- Do not repeat a passing command until inputs change; the final full matrix supersedes unchanged targeted evidence.
+- Key image evidence by immutable image ID and build inputs, not mutable tags. Docs-only edits preserve image evidence; dependency or runtime configuration changes invalidate affected live checks.
 - Preserve the tested command's exit status when limiting output. Use the
   repository gate runner or capture logs and check the original status; a
   successful `head` or `tail` process is not a passing test result.
-- Run independent read-only checks in parallel when resources permit. Serialize
-  image builds and live tests that mutate shared Docker, database, OMERO, or
-  persistent-storage state.
+- Fail pytest on unhandled worker exceptions. Test callback completion, cancellation and teardown with real event loops; never suppress thread warnings.
+- Diagnose independent gates with `--keep-going`: retain every failure and a nonzero exit; setup failure stops verification.
+- Parallelize independent read-only checks when resources allow; serialize image builds and live tests that mutate shared Docker, databases, OMERO or persistent storage.
 - During iteration, select tests from the changed ownership boundary. Run the
   complete required matrix once against the final tree and before release. Scanner changes require `--profile all`, including DevSkim; `--profile ci` omits container engines. Verify transitive engine pins, not only action wrappers, and preserve failed raw reports.
-- After validation, follow the runtime playbook's final cleanup inventory reconciliation.
-  A fresh-install image inventory never means resetting existing data or configuration.
+- After validation, follow the runtime playbook's cleanup inventory reconciliation; never reset existing data or configuration.
 
 ### 1. Documentation structure
 
@@ -65,6 +64,9 @@ bash -n <touched-shell-scripts>
 
 Never run all suites in a single pytest process. Run only the relevant suites, each separately:
 
+Root tests require native `ripgrep`; GUI tests require `xvfb`, `xauth`, and Tk-enabled Python; missing dependencies fail, never skip. Use an isolated, authenticated Xvfb display with TCP disabled.
+Create tool virtual environments at their final paths: relocated environments can retain invalid console-script shebangs even when Python imports work.
+
 ```bash
 python3 -m pytest tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
@@ -82,10 +84,9 @@ Boundary helper change: rerun the helper's own suite plus every directly affecte
 
 For functional OMERO, installation, Compose, startup, plugin-behavior, or env-contract changes, live-test whenever it makes sense or the user explicitly requests it. Reconcile the canonical live root to the exact checkout first, preserve unrelated dirty work non-destructively, run env guards, rebuild/inject/restart affected containers, and test the changed mechanisms end to end.
 Do not treat stale or dirty live state as a reason to skip required live verification. When changing CLI or query adapters, verify real command registration and typed parameter serialization; permissive test doubles do not prove protocol compatibility.
+For authentication, session/cache, cookie, gateway-cleanup or restart changes, apply the runtime playbook's historical session-regression gate. A successful re-login cannot substitute for preservation of the original authenticated session.
 
 ### 6. Diff review
-
-Check for:
 
 - unintended workflow or docs drift
 - accidental non-default-branch or draft-PR workflow guidance
@@ -105,8 +106,6 @@ Never imply that full pytest passed when only `py_compile`, `bash -n`, or narrow
 
 ## Common blockers
 
-- Host Python missing Django, `numpy`, `numcodecs`, or `matplotlib`: run
-  `python3 tools/run_local_workflow_gates.py --setup-only`, then run targeted
-  pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
+- Missing Python dependencies: run `python3 tools/run_local_workflow_gates.py --setup-only`, then targeted pytest with `${LOCAL_WORKFLOW_GATE_VENV:-.cache/local-workflow-gates/python-venv}/bin/python`.
 - Docker socket unavailable: do not keep retrying the same runtime probe
 - Root-owned repo or cache warnings: keep `-p no:cacheprovider`

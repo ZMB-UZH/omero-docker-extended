@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import pytest
 from pathlib import Path
 from unittest import TestCase, main as unittest_main
 
@@ -14,6 +15,87 @@ if str(REPO_ROOT) not in sys.path:
 
 
 from omero_plugin_common import tmp_cleanup
+
+
+@pytest.mark.parametrize("via_environment", [False, True])
+def test_persistent_directory_survives_age_cleanup(tmp_path, via_environment):
+    """Inputs: aged model data under temp. Output: preserved models and cleaned unrelated jobs."""
+    root = tmp_path / "omero-temp"
+    models = root / "custom [models]" / "blobs"
+    models.mkdir(parents=True)
+    unrelated = root / "imports"
+    unrelated.mkdir()
+    old = time.time() - 3 * 86400
+    model = models / "model-data"
+    artifact = unrelated / "finished-job"
+    for path in (model, artifact):
+        path.write_bytes(b"original")
+        os.utime(path, (old, old))
+    env = os.environ.copy()
+    command = [
+        BASH_BIN,
+        str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+        "--tmp-dir",
+        str(root),
+    ]
+    if via_environment:
+        env["OMERO_TMP_PRESERVE_DIR"] = str(models.parent)
+    else:
+        command += ["--preserve-dir", str(models.parent)]
+    subprocess.run(command, env=env, check=True, capture_output=True, timeout=10)
+    assert model.read_bytes() == b"original"
+    assert not artifact.exists()
+
+
+def test_preserved_symlink_and_target_both_survive(tmp_path):
+    """Inputs: persistent model-directory alias. Output: neither alias nor target is removed."""
+    root = tmp_path / "omero-temp"
+    target = root / "model-target"
+    target.mkdir(parents=True)
+    data = target / "weights"
+    data.write_bytes(b"original")
+    alias = root / "models"
+    alias.symlink_to(target, target_is_directory=True)
+    old = time.time() - 3 * 86400
+    for path in (data, alias):
+        os.utime(path, (old, old), follow_symlinks=False)
+    subprocess.run(
+        [
+            BASH_BIN,
+            str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+            "--tmp-dir",
+            str(root),
+            "--preserve-dir",
+            str(alias),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert alias.is_symlink()
+    assert data.read_bytes() == b"original"
+
+
+def test_invalid_preservation_boundary_aborts_before_cleanup(tmp_path):
+    """Inputs: absent preserved directory. Output: failure before any old file is deleted."""
+    data = tmp_path / "old-file"
+    data.write_bytes(b"original")
+    os.utime(data, (0, 0))
+    completed = subprocess.run(
+        [
+            BASH_BIN,
+            str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+            "--tmp-dir",
+            str(tmp_path),
+            "--preserve-dir",
+            str(tmp_path / "missing"),
+        ],
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 3
+    assert data.read_bytes() == b"original"
 
 
 class TmpCleanupRegressionTests(TestCase):

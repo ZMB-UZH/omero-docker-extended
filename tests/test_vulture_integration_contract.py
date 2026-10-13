@@ -85,7 +85,7 @@ class VultureIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.7", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.8", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         self.assertEqual(
             ".github/requirements/vulture-ci.txt",
@@ -143,7 +143,7 @@ class VultureIntegrationContractTests(TestCase):
         Inputs: repository fixtures. Output: fails on regressions in list vulture targets uses git ls files and safe directory.
         """
         repo_root = self.repo_root
-        tracked_files = "\n".join(
+        tracked_files = "\0".join(
             [
                 "tests/test_vulture_integration_contract.py",
                 "tools/vulture_check.py",
@@ -164,8 +164,8 @@ class VultureIntegrationContractTests(TestCase):
         ):
             self.assertEqual(
                 [
-                    "tools/vulture_check.py",
                     "omeroweb_import/views/core_functions.py",
+                    "tools/vulture_check.py",
                 ],
                 vulture_check.list_vulture_targets(repo_root),
             )
@@ -176,6 +176,10 @@ class VultureIntegrationContractTests(TestCase):
                 "-c",
                 f"safe.directory={repo_root.resolve()}",
                 "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
                 "--",
                 "*.py",
             ],

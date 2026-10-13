@@ -28,13 +28,18 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14.7'
+          python-version: '3.14.8'
           cache: 'pip'
           cache-dependency-path: .github/requirements/tests-ci.txt
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ripgrep xvfb xauth libtk8.6
           python3 -m pip install --require-hashes --requirement .github/requirements/tests-ci.txt
+
+      - name: Verify Redis session persistence and migration
+        run: python3 tools/run_local_workflow_gates.py --profile redis
 
       # Each test suite MUST be a separate invocation — the root
       # conftest.py installs mock stubs that interfere across test
@@ -43,39 +48,8 @@ jobs:
       - name: Run all test suites with coverage
         id: tests
         run: |
-          EXIT_FINAL=0
-
-          run_suite() {
-            local coverage_file="$1"
-            local suite_label="$2"
-            local suite_path="$3"
-
-            echo "::group::${suite_label}"
-            if ! COVERAGE_FILE="${coverage_file}" \
-              python3 -m coverage run --rcfile=.coveragerc \
-              -m pytest "${suite_path}" -v -p no:cacheprovider -W error; then
-              EXIT_FINAL=1
-            fi
-            echo "::endgroup::"
-          }
-
-          run_suite .coverage.root tests/ tests/
-          run_suite .coverage.common omero_plugin_common/tests/ omero_plugin_common/tests/
-          run_suite .coverage.imaris omero_imaris_connector/tests/ omero_imaris_connector/tests/
-          run_suite .coverage.admin omeroweb_admin_tools/tests/ omeroweb_admin_tools/tests/
-          run_suite .coverage.omp omeroweb_omp_plugin/tests/ omeroweb_omp_plugin/tests/
-          run_suite .coverage.import omeroweb_import/tests/ omeroweb_import/tests/
-          run_suite .coverage.tools omeroweb_tools/tests/ omeroweb_tools/tests/
-          run_suite .coverage.zarr omero_web_zarr/tests/ omero_web_zarr/tests/
-
-          exit $EXIT_FINAL
-
-      - name: Combine coverage and generate report
-        if: always()
-        run: |
-          python3 -m coverage combine --rcfile=.coveragerc
-          python3 -m coverage xml --rcfile=.coveragerc
-          python3 -m coverage report --rcfile=.coveragerc
+          python3 tools/run_local_workflow_gates.py --profile tests --keep-going \
+            --artifact-dir "${RUNNER_TEMP}/test-coverage"
 
       - name: Upload coverage to Codecov
         if: always() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch

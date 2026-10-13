@@ -51,6 +51,9 @@ Use this skill whenever the answer depends on current library, framework, image,
 
 ## Rules
 
+- Use mandatory `crawl4ai-research` to read selected public sources. Discovery
+  tools find URLs; snippets do not replace the source. Registry/account APIs
+  retain their metadata role. Never silently skip a failed Crawl4AI read.
 - Redact secrets before sending any query to docs or web tools.
 - Include exact versions or dates when they matter.
 - If a fact could have changed recently, verify it instead of guessing.

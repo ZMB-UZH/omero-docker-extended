@@ -299,7 +299,9 @@ Operational rule:
 - the OMERO.web Host field accepts only a hostname or IP address. Operators
   must not include `http://`, `https://`, a path, query string, username, or
   port in Host; the `Use HTTPS` checkbox and Port field are the single source of
-  truth for the connection scheme and port.
+  truth for the connection scheme and port. IPv6 addresses may be entered with
+  or without brackets; the connector adds the required URL and HTTP authority
+  brackets, including for cancellable downloads.
 - OMERO.web login, project loading, converter capability probing, and folder
   export capability probing run off the Tk UI thread. The main connector window
   stays responsive while the status indicator is busy, and the final browser
@@ -355,12 +357,31 @@ Operational rule:
   Folder export still rejects filesystem roots, malformed paths, and missing
   directories before starting uploads.
 - while connected, the XT connector runs silent periodic read-only OMERO.web
-  health checks. A transient failure is retried before the UI is changed; if
-  all retries fail, the connector reports that the connection was lost, clears
-  OMERO browser state, disables OMERO actions, and returns to the connect-ready
-  state. Silent health checks and native bridge probes must not force
+  health checks. If retries fail because of a network, service, or permission
+  error, the connector keeps its session and selections, reports the failed
+  check without a modal dialog, and checks again automatically. Recovery uses
+  the original cookies, never an automatic login or replay of an upload.
+  HTTP 401, OMERO's explicit unauthenticated JSON response, an actual login
+  redirect, or a login page returned instead of API data requires explicit
+  reconnection and clears the invalid local session. HTTP 403 alone does not
+  prove session expiry. Manual disconnect still clears
+  the session and browser state. Silent checks must not overwrite active task
+  progress. Health checks and native bridge probes must not force
   synchronous Tk idle redraws or leave a busy cursor on the main-window
   background after they complete.
+- script submission retries the legacy input encoding only after an explicit
+  HTTP 400 rejection. Connection loss, server errors, and empty or malformed
+  responses do not replay a possibly accepted job; check server-side job status
+  before submitting it again.
+- manual Refresh retries browser reads without attempting a new login. Failed
+  network or permission checks retain the original session and selection;
+  explicit authentication rejection requires reconnection. Successful Refresh
+  retains the project and dataset, then clears image selection as before.
+- IMS export polling also distinguishes permission denial from expired login.
+  A plain HTTP 403 must not trigger reauthentication. IMS and OME-TIFF exports
+  reject malformed job responses without displaying the response payload and
+  distinguish a missing download URL from a polling timeout. Failed transfers
+  close their responses and preserve existing local downloads.
 - `Load images into Imaris` is enabled only after a verified OMERO connection,
   an available converter, a structurally valid local path that is not known to
   be unwritable, and at least one selected entry in the Images panel are all

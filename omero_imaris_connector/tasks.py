@@ -744,13 +744,8 @@ def _close_export_connection(conn) -> None:
     if not callable(close):
         return
     hard_close = not bool(getattr(conn, _PRESERVE_JOINED_SESSION_ATTR, False))
-    try:
-        close(hard=hard_close)
-    except TypeError:
-        try:
-            close(hard_close)
-        except TypeError:
-            close()
+    # Cleanup errors must never change ownership or fall back to close(hard=True).
+    close(hard=hard_close)
 
 
 def _update_export_task_state(

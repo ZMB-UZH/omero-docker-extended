@@ -35,7 +35,9 @@ python3 tools/env_safety_guard.py compose-guard
 python3 tools/env_safety_guard.py backup
 ```
 
-The first command verifies every file listed in `.env_manifest` exists and is non-empty.
+The first command verifies every entry in `.env_manifest` resolves to a non-empty
+regular file. Operator-managed symlinks to regular files remain supported;
+directories, device files and other non-file entries are rejected.
 The second refuses `docker compose` from a non-canonical checkout whose repository root or `.env` project name does not match the declared installation.
 The third creates a timestamped backup under `.env_backups/`.
 

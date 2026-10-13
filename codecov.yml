@@ -1,19 +1,15 @@
 # Codecov configuration for omero-docker-extended
 # https://docs.codecov.io/docs/codecov-yaml
 
-# Codecov measures the server-side runtime packages configured in .coveragerc.
-# Tooling and host-side Python below remain tested, but outside that denominator.
+# Codecov measures all first-party Python implementation roots in .coveragerc,
+# including operational tools, certificate management and the Imaris XT client.
 # See docs/operations/code-scanning.md#codecov-coverage-scope.
 ignore:
   - "conftest.py"
-  - "startup/"
-  - "monitoring/"
-  - "docker/"
-  - "tools/"
   - "docs/"
   - "scripts/"
   - "env/"
-  - "omero_imaris_connector/XTOmeroConnector.py"
+  - "**/tests/"
   - "**/templates/"
   - "**/static/"
 
@@ -64,6 +60,18 @@ coverage:
         paths:
           - 'omero_web_zarr/'
           - '!.*/tests/.*'
+        threshold: 0%
+      operations:
+        target: 100%
+        paths:
+          - 'docker/'
+          - 'monitoring/'
+          - 'startup/'
+        threshold: 0%
+      maintenance-tooling:
+        target: 100%
+        paths:
+          - 'tools/'
         threshold: 0%
     # Patch coverage: only newly added / changed lines are evaluated.
     patch:

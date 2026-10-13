@@ -2889,10 +2889,10 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         
         // Create Icon. Inputs: kind. Output: return value.
         function createIcon(kind) {
-            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); // DevSkim: ignore DS137138 -- required SVG namespace identifier, not a network request
             icon.setAttribute('viewBox', '0 0 24 24');
             icon.classList.add('tree-icon');
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); // DevSkim: ignore DS137138 -- required SVG namespace identifier, not a network request
             if (kind === 'folder') {
                 path.setAttribute(
                     'd',

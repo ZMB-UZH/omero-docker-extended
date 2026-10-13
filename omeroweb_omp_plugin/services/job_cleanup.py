@@ -1,8 +1,4 @@
-"""
-Job cleanup for RAM-based job storage (redis).
-This module handles automatic cleanup of old job files to prevent RAM
-accumulation in the tmpfs-mounted job directory.
-"""
+"""Legacy filesystem job cleanup; not a Redis TTL or an automatically scheduled task."""
 
 import logging
 import os
@@ -21,9 +17,8 @@ def cleanup_old_jobs():
 
     Inputs: no caller arguments. Output: performs the documented action and returns None.
 
-    This is called from the job views to ensure old jobs
-    don't accumulate in memory. Since jobs are stored in tmpfs (RAM),
-    this prevents memory leaks.
+    Callers explicitly opt into age-based removal of legacy JSON job files.
+    Current host-side temporary cleanup is configured separately by installation.
 
     Multiple simultaneous calls are safe (worst case: redundant cleanup requests)
     """
@@ -52,7 +47,7 @@ def cleanup_old_jobs():
                 age = now - mtime
                 if age > JOB_MAX_AGE_SECONDS:
                     # Also delete associated lock file if it exists
-                    lock_file = filepath.replace(".json", ".lock")
+                    lock_file = os.path.splitext(filepath)[0] + ".lock"
                     os.remove(filepath)
                     deleted_count += 1
                     if os.path.exists(lock_file):
@@ -60,7 +55,9 @@ def cleanup_old_jobs():
                             os.remove(lock_file)
                         except OSError as exc:
                             logger.debug(
-                                "Ignoring lock cleanup error for %s: %s", lock_file, exc
+                                "Ignoring lock cleanup error for %s: %s",
+                                sanitize_log_value(lock_file),
+                                sanitize_log_value(exc),
                             )
             except OSError as e:
                 error_count += 1

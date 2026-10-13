@@ -43,7 +43,7 @@ def isolated_coco_runtime(tmp_path):
         / "cocoindex_code"
     )
     package.mkdir()
-    (package / "__init__.py").write_text('__version__ = "0.2.41"\n')
+    (package / "__init__.py").write_text('__version__ = "0.2.42"\n')
     (package / "settings.py").write_text(
         "import json, os\nfrom pathlib import Path\nfrom types import SimpleNamespace\n"
         "def load_project_settings(root):\n"
@@ -67,7 +67,7 @@ def test_package_pin_and_hashes_are_exact() -> None:
     Inputs: repository fixtures. Output: fails on regressions in package pin and hashes are exact.
     """
     assert cocoindex_agent_search.PACKAGE_REQUIREMENT == (
-        "cocoindex-code[full]==0.2.41"
+        "cocoindex-code[full]==0.2.42"
     )
     assert "latest" not in cocoindex_agent_search.PACKAGE_REQUIREMENT
 
@@ -167,7 +167,7 @@ def test_daemon_handshake_executes_inside_the_pinned_runtime(
         "        self.version = version\n"
         "class HandshakeResponse:\n"
         "    ok = mode != 'rejected'\n"
-        "    daemon_version = 'other' if mode == 'wrong-version' else '0.2.41'\n"
+        "    daemon_version = 'other' if mode == 'wrong-version' else '0.2.42'\n"
         "def encode_request(request):\n"
         "    return request.version.encode()\n"
         "def decode_response(data):\n"
@@ -177,7 +177,7 @@ def test_daemon_handshake_executes_inside_the_pinned_runtime(
         "        if mode == 'connect-error':\n"
         "            raise OSError('fixture connect failure')\n"
         "    def send_bytes(self, data):\n"
-        "        if data != b'0.2.41':\n"
+        "        if data != b'0.2.42':\n"
         "            raise RuntimeError('wrong requested version')\n"
         "    def recv_bytes(self):\n"
         "        if mode == 'read-error':\n"
@@ -2012,8 +2012,9 @@ def test_run_coco_search_uses_existing_artifact_daemon_path(
     )
 
 
+@pytest.mark.parametrize("save_report", [False, True])
 def test_run_benchmark_reuses_one_daemon_for_cocoindex_cases(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, save_report: bool
 ) -> None:
     """Verify run benchmark reuses one daemon for cocoindex cases.
 
@@ -2125,9 +2126,14 @@ def test_run_benchmark_reuses_one_daemon_for_cocoindex_cases(
         mock.Mock(side_effect=fake_benchmark_case),
     )
 
+    output_path = tmp_path / "benchmark.json" if save_report else None
     payload = cocoindex_agent_search.run_benchmark(
-        context, cases, output_path=None, allow_dirty=True
+        context, cases, output_path=output_path, allow_dirty=True
     )
+    if output_path is not None:
+        assert json.loads(output_path.read_text()) == payload
+    else:
+        assert not (tmp_path / "benchmark.json").exists()
 
     assert session_events == ["enter", "exit"]
     assert payload["summary"]["cases"] == 2
@@ -2433,7 +2439,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.42"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":'
             '{"tools":[{"name":"search"},{"name":"status"}]}}\n'
         ),
@@ -2451,7 +2457,7 @@ def test_mcp_smoke_uses_workspace_root_and_minimal_env(
         include_search=False,
     ) == {
         "server_name": "cocoindex-code",
-        "server_version": "0.2.41",
+        "server_version": "0.2.42",
         "tools": ["search", "status"],
     }
     assert mocked_run.call_args.args[0] == [
@@ -2487,7 +2493,7 @@ def test_mcp_stdio_smoke_include_search_fails_on_tool_error(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.42"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"missing index"}],"isError":true}}\n'
@@ -2522,7 +2528,7 @@ def test_mcp_stdio_smoke_include_search_records_success(
         returncode=0,
         stdout=(
             '{"jsonrpc":"2.0","id":1,"result":'
-            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.41"}}}\n'
+            '{"serverInfo":{"name":"cocoindex-code","version":"0.2.42"}}}\n'
             '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}\n'
             '{"jsonrpc":"2.0","id":3,"result":'
             '{"content":[{"type":"text","text":"File: AGENTS.md:1"}],"isError":false}}\n'

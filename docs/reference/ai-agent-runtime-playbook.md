@@ -9,13 +9,14 @@ Deep operational guidance for AI Agents. `AGENTS.md` should route here instead o
 - Do not `chown` bind-mounted data directories such as `postgresdb/`, `omero_data/`, or `omero_temp/` to a non-service user.
 - Worktrees and related clones can exist under `/tmp/omero-*`. Search them before declaring a commit missing.
 - Develop, commit, push, and verify on the current remote default branch unless the user explicitly names another branch. Resolve it dynamically; never create feature branches, PR branches, temporary remote branches, or draft PRs just to run workflows or scanner checks.
-- Before rebasing, refresh tracking refs explicitly with `git fetch origin <branch>:refs/remotes/origin/<branch> --force`.
-- GitHub HTTPS Git operations require a PAT or credential manager, never an account password. A `Password for 'https://github.com'` prompt is asking for a token-class credential.
-- For TTY pushes, resolve the default branch first, then use `python3 tools/git_push_with_pat.py origin "HEAD:${default_branch}"`; it resolves the remote before reading the token, serves the token only for `https://github.com` prompts, prompts without echo, disables stale GitHub credential helpers for that command, and keeps the token out of argv, remotes, logs, temp files, and long-lived git config.
-- In non-TTY agent shells, provide the PAT only as a short-lived `GITHUB_TOKEN`
-  environment variable for that helper invocation; never paste it into argv,
-  remotes, logs, temp files, or long-lived Git config.
-- If a stale `gh auth git-credential` helper intercepts GitHub HTTPS auth, inspect `git config --show-origin --get-all credential.https://github.com.helper` and `gh auth status`, then use the prompt helper above or repair the credential manager before retrying.
+- Follow the [GitHub publication contract](ai-agent-task-contracts.md#github-publication):
+  the official GitHub connector verifies its authenticated account and repository
+  write permission, creates commits using GitHub defaults, and updates the expected
+  branch head without force. No local identity overrides or AI co-author trailers.
+- Local Git inspection and fetches remain useful for source verification. They do
+  not prove connector identity or permission and cannot replace connector publication.
+- If the connector cannot perform the required write, stop publication and repair
+  that connection. Do not switch to a PAT push helper or another account.
 
 ## Cross-repository sync safety
 
@@ -206,7 +207,7 @@ the retained tags, digests, and complete reference graph again after cleanup.
 - For OMERO.web route checks, enumerate the running service's published
   bindings and verify `/webgateway/`; default endpoint docs are reference
   topology, not live probe input.
-- Switch to the Docker network path from inside a running container, usually `omeroweb`, using service DNS names such as `http://loki:3100`.
+- Switch to the Docker network path from inside a running container, usually `omeroweb`, using service DNS names such as `https://loki:3100` and the configured public CA. Never bypass peer verification.
 - Prefer the runtime interpreter inside the OMERO.web virtualenv for container-local Python checks.
 
 ## OMERO CLI and container Python
@@ -263,6 +264,13 @@ Avoid deeply nested heredocs inside `docker exec ... bash -lc "..."`.
   retry/error loop, first establish the correct workflow end to end, then update
   that instruction or tool concisely with regression coverage.
 - Run each test directory as a separate `pytest` invocation.
+- For threaded UI changes, test window closure during an active worker and while
+  a worker awaits a queued callback. Require bounded completion, no late widget
+  access, and no unhandled thread exceptions; preserve authenticated sessions
+  during unrelated network failures.
+- Run Linux verification as an unprivileged account. Filesystem tests need unique,
+  test-owned temporary roots and real readback where persistence is the contract.
+  Never repair a failing test by changing ownership of shared or operator data.
 - In root-owned clones, keep `-p no:cacheprovider -W error`.
 - Maintain a verification ledger with the exact command, relevant tree state,
   result, and runtime artifact. Do not repeat a passing check unless one of
@@ -353,7 +361,8 @@ for root in $candidate_roots "$OMERO_WEB_ROOT"/venv*; do
 done
 [ -n "$python_bin" ] || { echo "OMERO.web Python not found" >&2; exit 1; }
 "$python_bin" - <<'PY'
-import json, urllib.parse, urllib.request
+import json, os, ssl, urllib.parse, urllib.request
+context = ssl.create_default_context(cafile=os.environ["ADMIN_TOOLS_TLS_CA_FILE"])
 params = urllib.parse.urlencode({
     "query": '{compose_service="omeroserver", log_type="internal"} |~ "(?i)error"',
     "direction": "backward",
@@ -361,13 +370,52 @@ params = urllib.parse.urlencode({
     "end": "END_NS",
     "limit": "50",
 })
-with urllib.request.urlopen(f"http://loki:3100/loki/api/v1/query_range?{params}", timeout=20) as response:
+with urllib.request.urlopen(f"https://loki:3100/loki/api/v1/query_range?{params}", context=context, timeout=20) as response:
     print(json.loads(response.read().decode("utf-8", errors="replace")))
 PY
 SH
 ```
 
 ## Joined-session and import-thread rules
+
+### Historical session-regression gate
+
+- Review the relevant commit history and current call sites before changing
+  authentication, session storage, cookies, cleanup, or gateway ownership.
+  Historical anchors include `ae0af493` and `f5602308` (joined-session teardown),
+  `ba3f2adf` and `fa42c43f` (independent background work), `bf00c075`
+  (Redis-backed sessions and cookie/cache lifetime), and `c1116a20`
+  (export cleanup). History identifies mechanisms; it does not prove current behavior.
+- A TCP connection reset is not proof of logout. Distinguish transport errors,
+  HTTP redirects, expired cookies, missing cache entries, and invalid OMERO sessions.
+- XT background health checks must retain the client, cookies and selections
+  during outages or ordinary permission failures, and retry without replaying
+  credentials or writes. Only an explicit authentication rejection permits a
+  local session reset. Test the installed OMERO API's response: HTTP 403 alone
+  is not proof, and a login path in a URL query is not a login redirect.
+- Include manual XT Refresh in that boundary: its historical retry path called
+  reauthentication after any error. Retry browser reads using the original
+  session; never infer expiry from a transport or permission failure. Check
+  stale refresh callbacks cannot clear a newer connection.
+- Treat borrowed gateways as non-owning: `detachOnDestroy()` does not make
+  `BlitzGateway.close()` non-destructive. Use `close(hard=False)` for reconnection
+  and local cleanup. Only explicitly owned job sessions may be terminated.
+- Never retry a failed soft close with a hard close or an unspecified default.
+  Verify the installed gateway API; test doubles must match that supported
+  signature instead of inventing compatibility requirements. Keep cleanup failures visible.
+- Live session checks must preserve the original browser cookie and server
+  session across browsing, rendering, monitoring, imports, exports, and background
+  cleanup. Include an independent idle session beyond the historical five-minute
+  cache timeout, browser-context reopening without login, and logout isolation.
+  Reauthentication or replacing the cookie invalidates a continuity claim.
+- Redis-backed sessions are not disposable cache. Never flush session keys during
+  cleanup. Redis eviction, expiry, restart, and replacement need explicit data-loss
+  analysis and isolated lifecycle tests; a web-container restart test does not
+  prove Redis or OMERO.server restart persistence.
+- Preserve regression evidence and test the identified cause, including error
+  cleanup paths. Do not generalize one import-format result to every login flow.
+
+### Ownership and background work
 
 - When request-scoped helper code joins an existing end-user OMERO session, call `detachOnDestroy()` on the joined session before wrapping it in `BlitzGateway`.
 - Do not reopen the importing user's live OMERO.web session inside background threads or subprocess follow-up work.

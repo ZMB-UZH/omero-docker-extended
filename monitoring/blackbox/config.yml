@@ -10,6 +10,16 @@ modules:
       fail_if_ssl: false
       fail_if_not_ssl: false
       tls_config:
+        ca_file: /run/omero-tls/trust/ca-bundle.pem
+        min_version: TLS12
+  portainer_reachability:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      fail_if_not_ssl: true
+      tls_config:
+        # Reachability only; Portainer manages its independent self-signed cert.
         insecure_skip_verify: true
   tcp_connect:
     prober: tcp

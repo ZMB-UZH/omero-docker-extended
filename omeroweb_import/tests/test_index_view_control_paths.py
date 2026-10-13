@@ -2076,9 +2076,11 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         job_copy = json.loads(json.dumps(base_job))
         updated = updater(job_copy)
         normalized_keep_paths.append(updated["compatibility_status"])
+        assert import_core_functions._save_job(updated)
         return updated
 
     monkeypatch.setattr(index_view, "_update_job", update_job_capture)
+    monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
     normalized_payload = index_view.prune_upload(
         RequestFactory().post("/", data=b"{}", content_type="application/json"),
         job_id=job_id,
@@ -2238,7 +2240,7 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
         "_load_owned_job",
         lambda request, conn, current_job_id, missing_error: (confirm_job, None),
     )
-    monkeypatch.setattr(index_view, "_save_job", lambda job: False)
+    monkeypatch.setattr(index_view, "_update_job", lambda job_id, update: None)
     response = index_view.confirm_import(
         RequestFactory().post("/"), job_id=job_id, conn=object()
     )
@@ -2251,7 +2253,9 @@ def test_prune_upload_edge_paths_cover_payload_normalization_and_error_states(
     confirm_job["status"] = "awaiting_confirmation"
     confirm_job["compatibility_thread_active"] = True
     confirm_job["compatibility_confirmed"] = False
-    monkeypatch.setattr(index_view, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        index_view, "_update_job", lambda job_id, update: update(confirm_job)
+    )
     monkeypatch.setattr(
         index_view,
         "_prepare_ready_job_for_import_start",

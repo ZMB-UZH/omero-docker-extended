@@ -130,7 +130,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
         ]
         for name, package, version in (
             ("PILLOW", "pillow", "12.3.0"),
-            ("MSGPACK", "msgpack", "1.2.2"),
+            ("MSGPACK", "msgpack", "1.2.3"),
         ):
             with self.subTest(package=package):
                 self.assertIn(f"ARG {name}_VERSION={version}\n", hardening)
@@ -143,8 +143,28 @@ class SecurityHardeningContractTests(unittest.TestCase):
         Inputs: package inventories and transaction failures. Output: exact-only removal.
         """
         cases = (
-            ("absent", "python3\nansible-core-extra", {}, 0, False),
+            (
+                "absent",
+                "python3\nansible-core-extra\npython3-setuptools",
+                {},
+                0,
+                False,
+            ),
             ("present", "python3\nansible-core\npython3.12-pip", {}, 0, True),
+            (
+                "unused-setuptools",
+                "python3-setuptools\npython3.11-setuptools\npython3.12-setuptools",
+                {},
+                0,
+                True,
+            ),
+            (
+                "setuptools-required",
+                "python3.11-setuptools",
+                {"RPM_TEST_RC": "68"},
+                68,
+                False,
+            ),
             ("inventory-failed", "ansible-core", {"RPM_QUERY_RC": "67"}, 67, False),
             ("dependency-required", "ansible-core", {"RPM_TEST_RC": "68"}, 68, False),
             ("remove-failed", "ansible-core", {"RPM_REMOVE_RC": "69"}, 69, True),
@@ -193,12 +213,17 @@ class SecurityHardeningContractTests(unittest.TestCase):
                 self.assertEqual(result.returncode, expected_rc, result.stderr)
                 self.assertEqual(removed.exists(), removal_attempted)
                 commands = calls.read_text(encoding="utf-8").splitlines()
-                if name == "present":
+                if name in {"present", "unused-setuptools"}:
+                    packages = (
+                        "ansible-core python3.12-pip"
+                        if name == "present"
+                        else "python3.11-setuptools python3.12-setuptools"
+                    )
                     self.assertEqual(
                         commands[1:3],
                         [
-                            "-e --test -- ansible-core python3.12-pip",
-                            "-e -- ansible-core python3.12-pip",
+                            f"-e --test -- {packages}",
+                            f"-e -- {packages}",
                         ],
                     )
                 elif name in {"absent", "inventory-failed"}:

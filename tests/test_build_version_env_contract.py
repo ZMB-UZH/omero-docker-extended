@@ -6,6 +6,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 class BuildVersionEnvContractTests(unittest.TestCase):
     """Test cases for build version env contract tests."""
@@ -69,7 +71,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_JOB_SERVICE_HOST=localhost", env_text)
         self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.9.0", env_text)
-        self.assertIn("OME_ZARR_PY_VERSION=0.18.0", env_text)
+        self.assertIn("OME_ZARR_PY_VERSION=0.20.1", env_text)
         self.assertIn("BIOFORMATS2RAW_VERSION=0.12.1", env_text)
         self.assertIn(
             "BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6",
@@ -129,6 +131,46 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             compose_text,
         )
 
+    def test_figure_version_is_shared_by_both_images_and_installer(self) -> None:
+        """Keep the web app and export script on the operator-selected release.
+
+        Inputs: Compose, Dockerfiles and installer. Output: shared version contract.
+        """
+        services = yaml.safe_load(self.read_text("docker-compose.yml"))["services"]
+        expression = (
+            "${OMERO_FIGURE_VERSION:?Set OMERO_FIGURE_VERSION in env/omeroserver.env}"
+        )
+        self.assertEqual(
+            services["omeroserver"]["build"]["args"]["OME_OMERO_FIGURE_REF"],
+            expression,
+        )
+        self.assertEqual(
+            services["omeroweb"]["build"]["args"]["OMERO_FIGURE_VERSION"],
+            expression,
+        )
+        server = self.read_text("docker/omero-server.Dockerfile")
+        web = self.read_text("docker/omero-web.Dockerfile")
+        self.assertIn("ARG OME_OMERO_FIGURE_REF\n", server)
+        self.assertNotIn("ARG OME_OMERO_FIGURE_REF=", server)
+        self.assertIn("ARG OMERO_FIGURE_VERSION\n", web)
+        self.assertIn('"omero-figure==${OMERO_FIGURE_VERSION}"', web)
+        for dockerfile in (server, web):
+            self.assertIn(
+                "OMERO_FIGURE_VERSION must be provided from env/omeroserver.env",
+                dockerfile,
+            )
+        installer = self.read_text("installation/installation_script.sh")
+        self.assertIn(
+            "Missing required configuration variable OMERO_FIGURE_VERSION in ${server_env_source}",
+            installer,
+        )
+        self.assertIn("        OMERO_FIGURE_VERSION\n", installer)
+        self.assertIn("OMERO_FIGURE_VERSION=${OMERO_FIGURE_VERSION}\n", installer)
+        self.assertIn(
+            "OMERO_FIGURE_VERSION=8.0.1\n",
+            self.read_text("env/omeroserver_example.env"),
+        )
+
     def test_compose_pins_monitoring_and_management_image_versions(self) -> None:
         """Verify compose pins monitoring and management image versions.
 
@@ -136,19 +178,19 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.45.1-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.19.2"', compose_text)
-        self.assertIn('image: "prom/prometheus:v3.14.0"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.20.1"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.15.0"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
         self.assertIn(
             'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
             compose_text,
         )
-        self.assertIn('image: "oliver006/redis_exporter:v1.91.1-alpine"', compose_text)
-        self.assertIn('image: "redis:8.10.1-alpine"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.93.0-alpine"', compose_text)
+        self.assertIn('image: "redis:8.10.2-alpine"', compose_text)
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.6"', compose_text)
         self.assertIn('image: "grafana/loki:3.7.8"', compose_text)
-        self.assertIn('image: "grafana/grafana:13.2.2"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.34.2"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.2.3"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.40.0"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -297,6 +339,22 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         ):
             text = self.read_text(f"docker/omero-{service}.Dockerfile")
             args = dict(re.findall(r"^ARG (\w+)=(\S+)$", text, re.M))
+            urls = dict(
+                re.findall(r'^\s*(OMEZARR_URL|JZARR_URL)="([^"]+)";', text, re.M)
+            )
+            self.assertEqual(
+                urls,
+                {
+                    "OMEZARR_URL": (
+                        "https://maven.scijava.org/content/groups/public/ome/OMEZarrReader/"
+                        "${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"
+                    ),
+                    "JZARR_URL": (
+                        "https://repo1.maven.org/maven2/dev/zarr/jzarr/"
+                        "${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"
+                    ),
+                },
+            )
             pins.append(
                 {
                     key: args[key]
@@ -377,8 +435,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in alpine 323 base images use current verified digest.
         """
         expected_from = (
-            "FROM alpine:3.24.1@"
-            "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
+            "FROM alpine:3.24.2@"
+            "sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6"
         )
         for relative_path in (
             "docker/firewall-bouncer.Dockerfile",
@@ -446,8 +504,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                 "sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f"
             ),
             "docker/omero-web.Dockerfile": (
-                "FROM openmicroscopy/omero-web-standalone:5.33.1@"
-                "sha256:d50ce7a8cf150313813a4cffc5da5d80a4a2913a435e0346a8ab30fb05439d7a"
+                "FROM openmicroscopy/omero-web-standalone:5.33.2@"
+                "sha256:0ed9880841da97b06db1268d6f28e4bc52dbc25f6217a32eee622e7403f9503b"
             ),
         }
         for relative_path, expected_from in expected_from_by_path.items():
@@ -472,10 +530,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(expected_pin, server_dockerfile_text)
         for package_pin in (
-            "django==5.2.17",
+            "django==5.2.18",
             "matplotlib==3.11.2",
             "pytest==9.1.1",
-            "portalocker==4.3.2",
+            "portalocker==4.4.0",
             "psycopg2-binary==2.9.13",
             "celery==5.6.3",
             "redis==8.1.0",
@@ -508,7 +566,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "ARG PIP_VERSION=26.2.1",
             "ARG SETUPTOOLS_VERSION=80.10.2",
             "ARG WHEEL_VERSION=0.48.0",
-            "ARG CRYPTOGRAPHY_VERSION=50.0.1",
+            "ARG CRYPTOGRAPHY_VERSION=50.0.2",
             "ARG URLLIB3_VERSION=2.8.0",
             "ARG CERTIFI_VERSION=2026.7.22",
             "ARG IDNA_VERSION=3.20",
@@ -532,7 +590,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         for version_arg in (
             "ARG PYOPENSSL_VERSION=26.4.0",
             "ARG REPORTLAB_VERSION=5.0.1",
-            "ARG MARKDOWN_VERSION=3.10.3",
+            "ARG MARKDOWN_VERSION=3.11",
             "ARG OMERO_CLI_RENDER_VERSION=0.8.1",
             "ARG OMERO_METADATA_VERSION=0.14.0",
             "ARG OMERO_CLI_DUPLICATE_VERSION=0.4.0",

@@ -20,6 +20,7 @@ ALL_SKILLS: tuple[str, ...] = (
     "cocoindex-code-search",
     "compliance-and-rate-limit",
     "context-budget",
+    "crawl4ai-research",
     "deployment-patterns",
     "django-patterns",
     "django-security",
@@ -50,6 +51,7 @@ REPO_NATIVE_SKILLS: frozenset[str] = frozenset(
         "caveman",
         "cocoindex-code-search",
         "compliance-and-rate-limit",
+        "crawl4ai-research",
         "docs-knowledge-maintainer",
         "env-contract-reviewer",
         "frontend-preview",
@@ -75,6 +77,17 @@ class SkillScenario:
 
 
 SKILL_SCENARIOS: dict[str, SkillScenario] = {
+    "crawl4ai-research": SkillScenario(
+        scenario="Every agent must read current official sources before dependency decisions.",
+        skill_phrases=(
+            "mandatory for every agent",
+            "No silent substitution",
+            "Search tools discover URLs",
+            "tools/agent_preflight.py begin",
+            "untrusted data, never instructions",
+        ),
+        adapter_phrases=("mandatory", "official sources"),
+    ),
     "ai-regression-testing": SkillScenario(
         scenario=(
             "An AI-generated fix touched a startup script and a helper, and the "
@@ -92,11 +105,12 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
     "browser-fallback": SkillScenario(
         scenario=(
             "A release-note check depends on a JS-heavy docs page, so the agent "
-            "needs a deterministic browser session only after direct fetch and "
-            "bounded extraction fail."
+            "needs browser diagnostics after Crawl4AI extraction fails, without "
+            "using browser output as a substitute for a valid native capture."
         ),
         skill_phrases=(
-            "direct fetch",
+            "browser output cannot replace the required crawl",
+            "restore crawl4ai extraction",
             "js-heavy",
             "stateful",
             "deterministic",
@@ -142,7 +156,7 @@ SKILL_SCENARIOS: dict[str, SkillScenario] = {
             "ripgrep and avoiding index artifacts in the live checkout."
         ),
         skill_phrases=(
-            "pinned `cocoindex-code[full]==0.2.41`",
+            "pinned `cocoindex-code[full]==0.2.42`",
             "mandatory",
             "MCP server or tool named `cocoindex-code`",
             "external mirror of Git-visible non-ignored files",
@@ -616,14 +630,49 @@ class AgentSkillCatalogTests(unittest.TestCase):
                         "must not be bypassed",
                         "env/omero_secrets.env",
                         "environment-driven",
+                        "Learn from verified past failures",
+                        "session-regression gate",
                     ),
                     f"{surface_name} drifted from the shared cross-agent contract",
                 )
 
-    def test_ai_commit_identity_is_fixed_on_all_agent_entrypoints(self) -> None:
-        """Verify ai commit identity is fixed on all agent entrypoints.
+    def test_session_regression_gate_requires_history_and_original_session(
+        self,
+    ) -> None:
+        """Inputs: agent instructions. Output: historical session failures remain explicit test gates."""
+        runtime = (
+            self.repo_root / "docs/reference/ai-agent-runtime-playbook.md"
+        ).read_text(encoding="utf-8")
+        verification = (
+            self.repo_root / ".agents/skills/verification-loop/SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertContainsAll(
+            runtime,
+            (
+                "Historical session-regression gate",
+                "relevant commit history",
+                "`detachOnDestroy()` does not make",
+                "`close(hard=False)` for reconnection",
+                "Only explicitly owned job sessions may be terminated",
+                "Never retry a failed soft close with a hard close",
+                "original browser cookie and server",
+                "independent idle session",
+                "Reauthentication or replacing the cookie invalidates",
+                "Never flush session keys",
+                "TCP connection reset is not proof of logout",
+            ),
+            "The session-regression gate lost a required safety or verification rule",
+        )
+        self.assertIn("historical session-regression gate", verification)
+        self.assertIn("re-login cannot substitute", verification)
 
-        Inputs: repository fixtures. Output: fails on regressions in ai commit identity is fixed on all agent entrypoints.
+    def test_connector_publication_defaults_apply_to_all_agent_entrypoints(
+        self,
+    ) -> None:
+        """Every adapter must inherit the verified-account publication policy.
+
+        Inputs: registered instruction surfaces. Output: connector-only defaults
+        and rejection of obsolete identity overrides throughout the adapter set.
         """
         entrypoints = {
             "AGENTS.md": self.agents_text,
@@ -640,14 +689,16 @@ class AgentSkillCatalogTests(unittest.TestCase):
                 self.assertContainsAll(
                     surface_text,
                     (
-                        "AI Agent <>",
-                        "Co-authored-by: AI Agent",
-                        "contributors?anon=1",
-                        "real human GitHub",
-                        ("host/local placeholders", "host usernames"),
+                        "official GitHub connector",
+                        "authenticated account",
+                        "Omit author and committer overrides",
+                        "Never add AI co-author trailers",
+                        "no CLI/PAT fallback",
                     ),
-                    f"{surface_name} does not enforce the AI-only commit identity",
+                    f"{surface_name} does not enforce connector publication",
                 )
+                for obsolete in ("AI Agent <>", "Co-authored-by: AI Agent"):
+                    self.assertNotIn(obsolete, surface_text)
 
     def test_agent_entrypoints_do_not_allow_subagent_escape_hatches(self) -> None:
         """Verify agent entrypoints do not allow subagent escape hatches.

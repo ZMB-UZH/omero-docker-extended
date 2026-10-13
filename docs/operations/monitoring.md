@@ -4,16 +4,16 @@
 
 | Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
 | -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
-| Prometheus                 | v3.14.0              | Metrics scraping and storage                                            | `http://prometheus:9090`                   |
-| Grafana                    | 13.2.2               | Dashboards and visualization                                            | `http://grafana:3000`                      |
-| Loki                       | 3.7.8                | Log aggregation backend                                                 | `http://loki:3100`                         |
-| Alloy                      | v1.19.2              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
+| Prometheus                 | v3.15.0              | Metrics scraping and storage                                            | `https://prometheus:9090`                  |
+| Grafana                    | 13.2.3               | Dashboards and visualization                                            | `https://grafana:3000`                     |
+| Loki                       | 3.7.8                | Log aggregation backend                                                 | `https://loki:3100`                        |
+| Alloy                      | v1.20.1              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
 | Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
 | Node exporter              | v1.12.1              | Host-level metrics                                                      | `http://node-exporter:9100`                |
 | cAdvisor                   | v0.60.6              | Container resource metrics                                              | `http://cadvisor:8080`                     |
 | Postgres exporter          | v0.20.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
 | Postgres exporter (plugin) | v0.20.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
-| Redis exporter             | v1.91.1              | Redis metrics                                                           | `http://redis-exporter:9121`               |
+| Redis exporter             | v1.93.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
 | Path usage exporter        | custom (Python 3.12) | OMERO volume disk usage via textfile collector                          | writes to node-exporter textfile directory |
 | CrowdSec                   | v1.8.1               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
 
@@ -21,6 +21,67 @@ Loki uses its native `-health` readiness check. Alloy checks its HTTP readiness
 endpoint with the Bash and timeout utilities already present in the pinned
 image. These checks require a ready application, not merely a running process;
 non-success HTTP responses mark the service unhealthy.
+
+## Internal TLS lifecycle
+
+Grafana, Prometheus and Loki serve HTTPS. Their configured clients verify the
+certificate chain and peer name, including Admin Tools, Alloy and blackbox
+probes. Both PostgreSQL exporters use `verify-full`; enabling PostgreSQL TLS
+does not change unrelated database clients or require a database migration.
+Exporter credentials are passed through the PostgreSQL driver's environment,
+never embedded in a connection string that could appear in an error.
+
+The networkless `internal-tls` service maintains a separate installation CA.
+Only that service mounts the private authority volume. Each server receives
+only its own private key; clients receive a read-only public trust volume.
+The CA is name-constrained to the configured internal identities. No host-wide
+trust-store modification, public DNS name, public port, or internet connection
+is required for issuance or renewal.
+
+- Server certificates last 30 days and renew with 10 days remaining. The issuer
+  checks every five minutes and retries storage failures without replacing keys.
+- The authority certificate renews one year before its ten-year expiry.
+  Routine certificate renewal retains keys, avoiding inconsistent certificate
+  and key reads during native reloads.
+- Prometheus and Loki reload server certificates natively. Grafana watches
+  certificate changes; its wrapper gracefully restarts Grafana when the public
+  trust bundle changes. PostgreSQL reloads certificates without disconnecting
+  active transactions. Clients reload trust on subsequent connections.
+- After a prolonged shutdown, the issuer renews expired material on startup.
+  Clients fail closed until valid material is available; there is no plaintext
+  fallback or disabled certificate verification.
+- Healthchecks validate issuer activity, certificates, identities and matching
+  keys. Monitor issuer health, available disk space and actual write/query
+  operations. A successful readiness request alone does not prove that Loki
+  is accepting logs when its storage protection has activated.
+
+Keep all `internal-tls-*` named volumes with the installation's persistent state
+and encrypted recovery backups. Never remove them as build-cache cleanup.
+Loss or compromise of key material requires deliberate recovery, not an
+automatic trust reset. Routine expiry is managed automatically; storage faults,
+clock faults and compromised credentials still require operator attention.
+
+### Fresh installs and upgrades
+
+Fresh installs use the HTTPS defaults in `env/omeroweb_example.env`. Before an
+upgrade, review `ADMIN_TOOLS_GRAFANA_URL`, `ADMIN_TOOLS_PROMETHEUS_URL` and
+`ADMIN_TOOLS_LOKI_URL` in the operator-owned web environment. They must identify
+HTTPS backends. The environment and Compose guards reject plaintext settings
+before starting services; they never rewrite those files.
+
+Default certificate identities match the shipped Compose aliases and loopback
+healthchecks, not the host's address or public domain. Custom service identities
+or container account mappings can supply `INTERNAL_TLS_IDENTITIES_FILE` through
+Compose configuration. Its JSON schema is illustrated by
+`monitoring/tls/identities.json`; ownership refers to container accounts, never
+host login accounts. Preserve the installation's Compose project identity on
+upgrade so existing certificate volumes are reused.
+
+Use the authenticated Admin Tools links for dashboards and Prometheus targets.
+Direct diagnostic clients must explicitly trust the installation's public CA;
+do not use insecure client flags or install the private authority key on a host.
+Portainer retains its separately managed certificate and isolated reachability
+probe. Its existing self-signed probe policy does not apply to managed TLS.
 
 Monitoring data-directory ownership is auto-detected by
 `installation/installation_script.sh` before each install/update. For images
@@ -89,7 +150,7 @@ What this means operationally:
 
 Quick operator check after any change:
 
-1. Open `http://localhost:9090/targets`.
+1. Open **Prometheus targets** from Admin Tools resource monitoring.
 2. Confirm expected jobs are `UP`.
 3. If a target is missing, add/update it in `monitoring/prometheus/prometheus.yml` and reload Prometheus (`/-/reload`) or restart the service.
 
@@ -184,7 +245,7 @@ collector paths (`/logs/omeroserver`, `/logs/omeroweb`, and
 installation root. Labeled with `compose_service`, `log_type=internal`, and
 `filepath`.
 
-All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
+All logs are pushed to Loki at `https://loki:3100/loki/api/v1/push` with peer verification.
 
 The internal OMERO file tails start from the beginning when Alloy has no stored
 position (`tail_from_end = false`). That keeps first-run and recreated-collector
@@ -231,7 +292,7 @@ Expected startup log lines:
 
 ## Operational baseline checks
 
-1. Prometheus targets page (`http://localhost:9090/targets`) shows all targets as UP.
+1. Prometheus targets, opened through Admin Tools, show all expected jobs as UP.
 2. Grafana data sources are healthy (Settings > Data Sources > Test).
 3. Loki receives logs: query `{compose_service=~".+"}` returns recent entries.
 4. All four dashboards load with recent data.
@@ -241,30 +302,43 @@ Expected startup log lines:
 
 Use these host-side commands when Grafana panels are blank or proxy navigation fails.
 
+Run from the canonical installation. This helper uses the public CA already
+mounted in Grafana and Docker's internal service names, independently of host
+bindings. It does not expose credentials or relax certificate verification.
+
+```bash
+python3 tools/env_safety_guard.py check
+python3 tools/env_safety_guard.py compose-guard
+monitoring_request() {
+    docker compose exec -T grafana curl --fail --silent --show-error \
+        --cacert /run/omero-tls/trust/ca-bundle.pem "$@"
+}
+```
+
 ### 1) Validate scrape jobs and node exporter target labels
 
 ```bash
-curl -s http://127.0.0.1:9090/api/v1/label/job/values
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=up{job=~"node-exporter|node_exporter"}'
-curl -s http://127.0.0.1:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="node_exporter" or .labels.job=="node-exporter") | {health:.health,instance:.labels.instance,lastError:.lastError,scrapeUrl:.scrapeUrl}'
+monitoring_request https://prometheus:9090/api/v1/label/job/values
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=up{job=~"node-exporter|node_exporter"}'
+monitoring_request https://prometheus:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="node_exporter" or .labels.job=="node-exporter") | {health:.health,instance:.labels.instance,lastError:.lastError,scrapeUrl:.scrapeUrl}'
 ```
 
 ### 2) Validate Host CPU / Host memory panel queries directly in Prometheus
 
 ```bash
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))'
-curl -sG http://127.0.0.1:9090/api/v1/query_range --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))'
-curl -sG http://127.0.0.1:9090/api/v1/query_range --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))'
+monitoring_request -G https://prometheus:9090/api/v1/query_range --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))'
+monitoring_request -G https://prometheus:9090/api/v1/query_range --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
 ```
 
 ### 3) Diagnose Local IP panel data availability
 
 ```bash
 curl -s http://127.0.0.1:9100/metrics | grep -E 'node_network_address_info|node_network_route_info' | head -n 50
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=max by (address) (node_network_address_info{job=~"node-exporter|node_exporter", family="inet", scope="global"})'
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([0-9.]+):.*$")'
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([^:]+):.*$")'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=max by (address) (node_network_address_info{job=~"node-exporter|node_exporter", family="inet", scope="global"})'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([0-9.]+):.*$")'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([^:]+):.*$")'
 ```
 
 If `node_network_address_info` is absent from `/metrics`, node-exporter is not exposing interface-address metrics in the current runtime; the dashboard then falls back to `instance` label parsing.
@@ -305,10 +379,11 @@ When Grafana is down or unreachable, the proxy now returns a custom `503 Service
 ```bash
 docker compose exec grafana grafana-server -v
 docker compose images grafana
-curl -s http://127.0.0.1:3000/api/health
-curl -s http://127.0.0.1:3000/api/datasources
-curl -s -u "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" http://127.0.0.1:3000/api/datasources | jq '.[].name'
+monitoring_request https://grafana:3000/api/health
 ```
+
+Use the authenticated Grafana interface through Admin Tools to test data sources;
+do not place operator passwords in command-line arguments.
 
 If runtime Grafana version does not match the tag pinned in `docker-compose.yml`, refresh only the Grafana service image and container:
 
@@ -330,8 +405,8 @@ Panel query (from `monitoring/grafana/dashboards/omero-infrastructure.json`):
 Direct checks:
 
 ```bash
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}'
-curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}'
+monitoring_request -G https://prometheus:9090/api/v1/query --data-urlencode 'query=node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}'
 ```
 
 Interpretation:

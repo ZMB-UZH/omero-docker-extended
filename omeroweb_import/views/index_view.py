@@ -1693,16 +1693,31 @@ def confirm_import(request, job_id, conn=None, _url=None, **kwargs):
     if job.get("status") != "awaiting_confirmation":
         return JsonResponse({"ok": True, "status": job.get("status")})
 
-    job["compatibility_confirmed"] = True
-    job["compatibility_thread_active"] = False
-    job["status"] = "ready"
-    job["updated"] = time.time()
-    if not _save_job(job):
+    confirmed = False
+
+    def confirm_waiting_job(current_job):
+        """Confirm only a job that still awaits this decision.
+
+        Inputs: locked current job. Output: unchanged advanced job or ready job.
+        """
+        nonlocal confirmed
+        confirmed = current_job.get("status") == "awaiting_confirmation"
+        if confirmed:
+            current_job["compatibility_confirmed"] = True
+            current_job["compatibility_thread_active"] = False
+            current_job["status"] = "ready"
+            current_job["updated"] = time.time()
+        return current_job
+
+    job = _update_job(job_id, confirm_waiting_job)
+    if job is None:
         logger.error(
             "Unable to persist confirmation state for upload job %s.",
             sanitize_log_value(job_id),
         )
         return json_error(errors.unable_update_upload_job_state(), status=500)
+    if not confirmed:
+        return JsonResponse({"ok": True, "status": job.get("status")})
     _prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
     if prep_error:
         return _import_internal_error_response(

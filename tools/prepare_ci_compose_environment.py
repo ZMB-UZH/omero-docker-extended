@@ -81,12 +81,16 @@ def _copy_contract_exclusively(source: Path, target: Path) -> None:
         ) from exc
     try:
         with os.fdopen(file_descriptor, "wb") as target_file:
+            file_descriptor = -1
             target_file.write(source_bytes)
             target_file.flush()
             os.fsync(target_file.fileno())
     except Exception:
         target.unlink(missing_ok=True)
         raise
+    finally:
+        if file_descriptor >= 0:
+            os.close(file_descriptor)
 
 
 def _load_environment_values(pairs: Sequence[tuple[Path, Path]]) -> dict[str, str]:

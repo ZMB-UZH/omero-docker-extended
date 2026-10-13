@@ -5,15 +5,17 @@
 #     --output-file .github/requirements/tests-ci.txt \
 #     .github/requirements/tests-ci.in
 pytest==9.1.1
-coverage==7.16.1
-django==5.2.17
-cryptography==50.0.1
+coverage==7.16.2
+# The source-inventory regression executes the real type checker.
+mypy==2.4.0
+django==5.2.18
+cryptography==50.0.2
 pyyaml==6.0.3
-portalocker==4.3.2
+portalocker==4.4.0
 psycopg2-binary==2.9.13
 numpy==2.5.3
 numcodecs==0.17.0
 matplotlib==3.11.2
-ome-zarr==0.19.2
+ome-zarr==0.20.1
 zarr==3.4.0
-tifffile==2026.9.15
+tifffile==2026.9.20

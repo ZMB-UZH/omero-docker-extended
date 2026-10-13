@@ -26,10 +26,14 @@ declare -a RETAINED_DIRS=()
 declare -a RETAINED_FILES=()
 declare -a RETAINED_MARKERS=()
 declare -a LOCKED_SCOPES=()
+declare -a PRESERVED_PATHS=()
+if [[ -n "${OMERO_TMP_PRESERVE_DIR:-}" ]]; then
+    PRESERVED_PATHS+=("${OMERO_TMP_PRESERVE_DIR}")
+fi
 
 # Print usage text. Inputs: shell arguments and environment. Output: command status and side effects.
 usage() {
-    echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>]" >&2
+    echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>] [--preserve-dir <DIR>]..." >&2
 }
 
 # Require option value. Inputs: shell arguments and environment. Output: command status and side effects.
@@ -61,6 +65,11 @@ while [[ $# -gt 0 ]]; do
         --max-age-seconds)
             require_option_value "$1" "${2:-}"
             MAX_AGE_SECONDS="${2:-}"
+            shift 2
+            ;;
+        --preserve-dir)
+            require_option_value "$1" "${2:-}"
+            PRESERVED_PATHS+=("$2")
             shift 2
             ;;
         -h|--help)
@@ -102,6 +111,16 @@ if ! is_non_negative_integer "${MAX_AGE_SECONDS}"; then
     echo "ERROR: --max-age-seconds must be an integer." >&2
     exit 2
 fi
+
+# Validate every preservation boundary before inventory or deletion. Keep both
+# the requested path and its resolved target so symlinked mounts survive too.
+for preserved in "${PRESERVED_PATHS[@]}"; do
+    if [[ "${preserved}" != /* || ! -d "${preserved}" ]]; then
+        echo "ERROR: Each preserved path must be an existing absolute directory." >&2
+        exit 3
+    fi
+    RETAINED_DIRS+=("$(realpath -ms -- "${preserved}")" "$(realpath -e -- "${preserved}")")
+done
 
 MAX_AGE_MINUTES=$(( MAX_AGE_SECONDS / 60 ))
 if ! command -v flock >/dev/null 2>&1; then

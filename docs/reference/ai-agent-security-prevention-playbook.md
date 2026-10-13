@@ -302,6 +302,10 @@ Required rules:
 - Use full executable paths or verify the executable explicitly.
 - In shell scripts, quote variables and restore `IFS` after temporary changes.
 - Do not concatenate user text into shell snippets to silence a scanner. Redesign the interface instead.
+- Read Git filename lists with NUL framing and filesystem decoding, not line
+  splitting or display-quote parsing. Test mixed ordinary and quoted filenames.
+  An explicitly empty changed-file list must stay empty; reserve `None` for a
+  full scan so unchanged files do not alter a diff-only result.
 
 ### 8. Dockerfiles, workflows, and supply chain
 

@@ -2565,10 +2565,11 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual(job_payload, job)
         self.assertIsNone(error_response)
 
-    def test_confirm_import_defers_dataset_preparation_to_background_thread(self):
-        """Verify confirm import defers dataset preparation to background thread.
+    def test_confirm_import_persists_ready_job_before_starting_background_import(self):
+        """Persist confirmation before starting import, using isolated real job storage.
 
-        Inputs: repository fixtures. Output: fails on regressions in confirm import defers dataset preparation to background thread.
+        Inputs: an awaiting-confirmation job in private temporary storage.
+        Output: ready state reaches disk before the background import starts.
         """
         job_id = "d" * 32
         request = types.SimpleNamespace(
@@ -2582,30 +2583,51 @@ class ImportPluginRegressionTests(TestCase):
         }
         import_started = []
 
+        def start_import(job_id):
+            """Inputs: confirmed job ID. Output: checks persisted state before recording start."""
+            saved = core_functions._load_job(job_id)
+            self.assertTrue(saved["compatibility_confirmed"])
+            self.assertFalse(saved["compatibility_thread_active"])
+            self.assertEqual("ready", saved["status"])
+            import_started.append(job_id)
+
         with (
+            tempfile.TemporaryDirectory() as temporary,
+            mock.patch.object(
+                core_functions,
+                "_DIRECTORY_CACHE",
+                core_functions._DirectoryCache(
+                    upload_root=Path(temporary) / "uploads",
+                    jobs_root=Path(temporary) / "jobs",
+                    initialized=True,
+                ),
+            ),
             mock.patch.object(
                 index_view, "_load_owned_job", return_value=(job_payload, None)
             ),
-            mock.patch.object(index_view, "_save_job", return_value=True),
             mock.patch.object(
-                index_view,
-                "_prepare_job_import_datasets",
-                side_effect=AssertionError("dataset prep must stay off confirm_import"),
+                core_functions,
+                "_get_or_create_dataset",
+                side_effect=AssertionError("an empty job must not create a dataset"),
             ),
             mock.patch.object(
                 index_view,
                 "_start_import_thread",
-                side_effect=import_started.append,
+                side_effect=start_import,
             ),
         ):
+            core_functions._get_jobs_root().mkdir(mode=0o700)
+            core_functions._get_upload_root().mkdir(mode=0o700)
+            self.assertTrue(core_functions._save_job(job_payload))
             response = index_view.confirm_import(request, conn=object(), job_id=job_id)
+            saved = core_functions._load_job(job_id)
 
         status, payload = self._json_status_and_payload(response)
         self.assertEqual(200, status)
         self.assertEqual({"ok": True, "status": "ready"}, payload)
-        self.assertTrue(job_payload["compatibility_confirmed"])
-        self.assertFalse(job_payload["compatibility_thread_active"])
-        self.assertEqual("ready", job_payload["status"])
+        self.assertTrue(saved["compatibility_confirmed"])
+        self.assertFalse(saved["compatibility_thread_active"])
+        self.assertEqual("ready", saved["status"])
         self.assertEqual([job_id], import_started)
 
     def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
@@ -2734,8 +2756,8 @@ class ImportPluginRegressionTests(TestCase):
             ),
             mock.patch.object(
                 core_functions,
-                "_save_job",
-                return_value=True,
+                "_update_job",
+                side_effect=lambda job_id, update: update(job),
             ),
         ):
             prepared_job, error = core_functions._prepare_request_job_import_datasets(

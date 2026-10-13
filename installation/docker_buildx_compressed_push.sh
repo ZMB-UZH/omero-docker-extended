@@ -791,6 +791,9 @@ def _emit_import_changes(image_metadata):
 
     lines.extend(_emit_healthcheck(config))
 
+    if config.get("Shell"):
+        lines.append(f"SHELL {_compact_json(config['Shell'])}")
+
     if config.get("Entrypoint") is not None:
         lines.append(f"ENTRYPOINT {_compact_json(config.get('Entrypoint') or [])}")
     if config.get("Cmd") is not None:

@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import django
+import pytest
 from django.conf import settings
 from django.test import RequestFactory
 
@@ -815,7 +816,9 @@ def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_impo
     monkeypatch.setattr(
         core_functions, "_get_or_create_dataset", fake_get_or_create_dataset
     )
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        core_functions, "_update_job", lambda job_id, update: update(job)
+    )
 
     job = {
         "job_id": "c" * 32,
@@ -882,7 +885,9 @@ def test_prepare_request_job_import_datasets_uses_planned_import_units_for_gener
     monkeypatch.setattr(
         core_functions, "_get_or_create_dataset", fake_get_or_create_dataset
     )
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        core_functions, "_update_job", lambda job_id, update: update(job)
+    )
 
     job = {
         "job_id": "d" * 32,
@@ -3278,6 +3283,39 @@ def test_read_proc_rchar_returns_int_for_current_process():
     assert rchar is None or isinstance(rchar, int)
 
 
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("wchar: 23\nrchar: 451\nsyscr: 3\n", 451),
+        ("rchar: not-an-integer\n", None),
+        ("wchar: 23\n", None),
+        ("", None),
+    ],
+)
+def test_read_proc_rchar_parses_valid_and_incomplete_counters(
+    monkeypatch, content, expected
+):
+    """Verify counter parsing without relying on host procfs capabilities.
+
+    Inputs: valid, malformed or missing rchar records. Output: exact byte count
+    or unavailable result, with the expected read-only procfs access.
+    """
+    import io
+    import os
+
+    pid = os.getpid()
+    opened = []
+
+    def open_counter(path, mode, *, encoding):
+        """Inputs: requested procfs path and mode. Output: isolated counter text."""
+        opened.append((path, mode, encoding))
+        return io.StringIO(content)
+
+    monkeypatch.setattr(Path, "open", open_counter)
+    assert core_functions._read_proc_rchar(pid) == expected
+    assert opened == [(Path("/proc") / str(pid) / "io", "r", "utf-8")]
+
+
 def test_read_proc_rchar_returns_none_for_missing_pid():
     """Verify read proc rchar returns none for missing pid result shape.
 
@@ -3285,6 +3323,39 @@ def test_read_proc_rchar_returns_none_for_missing_pid():
     """
     result = core_functions._read_proc_rchar(999999999)
     assert result is None
+
+
+@pytest.mark.parametrize(
+    ("contents", "expected"),
+    [
+        ("wchar: 3\nrchar: 12345\nsyscr: 1\n", 12345),
+        ("rchar: 0\n", 0),
+        ("rchar: invalid\n", None),
+        ("wchar: 3\n", None),
+    ],
+)
+def test_read_proc_rchar_parses_real_file_contents(
+    tmp_path, monkeypatch, contents, expected
+):
+    """Check parsing independently of optional kernel process-accounting support.
+
+    Inputs: real temporary proc-style file and expected count. Output: parser checks.
+    """
+    fixture = tmp_path / "io"
+    fixture.write_text(contents, encoding="utf-8")
+    original_open = Path.open
+    requested = []
+
+    def proc_open(path, *args, **kwargs):
+        """Inputs: requested path and open arguments. Output: real file handle."""
+        if path == Path("/proc/123/io"):
+            requested.append(path)
+            path = fixture
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", proc_open)
+    assert core_functions._read_proc_rchar(" 123 ") == expected
+    assert requested == [Path("/proc/123/io")]
 
 
 def test_read_proc_rchar_rejects_invalid_pid_values():

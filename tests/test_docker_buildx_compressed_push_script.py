@@ -355,7 +355,7 @@ exit 0
                 '"Entrypoint":["/hello.txt"],'
                 '"Cmd":["--serve"],'
                 '"OnBuild":[],'
-                '"Shell":["/bin/sh","-c"],'
+                '"Shell":["/bin/bash","-o","pipefail","-c"],'
                 '"Healthcheck":{"Test":["CMD","/hello.txt"],'
                 '"Interval":5000000000,'
                 '"Timeout":3000000000,'
@@ -424,6 +424,10 @@ exit 0
             )
             self.assertIn(
                 'DOCKERFILE ENTRYPOINT ["/hello.txt"]',
+                joined_log,
+            )
+            self.assertIn(
+                'DOCKERFILE SHELL ["/bin/bash","-o","pipefail","-c"]',
                 joined_log,
             )
             self.assertIn(

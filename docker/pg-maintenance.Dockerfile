@@ -42,7 +42,7 @@ COPY maintenance/postgres/pg-maintenance-cron  /etc/cron.d/pg-maintenance
 
 # Make script executable, set correct cron permissions, create log file
 # ---------------------------------------------------------------------
-RUN chmod +x /usr/local/bin/pg-maintenance.sh /usr/local/bin/pg-maintenance-cron-runner && \
+RUN chmod 0555 /usr/local/bin/pg-maintenance.sh /usr/local/bin/pg-maintenance-cron-runner && \
     chmod 0644 /etc/cron.d/pg-maintenance && \
     touch /var/log/pg-maintenance.log
 
@@ -50,7 +50,7 @@ RUN chmod +x /usr/local/bin/pg-maintenance.sh /usr/local/bin/pg-maintenance-cron
 # then start cron in the foreground while tailing the log
 # -------------------------------------------------------
 COPY maintenance/postgres/pg-maintenance-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod 0555 /usr/local/bin/entrypoint.sh
 
 HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=30 \
     CMD pgrep -x cron >/dev/null || exit 1

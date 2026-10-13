@@ -288,64 +288,31 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("Docker Compose/Prometheus fallback", template)
         self.assertNotIn("volumes: - /var/run/docker.sock", template)
 
-    def test_current_branch_history_uses_exact_ai_agent_identity(self) -> None:
-        """Verify current branch history uses exact ai agent identity.
+    def test_publication_contract_preserves_history_and_uses_verified_account(
+        self,
+    ) -> None:
+        """Protect connector defaults without requiring destructive history cleanup.
 
-        Inputs: repository fixtures. Output: fails on regressions in current branch history uses exact ai agent identity.
+        Inputs: publication contract. Output: verified-account defaults and
+        separate historical migration approval remain mandatory.
         """
-        git_path = shutil.which("git")
-        self.assertIsNotNone(git_path)
-        output = subprocess.check_output(
-            [
-                git_path,
-                "log",
-                "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x00END",
-            ],
-            cwd=self.repo_root,
-            text=True,
-            encoding="utf-8",
-        )
-        forbidden_emails = {
-            "ai-" + "agent@users.noreply.github.com",
-            "co" + "dex@local",
-            "co" + "dex@openai.com",
-            "co" + "dex@openai.invalid",
-        }
-        bad_identities: list[str] = []
-        for record in output.split("\0END\n"):
-            if not record.strip():
-                continue
-            (
-                commit,
-                author_name,
-                author_email,
-                committer_name,
-                committer_email,
-                body,
-            ) = record.lstrip("\n").split("\0", maxsplit=5)
-            identities = (
-                ("author", author_name, author_email),
-                ("committer", committer_name, committer_email),
-            )
-            for role, name, email in identities:
-                lower_name = name.casefold()
-                bad_name = lower_name in {"ai-agent", "codex"} or (
-                    lower_name == "ai agent" and name != "AI Agent"
-                )
-                bad_ai_email = name == "AI Agent" and email != ""
-                if bad_name or bad_ai_email or email in forbidden_emails:
-                    bad_identities.append(f"{commit} {role}: {name} <{email}>")
-            for line in body.splitlines():
-                if line.casefold().startswith("co-authored-by:"):
-                    trailer = line.removeprefix("Co-authored-by:").strip()
-                    if trailer.casefold().startswith(("ai agent", "ai-agent", "codex")):
-                        self.assertEqual(
-                            "AI Agent",
-                            trailer,
-                            f"{commit} has invalid AI co-author trailer: {line}",
-                        )
-
-        self.assertEqual([], bad_identities)
+        contract = self.read_text("docs/reference/ai-agent-task-contracts.md")
+        for required in (
+            "authenticated account",
+            "effective\n   write permission",
+            "Omit author and committer overrides",
+            "expected head and no force",
+            "Do not rewrite published history",
+            "explicit migration scope and verified preservation checks",
+            "no CLI/PAT fallback",
+        ):
+            self.assertIn(required, contract)
+        for obsolete in (
+            "AI Agent <>",
+            "Co-authored-by: AI Agent",
+            "git -c user.name=",
+        ):
+            self.assertNotIn(obsolete, contract)
 
     def test_readme_repository_layout_paths_exist_and_stay_concise(self) -> None:
         """Verify README repository layout describes real paths compactly.
@@ -693,7 +660,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.34.2"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.40.0"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -710,10 +677,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.34.2",
+            "README.md": "ollama/ollama:0.40.0",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.34.2",
+            "docs/references/docker-compose-llms.txt": "Ollama 0.40.0",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():
@@ -957,12 +924,14 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         self.assertIn("tools/scanner_inventory.py deepsource", runbook_text)
         self.assertIn("tools/scanner_inventory.py deepsource-issues", runbook_text)
         self.assertIn("prompts without echo on a TTY", runbook_text)
-        self.assertIn("non-TTY agent shells", runbook_text)
-        self.assertIn("short-lived `GITHUB_TOKEN`", runbook_text)
         self.assertIn("Never paste PATs into command arguments", runbook_text)
-        self.assertIn("GitHub HTTPS Git operations require a PAT", runbook_text)
         self.assertIn(
-            'tools/git_push_with_pat.py origin "HEAD:${default_branch}"',
+            "read-only scanner inventory, not agent publication", runbook_text
+        )
+        self.assertIn("official GitHub connector", runbook_text)
+        self.assertIn("no CLI/PAT fallback", runbook_text)
+        self.assertIn(
+            "repository write permission and expected head",
             runbook_text,
         )
         self.assertIn("temp files", runbook_text)
@@ -995,7 +964,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             expected_runbook_phrase,
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
-        expected_auth_phrase = "ask immediately and pause for input"
+        expected_auth_phrase = "ask immediately and pause publication"
         for adapter_path in (
             "CLAUDE.md",
             "GEMINI.md",
@@ -1006,8 +975,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             normalized_adapter_text = " ".join(adapter_text.split())
             self.assertIn(".deepsource.toml", adapter_text)
             self.assertIn("ask immediately", normalized_adapter_text)
-            self.assertIn("credential", normalized_adapter_text)
-            self.assertIn("PAT", normalized_adapter_text)
+            self.assertIn("authenticated account", normalized_adapter_text)
+            self.assertIn("no CLI/PAT fallback", normalized_adapter_text)
             self.assertIn("GitHub workflows", normalized_adapter_text)
             self.assertIn("DeepSource", normalized_adapter_text)
             self.assertIn("skipped or unavailable", normalized_adapter_text)
@@ -1025,9 +994,15 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.repo_root, ".github/copilot-instructions.md"
             ),
         )
-        self.assertIn("GitHub PAT", normalized_agents_text)
+        self.assertIn("official GitHub connector", normalized_agents_text)
+        self.assertIn("Omit author and committer overrides", normalized_agents_text)
         self.assertIn(
-            "GitHub HTTPS Git operations require a PAT", normalized_agents_text
+            "GitHub publication requires the official GitHub connector",
+            normalized_agents_text,
+        )
+        self.assertIn(
+            "do not retry auth failures or request a PAT to bypass the connector",
+            normalized_agents_text,
         )
         self.assertIn(
             "DeepSource counts need explicit credentials", normalized_agents_text
@@ -1050,7 +1025,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
         self.assertIn(
-            "tools/git_push_with_pat.py",
+            "official GitHub connector",
             self.read_text(".agents/skills/security-finding-triager/SKILL.md"),
         )
         self.assertIn(
@@ -1173,10 +1148,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         runbook_text = self.read_text("docs/operations/code-scanning.md")
         self.assertIn("never hard-code `main`", agents_text)
         self.assertIn("temporary remote branches", agents_text)
+        self.assertIn("official GitHub connector", runtime_text)
+        self.assertIn("branch head without force", runtime_text)
+        self.assertNotIn("tools/git_push_with_pat.py", runtime_text)
         self.assertIn(
-            'tools/git_push_with_pat.py origin "HEAD:${default_branch}"',
+            "official GitHub connector",
             runtime_text,
         )
+        self.assertIn("Do not switch to a PAT push helper", runtime_text)
+        self.assertNotIn("tools/git_push_with_pat.py origin", runtime_text)
+        self.assertNotIn("tools/git_push_with_pat.py origin", runbook_text)
         self.assertNotIn("tools/git_push_with_pat.py origin main", runbook_text)
         self.assertNotIn("--branch main", runbook_text)
         self.assertIn(
@@ -1189,7 +1170,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in markdownlint command is pinned integration.
         """
-        expected = "npx --yes markdownlint-cli2@0.23.2"
+        expected = "npx --yes markdownlint-cli2@0.23.3"
         self.assertIn(expected, read_instruction_contract(self.repo_root, "AGENTS.md"))
         self.assertIn(
             expected,
@@ -1383,7 +1364,8 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in service topology docs match compose terms.
         """
-        self.assertEqual(21, len(self.services))
+        self.assertEqual(22, len(self.services))
+        self.assertEqual("none", self.services["internal-tls"]["network_mode"])
         self.assertIn("redis-sysctl-init", self.services)
         self.assertEqual("no", str(self.services["redis-sysctl-init"].get("restart")))
         self.assertEqual("root", self.services["redis-sysctl-init"].get("user"))
@@ -1559,11 +1541,16 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         direct_jobs = [
             config
             for config in scrape_configs
-            if config["job_name"] not in {"blackbox_http", "blackbox_tcp"}
+            if config.get("metrics_path") != "/probe"
         ]
         blackbox_http = scrape_configs_by_name["blackbox_http"]
         blackbox_tcp = scrape_configs_by_name["blackbox_tcp"]
-        http_targets = blackbox_http["static_configs"][0]["targets"]
+        http_targets = [
+            *blackbox_http["static_configs"][0]["targets"],
+            *scrape_configs_by_name["blackbox_portainer"]["static_configs"][0][
+                "targets"
+            ],
+        ]
         tcp_targets = blackbox_tcp["static_configs"][0]["targets"]
         self.assertEqual(10, len(direct_jobs))
         self.assertEqual(13, len(http_targets))

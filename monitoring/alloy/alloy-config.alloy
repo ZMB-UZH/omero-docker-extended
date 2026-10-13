@@ -114,6 +114,10 @@ loki.source.file "omeroweb_internal_logs" {
 
 loki.write "local" {
 	endpoint {
-		url = "http://loki:3100/loki/api/v1/push"
+		url = "https://loki:3100/loki/api/v1/push"
+		tls_config {
+			ca_file = "/run/omero-tls/trust/ca.pem"
+			min_version = "TLS12"
+		}
 	}
 }

@@ -28,11 +28,14 @@ Security practices and controls for this deployment.
   for startup bind-mount reconciliation, and the entrypoints drop to the
   application users before launching the long-running processes.
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
-- Redis runs without persistent state. Compose requires the generated `.env`
-  file to provide `REDIS_MAXMEMORY`, `REDIS_MAXMEMORY_POLICY`,
-  `REDIS_DATA_TMPFS_SIZE`, `REDIS_APPENDONLY`, and `REDIS_SAVE_POLICY`;
-  missing Redis env keys fail Compose interpolation instead of using a hidden
-  Compose-side default.
+- Redis holds web sessions and broker state, not disposable cache. Its
+  project-scoped `redis-data` volume survives container replacement. Compose
+  requires explicit `REDIS_MAXMEMORY`, `REDIS_MAXMEMORY_POLICY`,
+  `REDIS_APPENDONLY`, and `REDIS_SAVE_POLICY` values. Readiness requires AOF
+  persistence and `noeviction`; monitor memory and disk headroom because writes
+  fail when capacity is exhausted instead of silently evicting active sessions.
+  Existing temporary-storage installations require the
+  [session-preserving migration](operations/redis-persistence.md) before replacement.
 - `cadvisor` runs privileged because it inspects host/container runtime state for metrics.
 - The `crowdsec`, `pg-maintenance`, and `redis-sysctl-init` helper images
   default to non-root users. Compose explicitly runs these helper services as
@@ -98,7 +101,7 @@ only through separate fresh per-object confirmations in replacement mode.
 ## Image pinning
 
 - All docker images in `docker-compose.yml` use explicit version tags (e.g.,
-  `postgres:16.15`, `redis:8.10.1-alpine`). Untagged images and floating aliases
+  `postgres:16.15`, `redis:8.10.2-alpine`). Untagged images and floating aliases
   such as `latest`, `stable`, `edge`, `main`, `master`, `nightly`, `rolling`, or
   `current` are prohibited.
 - Dockerfiles pin base images and key package versions (e.g., `omero-py==5.23.0`, `celery==5.6.3`).

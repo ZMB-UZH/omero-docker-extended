@@ -257,6 +257,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                     GRAFANA_DATA_PATH="${{OMERO_DATA_PATH}}/grafana_data"
                     LOKI_DATA_PATH="${{OMERO_DATA_PATH}}/loki_data"
                     ALLOY_DATA_PATH="${{OMERO_DATA_PATH}}/alloy_data"
+                    OLLAMA_DATA_PATH="${{OMERO_TMP_PATH}}/custom-models"
                     PG_MAINTENANCE_DATA_PATH="${{OMERO_DATA_PATH}}/pg_maintenance_data"
                     BUILDX_DATA_PATH="${{OMERO_DATA_PATH}}/buildx_cache"
                     NODE_EXPORTER_TEXTFILE_PATH="${{OMERO_DATA_PATH}}/node_exporter_textfile"
@@ -267,6 +268,7 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
                     . "{env_file}"
                     printf 'INSTALL=%s\\n' "${{OMERO_INSTALLATION_PATH}}"
                     printf 'USER_DATA=%s\\n' "${{OMERO_USER_DATA_PATH}}"
+                    printf 'MODEL_DATA=%s\\n' "${{OLLAMA_DATA_PATH}}"
                     test ! -e "{marker_file}"
                     """
                 )
@@ -277,6 +279,10 @@ class InstallationEnvParsingRegressionTests(unittest.TestCase):
             self.assertIn(f"INSTALL=/tmp/omero; touch {marker_file}", result.stdout)
             self.assertIn(
                 f"USER_DATA=/tmp/omero data; touch {marker_file}/omero_user_data",
+                result.stdout,
+            )
+            self.assertIn(
+                f"MODEL_DATA=/tmp/omero tmp; touch {marker_file}/custom-models",
                 result.stdout,
             )
 

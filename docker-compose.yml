@@ -4,6 +4,35 @@
 
 services:
 
+  internal-tls:
+    image: ${INTERNAL_TLS_IMAGE:-internal-tls:custom}
+    build:
+      context: .
+      dockerfile: docker/internal-tls.Dockerfile
+    user: root
+    restart: unless-stopped
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    volumes:
+      - internal-tls-authority:/pki/private
+      - internal-tls-trust:/pki/trust
+      - internal-tls-database:/pki/servers/database
+      - internal-tls-database-plugin:/pki/servers/database_plugin
+      - internal-tls-grafana:/pki/servers/grafana
+      - internal-tls-loki:/pki/servers/loki
+      - internal-tls-prometheus:/pki/servers/prometheus
+      - ${INTERNAL_TLS_IDENTITIES_FILE:-./monitoring/tls/identities.json}:/etc/omero-tls/identities.json:ro
+    healthcheck:
+      test: ["CMD", "/opt/tls/bin/python", "-m", "monitoring.tls.manager", "check", "--root", "/pki", "--identities", "/etc/omero-tls/identities.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
   portainer:
     image: "portainer/portainer-ce:2.45.1-alpine"
     container_name: portainer
@@ -41,6 +70,11 @@ services:
     image: "grafana/loki:3.7.8"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
+    environment:
+      SSL_CERT_FILE: /run/omero-tls/trust/ca-bundle.pem
+    depends_on:
+      internal-tls:
+        condition: service_healthy
     networks:
       omero:
         aliases:
@@ -49,9 +83,11 @@ services:
       - "127.0.0.1:3100:3100"
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - internal-tls-loki:/run/omero-tls/server:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
     healthcheck:
-      test: ["CMD", "/usr/bin/loki", "-health"]
+      test: ["CMD", "/usr/bin/loki", "-health", "-health.url=https://localhost:3100/ready"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -60,7 +96,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.19.2"
+    image: "grafana/alloy:v1.20.1"
     restart: unless-stopped
     command:
       - "run"
@@ -74,6 +110,7 @@ services:
           - alloy
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${ALLOY_DATA_PATH:?Set ALLOY_DATA_PATH (run installation/installation_script.sh)}:/data-alloy:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroserver:ro
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/logs/omeroweb:ro
@@ -101,7 +138,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.14.0"
+    image: "prom/prometheus:v3.15.0"
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -111,9 +148,11 @@ services:
         sed "s/__OMERO_CLI_PORT__/$${OMERO_CLI_PORT}/g" /etc/prometheus/prometheus.yml.template > /tmp/prometheus.yml
         exec /bin/prometheus \
           --config.file=/tmp/prometheus.yml \
+          --web.config.file=/etc/prometheus/web.yml \
           --storage.tsdb.path=/prometheus
     environment:
       OMERO_CLI_PORT: "${OMERO_CLI_PORT:?Set OMERO_CLI_PORT in env/omeroserver.env}"
+      SSL_CERT_FILE: /run/omero-tls/trust/ca-bundle.pem
     networks:
       omero:
         aliases:
@@ -122,12 +161,17 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml.template:ro
+      - ./monitoring/prometheus/web.yml:/etc/prometheus/web.yml:ro
+      - internal-tls-prometheus:/run/omero-tls/server:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${PROMETHEUS_DATA_PATH:?Set PROMETHEUS_DATA_PATH (run installation/installation_script.sh)}:/prometheus:rw
     depends_on:
+      internal-tls:
+        condition: service_healthy
       blackbox-exporter:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
+      test: ["CMD", "/bin/promtool", "check", "ready", "--url=https://localhost:9090"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -148,6 +192,10 @@ services:
       - "crowdsec:host-gateway"
     volumes:
       - ./monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
+    depends_on:
+      internal-tls:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9115/-/healthy || exit 1"]
       interval: 10s
@@ -240,6 +288,7 @@ services:
       - ./env/omero_secrets.env
     environment:
       OMERO_POSTGRES_EXPORTER_SOURCE: main
+      PGSSLROOTCERT: /run/omero-tls/trust/ca.pem
     networks:
       omero:
         aliases:
@@ -251,6 +300,7 @@ services:
         condition: service_healthy
     volumes:
       - ./monitoring/postgres-exporter/entrypoint.sh:/postgres-exporter-entrypoint.sh:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
@@ -270,6 +320,7 @@ services:
       - ./env/omero_secrets.env
     environment:
       OMERO_POSTGRES_EXPORTER_SOURCE: plugin
+      PGSSLROOTCERT: /run/omero-tls/trust/ca.pem
     networks:
       omero:
         aliases:
@@ -279,6 +330,7 @@ services:
         condition: service_healthy
     volumes:
       - ./monitoring/postgres-exporter/entrypoint.sh:/postgres-exporter-entrypoint.sh:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
@@ -290,7 +342,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.91.1-alpine"
+    image: "oliver006/redis_exporter:v1.93.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -311,8 +363,10 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.2.2"
+    image: "grafana/grafana:13.2.3"
     restart: unless-stopped
+    init: true
+    entrypoint: ["/bin/sh", "/usr/local/bin/watch-trust.sh", "/run.sh"]
     networks:
       omero:
         aliases:
@@ -325,19 +379,28 @@ services:
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
-      # Admin Tools proxies Grafana over HTTP and intentionally does not proxy WebSockets.
+      # Admin Tools proxies Grafana over HTTPS and intentionally does not proxy WebSockets.
       GF_LIVE_MAX_CONNECTIONS: "0"
       GF_METRICS_ENABLED: "true"
+      GF_SERVER_PROTOCOL: https
+      GF_SERVER_CERT_FILE: /run/omero-tls/server/cert.pem
+      GF_SERVER_CERT_KEY: /run/omero-tls/server/key.pem
+      GF_SERVER_CERTS_WATCH_INTERVAL: 5s
+      GF_SERVER_MIN_TLS_VERSION: TLS1.2
+      SSL_CERT_FILE: /run/omero-tls/trust/ca-bundle.pem
     depends_on:
       prometheus:
         condition: service_healthy
     volumes:
+      - internal-tls-grafana:/run/omero-tls/server:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
+      - ./monitoring/tls/watch-trust.sh:/usr/local/bin/watch-trust.sh:ro
       - ${GRAFANA_DATA_PATH:?Set GRAFANA_DATA_PATH (run installation/installation_script.sh)}:/var/lib/grafana:rw
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/provisioning/dashboards/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD", "/usr/bin/curl", "--fail", "--silent", "--show-error", "--cacert", "/run/omero-tls/trust/ca.pem", "https://localhost:3000/api/health"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -348,6 +411,10 @@ services:
   database:
     image: "postgres:16.15"
     restart: unless-stopped
+    init: true
+    depends_on:
+      internal-tls:
+        condition: service_healthy
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
       - ./env/omero_secrets.env
@@ -364,12 +431,18 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
+      OMERO_POSTGRES_TLS_CERT: /run/omero-tls/server/cert.pem
+      OMERO_POSTGRES_TLS_KEY: /run/omero-tls/server/key.pem
+      OMERO_POSTGRES_TLS_CA: /run/omero-tls/trust/ca.pem
     networks:
       omero:
         aliases:
           - database
     volumes:
       - ./docker/postgres-entrypoint-from-env.sh:/usr/local/bin/postgres-entrypoint-from-env.sh:ro
+      - ./monitoring/tls/postgres-reload.sh:/usr/local/bin/postgres-tls-reload.sh:ro
+      - internal-tls-database:/run/omero-tls/server:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
@@ -382,10 +455,12 @@ services:
 
   omeroserver:
     image: ${OMERO_SERVER_IMAGE:-omeroserver:custom}
+    stop_grace_period: "${OMERO_SERVER_STOP_GRACE_PERIOD:-2m}"
     build:
       context: .
       dockerfile: docker/omero-server.Dockerfile
       args:
+        OME_OMERO_FIGURE_REF: "${OMERO_FIGURE_VERSION:?Set OMERO_FIGURE_VERSION in env/omeroserver.env}"
         OMERO_DROPBOX_VERSION: "${OMERO_DROPBOX_VERSION:?Set OMERO_DROPBOX_VERSION in env/omeroserver.env}"
         BIOFORMATS_VERSION: "${BIOFORMATS_VERSION:?Set BIOFORMATS_VERSION in env/omeroserver.env}"
         BIOFORMATS_SHA256: "${BIOFORMATS_SHA256:?Set BIOFORMATS_SHA256 in env/omeroserver.env}"
@@ -461,7 +536,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.10.1-alpine"
+    image: "redis:8.10.2-alpine"
     restart: unless-stopped
     command:
       - redis-server
@@ -479,10 +554,11 @@ services:
       omero:
         aliases:
           - redis
-    tmpfs:
-      - /data:size=${REDIS_DATA_TMPFS_SIZE:?Set REDIS_DATA_TMPFS_SIZE in .env}
+    volumes:
+      - redis-data:/data:rw
+      - ./docker/redis-healthcheck.sh:/usr/local/bin/redis-healthcheck.sh:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "/usr/local/bin/redis-healthcheck.sh"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -496,6 +572,7 @@ services:
       context: .
       dockerfile: docker/omero-web.Dockerfile
       args:
+        OMERO_FIGURE_VERSION: "${OMERO_FIGURE_VERSION:?Set OMERO_FIGURE_VERSION in env/omeroserver.env}"
         OMERO_CLI_ZARR_VERSION: "${OMERO_CLI_ZARR_VERSION:?Set OMERO_CLI_ZARR_VERSION in env/omeroserver.env}"
         OME_ZARR_PY_VERSION: "${OME_ZARR_PY_VERSION:?Set OME_ZARR_PY_VERSION in env/omeroserver.env}"
         BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"
@@ -520,6 +597,7 @@ services:
         aliases:
           - omeroweb
     environment:
+      ADMIN_TOOLS_TLS_CA_FILE: /run/omero-tls/trust/ca-bundle.pem
       OMERO_DATA_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR (run installation/installation_script.sh)}"
       OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
       OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
@@ -528,6 +606,7 @@ services:
     ports:
       - "${OMERO_WEB_HOST_PORT:?Set OMERO_WEB_HOST_PORT in env/omeroweb.env}:${CONFIG_omero_web_application__server_port:?Set CONFIG_omero_web_application__server_port in env/omeroweb.env}"
     volumes:
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
       - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
@@ -551,6 +630,10 @@ services:
   database_plugin:
     image: "postgres:16.15"
     restart: unless-stopped
+    init: true
+    depends_on:
+      internal-tls:
+        condition: service_healthy
     entrypoint: ["/usr/local/bin/postgres-entrypoint-from-env.sh"]
     env_file:
       - ./env/omero_secrets.env
@@ -568,12 +651,18 @@ services:
       PGPORT: 5433
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
+      OMERO_POSTGRES_TLS_CERT: /run/omero-tls/server/cert.pem
+      OMERO_POSTGRES_TLS_KEY: /run/omero-tls/server/key.pem
+      OMERO_POSTGRES_TLS_CA: /run/omero-tls/trust/ca.pem
     networks:
       omero:
         aliases:
           - database-plugin
     volumes:
       - ./docker/postgres-entrypoint-from-env.sh:/usr/local/bin/postgres-entrypoint-from-env.sh:ro
+      - ./monitoring/tls/postgres-reload.sh:/usr/local/bin/postgres-tls-reload.sh:ro
+      - internal-tls-database-plugin:/run/omero-tls/server:ro
+      - internal-tls-trust:/run/omero-tls/trust:ro
       - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5433"]
@@ -597,6 +686,8 @@ services:
     environment:
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /run/omero-tls/trust/ca.pem
       PGDATA: /var/lib/postgresql/data/pgmaintenance
       OMERO_DB_HOST: database
       OMERO_DB_PORT: 5432
@@ -608,6 +699,7 @@ services:
       PLUGIN_DB_USER: omero-plugin
     volumes:
       - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
+      - internal-tls-trust:/run/omero-tls/trust:ro
     networks:
       omero:
         aliases:
@@ -663,12 +755,12 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.34.2"
+    image: "ollama/ollama:0.40.0"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"
     volumes:
-      - ${OLLAMA_DATA_PATH:-/disks/omero_temp/ollama}:/root/.ollama
+      - ${OLLAMA_DATA_PATH:?Set OLLAMA_DATA_PATH to the existing model directory or a new persistent directory}:/root/.ollama:rw
     networks:
       omero:
     healthcheck:
@@ -682,3 +774,13 @@ services:
 
 networks:
   omero:
+
+volumes:
+  redis-data:
+  internal-tls-authority:
+  internal-tls-trust:
+  internal-tls-database:
+  internal-tls-database-plugin:
+  internal-tls-grafana:
+  internal-tls-loki:
+  internal-tls-prometheus:

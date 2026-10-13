@@ -1,0 +1,2 @@
+# Compile with pip-compile --generate-hashes --strip-extras --no-emit-index-url
+cryptography==50.0.2

@@ -91,7 +91,17 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![caveman]("),
+            badge_block.index("[![crawl4ai]("),
+        )
+        self.assertLess(
+            badge_block.index("[![crawl4ai]("),
             badge_block.index("[![andrej-karpathy-skills]("),
+        )
+        self.assertEqual(1, badge_block.count("[![crawl4ai]("))
+        self.assertIn(
+            "[![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555"
+            "&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)",
+            badge_block,
         )
         self.assertLess(
             badge_block.index("[![andrej-karpathy-skills]("),

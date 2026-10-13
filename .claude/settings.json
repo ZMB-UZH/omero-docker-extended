@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/tools/agent_preflight.py\" policy",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -12,7 +23,7 @@
           },
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.md ]] && [[ -f \"$f\" ]]; then npx --yes markdownlint-cli2@0.23.2 \"$f\" 2>&1; fi; } 2>/dev/null || true",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; if [[ \"$f\" == *.md ]] && [[ -f \"$f\" ]]; then npx --yes markdownlint-cli2@0.23.3 \"$f\" 2>&1; fi; } 2>/dev/null || true",
             "timeout": 15,
             "statusMessage": "Checking Markdown lint..."
           }
@@ -20,6 +31,17 @@
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/tools/agent_preflight.py\" check --hook",
+            "timeout": 10,
+            "statusMessage": "Verifying mandatory agent-tool execution"
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [

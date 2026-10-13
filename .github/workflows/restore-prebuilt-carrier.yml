@@ -103,8 +103,8 @@ jobs:
 
       - name: Install verified Docker Scout CLI
         env:
-          SCOUT_VERSION: "1.24.0"
-          SCOUT_SHA256: f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b
+          SCOUT_VERSION: "1.26.0"
+          SCOUT_SHA256: 47daa9ac442816316c65389f516b847146bb9f45e8d6afdcbb9ce835c4e138bd
         run: |
           set -euo pipefail
           archive="${RUNNER_TEMP}/docker-scout.tar.gz"

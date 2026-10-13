@@ -1,16 +1,15 @@
 # AGENTS guide
 
-Mandatory baseline for every coding agent. Read once per revision; load only the
-task-specific sections linked below. Adapters inherit this policy, not a copy.
+Mandatory for every AI agent. Read once per revision; load triggered docs.
 
-## Safety and scope
+## Safety
 
 - Work in one session. No background, delegated, or separate agent session.
   Codex Security scans are on-demand only: pause and clearly ask the user for
-  the exact scan target, mode, and worker/subagent use. Continue only after
+  the exact target, mode, and worker/subagent use. Continue only after
   explicit user approval or the Codex Security UI Start Scan handoff. Minimum
-  required workers only; all edits, commits, pushes, releases, and reconciliation
-  stay in the parent session.
+  required workers only; edits, commits, pushes, releases, and reconciliation
+  remain in the parent session.
 - Pause before every deletion of a pre-existing or persistent object. Require
   fresh approval naming exactly one object and one deletion, including replacements,
   containers, images, tags, releases, volumes, files, backups, and data.
@@ -25,46 +24,53 @@ task-specific sections linked below. Adapters inherit this policy, not a copy.
   Preserve user data and unrelated changes. Non-example deployment env files
   are operator-owned: never edit, overwrite, delete, normalize, or print their
   values without explicit one-off authorization for that exact operation.
-- Resolve the current remote default branch; develop, commit, push, and verify
-  there unless the user explicitly names another branch. No routine feature
-  branches, PR branches, temporary remote branches, or draft PRs.
-- AI-created/rewritten commits require author and committer `AI Agent <>` and
-  only `Co-authored-by: AI Agent` trailers. Use command-scoped Git identity.
-  Stop if the tool cannot preserve that identity.
+- Learn from verified past failures: inspect history before changing a failed
+  mechanism and retain regression tests for its cause. Session/authentication
+  must pass the runtime playbook's session-regression gate.
+- Resolve the current remote default branch; work, commit, push, and verify there
+  unless the user names another branch. No routine feature/PR branches, temporary
+  remote branches, or draft PRs.
+- Use the official GitHub connector for commits and pushes; verify its account
+  and repository permission. Use GitHub defaults: no identity overrides or
+  AI co-author trailers. If unavailable, stop publication; no CLI/PAT fallback.
 
 ## Mandatory efficiency
 
-Lower-token operation is the default, without reducing reasoning or verification.
+Mandatory lower-token tools; no silent skips.
 
-- CocoIndex Code is mandatory for broad semantic routing. Check the
+- Before edits run `python3 tools/agent_preflight.py begin --query "<task>"`.
+  Add `--research-url "<source>"` for web research. It loads Caveman, executes
+  CocoIndex/Crawl4AI, and saves private receipts. Run `check` before commit.
+  Diagnose failures; restore tooling before dependent work. Never substitute.
+- [Crawl4AI](.agents/skills/crawl4ai-research/SKILL.md) must read web research
+  sources. Search tools discover URLs; registry/account APIs retain their roles.
+  No snippets-only research or silent fallback.
+
+- CocoIndex Code is mandatory for broad semantic routing. After preflight check
   `cocoindex-code` MCP tool first; follow
   [cocoindex-code-search](.agents/skills/cocoindex-code-search/SKILL.md).
-  Exact known symbols, strings, scanner counts, and already-small scopes use
-  bounded `rg` directly. Confirm semantic hits against current source.
+  Confirm hits in source; exact symbols, strings, counts, and small scopes use `rg`.
   Never silently trust a stale index or install/refresh one through MCP search.
 - Apply [caveman](.agents/skills/caveman/SKILL.md) lite by default to internal AI
-  communication: remove repetition, not reasoning or evidence. This is mandatory,
+  communication: remove repetition, not reasoning or evidence. Mandatory,
   not opt-in. Public text, code, commands, exact errors, and user replies stay
-  normal prose and lossless. Expand normally for safety, approvals, ambiguity,
-  incidents, and ordered procedures; required progress updates remain mandatory.
+  normal prose and lossless. Expand for safety, approvals, ambiguity, incidents,
+  and ordered procedures. Required progress updates remain mandatory.
 - Use the [context router](docs/reference/ai-agent-context-routing.md) only when
-  the task location is unknown; load one matching skill, not the catalog.
-  Follow its numeric caps, escalating with a stated reason when correctness
-  needs more context. Never use a budget to skip required analysis or tests.
+  the location is unknown; load one skill, not the catalog. Follow its numeric caps;
+  explain escalation. Never use a budget to skip required analysis or tests.
 - Keep a verification ledger: command, relevant source/configuration/runtime
-  identity, result, and evidence location; reuse fresh evidence. Retry failures
-  only after changing a hypothesis/input. Run the full required matrix once on
-  the stable final tree. Preserve raw logs and exit status; inspect complete
-  failures, not only a truncated tail.
-- Do not reread unchanged files, dump trees/logs, poll unchanged jobs, load
-  upstream reference skills, or rediscover known tool schemas by default.
-  Keep handoffs to decisions, changed files, evidence, risks, and next action.
+  identity, result, and evidence; reuse fresh evidence. Retry only changed inputs or
+  hypotheses. Run the full matrix once on the stable final tree. Preserve
+  logs and exit status; inspect complete failures, not just tails.
+- Do not reread files, dump trees/logs, poll unchanged jobs, load upstream
+  references, or rediscover schemas without need. Handoffs retain decisions,
+  changed files, evidence, risks, and next action.
   Never compress user requests or claim billing savings from byte counts.
 
 ## Before the matching action
 
-Read only the required section of
-[task contracts](docs/reference/ai-agent-task-contracts.md):
+Read matching [task contracts](docs/reference/ai-agent-task-contracts.md):
 
 | Action | Required contract and next reference |
 | --- | --- |
@@ -73,25 +79,24 @@ Read only the required section of
 | Paths, I/O, logging, HTTP, SQL, subprocesses, Docker, workflows, secrets or auth | Mandatory security read order: `regression_guard.py catalog`, `scan`, matching prevention/history sections |
 | Deployment configuration, imports or test data | Configuration; tracked `*_example*` contracts |
 | Live, Docker/Compose or sync | Runtime and sync; `docs/reference/ai-agent-runtime-playbook.md`; env `check` and `compose-guard` before Compose |
-| Documentation or instruction edits | Documentation; `docs/reference/ai-agent-integrations.md` for adapters |
+| Docs/instructions | Documentation; `docs/reference/ai-agent-integrations.md` for adapters |
 | Tests, commit or push | Verification; `.agents/skills/verification-loop/SKILL.md` |
-| Git identity, branches, deletion or publication | AI commit identity; Default-branch development rule; Destructive operations and releases |
-| Index/MCP maintenance | CocoIndex; `.agents/skills/cocoindex-code-search/SKILL.md` |
+| Identity, branches, deletion, publication | GitHub publication; Default-branch development rule; Destructive operations and releases |
+| Index/MCP maintenance | CocoIndex contract and skill above |
 
 ## Completion gate
 
-- Preserve every required meaning and add objective regression checks before
-  compacting instructions. Fewer lines must prove full functional parity and
-  satisfy every repo rule. Do not weaken approvals, scanner scope, or tests.
+- Preserve required meaning when compacting instructions; prove full functional
+  parity with objective regression checks. Never weaken approvals, scanner scope,
+  tests, or other repo rules.
 - Before commit/push run
   `python3 tools/run_local_workflow_gates.py --setup --profile ci`.
   Scanner/action changes require `--profile all` with the exact engine.
   Run split pytest suites separately, never one monolithic process.
-- Functional OMERO/install changes require fresh-code live verification when
-  appropriate/requested, before commit/push. Agent-only edits do not justify
-  rebuilding unchanged application images or restarting services.
+- Verify functional OMERO/install changes live before commit/push when requested
+  or appropriate. Agent-only edits do not justify application rebuilds or restarts.
 - After every push, verify GitHub workflows and alert deltas for that exact
   commit. No suppression, scope reduction, or score manipulation to pass.
   Report untested areas and residual findings explicitly.
-- Detailed skill catalog: `docs/reference/ai-agent-skills.md`; full docs hub:
-  `docs/index.md`. Neither is a mandatory startup read.
+- Catalog: `docs/reference/ai-agent-skills.md`; hub: `docs/index.md`.
+  Neither is a mandatory startup read.

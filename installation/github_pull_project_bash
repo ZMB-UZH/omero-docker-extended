@@ -310,6 +310,7 @@ resolve_all_data_paths() {
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${OLLAMA_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
             "${CROWDSEC_CONFIG_PATH:-}"
@@ -439,6 +440,7 @@ collect_sentinel_dir_names() {
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
             "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${OLLAMA_DATA_PATH:-}" \
             "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
             "${CROWDSEC_DB_PATH:-}" \
             "${CROWDSEC_CONFIG_PATH:-}"; do

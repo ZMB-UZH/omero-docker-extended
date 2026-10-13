@@ -10,11 +10,13 @@ Use this skill when the target page or docs site is already known and the task i
 
 ## Workflow
 
-1. Prefer an official API, feed, raw markdown, or direct HTML fetch over a rendered page.
+1. Use mandatory `crawl4ai-research` for page reading. Prefer official APIs or
+   structured feeds for metadata; they do not replace reading release notes.
 2. Extract only the sections needed for the task instead of dumping whole pages.
 3. Keep the source URL, page title, publish/update date, and access date with the notes.
 4. Normalize findings into concise bullets, tables, or JSON-shaped notes.
-5. If the content depends on client-side rendering or interaction, switch to `browser-fallback`.
+5. Crawl4AI renders pages directly. If interaction is still necessary, use
+   `browser-fallback` without treating a failed crawl as successful research.
 
 ## Rules
 

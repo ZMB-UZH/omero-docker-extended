@@ -11,6 +11,21 @@ from omeroweb_omp_plugin.services import data_store
 TEST_DB_AUTH_VALUE = "plugin-db-auth-value"
 
 
+def test_missing_encryption_dependency_has_no_plaintext_fallback(monkeypatch):
+    """Inputs: unavailable cryptography module. Output: typed credential-storage failure."""
+    original = builtins.__import__
+
+    def import_without_fernet(name, *args, **kwargs):
+        """Inputs: import request. Output: injected Fernet absence or the real import."""
+        if name == "cryptography.fernet":
+            raise ImportError("dependency unavailable")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_fernet)
+    with pytest.raises(data_store.AiCredentialStoreError):
+        data_store._load_fernet()
+
+
 class _FakeSqlTemplate:
     """Test double for fake SQL template."""
 

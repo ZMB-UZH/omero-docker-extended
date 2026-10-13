@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 import textwrap
@@ -125,6 +126,64 @@ class TmpPermissionRegressionTests(unittest.TestCase):
                 (current_uid, current_gid),
                 self._ownership(tmp_root / "omero-web"),
             )
+
+    def test_persistent_model_permissions_and_symlinks_are_preserved(self):
+        """Inputs: nested model storage and external link. Output: bytes and modes remain intact."""
+        function_text = self._slice_function(
+            self.installation_script,
+            "ensure_omero_tmp_layout() {",
+            'if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}"',
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            root = parent / "omero-temp"
+            models = root / "legacy-data" / "models [preserve]"
+            models.mkdir(parents=True)
+            protected = models / "weights"
+            protected.write_bytes(b"original")
+            protected.chmod(0o400)
+            models.chmod(0o500)
+            external = parent / "external"
+            external.write_bytes(b"external")
+            external.chmod(0o400)
+            (root / "external-link").symlink_to(external)
+            script = (
+                "set -euo pipefail\n"
+                + function_text
+                + f"\nOLLAMA_DATA_PATH={shlex.quote(str(models))}\n"
+                f"ensure_omero_tmp_layout {shlex.quote(str(root))} "
+                f"{os.getuid()} {os.getgid()} {os.getuid()} {os.getgid()} omero-server omero-web\n"
+            )
+            self._run_bash(script)
+            self.assertEqual(protected.read_bytes(), b"original")
+            self.assertEqual(protected.stat().st_mode & 0o777, 0o400)
+            self.assertEqual(models.stat().st_mode & 0o777, 0o500)
+            self.assertEqual(external.stat().st_mode & 0o777, 0o400)
+            self.assertTrue((root / "external-link").is_symlink())
+            models.chmod(0o700)
+
+    def test_conflicting_model_storage_fails_before_layout_mutation(self):
+        """Inputs: persistent storage equal to the temp root. Output: failure without new files."""
+        function_text = self._slice_function(
+            self.installation_script,
+            "ensure_omero_tmp_layout() {",
+            'if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}"',
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = (
+                "set -euo pipefail\n"
+                + function_text
+                + f"\nOLLAMA_DATA_PATH={shlex.quote(str(root))}\n"
+                f"ensure_omero_tmp_layout {shlex.quote(str(root))} "
+                f"{os.getuid()} {os.getgid()} {os.getuid()} {os.getgid()} omero-server omero-web\n"
+            )
+            result = subprocess.run(
+                [BASH_BIN, "-c", script], capture_output=True, text=True, check=False
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("conflicts", result.stderr)
+            self.assertEqual(list(root.iterdir()), [])
 
     def test_server_bootstrap_removes_exact_legacy_lock_namespace(self) -> None:
         """Check server bootstrap removes exact legacy lock namespace cleanup behavior.

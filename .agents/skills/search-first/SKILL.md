@@ -24,7 +24,7 @@ Use this skill before introducing new code, dependencies, wrappers, or automatio
 
 1. Search this repository first: mandatory `cocoindex-code-search` for broad navigation, bounded `rg` for exact known symbols or already-small scopes.
 2. Route through `docs/reference/ai-agent-context-routing.md` and read the nearest tests, docs, and example env files.
-3. Check official upstream docs and release notes.
+3. Read official upstream docs and release notes through mandatory `crawl4ai-research`.
 4. Check upstream implementations or maintained references.
 5. Only then decide whether to adopt, extend, or build custom logic.
 

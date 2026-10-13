@@ -33,6 +33,7 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+MAX_SOURCE_BYTES = 8 * 1024 * 1024
 
 SEVERITY_ORDER: tuple[str, ...] = ("info", "low", "medium", "high", "critical")
 
@@ -70,6 +72,10 @@ TEST_FILENAME_SUFFIXES: tuple[str, ...] = ("_test.py",)
 # GitHub PAT regex string that would self-match.
 _PAT_PREFIX_CHARS = "poshru"
 GITHUB_PAT_RE = re.compile(rf"\bgh[{_PAT_PREFIX_CHARS}]_[A-Za-z0-9]{{36}}\b")
+
+
+class ScanError(RuntimeError):
+    """An applicable source could not be fully inspected."""
 
 
 @dataclass(frozen=True)
@@ -179,7 +185,7 @@ def _iter_repo_files(
     Inputs: `repo_root` (Path), `paths` (Sequence[Path] | None). Output:
     `Iterator[Path]`.
     """
-    if paths:
+    if paths is not None:
         for entry in paths:
             entry = entry.resolve()
             if entry.is_file():
@@ -202,20 +208,24 @@ def _walk(root: Path) -> Iterator[Path]:
             yield Path(dirpath) / fname
 
 
-def _read_text(path: Path) -> str | None:
-    """Read the text.
+def _read_text(path: Path) -> str:
+    """Read complete source within a bounded allocation, never silently skip it.
 
-    Inputs: `path` (Path) path. Output: `str | None`.
+    Inputs: applicable source `path`. Output: UTF-8 text; ScanError on incomplete input.
     """
     try:
-        if path.stat().st_size > 500_000:
-            return None
-    except OSError:
-        return None
+        with path.open("rb") as source:
+            data = source.read(MAX_SOURCE_BYTES + 1)
+    except OSError as exc:
+        raise ScanError(f"Cannot read source: {path}") from exc
+    if len(data) > MAX_SOURCE_BYTES:
+        raise ScanError(
+            f"Source exceeds the {MAX_SOURCE_BYTES}-byte scan limit: {path}"
+        )
     try:
-        return path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
-        return None
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ScanError(f"Source is not valid UTF-8: {path}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -247,25 +257,6 @@ def _ast_assert_in_production(
                 )
             )
     return hits
-
-
-def _has_logger_call_or_raise(body: list[ast.stmt]) -> bool:
-    """Return whether logger call or raise.
-
-    Inputs: `body`. Output: `bool`.
-    """
-    log_attrs = {"debug", "info", "warning", "error", "exception", "critical"}
-    for node in body:
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Raise):
-                return True
-            if (
-                isinstance(sub, ast.Call)
-                and isinstance(sub.func, ast.Attribute)
-                and sub.func.attr in log_attrs
-            ):
-                return True
-    return False
 
 
 _BROAD_EXCEPTION_NAMES = frozenset({"Exception", "BaseException"})
@@ -317,8 +308,6 @@ def _ast_silent_except(tree: ast.AST, src: str) -> list[tuple[int, int, str, str
         if not only_pass_or_continue:
             continue
         if not _exception_clause_is_broad(node):
-            continue
-        if _has_logger_call_or_raise(body):
             continue
         stmt = body[0]
         try:
@@ -957,8 +946,8 @@ def _python_ast_findings(rule: Rule, rel_path: str, src: str) -> list[Finding]:
         return []
     try:
         tree = ast.parse(src)
-    except SyntaxError:
-        return []
+    except (SyntaxError, RecursionError) as exc:
+        raise ScanError(f"Cannot parse Python source: {rel_path}") from exc
     out: list[Finding] = []
     for line, col, message, excerpt in rule.ast_check(tree, src):
         out.append(
@@ -1036,8 +1025,6 @@ def scan_paths(
         if not applicable:
             continue
         text = _read_text(path)
-        if text is None:
-            continue
         for rule in applicable:
             if rule.kind == "ast_python":
                 findings.extend(_python_ast_findings(rule, rel_norm, text))
@@ -1062,14 +1049,30 @@ def _git_changed_files(repo_root: Path, base: str) -> list[Path]:
     Inputs: `repo_root` (Path), `base` (str). Output: `list[Path]`. Raises: SystemExit
     when validation or the called operation fails.
     """
-    cmd = ["git", "-C", str(repo_root), "diff", "--name-only", f"{base}..HEAD"]
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("regression_guard: Git is required for diff scanning")
+    cmd = [
+        git,
+        "-C",
+        str(repo_root),
+        "diff",
+        "--name-only",
+        "-z",
+        "--end-of-options",
+        f"{base}..HEAD",
+        "--",
+    ]
     try:
-        out = subprocess.check_output(cmd, text=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
+        out = subprocess.check_output(cmd, timeout=60)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         raise SystemExit(f"regression_guard: git diff failed: {exc}") from None
     files: list[Path] = []
-    for line in out.splitlines():
-        candidate = (repo_root / line).resolve()
+    # Git's text format quotes filenames; NUL framing preserves all Linux names.
+    for name in out.split(b"\0"):
+        if not name:
+            continue
+        candidate = (repo_root / os.fsdecode(name)).resolve()
         if candidate.is_file():
             files.append(candidate)
     return files
@@ -1380,11 +1383,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
     if args.command == "scan":
-        if args.diff:
-            files = _git_changed_files(repo_root, args.diff)
-            findings = scan_paths(repo_root, files)
-        else:
-            findings = scan_paths(repo_root, list(args.paths) or None)
+        try:
+            if args.diff:
+                files = _git_changed_files(repo_root, args.diff)
+                findings = scan_paths(repo_root, files)
+            else:
+                findings = scan_paths(repo_root, list(args.paths) or None)
+        except ScanError as exc:
+            print(f"regression_guard: incomplete scan: {exc}", file=sys.stderr)
+            return 1
         gating = _filter_severity(findings, args.fail_on)
         if args.format == "json":
             payload = [

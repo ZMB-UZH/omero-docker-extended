@@ -144,7 +144,7 @@ def ensure_job_user(admin, query, job_user: str, job_pass: str, retries: int):
             )
             created = lookup_job_experimenter(query, job_user)
             if created is not None:
-                return created
+                return _validate_existing_job_experimenter(created, job_user)
             last_error = RuntimeError(
                 f"created {job_user!r} but could not read it back"
             )
@@ -249,8 +249,8 @@ def main(argv: list[str]) -> int:
     """
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.port <= 0:
-        parser.error("--port must be a positive integer")
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
     if args.user_retries <= 0:
         parser.error("--user-retries must be a positive integer")
     try:

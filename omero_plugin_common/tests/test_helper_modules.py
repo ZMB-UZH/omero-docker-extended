@@ -6,6 +6,17 @@ from types import SimpleNamespace
 from omero_plugin_common import omero_helpers, request_utils, string_utils
 
 
+def test_django_discovers_common_application_config():
+    """Inputs: real Django app discovery. Output: stable common-plugin app identity."""
+    from django.apps import AppConfig
+    from omero_plugin_common.apps import OmeroPluginCommonConfig
+
+    config = AppConfig.create("omero_plugin_common")
+    assert isinstance(config, OmeroPluginCommonConfig)
+    assert config.name == config.label == "omero_plugin_common"
+    assert config.verbose_name == "OMERO Plugin Common"
+
+
 class _ValueBox:
     """Test double for value box behavior in this module."""
 

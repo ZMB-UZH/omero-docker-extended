@@ -543,7 +543,9 @@ def test_request_path_dataset_preparation_links_path_targets_to_selected_project
     monkeypatch.setattr(
         core_functions, "_generate_orphan_dataset_name", lambda: "UploadRoot_TEST"
     )
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        core_functions, "_update_job", lambda job_id, update: update(job)
+    )
     monkeypatch.setattr(core_functions, "_get_or_create_dataset", get_or_create_dataset)
 
     job = {
@@ -594,7 +596,9 @@ def test_request_path_dataset_preparation_covers_success_and_failure(
 
         SERVICE_OPTS = SimpleNamespace(setOmeroGroup=group_calls.append)
 
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        core_functions, "_update_job", lambda job_id, update: update(job)
+    )
     monkeypatch.setattr(
         core_functions,
         "_get_or_create_dataset",
@@ -838,7 +842,9 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
             name, 21
         ),
     )
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+    monkeypatch.setattr(
+        core_functions, "_update_job", lambda job_id, update: update({"job_id": job_id})
+    )
 
     class _ScopeFailConn:
         """Test double for scope fail conn behavior in this module."""
@@ -891,7 +897,7 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
             name, 21
         ),
     )
-    monkeypatch.setattr(core_functions, "_save_job", lambda job: False)
+    monkeypatch.setattr(core_functions, "_update_job", lambda job_id, update: None)
     failed_job, failed_error = core_functions._prepare_request_job_import_datasets(
         "w" * 32,
         {

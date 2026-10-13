@@ -1,20 +1,23 @@
 ---
 name: browser-fallback
-description: Use a deterministic browser workflow only when direct fetch or extraction is insufficient for a public-web task.
+description: Diagnose interactive page behavior without replacing mandatory Crawl4AI source reading.
 origin: repo-local web research workflow
 ---
 
 # Browser Fallback
 
-Use this skill when static fetches fail because a page is JS-heavy, stateful, lazy-loaded, or otherwise not inspectable enough without a real browser session.
+Use this skill to diagnose JS-heavy, stateful or lazy-loaded page behavior.
+It is not an alternative reader for mandatory public-web research.
 
 ## Workflow
 
-1. Confirm that repo search, direct fetch, and `site-extract` are insufficient first.
+1. Preserve the failed Crawl4AI receipt and identify the diagnostic question.
+   Pause dependent research; browser output cannot replace the required crawl.
 2. Use the harness-provided browser tool or the most deterministic browser stack available.
 3. Reuse one session per site, inspect DOM and network behavior before adding extra actions, and record the exact final URL.
 4. Capture the minimum reproducible navigation steps, selectors, and visible result state.
-5. Once the data is visible, hand the content back to `site-extract` and `source-audit`.
+5. Restore Crawl4AI extraction and retain a valid native capture before using
+   page content as evidence; apply `source-audit` to that capture.
 
 ## Stop Rules
 

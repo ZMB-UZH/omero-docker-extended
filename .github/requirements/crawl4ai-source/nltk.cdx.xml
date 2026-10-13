@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1"> <!-- DevSkim: ignore DS137138 - XML namespace identifier, never a connection -->
+  <components>
+    <component type="library">
+      <name>nltk</name>
+      <version>3.10.3</version>
+      <purl>pkg:pypi/nltk@3.10.3</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/nltk/nltk/tree/b417a98a9497b4a27067043e35e64c388e060686</url>
+        </reference>
+        <reference type="distribution">
+          <url>https://github.com/nltk/nltk/archive/b417a98a9497b4a27067043e35e64c388e060686.tar.gz</url>
+          <hashes>
+            <hash alg="SHA-256">39612e4c4aebe7626f582d103ac87bd7c5ed256e6341114e61143a8b73c560ee</hash>
+          </hashes>
+        </reference>
+      </externalReferences>
+    </component>
+  </components>
+</bom>

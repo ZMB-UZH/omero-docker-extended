@@ -6,6 +6,7 @@ import hashlib
 import hmac
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_optional_env
 from omero.rtypes import rstring, rlong
 from omero.sys import ParametersI
@@ -37,13 +38,18 @@ def _effective_hash_secret():
 
     Inputs: none. Output: secret string. Raises RuntimeError if no private secret exists.
     """
-    secret = str(get_hash_secret() or getattr(settings, "SECRET_KEY", "") or "")
-    if secret:
-        return secret
-    raise RuntimeError(  # pragma: no cover - deployment misconfiguration guard
+    missing_secret = (
         f"Missing non-empty {HASH_HMAC_KEY_ENV} or Django SECRET_KEY for "
         "OMP annotation ownership hashing."
     )
+    try:
+        secret = str(get_hash_secret() or getattr(settings, "SECRET_KEY", "") or "")
+    except ImproperlyConfigured as exc:
+        # Django rejects an empty SECRET_KEY before returning its value.
+        raise RuntimeError(missing_secret) from exc
+    if secret:
+        return secret
+    raise RuntimeError(missing_secret)
 
 
 def canonicalize_mapping(mapping):
