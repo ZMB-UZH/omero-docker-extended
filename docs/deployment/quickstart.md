@@ -258,12 +258,13 @@ Notes:
   temporary source images after `buildx bake`; plain `docker compose build`
   runs the same flatten helper immediately afterward against the compose-built
   local images. In both cases, each target is rebuilt from `scratch` with a
-  single filesystem `COPY --from=source / /`, then metadata is restored
+  filesystem `COPY --from=<source-image> / /`, then metadata is restored
   (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`,
-  `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via
-  `docker image import --change ...`. This produces a true single-layer final
-  image for the local docker daemon, but it is intentionally slower because
-  every selected image is exported and re-imported. Set
+  `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) by a separate Docker build.
+  Literal values pass through build arguments and label options without being
+  reinterpreted as Dockerfile syntax. Deferred `ONBUILD` instructions are
+  preserved, not executed. This removes the original build layers at the cost
+  of an additional filesystem copy. Set
   `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` to enable it. Temporary source
   tags/build contexts are cleaned automatically, and flatten metadata
   generation now fails fast if source-image inspection or metadata restoration

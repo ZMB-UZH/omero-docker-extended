@@ -27,7 +27,7 @@ class ImageFlatteningTests(unittest.TestCase):
         self.assertIsNotNone(docker, "A native Linux Docker engine is required")
         self.assertIsNotNone(bash, "Bash is required")
         tag = "omero-flatten-test:" + uuid.uuid4().hex
-        images: set[str] = set()
+        images: set[str] = {tag}
         containers: list[str] = []
 
         def command(*args: str, binary: bool = False) -> str | bytes:
@@ -41,6 +41,20 @@ class ImageFlatteningTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             return result.stdout
+
+        def remove_image(reference: str) -> None:
+            """Inputs: fixture reference. Output: removal or a reported cleanup error."""
+            result = subprocess.run(
+                [str(docker), "image", "inspect", reference],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            if result.returncode:
+                self.assertIn("No such image:", result.stderr)
+                return
+            command("image", "rm", reference)
 
         values = {
             "PLAIN": "ordinary value",
@@ -149,22 +163,17 @@ class ImageFlatteningTests(unittest.TestCase):
                 with tarfile.open(
                     fileobj=io.BytesIO(command("export", identifier, binary=True))
                 ) as archive:
-                    self.assertEqual(archive.extractfile("payload").read(), payload)
+                    with archive.extractfile("payload") as member:
+                        self.assertEqual(member.read(), payload)
         finally:
+            # unittest runs every cleanup even if another fails, preserving the
+            # original assertion. LIFO removes containers, then tags, then IDs.
+            for reference in sorted(images):
+                if reference != tag:
+                    self.addCleanup(remove_image, reference)
+            self.addCleanup(remove_image, tag)
             for identifier in containers:
-                command("rm", "--volumes", identifier)
-            # Tags first, then their now-unreferenced fixture image IDs.
-            for reference in sorted(
-                images, key=lambda item: item.startswith("sha256:")
-            ):
-                result = subprocess.run(
-                    [str(docker), "image", "inspect", reference],
-                    capture_output=True,
-                    check=False,
-                    timeout=30,
-                )
-                if result.returncode == 0:
-                    command("image", "rm", reference)
+                self.addCleanup(command, "rm", "--volumes", identifier)
 
 
 if __name__ == "__main__":
