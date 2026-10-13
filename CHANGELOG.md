@@ -10,6 +10,29 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.3.0-main.1] - 2026-10-13
+
+### Changed
+
+- Updated compatible OMERO, application, and monitoring dependencies.
+- Added automatically renewed TLS for monitoring backends and database exporters.
+- Made Redis session and queue storage persistent across container replacements.
+
+### Fixed
+
+- Improved session continuity, Imaris connector recovery, concurrent imports, spectrum attachments, and Zarr handling.
+- Corrected deployment permission checks, temporary-file cleanup, and image packaging.
+
+### Upgrade Notes
+
+- Install the release bundle or rebuild application images, retaining existing configuration and data.
+- Before replacing services, follow the [monitoring upgrade guidance](https://github.com/ZMB-UZH/omero-docker-extended/blob/1.3.0-main.1/docs/operations/monitoring.md#fresh-installs-and-upgrades) and [Redis persistence migration](https://github.com/ZMB-UZH/omero-docker-extended/blob/1.3.0-main.1/docs/operations/redis-persistence.md#existing-installations).
+- No OMERO database schema migration is required.
+
+### Verification
+
+- Linux automated tests and live import, rendering, export, session, and monitoring checks passed.
+
 ## [1.2.2-main.1] - 2026-09-23
 
 ### Changed
@@ -143,7 +166,8 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.2-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.3.0-main.1...HEAD
+[1.3.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.2-main.1...1.3.0-main.1
 [1.2.2-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.1-main.1...1.2.2-main.1
 [1.2.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.0-main.1...1.2.1-main.1
 [1.2.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.1.2-main.1...1.2.0-main.1
