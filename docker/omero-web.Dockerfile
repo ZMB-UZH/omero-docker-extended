@@ -35,13 +35,11 @@ ENV PIP_NO_CACHE_DIR=1 \
     TMPDIR=/tmp \
     OMERO_TMPDIR=/tmp
 
-# Keep direct Python tooling and hardening dependencies reproducible. OMERO's
-# startup tooling still imports pkg_resources, so setuptools remains on the
-# newest compatible release instead of tracking the latest major line. The
-# deprecated API itself instructs affected environments to pin below 81.
+# Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
+# resource APIs; its CLI and database tooling no longer require pkg_resources.
 # --------------------------------------------------------------------------
 ARG PIP_VERSION=26.2.1
-ARG SETUPTOOLS_VERSION=80.10.2
+ARG SETUPTOOLS_VERSION=84.0.0
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0

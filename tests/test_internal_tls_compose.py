@@ -94,6 +94,14 @@ def test_tls_runtime_lockfile_has_automated_dependency_updates():
     assert "USER 65532:65532" in dockerfile
 
 
+def test_tls_image_installs_the_patched_distribution_zlib():
+    """Inputs: TLS image recipe. Output: base-image zlib is explicitly upgraded."""
+    dockerfile = (REPO / "docker/internal-tls.Dockerfile").read_text()
+    assert "ARG ZLIB_APK_VERSION=1.3.2-r1\n" in dockerfile
+    install = dockerfile.split("RUN apk add --no-cache ", 1)[1].split("\nCOPY ", 1)[0]
+    assert '"zlib=${ZLIB_APK_VERSION}"' in install
+
+
 def test_tls_code_directories_remain_traversable_by_the_default_user():
     """Inputs: immutable code copies. Output: non-root imports can traverse parents."""
     dockerfile = (REPO / "docker/internal-tls.Dockerfile").read_text()

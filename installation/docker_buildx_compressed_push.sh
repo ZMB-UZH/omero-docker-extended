@@ -667,15 +667,15 @@ cleanup_local_cache_staging_dirs() {
 generate_flatten_dockerfile() {
     local source_image_name="${1:?BUG: generate_flatten_dockerfile requires a source image name}"
     local dockerfile_path="${2:?BUG: generate_flatten_dockerfile requires a dockerfile path}"
+    local build_arguments_path="${3:-${dockerfile_path}.args}"
 
     if ! python3 - "${source_image_name}" >"${dockerfile_path}" <<'PY'
 import sys
 
 source_image_name = sys.argv[1]
 for line in (
-    f"FROM {source_image_name} AS source",
     "FROM scratch",
-    "COPY --from=source / /",
+    f"COPY --from={source_image_name} / /",
 ):
     print(line)
 PY
@@ -684,7 +684,7 @@ PY
         return 1
     fi
 
-    if ! build_flatten_import_changes "${source_image_name}" >>"${dockerfile_path}"; then
+    if ! build_flatten_import_changes "${source_image_name}" "${build_arguments_path}" >>"${dockerfile_path}"; then
         return 1
     fi
 
@@ -694,6 +694,7 @@ PY
 # Build flatten import changes. Inputs: shell arguments and environment. Output: command status and side effects.
 build_flatten_import_changes() {
     local source_image_name="${1:?BUG: build_flatten_import_changes requires a source image name}"
+    local build_arguments_path="${2:?BUG: build_flatten_import_changes requires an argument file}"
     local image_metadata_json=""
 
     if ! image_metadata_json="$(docker image inspect "${source_image_name}" --format '{{json .}}')"; then
@@ -706,9 +707,10 @@ build_flatten_import_changes() {
         return 1
     fi
 
-    if ! IMAGE_METADATA_JSON="${image_metadata_json}" python3 - <<'PY'
+    if ! IMAGE_METADATA_JSON="${image_metadata_json}" python3 - "${build_arguments_path}" <<'PY'
 import json
 import os
+from pathlib import Path
 import sys
 
 
@@ -761,16 +763,31 @@ def _emit_healthcheck(config):
 def _emit_import_changes(image_metadata):
     config = image_metadata.get("Config") or {}
     lines = []
+    arguments = []
+    environment = config.get("Env") or []
+    prefix = "_OMERO_FLATTEN_"
+    while any(str(entry).split("=", 1)[0].startswith(prefix) for entry in environment):
+        prefix = "_" + prefix
 
-    for env_entry in config.get("Env") or []:
+    def argument(value):
+        name = f"{prefix}{len(arguments) // 2}"
+        lines.append(f"ARG {name}")
+        arguments.extend(("--build-arg", f"{name}={value}"))
+        return "${" + name + "}"
+
+    # Dockerfile ENV/LABEL are not JSON instructions. Expand each value exactly
+    # once from argv, preserving literal dollars, quotes and control characters.
+    for env_entry in environment:
         key, separator, value = str(env_entry).partition("=")
         if not separator or not key:
             continue
-        lines.append(f"ENV {key}={_compact_json(value)}")
+        key_reference = argument(key)
+        value_reference = argument(value)
+        lines.append(f'ENV "{key_reference}"="{value_reference}"')
 
     labels = config.get("Labels") or {}
     for key in sorted(labels):
-        lines.append(f"LABEL {key}={_compact_json(labels[key])}")
+        arguments.extend(("--label", f"{key}={labels[key]}"))
 
     exposed_ports = config.get("ExposedPorts") or {}
     for port_name in sorted(exposed_ports):
@@ -778,7 +795,8 @@ def _emit_import_changes(image_metadata):
 
     volumes = sorted((config.get("Volumes") or {}).keys())
     if volumes:
-        lines.append(f"VOLUME {_compact_json(volumes)}")
+        references = [argument(value) for value in volumes]
+        lines.append(f"VOLUME {_compact_json(references)}")
 
     for dockerfile_key, config_key in (
         ("WORKDIR", "WorkingDir"),
@@ -787,7 +805,8 @@ def _emit_import_changes(image_metadata):
     ):
         raw_value = str(config.get(config_key) or "")
         if raw_value:
-            lines.append(f"{dockerfile_key} {raw_value}")
+            reference = argument(raw_value)
+            lines.append(f"{dockerfile_key} {reference}")
 
     lines.extend(_emit_healthcheck(config))
 
@@ -802,6 +821,11 @@ def _emit_import_changes(image_metadata):
     for onbuild_entry in config.get("OnBuild") or []:
         lines.append(f"ONBUILD {onbuild_entry}")
 
+    if any("\0" in value for value in arguments):
+        raise ValueError("Image metadata contains a NUL byte")
+    Path(sys.argv[1]).write_bytes(
+        b"".join(value.encode("utf-8") + b"\0" for value in arguments)
+    )
     return lines
 
 
@@ -833,21 +857,25 @@ flatten_target_image() {
     local final_image_name=""
     local flatten_context_dir=""
     local flatten_dockerfile=""
+    local flatten_build_arguments=""
+    local metadata_build_args=()
 
     source_image_name="$(compose_flatten_source_image_name "${target}")"
     final_image_name="$(resolve_target_final_image_name "${target}")"
     flatten_context_dir="$(mktemp -d)"
     register_flatten_temp_dir "${flatten_context_dir}"
     flatten_dockerfile="${flatten_context_dir}/Dockerfile"
+    flatten_build_arguments="${flatten_context_dir}/metadata.args"
 
     if ! docker image inspect "${source_image_name}" >/dev/null 2>&1; then
         echo "ERROR (${SCRIPT_NAME}): Flatten source image is missing for target '${target}': ${source_image_name}" >&2
         return 1
     fi
 
-    if ! generate_flatten_dockerfile "${source_image_name}" "${flatten_dockerfile}"; then
+    if ! generate_flatten_dockerfile "${source_image_name}" "${flatten_dockerfile}" "${flatten_build_arguments}"; then
         return 1
     fi
+    mapfile -d '' -t metadata_build_args <"${flatten_build_arguments}"
 
     echo "INFO (${SCRIPT_NAME}): Flattening '${target}' into single-layer image '${final_image_name}'." >&2
     if ! docker build \
@@ -855,6 +883,7 @@ flatten_target_image() {
         --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
         --file "${flatten_dockerfile}" \
         --tag "${final_image_name}" \
+        "${metadata_build_args[@]}" \
         "${flatten_context_dir}" >/dev/null; then
         echo "ERROR (${SCRIPT_NAME}): Failed to build flattened single-layer image for target '${target}'." >&2
         return 1

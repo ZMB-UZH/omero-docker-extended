@@ -34,6 +34,10 @@ Deep operational guidance for AI Agents. `AGENTS.md` should route here instead o
 - `docker compose --env-file installation_paths.env ps` fails when the required secrets/server/web/Celery/Grafana env files are absent. Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as the fallback probe.
 - Before any `docker compose` command, run `python3 tools/env_safety_guard.py check` and `python3 tools/env_safety_guard.py compose-guard`. The compose guard refuses non-canonical worktrees and `.env` files whose `COMPOSE_PROJECT_NAME` does not match the installation path, preventing a second Compose project from attaching to the same live bind mounts.
 - Match the active release's hardening and flattening settings when rebuilding candidates. A plain Compose build of older revisions can skip hardening; compare effective OS/Python package inventories before deployment and never accept a candidate that silently downgrades them.
+- Verify flattening with the real Docker round-trip gate, not generated-text
+  assertions alone. Preserve literal environment values, labels and paths;
+  JSON escaping does not preserve Dockerfile `ENV` or `LABEL` values. Copy the
+  source filesystem without executing its deferred `ONBUILD` instructions.
 - Before replacement, verify entrypoint and configuration readability as the
   image's non-root runtime user. Checkout permissions can survive Docker COPY;
   set required runtime modes explicitly in the Dockerfile, and test restrictive

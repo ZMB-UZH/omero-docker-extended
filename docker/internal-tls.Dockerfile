@@ -3,8 +3,10 @@ FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4c
 ARG PYTHON_APK_VERSION=3.14.8-r0
 ARG PIP_APK_VERSION=26.1.2-r0
 ARG CA_CERTIFICATES_APK_VERSION=20260909-r0
+ARG ZLIB_APK_VERSION=1.3.2-r1
 RUN apk add --no-cache "python3=${PYTHON_APK_VERSION}" \
-    "py3-pip=${PIP_APK_VERSION}" "ca-certificates=${CA_CERTIFICATES_APK_VERSION}"
+    "py3-pip=${PIP_APK_VERSION}" "ca-certificates=${CA_CERTIFICATES_APK_VERSION}" \
+    "zlib=${ZLIB_APK_VERSION}"
 COPY --chmod=0444 monitoring/tls/requirements.txt /build/requirements.txt
 RUN python3 -m venv --without-pip /opt/tls && \
     python3 -m pip --python /opt/tls/bin/python install --no-cache-dir \

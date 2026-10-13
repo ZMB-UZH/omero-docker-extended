@@ -22,12 +22,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # ----------------------------------------------------------
 ARG APPLY_SECURITY_HARDENING=0
 
-# Keep direct Python tooling and hardening dependencies reproducible. Retain the
-# newest Setuptools release below 81 because OMERO's Python stack still imports
-# pkg_resources, whose own deprecation warning requires that compatibility pin.
+# Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
+# resource APIs; its CLI and database tooling no longer require pkg_resources.
 # --------------------------------------------------------------------------
 ARG PIP_VERSION=26.2.1
-ARG SETUPTOOLS_VERSION=80.10.2
+ARG SETUPTOOLS_VERSION=84.0.0
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0

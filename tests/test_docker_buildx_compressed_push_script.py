@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
@@ -415,13 +416,18 @@ exit 0
                 joined_log,
             )
             self.assertIn(
-                "DOCKERFILE FROM omeroserver:flattencheck__flatten_source_",
+                "DOCKERFILE COPY --from=omeroserver:flattencheck__flatten_source_",
                 joined_log,
             )
             self.assertIn(
-                'DOCKERFILE ENV FOO="bar baz"',
+                "--build-arg _OMERO_FLATTEN_3=bar baz",
                 joined_log,
             )
+            self.assertIn(
+                'DOCKERFILE ENV "${_OMERO_FLATTEN_2}"="${_OMERO_FLATTEN_3}"',
+                joined_log,
+            )
+            self.assertIn("--label test.label=value with space", joined_log)
             self.assertIn(
                 'DOCKERFILE ENTRYPOINT ["/hello.txt"]',
                 joined_log,
@@ -449,6 +455,41 @@ exit 0
                 "buildx rm -f omero-builder",
                 joined_log,
             )
+
+    def test_invalid_metadata_cannot_build_or_publish(self) -> None:
+        """Inputs: corrupt or non-argv metadata. Output: fail before build/push."""
+        for metadata in (
+            "not json",
+            json.dumps({"Config": {"Env": ["VALUE=bad\0value"]}}),
+            json.dumps({"Config": {"Labels": {"example": "bad\0value"}}}),
+        ):
+            with self.subTest(metadata=metadata), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                log = root / "docker.log"
+                self._create_fake_docker(root, log)
+                environment = os.environ | {
+                    "PATH": f"{root}:{os.environ.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(log),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": metadata,
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_REGISTRY_PREFIX": "example.invalid/fixture",
+                    "DOCKER_BUILD_PUSH_IMAGES": "1",
+                    "DOCKER_BUILD_FLATTEN_ONLY": "1",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                }
+                result = subprocess.run(
+                    [str(self.script_path)],
+                    cwd=self.repo_root,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=30,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                calls = log.read_text().splitlines()
+                self.assertFalse(any(line.startswith("build ") for line in calls))
+                self.assertFalse(any(line.startswith("image push ") for line in calls))
 
     def test_serial_flatten_releases_each_source_before_next_target(self) -> None:
         """Verify serial flattened builds keep only one target source image live.

@@ -564,7 +564,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
         common_version_args = (
             "ARG PIP_VERSION=26.2.1",
-            "ARG SETUPTOOLS_VERSION=80.10.2",
+            "ARG SETUPTOOLS_VERSION=84.0.0",
             "ARG WHEEL_VERSION=0.48.0",
             "ARG CRYPTOGRAPHY_VERSION=50.0.2",
             "ARG URLLIB3_VERSION=2.8.0",
@@ -579,13 +579,6 @@ class BuildVersionEnvContractTests(unittest.TestCase):
                     self.assertIn(version_arg, dockerfile_text)
             self.assertIn("TMPDIR=/tmp", dockerfile_text)
             self.assertIn("OMERO_TMPDIR=/tmp", dockerfile_text)
-
-        combined_text = "\n".join((server_text, web_text, worker_text))
-        self.assertIn("pkg_resources", combined_text)
-        self.assertNotRegex(
-            combined_text,
-            r"ARG SETUPTOOLS_VERSION=(?:8[1-9]|9[0-9])(?:\.|$)",
-        )
 
         for version_arg in (
             "ARG PYOPENSSL_VERSION=26.4.0",

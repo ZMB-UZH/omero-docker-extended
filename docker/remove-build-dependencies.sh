@@ -1,10 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# Keep the application's virtualenv tooling. Only inherited OS build tools and
-# their unused cryptography dependency are removed from the finished image.
+# Keep the application's virtualenv tooling and Docker CLI/Compose diagnostics.
+# Image builds run on the host; the application does not need the Buildx plugin.
+# Remove only these unused build tools and their inherited dependencies.
 readonly candidates=(
     ansible-core
+    docker-buildx-plugin
     python3-cryptography
     python3-pip
     python3.11-pip

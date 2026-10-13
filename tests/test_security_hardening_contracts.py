@@ -145,12 +145,27 @@ class SecurityHardeningContractTests(unittest.TestCase):
         cases = (
             (
                 "absent",
-                "python3\nansible-core-extra\npython3-setuptools",
+                "python3\nansible-core-extra\npython3-setuptools\n"
+                "docker-ce-cli\ndocker-compose-plugin\ndocker-buildx-plugin-extra",
                 {},
                 0,
                 False,
             ),
             ("present", "python3\nansible-core\npython3.12-pip", {}, 0, True),
+            (
+                "unused-buildx",
+                "docker-ce-cli\ndocker-buildx-plugin\ndocker-compose-plugin",
+                {},
+                0,
+                True,
+            ),
+            (
+                "buildx-required",
+                "docker-buildx-plugin",
+                {"RPM_TEST_RC": "68"},
+                68,
+                False,
+            ),
             (
                 "unused-setuptools",
                 "python3-setuptools\npython3.11-setuptools\npython3.12-setuptools",
@@ -213,12 +228,13 @@ class SecurityHardeningContractTests(unittest.TestCase):
                 self.assertEqual(result.returncode, expected_rc, result.stderr)
                 self.assertEqual(removed.exists(), removal_attempted)
                 commands = calls.read_text(encoding="utf-8").splitlines()
-                if name in {"present", "unused-setuptools"}:
-                    packages = (
-                        "ansible-core python3.12-pip"
-                        if name == "present"
-                        else "python3.11-setuptools python3.12-setuptools"
-                    )
+                expected_removals = {
+                    "present": "ansible-core python3.12-pip",
+                    "unused-setuptools": "python3.11-setuptools python3.12-setuptools",
+                    "unused-buildx": "docker-buildx-plugin",
+                }
+                if name in expected_removals:
+                    packages = expected_removals[name]
                     self.assertEqual(
                         commands[1:3],
                         [

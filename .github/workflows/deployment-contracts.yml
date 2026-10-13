@@ -102,3 +102,5 @@ jobs:
             --check \
             --set '*.output=type=cacheonly' \
             --progress plain
+
+          python3 -m unittest -v tests.container_image_flattening
