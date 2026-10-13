@@ -1410,6 +1410,9 @@ def https_api(tmp_path, monkeypatch, request):
     context = ssl.SSLContext(
         ssl.PROTOCOL_TLS_SERVER,  # DevSkim: ignore DS440072 -- negotiating server context
     )
+    context.minimum_version = (
+        ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001 -- minimum, not maximum
+    )
     context.load_cert_chain(targets / "api" / "cert.pem", targets / "api" / "key.pem")
     server.socket = context.wrap_socket(server.socket, server_side=True)
     authority_host = f"[{host}]" if host == "::1" else host

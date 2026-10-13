@@ -445,6 +445,9 @@ def tls_handshake(leaf_dir, ca_file, hostname):
     )
     server.load_cert_chain(leaf_dir / "cert.pem", leaf_dir / "key.pem")
     client = ssl.create_default_context(cafile=str(ca_file))
+    client.minimum_version = (
+        ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001 -- minimum, not maximum
+    )
     errors = []
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))

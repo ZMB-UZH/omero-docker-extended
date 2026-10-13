@@ -86,6 +86,9 @@ def inventory_api(tmp_path, monkeypatch):
     plain = Server(("127.0.0.1", 0), Handler)
     secure = Server(("127.0.0.1", 0), Handler)
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.minimum_version = (
+        ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001 -- minimum, not maximum
+    )
     context.load_cert_chain(servers / "api/cert.pem", servers / "api/key.pem")
     secure.socket = context.wrap_socket(secure.socket, server_side=True)
     threads = [

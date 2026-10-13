@@ -7175,7 +7175,10 @@ class OMEROWebClient:
             if parsed.scheme == "https":
                 context = ssl.create_default_context()
                 tls_floor = ssl.TLSVersion.TLSv1_2  # DevSkim: ignore DS440001
-                context.minimum_version = max(context.minimum_version, tls_floor)
+                default_minimum = context.minimum_version
+                context.minimum_version = (
+                    default_minimum if default_minimum > tls_floor else tls_floor
+                )
                 sock = context.wrap_socket(sock, server_hostname=parsed.hostname)
             sock.setblocking(False)
 
@@ -7744,7 +7747,9 @@ class OMEROWebClient:
         attempts = _http_retry_attempts() if retry_transient else 1
         delay = _http_retry_delay_seconds()
 
-        for attempt in range(1, attempts + 1):
+        attempt = 0
+        while True:
+            attempt += 1
             try:
                 return self._api_request_once(
                     url,
@@ -7928,7 +7933,9 @@ class OMEROWebClient:
         request_method = method or ("POST" if data is not None else "GET")
         attempts = _http_retry_attempts() if retry_transient else 1
         delay = _http_retry_delay_seconds()
-        for attempt in range(1, attempts + 1):
+        attempt = 0
+        while True:
+            attempt += 1
             try:
                 status_code, raw_body = self._open_json_request_once(
                     url,

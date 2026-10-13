@@ -57,16 +57,26 @@ def test_deployment_contract_workflow_validates_full_compose_build_graph() -> No
     assert prepare["run"] == "python3 -m tools.prepare_ci_compose_environment"
 
     script = validate["run"]
+    services = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())[
+        "services"
+    ]
+    profiles = {
+        profile
+        for service in services.values()
+        for profile in service.get("profiles", [])
+    }
+    images = {service["image"] for service in services.values()}
+    builds = {name for name, service in services.items() if "build" in service}
     assert '"${compose[@]}" config --quiet' in script
     assert '"${compose[@]}" config --services' in script
-    assert '[ "${#services[@]}" -eq 21 ]' in script
+    assert f'[ "${{#services[@]}}" -eq {len(services)} ]' in script
     assert '"${compose[@]}" config --profiles' in script
-    assert '[ "${#profiles[@]}" -eq 2 ]' in script
+    assert f'[ "${{#profiles[@]}}" -eq {len(profiles)} ]' in script
     assert '"${compose[@]}" config --images' in script
-    assert '[ "${#images[@]}" -eq 19 ]' in script
+    assert f'[ "${{#images[@]}}" -eq {len(images)} ]' in script
     assert "*:latest" in script
     assert '"${compose[@]}" build --print' in script
-    assert "len(targets) != 6" in script
+    assert f"len(targets) != {len(builds)}" in script
     assert "docker buildx bake" in script
     assert '--file "${bake_plan}"' in script
     assert "--check" in script

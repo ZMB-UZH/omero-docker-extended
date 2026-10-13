@@ -8,7 +8,7 @@ observe a new certificate paired with an old private key.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import fcntl
@@ -163,11 +163,9 @@ def publish(
         os.replace(temporary, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
         os.fsync(directory_fd)
     finally:
-        try:
+        # Atomic replacement consumes the temporary name; failed writes do not.
+        with suppress(FileNotFoundError):
             os.unlink(temporary, dir_fd=directory_fd)
-        except FileNotFoundError:
-            # A successful atomic replace already consumed this temporary file.
-            temporary = ""
 
 
 def private_key(

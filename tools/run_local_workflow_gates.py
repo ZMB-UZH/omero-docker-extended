@@ -860,6 +860,25 @@ def run_redis(context: GateContext) -> None:
     )
 
 
+def run_deployment(context: GateContext) -> None:
+    """Inputs: Linux Docker context. Output: the exact hosted deployment contract check."""
+    _run(
+        (
+            context.python,
+            "-m",
+            "pytest",
+            "tests/container_deployment_contracts.py",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-W",
+            "error",
+        ),
+        cwd=context.repo_root,
+        label="Deployment Compose and Buildx contracts",
+    )
+
+
 GateRunner = Callable[[GateContext], None]
 
 PROFILES: dict[str, tuple[GateRunner, ...]] = {
@@ -872,6 +891,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
     "hadolint": (run_hadolint,),
     "devskim": (run_devskim,),
     "redis": (run_redis,),
+    "deployment": (run_deployment,),
     "regression-guard": (run_regression_guard,),
     "super-linter": (run_super_linter,),
     "python": (run_ruff, run_mypy, run_vulture),
@@ -896,6 +916,7 @@ PROFILES: dict[str, tuple[GateRunner, ...]] = {
         run_devskim,
         run_super_linter,
         run_redis,
+        run_deployment,
     ),
 }
 
@@ -920,7 +941,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help=(
             "Gate profile to run. 'ci' mirrors docs, Ruff, Mypy, Vulture, tests, "
             "and Bandit. 'all' also runs pinned Hadolint and DevSkim engines and the "
-            "Docker-backed Super-Linter."
+            "Docker-backed Super-Linter, Redis persistence and deployment contracts."
         ),
     )
     parser.add_argument(

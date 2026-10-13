@@ -24,5 +24,7 @@ RUN chmod 0555 /app/monitoring /app/monitoring/tls /etc/omero-tls && \
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # Compose grants root only to the isolated, networkless volume owner.
 USER 65532:65532
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["/opt/tls/bin/python", "-m", "monitoring.tls.manager", "check", "--root", "/pki", "--identities", "/etc/omero-tls/identities.json"]
 ENTRYPOINT ["/opt/tls/bin/python", "-m", "monitoring.tls.manager"]
 CMD ["serve", "--root", "/pki", "--identities", "/etc/omero-tls/identities.json"]

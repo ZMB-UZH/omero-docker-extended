@@ -1779,6 +1779,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     assert attached[0]["create_tables"] is create_tables
     generated = list((upload_root / job_id / "_derived").rglob("*.png"))
     assert len(generated) == int(attachments or images)
+    expected_plot_imports = []
     if generated:
         plot_source = generated[0]
         assert plot_source.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
@@ -1786,6 +1787,8 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         plot_relative = plot_source.relative_to(upload_root / job_id).as_posix()
         assert plot_relative.startswith("_derived/sem-edx/")
         assert attached[0]["plot_path"] == (plot_source if attachments else None)
+        if images:
+            expected_plot_imports.append(("images/sample_edx.png", 88, plot_relative))
     else:
         assert attached[0]["plot_path"] is None
     assert (
@@ -1793,10 +1796,7 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
     )
     assert staged_txt.read_text(encoding="utf-8") == spectrum_text
     assert not attached[0]["kwargs"].get("session_key")
-    if images:
-        assert plot_imports == [("images/sample_edx.png", 88, plot_relative)]
-    else:
-        assert plot_imports == []
+    assert plot_imports == expected_plot_imports
     assert removed_jobs == [(job_id, upload_root)]
     assert deferred_jobs == []
 

@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "tool": "Semgrep OSS",
+  "version": "1.179.0",
+  "findings": [
+    {
+      "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",
+      "path": "tools/prepare_quota_directories.py",
+      "line": 55,
+      "reason": "DevSkim: ignore DS173237 -- public source SHA-256, not a credential. Reviewed directory-only false positive: 01770 permits the runtime group to write metadata, denies other users, and uses the sticky bit to protect root-owned entries. The rule incorrectly compares the numeric mode with file permissions. Descriptor-based ownership and no-follow checks remain enforced.", "sha256": "6b718a0eb0ee33cccad185d2b2664b9e79cf443bcf5d95dddb34847cfbed7e72"
+    },
+    {
+      "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",
+      "path": "tools/prepare_quota_directories.py",
+      "line": 58,
+      "reason": "DevSkim: ignore DS173237 -- public source SHA-256, not a credential. Reviewed directory-only false positive: 0700 grants only the root owner directory traversal and write access. The rule incorrectly treats 0700 as more permissive than a regular-file mode. Removing owner execute would prevent required directory access.", "sha256": "6b718a0eb0ee33cccad185d2b2664b9e79cf443bcf5d95dddb34847cfbed7e72"
+    }
+  ]
+}

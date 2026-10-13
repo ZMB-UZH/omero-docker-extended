@@ -103,6 +103,40 @@ def test_operator_selected_root_alias_is_supported(tmp_path, ownership):
     assert stat.S_IMODE((data / ".admin-tools").stat().st_mode) == 0o1770
 
 
+@pytest.mark.parametrize("failed", [None, "open", "fchown", "fchmod", "stat"])
+def test_all_metadata_handles_close_on_success_and_failure(
+    tmp_path, ownership, monkeypatch, failed
+):
+    """Inputs: interrupted setup. Output: every acquired descriptor is closed."""
+    opened = []
+    native_open = os.open
+
+    def record_open(path, flags, *args, **kwargs):
+        """Inputs: metadata open request. Output: real handle or child-open failure."""
+        if failed == "open" and path == "quota":
+            raise PermissionError("fixture open denied")
+        descriptor = native_open(path, flags, *args, **kwargs)
+        opened.append(descriptor)
+        return descriptor
+
+    def deny(*_args, **_kwargs):
+        """Inputs: permission or identity check. Output: controlled OS failure."""
+        raise PermissionError("fixture operation denied")
+
+    monkeypatch.setattr(permissions.os, "open", record_open)
+    if failed in {"fchown", "fchmod", "stat"}:
+        monkeypatch.setattr(permissions.os, failed, deny)
+    if failed is None:
+        permissions.prepare(tmp_path, 1234)
+    else:
+        with pytest.raises(PermissionError, match="fixture"):
+            permissions.prepare(tmp_path, 1234)
+    assert len(opened) == (2 if failed == "open" else 3)
+    for descriptor in opened:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
 def test_directory_replacement_does_not_redirect_permission_changes(
     tmp_path, ownership, monkeypatch
 ):

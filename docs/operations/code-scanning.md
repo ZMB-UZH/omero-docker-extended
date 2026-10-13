@@ -159,7 +159,13 @@ python3 tools/run_local_workflow_gates.py --setup --profile ci
 ```
 
 This installs Python-backed workflow tools into an ignored local environment from the same hash-pinned requirement files used by GitHub Actions, then runs the docs, Ruff, Mypy, Vulture, split test, coverage, and Bandit gates.
-Use `--profile all` when Docker is available to also run the exact Hadolint, DevSkim, and Super-Linter gates. `--profile devskim` runs only the shared DevSkim gate during focused iteration.
+Use `--profile all` when Docker is available to also run the exact Hadolint, DevSkim, Super-Linter, Redis persistence, and deployment-contract gates. `--profile devskim` and `--profile deployment` run their respective gates during focused iteration.
+
+The deployment gate executes the hosted Compose and Buildx validation script in
+an isolated Git-selected source copy with synthetic environment files. It never
+copies operator configuration or starts the application stack. Topology tests
+bind workflow service, image, profile, and build counts to the tracked Compose
+definitions, preventing an added service from leaving stale CI expectations.
 
 Some GitHub-only behavior cannot be made fully identical on the host: SARIF
 upload, CodeQL hosted analysis, OIDC publishing, repository Scorecard checks,
@@ -222,6 +228,28 @@ checks remain mandatory; do not describe this percentage as all-language or
 bug-free proof.
 
 ## Scanner Upgrade Compatibility Gate
+
+### Reviewed directory-permission false positives
+
+Semgrep 1.179.0's `insecure-file-permissions` rule numerically compares modes
+with regular-file permissions. It incorrectly flags the quota helper's `0700`
+root-only directory and `01770` service-group directory with sticky ownership.
+Directory execute permission is required for traversal; these modes must not be
+changed merely to satisfy that comparison.
+
+The two reviewed findings use native, line-specific `nosemgrep` annotations.
+`.github/semgrep-reviewed-findings.json` binds approval to the exact source hash,
+rule, location, scanner version, and rationale. The pre-upload guard verifies
+successful scanner execution and exactly one native match per approved location.
+Changed source, stale approvals, duplicate matches, or any other finding block
+upload. The full original SARIF, including both suppressed results, is retained
+and uploaded unchanged after validation. Other scanners still require zero
+results. Updating an approval requires renewed evidence and explicit review;
+never automatically refresh its hash or expand its scope to pass a gate.
+The manifest's complete source hashes are recomputed by the guard; their
+same-line DevSkim annotations identify public checksums, not credentials.
+
+### Engine compatibility
 
 An action version is not a sufficient compatibility boundary. Before changing
 any scanner action pin:

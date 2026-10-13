@@ -159,7 +159,8 @@ def test_setup_keeps_hash_locked_requirements_and_exact_linter_pin(
     gates._install_python_workflow_dependencies(context)
     commands = [call.args[0] for call in runner.call_args_list]
     if not exists:
-        assert commands.pop(0) == (sys.executable, "-m", "venv", str(context.tool_venv))
+        creation = commands.pop(0)
+        assert creation == (sys.executable, "-m", "venv", str(context.tool_venv))
     assert len(commands) == 5
     assert {command[-1] for command in commands[:-1]} == {
         ".github/requirements/tests-ci.txt",

@@ -2831,8 +2831,8 @@ def test_folder_inventory_rejects_incomplete_or_unsafe_sources(
         root.write_bytes(b"keep")
     elif kind != "missing":
         root.mkdir()
+    original = tmp_path / "outside"
     if kind == "symlink":
-        original = tmp_path / "outside"
         original.write_bytes(b"keep")
         (root / "link").symlink_to(original)
     elif kind == "fifo":

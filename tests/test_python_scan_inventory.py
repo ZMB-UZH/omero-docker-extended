@@ -111,7 +111,7 @@ def test_gui_test_prerequisites_and_isolation_remain_documented():
     steps = workflow["jobs"]["test-with-coverage"]["steps"]
     install = next(step for step in steps if step.get("name") == "Install dependencies")
     packages = set()
-    for line in install["run"].splitlines():
+    for line in install["run"].replace("\\\n", " ").splitlines():
         arguments = shlex.split(line)
         if arguments[:3] == ["sudo", "apt-get", "install"]:
             assert {"--no-install-recommends", "--yes"} <= set(arguments)

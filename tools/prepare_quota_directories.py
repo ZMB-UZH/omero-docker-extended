@@ -4,10 +4,36 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+from contextlib import contextmanager
+import logging
 import os
 from pathlib import Path
 import sys
+from typing import Iterator
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+@contextmanager
+def directory(path: Path | str, *, parent_fd: int | None = None) -> Iterator[int]:
+    """Inputs: operator root or relative child. Output: owned directory handle.
+
+    Only the operator-selected root may be an alias. Metadata children are
+    created privately when absent and never opened through symbolic links.
+    """
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+    if parent_fd is not None:
+        try:
+            os.mkdir(path, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            LOGGER.debug("Validating existing quota metadata directory")
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, dir_fd=parent_fd)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
 
 
 def prepare(data_root: Path, web_gid: int) -> None:
@@ -18,32 +44,22 @@ def prepare(data_root: Path, web_gid: int) -> None:
     """
     if not 0 <= web_gid < 2**32 - 1:
         raise ValueError("The runtime group must be a valid nonnegative GID.")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
-    with ExitStack() as opened:
-        # The operator may select a symlinked data root. Untrusted children
-        # below that root are opened relative to descriptors with NOFOLLOW.
-        root = os.open(data_root, flags)
-        opened.callback(os.close, root)
-        parent = root
-        directories = []
-        bindings = []
-        for name in (".admin-tools", "quota"):
-            try:
-                os.mkdir(name, 0o700, dir_fd=parent)
-            except FileExistsError:
-                pass
-            descriptor = os.open(name, flags | os.O_NOFOLLOW, dir_fd=parent)
-            opened.callback(os.close, descriptor)
-            directories.append(descriptor)
-            bindings.append((parent, name, descriptor))
-            parent = descriptor
-        admin, quota = directories
+    with (
+        directory(data_root) as root,
+        directory(".admin-tools", parent_fd=root) as admin,
+        directory("quota", parent_fd=admin) as quota,
+    ):
         os.fchown(admin, 0, web_gid)
         # Only the service group writes state; sticky ownership protects root files.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.fchmod(admin, 0o1770)  # nosec B103
         os.fchown(quota, 0, 0)
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.fchmod(quota, 0o700)
-        for parent, name, descriptor in bindings:
+        for parent, name, descriptor in (
+            (root, ".admin-tools", admin),
+            (admin, "quota", quota),
+        ):
             current = os.stat(name, dir_fd=parent, follow_symlinks=False)
             expected = os.fstat(descriptor)
             if (current.st_dev, current.st_ino) != (

@@ -39,8 +39,8 @@ jobs:
           "${compose[@]}" config --quiet
 
           mapfile -t services < <("${compose[@]}" config --services | sort -u)
-          [ "${#services[@]}" -eq 21 ] || {
-            printf 'Expected 21 Compose services, found %s:\n' "${#services[@]}" >&2
+          [ "${#services[@]}" -eq 22 ] || {
+            printf 'Expected 22 Compose services, found %s:\n' "${#services[@]}" >&2
             printf '  %s\n' "${services[@]}" >&2
             exit 1
           }
@@ -53,8 +53,8 @@ jobs:
           }
 
           mapfile -t images < <("${compose[@]}" config --images | sort -u)
-          [ "${#images[@]}" -eq 19 ] || {
-            printf 'Expected 19 Compose images, found %s:\n' "${#images[@]}" >&2
+          [ "${#images[@]}" -eq 20 ] || {
+            printf 'Expected 20 Compose images, found %s:\n' "${#images[@]}" >&2
             printf '  %s\n' "${images[@]}" >&2
             exit 1
           }
@@ -78,10 +78,10 @@ jobs:
 
           plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           targets = plan.get("target", {})
-          if not isinstance(targets, dict) or len(targets) != 6:
+          if not isinstance(targets, dict) or len(targets) != 7:
               target_names = sorted(targets) if isinstance(targets, dict) else []
               raise SystemExit(
-                  f"Expected 6 Compose build targets, found {len(target_names)}: "
+                  f"Expected 7 Compose build targets, found {len(target_names)}: "
                   + ", ".join(target_names)
               )
           root = Path.cwd().resolve()

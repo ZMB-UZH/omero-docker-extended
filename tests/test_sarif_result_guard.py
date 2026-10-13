@@ -163,3 +163,41 @@ def test_codeql_workflow_guard_executes_fail_closed(
     )
     assert result.returncode == expected, result.stderr
     assert {path.name: path.read_bytes() for path in reports.iterdir()} == before
+
+
+@pytest.mark.parametrize(
+    "job,report,guard",
+    [
+        ("codeql", "${{ runner.temp }}/codeql-results", "CodeQL"),
+        ("trivy-filesystem", "trivy-results.sarif", "Trivy"),
+        ("semgrep", "semgrep-results.sarif", "Semgrep"),
+    ],
+)
+def test_rejected_reports_remain_available_without_security_upload(job, report, guard):
+    """Inputs: hosted scanners. Output: raw evidence retained before blocking findings."""
+    repo = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load(
+        (repo / ".github/workflows/security-code-scanning.yml").read_text()
+    )
+    steps = workflow["jobs"][job]["steps"]
+    preservation = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/upload-artifact@")
+        and step.get("with", {}).get("path") == report
+    )
+    rejection = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == f"Reject {guard} findings before upload"
+    )
+    assert preservation < rejection
+    assert steps[preservation]["if"] == "always()"
+    assert steps[preservation]["with"]["if-no-files-found"] == "error"
+    assert not steps[rejection].get("continue-on-error", False)
+    upload = next(
+        step
+        for step in steps[rejection + 1 :]
+        if step.get("uses", "").startswith("github/codeql-action/upload-sarif@")
+    )
+    assert upload.get("if", "success()") == "success()"

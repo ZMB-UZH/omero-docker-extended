@@ -13,7 +13,7 @@ walk payload trees and never changes files below existing user directories.
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 import errno
 import grp
 import logging
@@ -418,13 +418,10 @@ def ensure_user_directory(
             f"resolved username directory escaped DropBox root: {sanitize_for_log(username)!r}"
         )
 
-    with ExitStack() as handles:
-        parent_fd = handles.enter_context(directory_handle(root))
+    with directory_handle(root) as parent_fd:
         created = False
         try:
-            descriptor = handles.enter_context(
-                directory_handle(username, parent_fd=parent_fd)
-            )
+            os.stat(username, dir_fd=parent_fd, follow_symlinks=False)
         except FileNotFoundError:
             try:
                 os.mkdir(username, mode=config.mode, dir_fd=parent_fd)
@@ -432,16 +429,14 @@ def ensure_user_directory(
             except FileExistsError:
                 # Another initializer may have created the entry; validate it below.
                 created = False
-            descriptor = handles.enter_context(
-                directory_handle(username, parent_fd=parent_fd)
-            )
-        current = os.fstat(descriptor)
-        if (current.st_uid, current.st_gid) != (uid, gid):
-            os.fchown(descriptor, uid, gid)
-        if stat.S_IMODE(os.fstat(descriptor).st_mode) != config.mode:
-            os.fchmod(descriptor, config.mode)
-        verify_directory_entry(parent_fd, username, descriptor)
-        return "created" if created else "existing"
+        with directory_handle(username, parent_fd=parent_fd) as descriptor:
+            current = os.fstat(descriptor)
+            if (current.st_uid, current.st_gid) != (uid, gid):
+                os.fchown(descriptor, uid, gid)
+            if stat.S_IMODE(os.fstat(descriptor).st_mode) != config.mode:
+                os.fchmod(descriptor, config.mode)
+            verify_directory_entry(parent_fd, username, descriptor)
+            return "created" if created else "existing"
 
 
 def write_status(path: Path, values: dict[str, str | int]) -> None:

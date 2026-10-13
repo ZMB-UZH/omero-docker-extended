@@ -25,6 +25,12 @@ def virtual_display():
     """Inputs: installed Xvfb. Output: isolated local display, released after tests."""
     executable = shutil.which("xvfb-run")
     assert executable, "Real Tk tests require the Linux xvfb package."
+    display_server = (
+        "import json, os, sys; "
+        "print(json.dumps({key: os.environ[key] "
+        "for key in ('DISPLAY', 'XAUTHORITY')}), flush=True); "
+        "sys.stdin.read()"
+    )
     with tempfile.TemporaryFile() as errors:
         process = subprocess.Popen(
             [
@@ -33,10 +39,7 @@ def virtual_display():
                 "--server-args=-screen 0 1920x1200x24 -nolisten tcp",
                 sys.executable,
                 "-c",
-                "import json, os, sys; "
-                "print(json.dumps({key: os.environ[key] "
-                "for key in ('DISPLAY', 'XAUTHORITY')}), flush=True); "
-                "sys.stdin.read()",
+                display_server,
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

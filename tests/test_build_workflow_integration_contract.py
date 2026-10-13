@@ -1705,21 +1705,35 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         Inputs: repository fixtures. Output: fails on regressions in ci workflows install from pinned requirement manifests.
         """
-        tests_workflow = (
-            self.repo_root / ".github" / "workflows" / "tests.yml"
-        ).read_text(encoding="utf-8")
-        security_workflow = (
-            self.repo_root / ".github" / "workflows" / "security-code-scanning.yml"
-        ).read_text(encoding="utf-8")
+        import yaml
 
-        self.assertIn(
-            "python3 -m pip install --require-hashes --requirement .github/requirements/tests-ci.txt",
-            tests_workflow,
+        cases = (
+            ("tests.yml", "test-with-coverage", "tests-ci.txt"),
+            ("tests.yml", "test-with-coverage", "vulture-ci.txt"),
+            ("security-code-scanning.yml", "bandit", "security-code-scanning.txt"),
         )
-        self.assertIn(
-            "python3 -m pip install --require-hashes --requirement .github/requirements/security-code-scanning.txt",
-            security_workflow,
-        )
+        for filename, job, lockfile in cases:
+            workflow = yaml.safe_load(
+                (self.repo_root / ".github/workflows" / filename).read_text()
+            )
+            commands = [
+                shlex.split(line)
+                for step in workflow["jobs"][job]["steps"]
+                if step.get("name", "").startswith("Install")
+                for line in step["run"].replace("\\\n", " ").splitlines()
+            ]
+            install = next_or_fail(
+                command
+                for command in commands
+                if command[:4] == ["python3", "-m", "pip", "install"]
+            )
+            self.assertIn("--require-hashes", install)
+            requirements = [
+                value
+                for flag, value in zip(install, install[1:])
+                if flag == "--requirement"
+            ]
+            self.assertIn(f".github/requirements/{lockfile}", requirements)
 
     def test_python_backed_ci_workflows_pin_exact_setup_python_runtime(self) -> None:
         """Verify python backed ci workflows pin exact setup python runtime.
@@ -1760,7 +1774,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         expected_cache_paths = {
             ".github/workflows/tests.yml": (
                 "test-with-coverage",
-                [".github/requirements/tests-ci.txt"],
+                [
+                    ".github/requirements/tests-ci.txt",
+                    ".github/requirements/vulture-ci.txt",
+                ],
             ),
             ".github/workflows/mypy.yml": (
                 "mypy",

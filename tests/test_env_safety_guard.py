@@ -9,11 +9,10 @@ import subprocess
 import sys
 import tempfile
 import threading
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import env_safety_guard
@@ -21,7 +20,7 @@ import env_safety_guard
 ALL_INTERFACES_IPV4 = ".".join(("0", "0", "0", "0"))
 
 
-class EnvSafetyGuardTests(unittest.TestCase):
+class EnvSafetyGuardTests(TestCase):
     """Verify the env safety guard protects deployment config files."""
 
     def _make_repo(

@@ -82,6 +82,14 @@ jobs:
           output: ${{ runner.temp }}/codeql-results
           upload: never
 
+      - name: Preserve unmodified CodeQL report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-report-${{ matrix.language }}
+          path: ${{ runner.temp }}/codeql-results
+          if-no-files-found: error
+
       - name: Reject CodeQL findings before upload
         shell: bash
         env:
@@ -147,6 +155,14 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           skip-dirs: third_party
+
+      - name: Preserve unmodified Trivy report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-report
+          path: trivy-results.sarif
+          if-no-files-found: error
 
       - name: Reject Trivy findings before upload
         run: python3 tools/sarif_result_guard.py trivy-results.sarif
@@ -215,7 +231,9 @@ jobs:
           if-no-files-found: error
 
       - name: Reject Semgrep findings before upload
-        run: python3 tools/sarif_result_guard.py semgrep-results.sarif
+        run: >-
+          python3 tools/sarif_result_guard.py semgrep-results.sarif
+          --reviewed-suppressions .github/semgrep-reviewed-findings.json
 
       - name: Upload Semgrep results to GitHub Security tab
         id: upload-sarif

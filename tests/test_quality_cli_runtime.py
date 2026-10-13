@@ -221,13 +221,16 @@ def test_quality_cli_returns_native_tool_result(quality_repository, name, invali
 def test_smoke_command_preserves_native_failure(tmp_path, monkeypatch):
     """Inputs: a real failing child process. Output: exact status, correct working directory."""
     monkeypatch.setattr(run_agent_skill_smoke, "REPO_ROOT", tmp_path)
+    child = (
+        "from pathlib import Path; import sys; "
+        "Path('receipt').write_text('ran'); sys.exit(13)"
+    )
     assert (
         run_agent_skill_smoke._run_command(
             [
                 sys.executable,
                 "-c",
-                "from pathlib import Path; import sys; "
-                "Path('receipt').write_text('ran'); sys.exit(13)",
+                child,
             ]
         )
         == 13

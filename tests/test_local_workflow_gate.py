@@ -319,6 +319,7 @@ class LocalWorkflowGateTests(unittest.TestCase):
                 self.tool.run_devskim,
                 self.tool.run_super_linter,
                 self.tool.run_redis,
+                self.tool.run_deployment,
             ),
             self.tool.PROFILES["all"],
         )
@@ -339,6 +340,19 @@ class LocalWorkflowGateTests(unittest.TestCase):
         self.assertIn(
             "--profile redis", (REPO_ROOT / ".github/workflows/tests.yml").read_text()
         )
+
+    def test_deployment_gate_runs_the_hosted_contract_in_an_isolated_copy(self) -> None:
+        """Inputs: local gate. Output: the actual hosted Compose/Buildx check is mandatory in all."""
+        context = self.tool.GateContext(
+            REPO_ROOT, REPO_ROOT / ".cache", REPO_ROOT / ".venv", sys.executable, False
+        )
+        with unittest.mock.patch.object(self.tool, "_run") as run:
+            self.tool.run_deployment(context)
+        command = run.call_args.args[0]
+        self.assertIn("tests/container_deployment_contracts.py", command)
+        self.assertEqual(command[:3], (sys.executable, "-m", "pytest"))
+        self.assertEqual(self.tool.PROFILES["deployment"], (self.tool.run_deployment,))
+        self.assertIn(self.tool.run_deployment, self.tool.PROFILES["all"])
 
     def test_hadolint_gate_uses_compatible_pinned_engine(self) -> None:
         """Verify the local Hadolint gate pins the workflow-compatible engine.

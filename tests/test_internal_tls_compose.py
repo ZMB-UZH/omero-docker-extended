@@ -29,6 +29,19 @@ def test_authority_is_offline_and_has_no_application_or_docker_mounts():
     assert "check" in service["healthcheck"]["test"]
 
 
+def test_image_healthcheck_matches_the_deployed_certificate_check():
+    """Inputs: image and Compose probes. Output: both verify the same persisted PKI."""
+    source = (REPO / "docker/internal-tls.Dockerfile").read_text()
+    healthcheck = source.split("HEALTHCHECK ", 1)[1].split("ENTRYPOINT ", 1)[0]
+    command = json.loads(healthcheck.split("CMD ", 1)[1].strip())
+    deployed = compose()["services"]["internal-tls"]["healthcheck"]
+    assert ["CMD", *command] == deployed["test"]
+    assert "--interval=30s" in healthcheck
+    assert "--timeout=10s" in healthcheck
+    assert "--start-period=30s" in healthcheck
+    assert "--retries=3" in healthcheck
+
+
 def test_every_server_has_only_its_own_private_key_and_readonly_public_trust():
     """Inputs: service mounts. Output: no client receives CA or other service keys."""
     document = compose()
