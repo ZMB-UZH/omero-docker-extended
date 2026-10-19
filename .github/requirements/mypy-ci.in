@@ -11,4 +11,4 @@ django-stubs-ext==6.1.2
 # Requests includes inline type information from 2.34; do not shadow it with stubs.
 requests==2.34.2
 types-atheris==3.1.0.20260630
-types-psycopg2==2.9.21.20260911
+types-psycopg2==2.9.21.20261008
