@@ -13,7 +13,7 @@ cryptography==50.0.2
 pyyaml==6.0.3
 portalocker==4.4.0
 psycopg2-binary==2.9.13
-numpy==2.5.3
+numpy==2.5.4
 numcodecs==0.17.0
 matplotlib==3.11.2
 ome-zarr==0.20.1
