@@ -737,14 +737,14 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             step for step in steps if step["name"] == "Install Docker Scout CLI"
         )
         self.assertEqual(
-            "1.26.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
+            "1.27.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
         )
         expected_scout_sha256 = "".join(
             (
-                "47daa9ac44281631",
-                "6c65389f516b8471",
-                "46bb9f45e8d6afdc",
-                "bb9ce835c4e138bd",
+                "815207e27559fd3d",
+                "7dddfe778e86f0ae",
+                "b823eeb24b3cd79d",
+                "00bc5cd8dfd0724d",
             )
         )
         self.assertEqual(

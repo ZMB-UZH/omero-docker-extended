@@ -71,10 +71,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_JOB_SERVICE_HOST=localhost", env_text)
         self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.9.0", env_text)
-        self.assertIn("OME_ZARR_PY_VERSION=0.20.1", env_text)
-        self.assertIn("BIOFORMATS2RAW_VERSION=0.12.1", env_text)
+        self.assertIn("OME_ZARR_PY_VERSION=0.21.0", env_text)
+        self.assertIn("BIOFORMATS2RAW_VERSION=0.13.0", env_text)
         self.assertIn(
-            "BIOFORMATS2RAW_SHA256=51fbbf04a83c2042b707fce016ad0c8260d37194ff8fe7d986d53f4ebee116a6",
+            "BIOFORMATS2RAW_SHA256=7f0f92fe2d125219e4e20d4510d4f7cecfe19e8eadc52d9f462510a3494c5360",
             env_text,
         )
         self.assertIn(
@@ -82,6 +82,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             env_text,
         )
         self.assertIn("TIFFFILE_VERSION=2026.3.3", env_text)
+        self.assertIn("WEB_TIFFFILE_VERSION=2026.10.15", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
         self.assertIn(
             "BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2",
@@ -116,6 +117,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(
             'TIFFFILE_VERSION: "${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}"',
+            compose_text,
+        )
+        self.assertIn(
+            'TIFFFILE_VERSION: "${WEB_TIFFFILE_VERSION:-${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}}"',
             compose_text,
         )
         self.assertIn(
@@ -177,20 +182,20 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in compose pins monitoring and management image versions.
         """
         compose_text = self.read_text("docker-compose.yml")
-        self.assertIn('image: "portainer/portainer-ce:2.45.1-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.20.1"', compose_text)
-        self.assertIn('image: "prom/prometheus:v3.15.0"', compose_text)
+        self.assertIn('image: "portainer/portainer-ce:2.45.3-alpine"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.21.2"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.15.1"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
         self.assertIn(
             'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
             compose_text,
         )
-        self.assertIn('image: "oliver006/redis_exporter:v1.93.0-alpine"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.96.0-alpine"', compose_text)
         self.assertIn('image: "redis:8.10.2-alpine"', compose_text)
         self.assertIn('image: "ghcr.io/google/cadvisor:0.60.6"', compose_text)
-        self.assertIn('image: "grafana/loki:3.7.8"', compose_text)
-        self.assertIn('image: "grafana/grafana:13.2.3"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.40.0"', compose_text)
+        self.assertIn('image: "grafana/loki:3.7.9"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.2.4"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.40.11"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -435,8 +440,8 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in alpine 323 base images use current verified digest.
         """
         expected_from = (
-            "FROM alpine:3.24.2@"
-            "sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6"
+            "FROM alpine:3.24.3@"
+            "sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
         )
         for relative_path in (
             "docker/firewall-bouncer.Dockerfile",
@@ -459,7 +464,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/omero-celery-worker.Dockerfile")
         self.assertIn(
             "FROM ubuntu:26.04@"
-            "sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b",
+            "sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
             dockerfile_text,
         )
         self.assertNotIn(
@@ -476,7 +481,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/pg-maintenance.Dockerfile")
         self.assertIn(
             "FROM postgres:16.15@"
-            "sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+            "sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97",
             dockerfile_text,
         )
         self.assertNotIn(
@@ -533,7 +538,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             "django==5.2.18",
             "matplotlib==3.11.2",
             "pytest==9.1.1",
-            "portalocker==4.4.0",
+            "portalocker==4.4.1",
             "psycopg2-binary==2.9.13",
             "celery==5.6.3",
             "redis==8.1.0",
@@ -563,12 +568,12 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         worker_text = self.read_text("docker/omero-celery-worker.Dockerfile")
 
         common_version_args = (
-            "ARG PIP_VERSION=26.2.1",
-            "ARG SETUPTOOLS_VERSION=84.0.0",
+            "ARG PIP_VERSION=26.2.2",
+            "ARG SETUPTOOLS_VERSION=84.2.1",
             "ARG WHEEL_VERSION=0.48.0",
             "ARG CRYPTOGRAPHY_VERSION=50.0.2",
             "ARG URLLIB3_VERSION=2.8.0",
-            "ARG CERTIFI_VERSION=2026.7.22",
+            "ARG CERTIFI_VERSION=2026.10.23",
             "ARG IDNA_VERSION=3.20",
             "ARG REQUESTS_VERSION=2.34.2",
             "ARG JINJA2_VERSION=3.1.6",
@@ -582,7 +587,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
 
         for version_arg in (
             "ARG PYOPENSSL_VERSION=26.4.0",
-            "ARG REPORTLAB_VERSION=5.0.1",
+            "ARG REPORTLAB_VERSION=5.1.0",
             "ARG MARKDOWN_VERSION=3.11",
             "ARG OMERO_CLI_RENDER_VERSION=0.8.1",
             "ARG OMERO_METADATA_VERSION=0.14.0",
@@ -753,6 +758,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("BIOFORMATS2RAW_VERSION=${BIOFORMATS2RAW_VERSION}", script_text)
         self.assertIn("BIOFORMATS2RAW_SHA256=${BIOFORMATS2RAW_SHA256}", script_text)
         self.assertIn("TIFFFILE_VERSION=${TIFFFILE_VERSION}", script_text)
+        self.assertIn(
+            "WEB_TIFFFILE_VERSION=${WEB_TIFFFILE_VERSION:-${TIFFFILE_VERSION}}",
+            script_text,
+        )
         self.assertIn("BIOFORMATS_VERSION=${BIOFORMATS_VERSION}", script_text)
         self.assertIn("BIOFORMATS_SHA256=${BIOFORMATS_SHA256}", script_text)
         self.assertIn("OMERO_SERVER_HOST_PORT=${OMERO_SERVER_HOST_PORT}", script_text)

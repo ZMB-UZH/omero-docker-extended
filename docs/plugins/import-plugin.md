@@ -78,11 +78,13 @@ Related docs:
   env-driven build args loaded from `env/omeroserver.env`
   (`OMERO_CLI_ZARR_VERSION`, `BIOFORMATS2RAW_VERSION`,
   `OME_ZARR_PY_VERSION`) so native Zarr behavior stays reproducible and
-  upgrades remain deliberate. The tracked example pins `ome-zarr==0.18.0`,
+  upgrades remain deliberate. The tracked example pins `ome-zarr==0.21.0`,
   `omero-cli-zarr==0.9.0` and `bioformats2raw==0.12.1`. This combination supports
-  the shared Python 3.11 runtime and resolves stable dependencies. The newer
-  `ome-zarr` 0.19 line requires Python 3.12 or newer and is not a drop-in update
-  for this deployment. Existing installations retain their operator-owned
+  the web image's Python 3.12 runtime. OME-Zarr is not installed in the server's
+  separate Python 3.11 environment. Web builds may set `WEB_TIFFFILE_VERSION`
+  independently; if omitted, they retain the shared `TIFFFILE_VERSION` setting.
+  Keep the server's Tifffile pin compatible with Python 3.11.
+  Existing installations retain their operator-owned
   version settings; reconcile intended upgrades before rebuilding the images.
 - **Zarr pre-flight scan and routing persistence**: the Bio-Formats dry-run
   (`omero import -f`) is still used for all non-zarr imports and for `.zarr`

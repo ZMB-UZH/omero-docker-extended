@@ -1,0 +1,15 @@
+# Reviewed updates for the Python 3.11 server image, not a replacement for
+# OMERO/plugin requirements. pandas remains on OMERO.metadata's supported 2.x line.
+annotated-types==0.8.0
+blosc2==4.14.1
+charset-normalizer==3.5.2
+MarkupSafe==3.0.4
+numexpr==2.14.2
+numpy==2.4.6
+packaging==26.3
+portalocker==4.4.1
+pydantic==2.14.1
+pydantic-core==2.50.1
+threadpoolctl==3.7.0
+typing_extensions==4.16.0
+typing-inspection==0.4.4

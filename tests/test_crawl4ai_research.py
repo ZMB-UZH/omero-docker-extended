@@ -158,7 +158,7 @@ def test_child_does_not_receive_credentials_or_personal_home(tmp_path, monkeypat
 def test_nltk_rejects_unreviewed_installed_source(monkeypatch, record):
     """Inputs: missing or altered source metadata. Output: no accepted NLTK provenance."""
     distribution = SimpleNamespace(
-        read_text=lambda name: json.dumps(record), version="3.10.3"
+        read_text=lambda name: json.dumps(record), version=reader.NLTK_VERSION
     )
     monkeypatch.setattr(
         reader.importlib.metadata, "distribution", lambda name: distribution
@@ -174,16 +174,20 @@ def test_nltk_requires_the_reviewed_archive_digest(monkeypatch):
         "archive_info": {"hashes": {"sha256": reader.NLTK_SOURCE_SHA256}},
     }
     distribution = SimpleNamespace(
-        read_text=lambda name: json.dumps(record), version="3.10.3"
+        read_text=lambda name: json.dumps(record), version=reader.NLTK_VERSION
     )
     monkeypatch.setattr(
         reader.importlib.metadata, "distribution", lambda name: distribution
     )
     assert reader.nltk_provenance() == {
-        "version": "3.10.3",
+        "version": reader.NLTK_VERSION,
         "source_url": reader.NLTK_SOURCE_URL,
         "sha256": reader.NLTK_SOURCE_SHA256,
     }
+    distribution.version = "3.10.3"
+    with pytest.raises(RuntimeError, match="version mismatch"):
+        reader.nltk_provenance()
+    distribution.version = reader.NLTK_VERSION
     distribution.read_text = lambda name: "invalid JSON"
     with pytest.raises(ValueError):
         reader.nltk_provenance()
@@ -195,7 +199,7 @@ def test_nltk_lock_matches_runtime_provenance():
     assert f"nltk @ {reader.NLTK_SOURCE_URL}" in locked
     assert f"--hash=sha256:{reader.NLTK_SOURCE_SHA256}" in locked
     build = reader.BUILD_LOCK.read_text()
-    assert "\nsetuptools==84.0.0 \\" in build
+    assert "\nsetuptools==84.2.1 \\" in build
     assert "--hash=sha256:" in build
 
 
@@ -205,9 +209,6 @@ def test_source_dependency_remains_in_scanner_inventory():
     source_advisory_guard.check_inventory(
         reader.ROOT / inventory_path,
         {
-            "source_revision": reader.NLTK_SOURCE_URL.rsplit("/", 1)[1].removesuffix(
-                ".tar.gz"
-            ),
             "archive_url": reader.NLTK_SOURCE_URL,
             "archive_sha256": reader.NLTK_SOURCE_SHA256,
         },
@@ -299,8 +300,54 @@ def test_result_without_source_identity_is_rejected():
         reader.result_record(page(url=None), "https://docs.example.org/guide", 100)
 
 
+@pytest.mark.parametrize(
+    ("url", "selector", "expected"),
+    [
+        (
+            "https://github.com/example/project/blob/v1/CHANGELOG.md",
+            None,
+            "article.markdown-body",
+        ),
+        (
+            "https://github.com/example/project/blob/v1/README.MARKDOWN",
+            None,
+            "article.markdown-body",
+        ),
+        (
+            "https://github.com/example/project/blob/v1/guide.rst",
+            None,
+            "article.markdown-body",
+        ),
+        (
+            "https://github.com/example/project/blob/v1/CHANGELOG.md",
+            "article",
+            "article",
+        ),
+        ("https://docs.example.org/blob/v1/CHANGELOG.md", None, None),
+        ("https://github.com/example/project/releases/tag/v1", None, None),
+        ("https://github.com/example/project/blob/v1/tool.py", None, None),
+    ],
+)
+def test_markdown_file_reads_require_the_source_body(url, selector, expected):
+    """Inputs: rendered files, explicit scopes and other sources. Output: no navigation-only admission."""
+    assert reader.source_selector(url, selector) == expected
+
+
 @pytest.mark.parametrize("failure", [None, "denied", "empty", "challenge"])
-def test_public_api_configuration_and_close_on_failure(tmp_path, monkeypatch, failure):
+@pytest.mark.parametrize(
+    ("url", "selector", "expected_selector"),
+    [
+        ("https://docs.example.org/guide", "article", "article"),
+        (
+            "https://github.com/example/project/blob/v1/CHANGELOG.md",
+            None,
+            "article.markdown-body",
+        ),
+    ],
+)
+def test_public_api_configuration_and_close_on_failure(
+    tmp_path, monkeypatch, failure, url, selector, expected_selector
+):
     """Inputs: instrumented crawler outcomes. Output: safe settings, closed browser and native evidence."""
     configs = {}
     closed = []
@@ -323,10 +370,10 @@ def test_public_api_configuration_and_close_on_failure(tmp_path, monkeypatch, fa
             """Inputs: context exit details. Output: a recorded resource-close event."""
             closed.append(True)
 
-        async def arun(self, url, config):
+        async def arun(self, **kwargs):
             """Inputs: source and run settings. Output: the selected native failure or success."""
-            configs["crawler"] = vars(config)
-            assert url == "https://docs.example.org/guide"
+            configs["crawler"] = vars(kwargs["config"])
+            assert kwargs["url"] == url
             if failure == "denied":
                 return page(
                     success=False, status_code=403, error_message="robots denied"
@@ -335,7 +382,7 @@ def test_public_api_configuration_and_close_on_failure(tmp_path, monkeypatch, fa
                 return page(markdown=None)
             if failure == "challenge":
                 return page(metadata={"title": "Verify you are human"})
-            return page()
+            return page(url=url)
 
     monkeypatch.setitem(
         sys.modules,
@@ -350,9 +397,7 @@ def test_public_api_configuration_and_close_on_failure(tmp_path, monkeypatch, fa
     monkeypatch.setattr(
         reader.importlib.metadata, "version", lambda name: reader.VERSION
     )
-    operation = reader.read_source(
-        "https://docs.example.org/guide", 100, "article", tmp_path
-    )
+    operation = reader.read_source(url, 100, selector, tmp_path)
     if failure:
         with pytest.raises(RuntimeError):
             asyncio.run(operation)
@@ -377,7 +422,7 @@ def test_public_api_configuration_and_close_on_failure(tmp_path, monkeypatch, fa
     assert configs["browser"]["accept_downloads"] is False
     assert configs["crawler"]["check_robots_txt"] is True
     assert configs["crawler"]["cache_mode"] == "fresh"
-    assert configs["crawler"]["css_selector"] == "article"
+    assert configs["crawler"]["css_selector"] == expected_selector
     native = tmp_path / "native.json"
     assert result["native_sha256"] == hashlib.sha256(native.read_bytes()).hexdigest()
     saved = json.loads(native.read_bytes())
@@ -414,7 +459,9 @@ def test_setup_is_hash_pinned_idempotent_and_not_an_application_install(
     install = next(cmd for cmd in commands if str(reader.LOCK) in cmd)
     assert commands.index(build) < commands.index(install)
     assert "--require-hashes" in build and "--only-binary=:all:" in build
-    assert "--no-build-isolation" in install and "--no-binary=nltk" in install
+    assert "--only-binary=:all:" in install
+    assert "--no-build-isolation" not in install
+    assert "--no-binary=nltk" not in install
     assert "--only-binary=:all:" in install and str(reader.LOCK) in install
     assert any(cmd[-3:] == ["playwright", "install", "chromium"] for cmd in commands)
     assert (env / "ready").read_text().strip() == reader.VERSION

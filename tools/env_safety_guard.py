@@ -128,6 +128,13 @@ DOT_ENV_MIRRORED_KEYS = tuple(
 # Older generated .env files predate this build pin; explicit env-file loading
 # still supplies it. Validate a mirror when present without requiring migration.
 DOT_ENV_OPTIONAL_MIRRORED_KEYS = ("OMERO_FIGURE_VERSION",)
+# Fresh installs receive this active default; older installations may omit it
+# because the web build falls back to TIFFFILE_VERSION.
+ENV_OPTIONAL_ACTIVE_KEYS = {
+    ("env/omeroserver_example.env", "env/omeroserver.env"): frozenset(
+        {"WEB_TIFFFILE_VERSION"}
+    )
+}
 REQUIRED_NONEMPTY_ENV_KEYS = frozenset(
     {
         "OMERO_DB_PASS",
@@ -1000,8 +1007,14 @@ def cmd_template_check(repo_root: Path) -> int:
             failures += 1
             continue
 
-        required_keys = parse_env_keys(example_path)
-        optional_keys = tuple(parse_commented_env_assignments(example_path))
+        optional_active = ENV_OPTIONAL_ACTIVE_KEYS.get((example_rel, actual_rel), ())
+        required_keys = [
+            key for key in parse_env_keys(example_path) if key not in optional_active
+        ]
+        optional_keys = (
+            *parse_commented_env_assignments(example_path),
+            *optional_active,
+        )
         actual_keys = parse_env_keys(actual_path)
         required_set = set(required_keys)
         optional_set = set(optional_keys)
@@ -1077,7 +1090,12 @@ def validate_env_file_pair(
     optional_keys = set(optional_assignments)
     actual_keys = set(actual_assignments)
 
-    missing = [key for key in required_assignments if key not in actual_keys]
+    optional_active = ENV_OPTIONAL_ACTIVE_KEYS.get((example_rel, actual_rel), ())
+    missing = [
+        key
+        for key in required_assignments
+        if key not in actual_keys and key not in optional_active
+    ]
     extra = [
         key for key in actual_assignments if key not in required_keys | optional_keys
     ]

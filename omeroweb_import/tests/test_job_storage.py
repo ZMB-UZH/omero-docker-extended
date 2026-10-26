@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import sys
 import time
 
 import pytest
@@ -15,6 +16,30 @@ def _job_id() -> str:
     Inputs: none. Output: `str`.
     """
     return "a" * 32
+
+
+def test_overlong_numeric_setting_uses_default(monkeypatch):
+    """Reject an unconvertible setting without breaking job preparation.
+
+    Inputs: numeric text beyond Python's conversion limit. Output: bounded default.
+    """
+    previous = sys.get_int_max_str_digits()
+    limit = sys.int_info.str_digits_check_threshold
+    try:
+        sys.set_int_max_str_digits(limit)
+        monkeypatch.setenv("UPLOAD_BATCH_TEST", "9" * (limit + 1))
+        assert job_storage.get_env_int("UPLOAD_BATCH_TEST", 4, 1, 10) == 4
+    finally:
+        sys.set_int_max_str_digits(previous)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_nonfinite_batch_size_uses_default(value):
+    """Keep malformed numeric payloads within the ordinary fallback path.
+
+    Inputs: nonfinite JSON-decoder values. Output: a usable bounded batch size.
+    """
+    assert job_storage.normalize_job_batch_size(value, default=3) == 3
 
 
 @pytest.mark.parametrize("operation", ["save", "update"])

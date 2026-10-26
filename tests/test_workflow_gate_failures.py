@@ -149,7 +149,7 @@ def test_setup_keeps_hash_locked_requirements_and_exact_linter_pin(
 ):
     """Inputs: fresh or existing tool env. Output: every lockfile installed with hash enforcement."""
     context = gate_context
-    (context.repo_root / ".ruff.toml").write_text('required-version = "==0.16.10"\n')
+    (context.repo_root / ".ruff.toml").write_text('required-version = "==0.17.2"\n')
     python = context.tool_venv / "bin" / "python"
     if exists:
         python.parent.mkdir(parents=True)
@@ -177,7 +177,7 @@ def test_setup_keeps_hash_locked_requirements_and_exact_linter_pin(
             "--require-hashes",
             "--requirement",
         )
-    assert commands[-1] == (str(python), "-m", "pip", "install", "ruff==0.16.10")
+    assert commands[-1] == (str(python), "-m", "pip", "install", "ruff==0.17.2")
     assert all(
         call.kwargs["cwd"] == context.repo_root for call in runner.call_args_list
     )

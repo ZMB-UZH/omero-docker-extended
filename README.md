@@ -11,9 +11,9 @@
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/astral-sh/ruff)
 [![Vulture](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/vulture.yml?branch=main&logo=python&label=Vulture)](https://github.com/jendrikseipp/vulture)
 [![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
-[![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
 [![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)
+[![everything-claude-code](https://img.shields.io/static/v1?label=&message=everything-claude-code&color=555&logo=github&logoColor=white)](https://github.com/affaan-m/everything-claude-code)
 [![andrej-karpathy-skills](https://img.shields.io/static/v1?label=&message=andrej-karpathy-skills&color=555&logo=github&logoColor=white)](https://github.com/forrestchang/andrej-karpathy-skills)
 <!-- END GENERATED BADGES -->
 
@@ -257,20 +257,20 @@ The table below lists the long-running services available in the full profile se
 | `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.10.2-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.40.0 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `ollama` | ollama/ollama:0.40.11 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
 | `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer/portainer-ce:2.45.1-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
-| `prometheus` | prom/prometheus:v3.15.0 | Metrics scraping and storage | 127.0.0.1:9090 |
-| `grafana` | grafana/grafana:13.2.3 | Dashboards and visualization | 127.0.0.1:3000 |
-| `loki` | grafana/loki:3.7.8 | Log aggregation backend | 127.0.0.1:3100 |
-| `alloy` | grafana/alloy:v1.20.1 | Log collection pipeline (file-based) | 12345 (internal) |
-| `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
+| `portainer` | portainer/portainer-ce:2.45.3-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
+| `prometheus` | prom/prometheus:v3.15.1 | Metrics scraping and storage | 127.0.0.1:9090 |
+| `grafana` | grafana/grafana:13.2.4 | Dashboards and visualization | 127.0.0.1:3000 |
+| `loki` | grafana/loki:3.7.9 | Log aggregation backend | 127.0.0.1:3100 |
+| `alloy` | grafana/alloy:v1.21.2 | Log collection pipeline (file-based) | 12345 (internal) |
+| `blackbox-exporter` | prom/blackbox-exporter:v0.29.1 | HTTP/TCP endpoint probing | 9115 (internal) |
 | `node-exporter` | prom/node-exporter:v1.12.1 | Host-level metrics | 9100 (internal) |
 | `cadvisor` | ghcr.io/google/cadvisor:0.60.6 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | prometheuscommunity/postgres-exporter:v0.20.1 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | prometheuscommunity/postgres-exporter:v0.20.1 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | oliver006/redis_exporter:v1.93.0-alpine | Redis metrics | 9121 (internal) |
-| `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
+| `redis-exporter` | oliver006/redis_exporter:v1.96.0-alpine | Redis metrics | 9121 (internal) |
+| `path-usage-exporter` | Custom (Alpine 3.24.3) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
 | `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.8) | Host-wide cybersecurity engine (host syslog, SSH auth, and docker log analysis) | 8080 |
 
 </details>

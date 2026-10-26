@@ -25,6 +25,15 @@ match the URL and whose certificate file contains the complete issuer chain.
 Use Portainer's supported certificate replacement workflow instead of
 bypassing browser certificate warnings.
 
+This certificate is separate from the automatically renewed internal TLS
+authority. In the bundled Portainer 2.45.3, a missing default certificate is
+generated with a five-year lifetime, but an existing certificate is loaded
+without automatic expiry renewal. Monitor its expiration and arrange a trusted,
+renewable certificate or a planned replacement; rotating a self-signed
+certificate can also require clients to update their trust configuration.
+See the [Portainer SSL implementation](https://github.com/portainer/portainer/blob/2.45.3/api/internal/ssl/ssl.go)
+and [certificate configuration guidance](https://docs.portainer.io/advanced/ssl).
+
 ## Internal-only endpoints (Docker network)
 
 | Service | Internal URL | Purpose |

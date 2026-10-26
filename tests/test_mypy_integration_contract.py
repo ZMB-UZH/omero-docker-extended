@@ -82,7 +82,7 @@ class MypyIntegrationContractTests(TestCase):
         self.assertIn("requests==2.34.2", compiled)
         self.assertNotIn("types-requests==", compiled)
         self.assertIn("types-atheris==3.1.0.20260630", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20260911", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20261008", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 
@@ -130,7 +130,7 @@ class MypyIntegrationContractTests(TestCase):
             uses_values,
         )
         self.assertIn(
-            "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
             uses_values,
         )
         setup_step = next_or_fail(

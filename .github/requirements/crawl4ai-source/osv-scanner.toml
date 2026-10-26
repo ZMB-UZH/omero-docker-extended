@@ -1,6 +1,2 @@
-# This directory contains only the hash-bound, reviewed NLTK source inventory.
-# tools/source_advisory_guard.py must pass before this native exception is used.
-[[IgnoredVulns]]
-id = "GHSA-8mgp-746c-j5xp"
-ignoreUntil = 2026-11-07
-reason = "Exact-source review.toml; archive sha256:39612e4c4aebe7626f582d103ac87bd7c5ed256e6341114e61143a8b73c560ee. Raw results are retained by the prerequisite audit."
+# No advisory or package exceptions. The fixed upstream release is scanned normally.
+# tools/source_advisory_guard.py rejects any active configuration in this file.

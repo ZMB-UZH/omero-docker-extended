@@ -660,7 +660,7 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
             ["Local", "Groq", "Gemini", "Claude", "Perplexity", "xAI", "Cohere"],
             provider_labels,
         )
-        self.assertIn('image: "ollama/ollama:0.40.0"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.40.11"', compose_text)
         self.assertIn(
             '_OLLAMA_PORT = "11434"', self.read_text("omeroweb_omp_plugin/constants.py")
         )
@@ -677,10 +677,10 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
                 self.assertIn(expected_provider_text, self.read_text(relative_path))
 
         expected_ollama_docs = {
-            "README.md": "ollama/ollama:0.40.0",
+            "README.md": "ollama/ollama:0.40.11",
             "docs/architecture/system-overview.md": "### Local AI inference (`ollama`)",
             "docs/reference/service-endpoints.md": "ollama:11434",
-            "docs/references/docker-compose-llms.txt": "Ollama 0.40.0",
+            "docs/references/docker-compose-llms.txt": "ollama/ollama:0.40.11",
             "env/omeroweb_example.env": "OMP_OLLAMA_MODEL=qwen2.5:3b",
         }
         for relative_path, phrase in expected_ollama_docs.items():
@@ -692,6 +692,57 @@ class RepositoryDocumentationRegressionTests(unittest.TestCase):
         )
         self.assertIn("must be pulled before first use", ollama_design)
         self.assertNotIn("auto-pulled on first use", ollama_design)
+
+    def test_compose_reference_tracks_images_and_redis_storage(self) -> None:
+        """Inputs: Compose and agent reference. Output: image and Redis contracts agree."""
+        reference = self.read_text("docs/references/docker-compose-llms.txt")
+        for name, service in self.services.items():
+            image = service.get("image")
+            if isinstance(image, str) and "$" not in image:
+                with self.subTest(service=name):
+                    self.assertIn(image, reference)
+        redis = self.services["redis"]
+        self.assertIn("redis-data:/data:rw", redis["volumes"])
+        self.assertIn("--appendonly", redis["command"])
+        self.assertIn("persistent named volume", reference)
+        self.assertIn("REDIS_APPENDONLY", reference)
+        self.assertIn("REDIS_MAXMEMORY_POLICY", reference)
+        self.assertNotIn("in-memory only (no persistence)", reference)
+        self.assertNotIn("tmpfs-backed", reference)
+        self.assertNotIn("Redis uses tmpfs", reference)
+
+    def test_architecture_storage_descriptions_match_compose(self) -> None:
+        """Inputs: architecture and Compose. Output: persistent paths are described correctly."""
+        architecture = self.read_text("docs/architecture/system-overview.md")
+        redis = architecture.split("### Redis (`redis`)", 1)[1].split(
+            "### Local AI inference", 1
+        )[0]
+        ollama = architecture.split("### Local AI inference", 1)[1].split(
+            "### Monitoring stack", 1
+        )[0]
+        self.assertIn("redis-data:/data:rw", self.services["redis"]["volumes"])
+        self.assertIn("persistent `redis-data` named volume", redis)
+        self.assertIn("`noeviction`", redis)
+        self.assertNotIn("in-memory only", redis)
+        self.assertNotIn("backed by tmpfs", redis)
+        self.assertIn("required `OLLAMA_DATA_PATH`", ollama)
+        self.assertIn("retain the existing model-data mount", ollama)
+        self.assertIn("`OMERO_TMP_PATH`", architecture)
+        self.assertNotIn("tmpfs for job files", architecture)
+        self.assertNotIn("tmpfs job files", architecture)
+
+    def test_portainer_certificate_lifecycle_is_not_conflated_with_internal_tls(
+        self,
+    ) -> None:
+        """Inputs: endpoint documentation. Output: external certificate limits stay explicit."""
+        endpoints = self.read_text("docs/reference/service-endpoints.md")
+        self.assertIn("separate from the automatically renewed internal TLS", endpoints)
+        self.assertIn("without automatic expiry renewal", endpoints)
+        self.assertIn("clients to update their trust configuration", endpoints)
+        self.assertIn("whose subject alternative names", endpoints)
+        security = " ".join(self.read_text("docs/SECURITY.md").split())
+        self.assertIn("does not make Docker's API read-only", security)
+        self.assertNotIn("only `omeroserver`", security)
 
     def test_doc_compaction_requires_objective_meaning_preservation(self) -> None:
         """Verify doc compaction requires objective meaning preservation.

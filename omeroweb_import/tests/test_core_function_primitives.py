@@ -10,6 +10,15 @@ import pytest
 from omeroweb_import.views import core_functions
 
 
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_nonfinite_batch_size_uses_default(value):
+    """Prevent malformed numeric payloads from aborting import preparation.
+
+    Inputs: nonfinite decoded numbers. Output: the configured bounded fallback.
+    """
+    assert core_functions._normalize_job_batch_size(value, default=3) == 3
+
+
 class _FakeValue:
     """Test double for fake value."""
 

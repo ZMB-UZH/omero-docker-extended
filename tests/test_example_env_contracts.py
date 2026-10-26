@@ -184,6 +184,7 @@ EXPECTED_EXAMPLE_ENV_KEYS: dict[str, frozenset[str]] = {
             "BIOFORMATS2RAW_VERSION",
             "BIOFORMATS2RAW_SHA256",
             "TIFFFILE_VERSION",
+            "WEB_TIFFFILE_VERSION",
             "BIOFORMATS_VERSION",
             "BIOFORMATS_SHA256",
             "IMARISCONVERT_REPO_URL",

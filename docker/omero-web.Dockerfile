@@ -38,16 +38,17 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
 # resource APIs; its CLI and database tooling no longer require pkg_resources.
 # --------------------------------------------------------------------------
-ARG PIP_VERSION=26.2.1
-ARG SETUPTOOLS_VERSION=84.0.0
+ARG PIP_VERSION=26.2.2
+ARG SETUPTOOLS_VERSION=84.2.1
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0
-ARG CERTIFI_VERSION=2026.7.22
+ARG CERTIFI_VERSION=2026.10.23
 ARG IDNA_VERSION=3.20
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 ARG PYOPENSSL_VERSION=26.4.0
+ARG PILLOW_VERSION=13.0.0
 
 # Locate OMERO.web venv, validate layout, and ensure stable OMERO.web symlink
 # ---------------------------------------------------------------------------
@@ -134,6 +135,11 @@ RUN set -euo pipefail; \
         make \
         blosc \
         python3-devel \
+        python3.12-devel \
+        patch \
+        bzip2-devel \
+        openssl-devel \
+        libedit-devel \
         supervisor \
         procps-ng \
         quota \
@@ -262,7 +268,7 @@ RUN set -euo pipefail; \
         django==5.2.18 \
         matplotlib==3.11.2 \
         pytest==9.1.1 \
-        portalocker==4.4.0 \
+        portalocker==4.4.1 \
         psycopg2-binary==2.9.13 \
         celery==5.6.3 \
         redis==8.1.0 \
@@ -468,7 +474,8 @@ RUN set -euo pipefail; \
         "idna==${IDNA_VERSION}" \
         "requests==${REQUESTS_VERSION}" \
         "jinja2==${JINJA2_VERSION}" \
-        "pyopenssl==${PYOPENSSL_VERSION}"
+        "pyopenssl==${PYOPENSSL_VERSION}" \
+        "pillow==${PILLOW_VERSION}"
 
 # ---------------------------------------------------------------------------
 # Final security hardening pass (APPLY_SECURITY_HARDENING=1)
@@ -476,6 +483,7 @@ RUN set -euo pipefail; \
 # Runs AFTER all dnf installs and pip installs are complete, so that every
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
+COPY docker/requirements-runtime-web.txt /tmp/requirements-runtime-web.txt
 ARG APPLY_SECURITY_HARDENING=1
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
@@ -498,8 +506,20 @@ RUN set -euo pipefail; \
         echo "ERROR: Could not find valid OMERO.web venv for hardening verification." >&2; \
         exit 1; \
     fi; \
-    echo "Skipping blanket OMERO.web venv upgrades to preserve pinned/plugin-dependent packages."; \
-    echo "Only curated compatibility-safe Python tooling updates are applied in this image."; \
+    echo "Applying curated compatibility-safe Python security updates in ${VENV_DIR}..."; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}" \
+        "cryptography==${CRYPTOGRAPHY_VERSION}" \
+        "urllib3==${URLLIB3_VERSION}" \
+        "certifi==${CERTIFI_VERSION}" \
+        "idna==${IDNA_VERSION}" \
+        "requests==${REQUESTS_VERSION}" \
+        "jinja2==${JINJA2_VERSION}" \
+        "pyopenssl==${PYOPENSSL_VERSION}" \
+        "pillow==${PILLOW_VERSION}" \
+        --requirement /tmp/requirements-runtime-web.txt; \
     "${VENV_DIR}/bin/python" -m pip check
 
 # Configure supervisord to run OMERO.web and plugin background workers
@@ -567,6 +587,7 @@ RUN set -euo pipefail; \
 
 # Update converter dependencies without changing its explicit launcher classpath layout.
 COPY docker/java-dependencies.cdx.xml /usr/local/share/omero-java-dependencies.cdx.xml
+COPY docker/zarr-pixel-runtime.cdx.xml /usr/local/share/omero-zarr-pixel-runtime.cdx.xml
 COPY tools/install_java_dependencies.py /tmp/install-java-dependencies.py
 COPY --from=omero-client /opt/omero/server/OMERO.server/lib/client/ /opt/omero/client/lib/client/
 COPY --from=omero-client /opt/omero/server/OMERO.server/etc/logback-cli.xml /opt/omero/client/lib/client/logback-cli.xml
@@ -578,10 +599,22 @@ RUN python3 -B /tmp/install-java-dependencies.py \
     && python3 -B /tmp/install-java-dependencies.py \
         --profile client --root /opt/omero/client \
         --lock /usr/local/share/omero-java-dependencies.cdx.xml \
+    && python3 -B /tmp/install-java-dependencies.py \
+        --profile client-plugin --root /opt/omero/client \
+        --lock /usr/local/share/omero-zarr-pixel-runtime.cdx.xml \
     && install -m 0644 /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar "${OMERO_IMPORT_CLIENT_DIR}/OMEZarrReader.jar" \
     && install -m 0644 /opt/omero/web/zarr-jar-upgrade/jzarr.jar "${OMERO_IMPORT_CLIENT_DIR}/jzarr.jar" \
     && bioformats2raw --help >/dev/null \
     && rm -f /tmp/install-java-dependencies.py
+
+# Rebuild the supported Python binding against maintained system TLS libraries.
+COPY docker/install-ice-python.sh /tmp/install-ice-python.sh
+RUN set -euo pipefail; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)"; \
+    test -n "${VENV_DIR}"; \
+    /bin/bash /tmp/install-ice-python.sh "${VENV_DIR}/bin/python"; \
+    "${VENV_DIR}/bin/python" -m pip check; \
+    rm -f /tmp/install-ice-python.sh
 
 # Remove inherited build-only OS dependencies without touching application venvs.
 COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh

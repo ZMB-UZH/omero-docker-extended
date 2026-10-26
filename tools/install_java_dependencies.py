@@ -22,6 +22,13 @@ import xml.etree.ElementTree as ET  # nosec B405 - reviewed build lock; DTDs rej
 import zipfile
 
 
+MAVEN_REPOSITORIES = {
+    "central": "https://repo.maven.apache.org/maven2/",
+    "unidata": "https://artifacts.unidata.ucar.edu/releases/",
+}
+CYCLONEDX_NAMESPACE = "{http://cyclonedx.org/schema/bom/1.6}"  # DevSkim: ignore DS137138 - XML namespace identifier, never a network request
+
+
 @dataclass(frozen=True)
 class Artifact:
     """One reviewed Maven artifact and its expected distribution input."""
@@ -30,8 +37,12 @@ class Artifact:
     name: str
     version: str
     sha256: str
-    source_version: str
-    source_sha256: str
+    source_version: str | None
+    source_sha256: str | None
+    repository: str = "central"
+    pom_sha256: str | None = None
+    source_absent: bool = False
+    manifest_version: str | None = None
 
     @property
     def filename(self) -> str:
@@ -55,18 +66,26 @@ def _checksum(value: object) -> str:
     return value
 
 
+def read_xml(text: str, description: str) -> ET.Element:
+    """Parse metadata without DTDs or entities.
+
+    Inputs: XML text and diagnostic description. Output: parsed root or ValueError.
+    """
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)", text, re.IGNORECASE):
+        raise ValueError(f"{description} must not declare a DTD or entities")
+    try:
+        return ET.fromstring(text)  # nosec B314 - declarations rejected before parsing
+    except ET.ParseError as error:
+        raise ValueError(f"Malformed {description}") from error
+
+
 def read_lock(lock: Path) -> object:
     """Read a strict CycloneDX document. Inputs: lock path. Output: parsed lock."""
     text = lock.read_text(encoding="utf-8")
     if lock.suffix != ".xml":
         return json.loads(text)
-    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)", text, re.IGNORECASE):
-        raise ValueError("Dependency lock must not declare a DTD or entities")
-    try:
-        root = ET.fromstring(text)  # nosec B314 - declarations rejected before parsing
-    except ET.ParseError as error:
-        raise ValueError("Malformed XML dependency lock") from error
-    namespace = "{http://cyclonedx.org/schema/bom/1.6}"  # DevSkim: ignore DS137138 - XML namespace identifier, never a network request
+    root = read_xml(text, "XML dependency lock")
+    namespace = CYCLONEDX_NAMESPACE
     if root.tag != namespace + "bom" or root.get("version") != "1":
         raise ValueError("Expected a version 1 CycloneDX 1.6 dependency lock")
     components = []
@@ -96,7 +115,13 @@ def read_lock(lock: Path) -> object:
 
 def load_artifacts(lock: Path, profile: str) -> list[Artifact]:
     """Read a strict, scanner-readable lock. Inputs: lock, profile. Output: artifacts."""
-    if profile not in {"server", "client", "converter"}:
+    if profile not in {
+        "server",
+        "client",
+        "converter",
+        "server-plugin",
+        "client-plugin",
+    }:
         raise ValueError("Unknown Java dependency profile")
     data = read_lock(lock)
     if not isinstance(data, dict) or (
@@ -150,7 +175,29 @@ def load_artifacts(lock: Path, profile: str) -> list[Artifact]:
             source_profile = "server"
         source_version = values.get(f"omero:{source_profile}:source-version")
         source_checksum = values.get(f"omero:{source_profile}:source-sha256")
-        if source_version is None and source_checksum is None:
+        source_state = values.get(f"omero:{source_profile}:source-state")
+        repository = values.get("omero:repository", "central")
+        if repository not in MAVEN_REPOSITORIES:
+            raise ValueError("Unknown reviewed Maven repository")
+        pom_checksum = values.get("omero:pom-sha256")
+        manifest_version = values.get("omero:manifest-version")
+        if manifest_version is not None and pom_checksum is None:
+            raise ValueError(
+                "Noncanonical manifest versions require a separately pinned POM"
+            )
+        if source_state is not None:
+            if (
+                source_state not in {"absent", "present"}
+                or profile not in {"server-plugin", "client-plugin"}
+                or (
+                    source_state == "absent"
+                    and (source_version is not None or source_checksum is not None)
+                )
+            ):
+                raise ValueError(
+                    "Only new server-plugin or client-plugin manifests may declare explicit source state"
+                )
+        elif source_version is None and source_checksum is None:
             continue
         artifacts.append(
             Artifact(
@@ -158,8 +205,15 @@ def load_artifacts(lock: Path, profile: str) -> list[Artifact]:
                 name,
                 version,
                 checksum,
-                _token(source_version),
-                _checksum(source_checksum),
+                None
+                if source_state == "absent"
+                or (source_state == "present" and source_version is None)
+                else _token(source_version),
+                None if source_state == "absent" else _checksum(source_checksum),
+                repository,
+                _checksum(pom_checksum) if pom_checksum is not None else None,
+                source_state == "absent",
+                _token(manifest_version) if manifest_version is not None else None,
             )
         )
     if not artifacts:
@@ -178,14 +232,16 @@ def file_digest(path: Path) -> str:
 
 def plan_installation(
     root: Path, profile: str, artifacts: list[Artifact]
-) -> list[tuple[Path, Path, Artifact]]:
+) -> list[tuple[Path | None, Path, Artifact]]:
     """Verify all inputs before downloads or writes. Inputs: layout. Output: plan."""
     directories = {
         "server": ("lib/client", "lib/server"),
         "client": ("lib/client",),
         "converter": ("lib",),
+        "server-plugin": ("lib/server",),
+        "client-plugin": ("lib/client",),
     }[profile]
-    plan = []
+    plan: list[tuple[Path | None, Path, Artifact]] = []
     targets: set[Path] = set()
     for subdirectory in directories:
         directory = root / subdirectory
@@ -198,12 +254,35 @@ def plan_installation(
                 else f"{artifact.name}-{artifact.source_version}.jar"
             )
             source = directory / old_name
+            addition = artifact.source_absent
             destination = (
-                source if profile != "converter" else directory / artifact.filename
+                directory / artifact.filename
+                if addition or profile == "converter"
+                else source
             )
             if destination in targets:
                 raise ValueError("Colliding Java artifact destinations")
             targets.add(destination)
+            if addition:
+                if (
+                    profile not in {"server-plugin", "client-plugin"}
+                    or artifact.source_sha256 is not None
+                    or artifact.source_version is not None
+                ):
+                    raise ValueError(
+                        "Unexpected source absence outside server-plugin profile"
+                    )
+                conflicts = {
+                    source,
+                    destination,
+                    *directory.glob(f"{artifact.name}-[0-9]*.jar"),
+                }
+                if any(path.exists() or path.is_symlink() for path in conflicts):
+                    raise ValueError(
+                        f"New JAR conflicts with an existing classpath entry: {artifact.name}"
+                    )
+                plan.append((None, destination, artifact))
+                continue
             if not source.is_file() or source.is_symlink():
                 raise ValueError(f"Missing regular source JAR: {old_name}")
             if file_digest(source) != artifact.source_sha256:
@@ -245,8 +324,10 @@ def download_artifact(artifact: Artifact, destination: Path) -> None:
     if curl is None:
         raise RuntimeError("curl is required to build Java dependency updates")
     url = (
-        "https://repo.maven.apache.org/maven2/"
-        f"{artifact.group.replace('.', '/')}/{artifact.name}/{artifact.version}/{artifact.filename}"
+        MAVEN_REPOSITORIES[artifact.repository]
+        + f"{artifact.group.replace('.', '/')}/{artifact.name}/{artifact.version}/"
+        + f"{artifact.name}-{artifact.version}"
+        + (".pom" if destination.suffix == ".pom" else ".jar")
     )
     subprocess.run(
         [
@@ -273,10 +354,47 @@ def download_artifact(artifact: Artifact, destination: Path) -> None:
     )
 
 
-def verify_artifact(path: Path, artifact: Artifact) -> None:
+def verify_maven_pom(path: Path, artifact: Artifact) -> None:
+    """Verify a literal Maven identity with an independent content pin.
+
+    Inputs: approved POM bytes and artifact coordinate. Output: validated identity;
+    rejects entities, expressions, duplicate fields and conflicting coordinates.
+    """
+    if file_digest(path) != artifact.pom_sha256:
+        raise ValueError(f"Downloaded POM SHA-256 mismatch: {artifact.filename}")
+    text = path.read_text(encoding="utf-8")
+    root = read_xml(text, "reviewed Maven POM")
+    namespace = "{http://maven.apache.org/POM/4.0.0}"  # DevSkim: ignore DS137138 - XML namespace identifier, never a network request
+    if root.tag == "project":
+        namespace = ""
+    parents = root.findall(namespace + "parent")
+    if (
+        root.tag != namespace + "project"
+        or len(parents) > 1
+        or len(root.findall(namespace + "modelVersion")) != 1
+        or root.findtext(namespace + "modelVersion") != "4.0.0"
+    ):
+        raise ValueError("Expected one Maven project and at most one parent")
+    identity = []
+    for key in ("groupId", "artifactId", "version"):
+        fields = root.findall(namespace + key)
+        if not fields and key != "artifactId" and parents:
+            fields = parents[0].findall(namespace + key)
+        if len(fields) != 1:
+            raise ValueError("Missing or duplicate Maven POM identity field")
+        identity.append(fields[0].text)
+    if tuple(identity) != (artifact.group, artifact.name, artifact.version):
+        raise ValueError(f"Downloaded Maven POM identity mismatch: {artifact.filename}")
+
+
+def verify_artifact(path: Path, artifact: Artifact, pom: Path | None = None) -> None:
     """Check content and embedded version. Inputs: path, artifact. Output: validated JAR."""
     if file_digest(path) != artifact.sha256:
         raise ValueError(f"Downloaded SHA-256 mismatch: {artifact.filename}")
+    if artifact.pom_sha256 is not None:
+        if pom is None:
+            raise ValueError("Missing separately pinned Maven POM")
+        verify_maven_pom(pom, artifact)
     with zipfile.ZipFile(path) as archive:
         properties = f"META-INF/maven/{artifact.group}/{artifact.name}/pom.properties"
         if properties in archive.namelist():
@@ -293,9 +411,14 @@ def verify_artifact(path: Path, artifact: Artifact) -> None:
         else:
             manifest = archive.read("META-INF/MANIFEST.MF").decode("utf-8").splitlines()
             valid = any(
-                f"{key}: {artifact.version}" in manifest
+                f"{key}: {artifact.manifest_version or artifact.version}" in manifest
                 for key in ("Implementation-Version", "Bundle-Version")
             )
+            if not any(
+                line.startswith(("Implementation-Version:", "Bundle-Version:"))
+                for line in manifest
+            ):
+                valid = artifact.pom_sha256 is not None
         if not valid:
             raise ValueError(f"Downloaded Maven identity mismatch: {artifact.filename}")
 
@@ -322,21 +445,28 @@ def install(root: Path, lock: Path, profile: str) -> None:
         for artifact in artifacts:
             path = Path(staging) / artifact.filename
             download_artifact(artifact, path)
-            verify_artifact(path, artifact)
+            pom = None
+            if artifact.pom_sha256 is not None:
+                pom = path.with_suffix(".pom")
+                download_artifact(artifact, pom)
+            verify_artifact(path, artifact, pom)
             staged[artifact] = path
         # Docker discards the entire RUN layer on failure. Never invoke on live files.
         for source, destination, artifact in plan:
-            metadata = source.stat()
-            with tempfile.NamedTemporaryFile(dir=source.parent, delete=False) as handle:
+            metadata = (source or destination.parent).stat()
+            mode = stat.S_IMODE(metadata.st_mode) if source is not None else 0o644
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent, delete=False
+            ) as handle:
                 temporary = Path(handle.name)
             try:
                 shutil.copyfile(staged[artifact], temporary)
-                temporary.chmod(stat.S_IMODE(metadata.st_mode))
+                temporary.chmod(mode)
                 os.chown(temporary, metadata.st_uid, metadata.st_gid)
                 temporary.replace(destination)
             finally:
                 temporary.unlink(missing_ok=True)
-            if source != destination:
+            if source is not None and source != destination:
                 source.unlink()
         if launcher_text is not None:
             launcher.write_text(launcher_text, encoding="utf-8")
@@ -349,7 +479,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--lock", type=Path, required=True)
     parser.add_argument(
-        "--profile", choices=("server", "client", "converter"), required=True
+        "--profile",
+        choices=("server", "client", "converter", "server-plugin", "client-plugin"),
+        required=True,
     )
     args = parser.parse_args(argv)
     try:

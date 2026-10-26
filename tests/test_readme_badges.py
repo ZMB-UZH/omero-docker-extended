@@ -83,10 +83,6 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![cocoindex-code]("),
-            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
-        )
-        self.assertLess(
-            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
             badge_block.index("[![caveman]("),
         )
         self.assertLess(
@@ -95,6 +91,10 @@ class ReadmeBadgeGenerationTests(TestCase):
         )
         self.assertLess(
             badge_block.index("[![crawl4ai]("),
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
+        )
+        self.assertLess(
+            badge_block.index(f"[![{self.upstream_sources.badge_title}]("),
             badge_block.index("[![andrej-karpathy-skills]("),
         )
         self.assertEqual(1, badge_block.count("[![crawl4ai]("))

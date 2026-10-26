@@ -69,7 +69,7 @@ Examples:
 | `omero.web.session_cookie_age`                 | `CONFIG_omero_web_session__cookie__age`                  |
 | `omero.web.session_expire_at_browser_close`    | `CONFIG_omero_web_session__expire__at__browser__close`   |
 | `omero.web.csrf_trusted_origins`               | `CONFIG_omero_web_csrf__trusted__origins`                |
-| `omero.web.application_server_port`            | `CONFIG_omero_web_application__server__port`             |
+| `omero.web.application_server.port`            | `CONFIG_omero_web_application__server_port`              |
 
 **Common mistake**: using single underscores where doubles are required. `CONFIG_omero_web_session_engine` (wrong) vs `CONFIG_omero_web_session__engine` (correct). The single-underscore version silently creates a different (nonexistent) config property.
 
@@ -80,6 +80,10 @@ Examples:
   scan evidence. A container's recorded image ID alone is not a retained image;
   verify the saved reference independently before proceeding.
 - `docker compose build <service>` reuses unchanged layers. Changed build ARG values invalidate dependent instructions; changed base-image digests and COPY inputs also invalidate their dependent layers. Verify the resolved inputs and installed versions rather than assuming a cache hit means stale code.
+- Build every changed image recipe with its reviewed defaults before publication.
+  Lint and Buildx `--check` do not resolve package pins or execute image startup.
+  The deployment workflow builds the TLS issuer and verifies fresh certificate
+  issuance, readiness and idempotence on isolated mounts.
 - A plain Compose build does not enable optional dependency-update arguments.
   Match the reviewed installer or release hardening profile explicitly, then
   verify installed package versions and `pip check` in the resulting images.
@@ -90,6 +94,14 @@ Examples:
   elsewhere without rebuilding; verify immutable image identities before and
   after export, and retain complete SBOMs and advisory reports. An interrupted
   scan is incomplete, never a clean result.
+- Treat a scanner memory-exhaustion kill as a stop-and-relocate condition.
+  Do not repeat indexing on the application host with only a different Go
+  garbage-collection target: `GOMEMLIMIT` is soft and does not establish a hard
+  resident-memory boundary. Use isolated analysis compute with an enforced
+  process or cgroup memory limit and headroom for other workloads. Stream
+  immutable image archives off the deployment host when needed; preserve the
+  complete inventory and verify archive hashes and filesystem-layer identities.
+  Do not change global VM or application memory settings to accommodate analysis.
 - Runtime-image analysis creates private per-image scratch under its selected
   `--output-dir`, not global temporary storage. Choose an output filesystem with
   room for image export and unpacked layers; a small RAM-backed temporary
@@ -231,7 +243,7 @@ than blindly repeating a destructive request.
   `BIOFORMATS2RAW_SHA256` from `env/omeroserver.env`; the Compose guard rejects
   a stale generated `.env` mirror before any build or deployment.
 - Before upgrading `bioformats2raw`, verify Java compatibility: run `bioformats2raw --version` inside the container. If the new version requires a newer Java runtime (check "class file version" errors), you must first install the required JDK in the Dockerfile.
-- The base image `openmicroscopy/omero-web-standalone` ships Java 8 (class file version 52). `bioformats2raw` v0.11.x works with Java 8. Starting from v0.12.x, Java 11+ (class file version 55) is required.
+- Inspect the selected base image's Java runtime. `bioformats2raw` v0.11.x supports Java 8; v0.12.x and later require Java 11+ (class file version 55).
 - `bioformats2raw` bundles its own Bio-Formats version. Check `bioformats2raw --version` output for the bundled Bio-Formats version. This is independent of any Bio-Formats version used by OMERO.server.
 
 ## Host sandbox vs container network

@@ -8,6 +8,7 @@ import configparser
 import csv
 import hashlib
 import io
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -25,6 +26,8 @@ IGNORE_GLOBS = (
 )
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
+MAX_DEBUG_LOG_BYTES = 32 * 1024 * 1024
+MAX_METADATA_BYTES = 1024 * 1024
 
 
 def executable(name: str) -> str:
@@ -54,6 +57,8 @@ def read_tooling(path: Path) -> dict[str, str]:
     patterns = {
         "version": r"[0-9]+\.[0-9]+\.[0-9]+",
         "package_sha256": r"[0-9a-f]{64}",
+        "languages_sha256": r"[0-9a-f]{64}",
+        "comments_sha256": r"[0-9a-f]{64}",
         "runtime_image": r"mcr\.microsoft\.com/dotnet/sdk:[0-9.]+-bookworm-slim@sha256:[0-9a-f]{64}",
         "framework": r"net[0-9]+\.0",
     }
@@ -214,6 +219,92 @@ def bind_mount(source: Path, target: str, *, readonly: bool = True) -> str:
     return stream.getvalue()
 
 
+def prepare_language_metadata(
+    repo_root: Path, settings: dict[str, str], destination: Path
+) -> None:
+    """Extend verified upstream language definitions without replacing existing mappings.
+
+    Inputs: repository, reviewed pins and private destination. Output: scanner metadata.
+    """
+    metadata = repo_root / "tools" / f"devskim-metadata-v{settings['version']}"
+    if metadata.is_symlink() or not metadata.resolve().is_relative_to(
+        repo_root.resolve()
+    ):
+        raise ValueError("DevSkim metadata must remain inside the repository.")
+    documents = {}
+    verified_contents = {}
+    for name in ("languages", "comments"):
+        path = metadata / f"{name}.json"
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or path.stat().st_size > MAX_METADATA_BYTES
+        ):
+            raise ValueError("DevSkim metadata must use bounded regular files.")
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != settings[f"{name}_sha256"]:
+            raise ValueError("DevSkim metadata does not match the reviewed release.")
+        try:
+            documents[name] = json.loads(content)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("DevSkim metadata is not valid JSON.") from exc
+        if not isinstance(documents[name], list):
+            raise ValueError("DevSkim metadata has an invalid top-level structure.")
+        verified_contents[name] = content
+
+    languages = documents["languages"]
+    if any(
+        not isinstance(row, dict)
+        or not isinstance(row.get("name"), str)
+        or not isinstance(row.get("extensions"), list)
+        or any(not isinstance(ext, str) for ext in row["extensions"])
+        for row in languages
+    ):
+        raise ValueError("DevSkim language metadata has an invalid structure.")
+    for name, extension in (("python", ".pyi"), ("javascript", ".mjs")):
+        matches = [row for row in languages if row["name"] == name]
+        if len(matches) != 1 or any(
+            extension.lower() in (ext.lower() for ext in row["extensions"])
+            for row in languages
+        ):
+            raise ValueError(
+                "DevSkim language metadata conflicts with reviewed mappings."
+            )
+        matches[0]["extensions"].append(extension)
+
+    (destination / "languages.json").write_text(
+        json.dumps(languages, indent=2) + "\n", encoding="utf-8"
+    )
+    (destination / "comments.json").write_bytes(verified_contents["comments"])
+
+
+def report_native_counts(path: Path) -> None:
+    """Report native analyzer coverage without exposing matched source or debug contents.
+
+    Inputs: private scanner debug log. Output: analyzed and skipped file counts.
+    """
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or path.stat().st_size > MAX_DEBUG_LOG_BYTES
+    ):
+        raise ValueError("DevSkim must produce a bounded regular debug log.")
+    contents = path.read_text(encoding="utf-8")
+    counts = {}
+    for label in ("analyzed", "skipped"):
+        matches = re.findall(
+            rf"(?m)^[^\r\n]*\[DBG\] Files {label}: ([0-9]+)[ \t]*$", contents
+        )
+        if len(matches) != 1:
+            raise ValueError("DevSkim did not report unambiguous native file counts.")
+        counts[label] = int(matches[0])
+    print(
+        f"DevSkim analyzed {counts['analyzed']} files and skipped {counts['skipped']} "
+        "(unsupported or unreadable); selected files may also be excluded by ignore globs.",
+        flush=True,
+    )
+
+
 def scan(repo_root: Path, artifact_dir: Path) -> Path:
     """Run the reviewed scanner without network access or write access to source.
 
@@ -225,13 +316,14 @@ def scan(repo_root: Path, artifact_dir: Path) -> Path:
     report = artifact_dir / "devskim-results.sarif"
     with tempfile.TemporaryDirectory(prefix="scan-", dir=artifact_dir) as temporary:
         root = Path(temporary)
-        engine, source, output = (
-            root / name for name in ("engine", "source", "output")
+        engine, source, output, metadata = (
+            root / name for name in ("engine", "source", "output", "metadata")
         )
-        for directory in (engine, source, output):
+        for directory in (engine, source, output, metadata):
             directory.mkdir()
         extract_engine(package, settings["framework"], engine)
         snapshot_candidate(repo_root, source)
+        prepare_language_metadata(repo_root, settings, metadata)
         subprocess.run(
             [
                 docker,
@@ -260,6 +352,8 @@ def scan(repo_root: Path, artifact_dir: Path) -> Path:
                 bind_mount(source, "/source"),
                 "--mount",
                 bind_mount(output, "/output", readonly=False),
+                "--mount",
+                bind_mount(metadata, "/metadata"),
                 settings["runtime_image"],
                 "dotnet",
                 "/engine/devskim.dll",
@@ -272,6 +366,14 @@ def scan(repo_root: Path, artifact_dir: Path) -> Path:
                 IGNORE_GLOBS,
                 "--ignore-rule-ids",
                 "DS162092",
+                "--languages",
+                "/metadata/languages.json",
+                "--comments",
+                "/metadata/comments.json",
+                "--log-file-level",
+                "Debug",
+                "--log-file-path",
+                "/output/devskim-debug.log",
             ],
             check=True,
         )
@@ -279,6 +381,7 @@ def scan(repo_root: Path, artifact_dir: Path) -> Path:
         if candidate_report.is_symlink() or not candidate_report.is_file():
             raise ValueError("DevSkim must produce a regular SARIF report file.")
         candidate_report.replace(report)
+        report_native_counts(output / "devskim-debug.log")
     return report
 
 

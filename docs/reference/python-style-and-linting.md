@@ -11,8 +11,8 @@ This repository uses [Ruff](https://github.com/astral-sh/ruff) as the canonical 
 - These workflows intentionally avoid hard-coded branch names in `on:` filters.
   The default-branch guard lives at the job level so a maintainer can rename
   the default branch without editing workflow YAML.
-- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.16.10`).
-- The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`. The current Mypy CI pin is `2.3.1`.
+- The workflow uses pinned GitHub Actions and a pinned Ruff release (`0.17.2`).
+- The Mypy workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/tests-ci.txt` and `.github/requirements/mypy-ci.txt` lockfiles as its cache key, installs both dependency sets, then runs `python3 tools/mypy_check.py`. The current Mypy CI pin is `2.4.0`.
 - The Vulture workflow restores and stores the `pip` download cache using the hash-pinned `.github/requirements/vulture-ci.txt` lockfile as its cache key, then runs `python3 tools/vulture_check.py`.
 - CI runs:
   - `ruff check .`
@@ -99,17 +99,18 @@ ruff format .
 
 Regenerate `.github/requirements/*.txt` from their matching `.in` files with
 the Python minor version used by CI. Use an isolated compiler environment;
-the verified compiler pair is `pip-tools==7.6.1` with `pip==26.2.1`.
+the verified compiler pair is `pip-tools==7.6.2` with `pip==26.2.2`.
 Older pip-tools versions can fail against changed pip internals. Follow each
 input file's hash-generation command, review the complete lockfile diff,
 and run the local CI profile before pushing dependency changes.
 
-CI tests OME-Zarr 0.19.2 on Python 3.14. Its upstream minimum is Python 3.12;
-the shared server/web pin remains at OME-Zarr 0.18.0 because the server image
-runs Python 3.11, even though the web image runs Python 3.12. Update the shared
-pin only after both runtimes are compatible. NGFF changes need real checks against
-the deployed runtime, not an assumption that the two dependency graphs match.
-See the [upstream release notes](https://github.com/ome/ome-zarr-py/releases/tag/v0.19.2).
+CI tests OME-Zarr 0.21.0 on Python 3.14; its upstream minimum is Python 3.12.
+The web image uses Python 3.12 and installs OME-Zarr independently of the server's
+Python 3.11 environment. Tifffile remains separately constrained on the server;
+the optional `WEB_TIFFFILE_VERSION` can select the current web-compatible release
+without changing the server pin. NGFF changes need real checks against the
+deployed runtime, not an assumption that both dependency graphs match.
+See the [upstream release notes](https://github.com/ome/ome-zarr-py/releases/tag/v0.21.0).
 
 ## Lint scope
 

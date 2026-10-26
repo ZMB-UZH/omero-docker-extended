@@ -67,7 +67,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -76,7 +76,7 @@ jobs:
           queries: security-extended,security-and-quality
 
       - name: Analyze
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results
@@ -84,7 +84,7 @@ jobs:
 
       - name: Preserve unmodified CodeQL report and diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codeql-report-${{ matrix.language }}
           path: ${{ runner.temp }}/codeql-results
@@ -99,7 +99,7 @@ jobs:
       - name: Upload CodeQL results to GitHub Security tab
         id: upload-sarif
         if: success()
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: ${{ runner.temp }}/codeql-results
           category: /language:${{ matrix.language }}
@@ -147,7 +147,7 @@ jobs:
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          version: v0.75.0
+          version: v0.76.1
           scan-type: fs
           format: sarif
           output: trivy-results.sarif
@@ -158,7 +158,7 @@ jobs:
 
       - name: Preserve unmodified Trivy report and diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-report
           path: trivy-results.sarif
@@ -169,7 +169,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         id: upload-sarif
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -192,7 +192,7 @@ jobs:
       contents: read
       security-events: write # Required to upload Semgrep results to code scanning.
     container:
-      image: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
+      image: semgrep/semgrep:1.182.1@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6
 
     steps:
       - name: Checkout
@@ -224,7 +224,7 @@ jobs:
 
       - name: Preserve unmodified Semgrep report and diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: semgrep-report
           path: semgrep-results.sarif
@@ -237,7 +237,7 @@ jobs:
 
       - name: Upload Semgrep results to GitHub Security tab
         id: upload-sarif
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -267,7 +267,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.14.8'
           cache: 'pip'
@@ -283,7 +283,7 @@ jobs:
 
       - name: Preserve unmodified Bandit reports and scope inventory
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bandit-reports
           path: ${{ runner.temp }}/bandit
@@ -346,7 +346,7 @@ jobs:
 
       - name: Upload Bandit production results to GitHub Security tab
         id: upload-prod
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-prod.sarif
           category: bandit-prod
@@ -362,7 +362,7 @@ jobs:
 
       - name: Upload Bandit test results to GitHub Security tab
         id: upload-test
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-test.sarif
           category: bandit-test
@@ -378,7 +378,7 @@ jobs:
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
         id: upload-legacy
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: ${{ runner.temp }}/bandit/bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
@@ -457,7 +457,7 @@ jobs:
 
       - name: Upload Hadolint results to GitHub Security tab
         id: upload-sarif
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -512,7 +512,7 @@ jobs:
 
       - name: Preserve the unmodified DevSkim report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: devskim-report
           path: ${{ runner.temp }}/devskim/devskim-results.sarif
@@ -520,7 +520,7 @@ jobs:
 
       - name: Upload DevSkim results to GitHub Security tab
         id: upload-sarif
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: ${{ runner.temp }}/devskim/devskim-results.sarif
           category: devskim
@@ -561,16 +561,16 @@ jobs:
           find .github/requirements -maxdepth 1 -type f -name '*.txt' | sort
           echo "::endgroup::"
 
-      - name: Verify exact-source exception and retain unfiltered results
+      - name: Verify direct-URL provenance and retain unfiltered results
         run: |
           set -euo pipefail
           python3 -m tools.source_advisory_guard check
           scanner="$RUNNER_TEMP/osv-scanner-source-audit"
           curl --fail --location --retry 3 --max-time 120 \
-            https://github.com/google/osv-scanner/releases/download/v2.6.0/osv-scanner_linux_amd64 \
+            https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64 \
             --output "$scanner"
           printf '%s  %s\n' \
-            ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108 \
+            160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b \
             "$scanner" | sha256sum --check --strict
           chmod 0755 "$scanner"
           python3 -m tools.source_advisory_guard audit \
@@ -578,7 +578,7 @@ jobs:
 
       - name: Preserve unfiltered source advisory evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: source-advisory-evidence
           path: ${{ runner.temp }}/source-advisory-evidence/
@@ -593,7 +593,7 @@ jobs:
       contents: read
       security-events: write # Required to upload OSV results to code scanning.
       actions: read # Required for SARIF uploads to resolve workflow run metadata.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
     with:
       scan-args: |-
         --recursive
@@ -606,6 +606,10 @@ jobs:
         --lockfile=requirements.txt:.github/requirements/tests-ci.txt
         --lockfile=requirements.txt:.github/requirements/vulture-ci.txt
         --lockfile=docker/java-dependencies.cdx.xml
+        --lockfile=docker/zarr-pixel-runtime.cdx.xml
+        --lockfile=docker/ice-python.cdx.xml
+        --lockfile=requirements.txt:docker/requirements-runtime-server.txt
+        --lockfile=requirements.txt:docker/requirements-runtime-web.txt
         ./
 
   scorecard:
@@ -634,7 +638,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run OSSF Scorecard
-        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         continue-on-error: true
         with:
           results_file: scorecard-results.sarif
@@ -643,7 +647,7 @@ jobs:
 
       - name: Upload Scorecard results to GitHub Security tab
         id: upload-sarif
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
@@ -685,7 +689,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.14.8'
 

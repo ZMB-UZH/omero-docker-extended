@@ -231,7 +231,7 @@ bug-free proof.
 
 ### Reviewed directory-permission false positives
 
-Semgrep 1.179.0's `insecure-file-permissions` rule numerically compares modes
+Semgrep 1.182.1's revalidated `insecure-file-permissions` rule numerically compares modes
 with regular-file permissions. It incorrectly flags the quota helper's `0700`
 root-only directory and `01770` service-group directory with sticky ownership.
 Directory execute permission is required for traversal; these modes must not be
@@ -309,6 +309,24 @@ findings, and never infer runtime safety from the carrier's Docker Hub status.
 See the [Scout SBOM reference](https://docs.docker.com/reference/cli/docker/scout/sbom/)
 and [SBOM analysis support](https://docs.docker.com/reference/cli/docker/scout/cves/).
 
+### Curated Python Dependencies
+
+The server and web runtime requirement files retain complete, exact-version
+dependency cohorts for their supported Linux Python versions. The matching
+`.in` files identify the direct update inputs; they are not install locks.
+Resolve requested extras and environment markers against the actual target
+runtime, then validate the entire resulting cohort with `pip check`, native
+application checks, and unfiltered dependency scans. Keep operator-selected
+converter, Tifffile, and Figure inputs separate from these runtime cohorts.
+
+Do not publish partial override manifests as if they were resolved locks.
+Incomplete context can allow vulnerable alternative dependency versions and
+produce scanner results that do not match the deployed environment. Retain
+the original report, capture every installed distribution independently, and
+fix the dependency constraints rather than disabling resolution or filtering
+the findings. Build-argument changes affecting a curated dependency require
+requalification of the matching complete cohort.
+
 ### Curated Java Dependencies
 
 `docker/java-dependencies.cdx.xml` is a CycloneDX build lock for reviewed Java
@@ -324,6 +342,17 @@ before modifying a disposable build layer. The import client inherits shared
 server pins unless a client-specific pin is recorded; the converter has its own set.
 Changing a base image or distribution requires reviewing the recorded source
 hashes, not relaxing the checks. The XML loader rejects DTD/entity declarations.
+
+`docker/zarr-pixel-runtime.cdx.xml` records the complete reviewed pixel-reader
+dependency set, including unchanged dependencies supplied by the core image.
+Its server-plugin and client-plugin profiles install only the additions and
+replacements needed by each classpath. A new dependency must explicitly declare
+that no source JAR exists; an existing dependency must match its recorded source
+hash. Neither profile relaxes the original core or converter source checks.
+JARs without canonical embedded version metadata require a separately
+hash-pinned Maven POM. Downloads use only the reviewed Maven Central or Unidata
+origins. Keep the core and pixel locks aligned when updating shared libraries,
+and scan both locks without filtering unchanged components.
 
 Validate actual class origins and operations for all three consumers: server,
 browser-import client, and converter. Also inspect libraries embedded inside
@@ -348,6 +377,18 @@ build time. Both environments now run identical verified engine bytes over
 Git-selected candidate files, including intended new files but not ignored
 deployment state. The container has no network or write access to source.
 The raw SARIF is retained as a workflow artifact even when the guard fails.
+The gate verifies the version-matched upstream language and comment metadata,
+then adds Python-stub (`.pyi`) and JavaScript-module (`.mjs`) mappings without
+removing existing mappings. The upstream metadata and MIT license are retained
+under `tools/devskim-metadata-v1.0.100`; update their pins with the CLI.
+DevSkim's own analyzed and skipped counts are reported separately from the
+Git-selected candidate count. Skipped files may be unsupported or unreadable,
+and ignore globs may exclude additional files; other scanners and tests remain
+necessary. Debug contents are not published because they may contain source
+excerpts. DevSkim also attempts XML parsing for `omero-web.config`, which is a
+properties-format file; the resulting XML diagnostic is retained, while its
+applicable text rules still run. Do not treat that diagnostic as proof that
+other parsing errors can be ignored.
 
 Six `DS173237` detections on 2026-09-12 were public SHA-256 values, not secrets.
 The rule heuristically matches quoted long hexadecimal strings. Each value

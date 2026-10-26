@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "tool": "Semgrep OSS",
-  "version": "1.179.0",
+  "version": "1.182.1",
   "findings": [
     {
       "rule_id": "python.lang.security.audit.insecure-file-permissions.insecure-file-permissions",

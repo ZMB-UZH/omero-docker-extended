@@ -8,39 +8,39 @@ Service topology (docker-compose.yml):
 - All long-running services have explicit healthcheck: blocks; the one-shot redis-sysctl-init helper does not. Most use interval 10s, timeout 10s, retries 30; omeroserver uses a 900s start period and 120 retries for slow first starts.
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
-- All images use pinned version tags. Never use :latest.
+- Published dependency images use pinned version tags; custom-built image names are configurable. Never use :latest.
 
 Core services:
 
 - omeroserver (host port from OMERO_SERVER_HOST_PORT, default 4064; container/API port from OMERO_CLI_PORT, default 4064): OMERO.server, custom Dockerfile, depends on database.
 - omeroweb (port 4090): OMERO.web + plugins + Celery workers + storage-quota reconciliation loop via supervisord, depends on omeroserver + redis.
-- database (port 5432): PostgreSQL 16.15, OMERO core database.
-- database_plugin (port 5433): PostgreSQL 16.15, OMERO plugin database.
-- redis (port 6379): Redis 8.10.2-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed. Container replacement discards sessions and queued work unless the operator explicitly preserves and restores its state during a quiesced upgrade.
-- ollama (port 11434 internal): Ollama 0.40.0 local AI inference for OMP's Local provider. OLLAMA_DATA_PATH is required; upgrades must explicitly retain the existing model-data bind mount, while new installations choose persistent model storage.
+- database (port 5432): PostgreSQL 16.15 (`postgres:16.15`), OMERO core database.
+- database_plugin (port 5433): PostgreSQL 16.15 (`postgres:16.15`), OMERO plugin database.
+- redis (port 6379): `redis:8.10.2-alpine` stores data in the persistent named volume `redis-data`. Snapshotting, append-only persistence, memory limits, and eviction policy are controlled by `REDIS_SAVE_POLICY`, `REDIS_APPENDONLY`, `REDIS_MAXMEMORY`, and `REDIS_MAXMEMORY_POLICY`. The example enables append-only persistence and `noeviction`; preserve the volume and session keys during upgrades.
+- ollama (port 11434 internal): `ollama/ollama:0.40.11` provides local AI inference for OMP's Local provider. OLLAMA_DATA_PATH is required; upgrades must explicitly retain the existing model-data bind mount, while new installations choose persistent model storage.
 
 Supporting services:
 
 - internal-tls: offline certificate issuer with dedicated persistent authority, trust, and per-service leaf volumes. Native monitoring HTTPS and verified PostgreSQL-exporter connections renew automatically. These volumes are installation state, never disposable cache.
 - redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
-- portainer (${PORTAINER_HOST_BIND:-0.0.0.0}:9443): HTTPS-only container management UI, portainer/portainer-ce:2.45.1-alpine. Docker Compose uses the init shim plus a container-local TCP healthcheck for readiness; Prometheus blackbox performs the full HTTPS `/api/system/status` probe.
+- portainer (${PORTAINER_HOST_BIND:-0.0.0.0}:9443): HTTPS-only container management UI, portainer/portainer-ce:2.45.3-alpine. Docker Compose uses the init shim plus a container-local TCP healthcheck for readiness; Prometheus blackbox performs the full HTTPS `/api/system/status` probe.
 
 Monitoring services:
 
 - Prometheus scrapes 10 direct targets, 13 HTTP/HTTPS probe targets (including the separate Portainer reachability job), and 5 TCP probe targets in the tracked configuration.
 
-- prometheus (HTTPS, 127.0.0.1:9090): metrics scraping plus blackbox HTTP/TCP probes, prom/prometheus:v3.15.0.
-- grafana (HTTPS, 127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.2.3.
-- loki (HTTPS, 127.0.0.1:3100): log aggregation backend, grafana/loki:3.7.8.
-- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.20.1.
-- blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.28.0.
+- prometheus (HTTPS, 127.0.0.1:9090): metrics scraping plus blackbox HTTP/TCP probes, prom/prometheus:v3.15.1.
+- grafana (HTTPS, 127.0.0.1:3000): 4 auto-provisioned dashboards, grafana/grafana:13.2.4.
+- loki (HTTPS, 127.0.0.1:3100): log aggregation backend, grafana/loki:3.7.9.
+- alloy: log collection from mounted OMERO log files, grafana/alloy:v1.21.2.
+- blackbox-exporter: HTTP and TCP probing, prom/blackbox-exporter:v0.29.1.
 - node-exporter: host metrics, prom/node-exporter:v1.12.1.
 - cadvisor: container metrics, ghcr.io/google/cadvisor:0.60.6.
 - postgres-exporter: OMERO database metrics, prometheuscommunity/postgres-exporter:v0.20.1.
 - postgres-exporter-plugin: plugin database metrics, prometheuscommunity/postgres-exporter:v0.20.1.
-- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.93.0-alpine.
-- path-usage-exporter: custom Python 3.12 service exporting host path usage metrics via node-exporter textfile collector.
+- redis-exporter: Redis metrics, oliver006/redis_exporter:v1.96.0-alpine.
+- path-usage-exporter: custom Python service exporting host path usage metrics via node-exporter textfile collector.
 - crowdsec (profile-gated, port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
 
 Environment files:
@@ -56,7 +56,7 @@ Volume mount patterns:
 
 - Host paths from installation_paths.env bind-mounted into containers.
 - PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
-- Redis uses tmpfs for /data (512MB).
+- Redis mounts the persistent `redis-data` volume at /data; preserve it across container replacement.
 - OMERO_TMP_PATH bind-mounted at the same configured absolute path in both application containers, with separate server/web namespaces.
 - Docker socket is mounted only into Portainer for container-management operations.
 - Monitoring configs mounted read-only from ./monitoring/ directories.

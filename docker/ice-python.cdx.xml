@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1"> <!-- DevSkim: ignore DS137138 - XML namespace identifier, never a connection -->
+  <components>
+    <component type="library">
+      <name>zeroc-ice</name>
+      <version>3.6.5</version>
+      <purl>pkg:pypi/zeroc-ice@3.6.5</purl>
+      <externalReferences>
+        <reference type="distribution">
+          <url>https://files.pythonhosted.org/packages/1e/65/43c3ad2412467c731ee3c23bce03fad7e2b79df31301e27cc7b1b454554b/zeroc-ice-3.6.5.tar.gz</url>
+          <hashes><hash alg="SHA-256">4235ffeb605bcd4e22e716577f7d61e4aa1bc82f65276bb542701a81b7933356</hash></hashes>
+        </reference>
+        <reference type="other">
+          <url>https://raw.githubusercontent.com/glencoesoftware/zeroc-ice-py-patches/fedb23b9029b525e2e5a6396a970f5f1fa5bb3aa/0002-python-311-support.patch</url>
+          <hashes><hash alg="SHA-256">228d972347a89870994235edf0b7bef23eac69b9ec46ebf13ac5c9bc03774371</hash></hashes>
+        </reference>
+        <reference type="other">
+          <url>https://raw.githubusercontent.com/glencoesoftware/zeroc-ice-py-patches/fedb23b9029b525e2e5a6396a970f5f1fa5bb3aa/0003-python-312-support.patch</url>
+          <hashes><hash alg="SHA-256">97c577d010690c66d2be37530985d4fba14b1564211a057257c52e7f2bfb469b</hash></hashes>
+        </reference>
+      </externalReferences>
+    </component>
+  </components>
+</bom>

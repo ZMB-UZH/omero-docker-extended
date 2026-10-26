@@ -74,7 +74,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
             index_text,
         )
         self.assertIn(".github/workflows/ruff.yml", doc_text)
-        self.assertIn("0.16.10", doc_text)
+        self.assertIn("0.17.2", doc_text)
         self.assertIn("pre-commit install", doc_text)
         self.assertIn("ruff format .", doc_text)
 
@@ -133,7 +133,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in ruff config is pinned and repo specific.
         """
         config = tomllib.loads(self.read_text(".ruff.toml"))
-        self.assertEqual("==0.16.10", config["required-version"])
+        self.assertEqual("==0.17.2", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["third_party"], config["extend-exclude"])
         self.assertEqual(["F", "E7", "E9", "B904", "LOG014"], config["lint"]["select"])
@@ -211,7 +211,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         install_step = next_or_fail(
             step for step in steps if step.get("name") == "Install Ruff"
         )
-        self.assertEqual("0.16.10", install_step["with"]["version"])
+        self.assertEqual("0.17.2", install_step["with"]["version"])
         self.assertEqual("--version", install_step["with"]["args"])
 
 

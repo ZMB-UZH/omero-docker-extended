@@ -1,0 +1,33 @@
+# Resolved Linux Python 3.12 dependency cohort.
+# Direct update inputs: requirements-runtime-web.in.
+# Preserve the complete transitive set and verify against the native image.
+appdirs==1.4.4
+asgiref==3.13.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+concurrent-log-handler==0.9.31
+django==5.2.18
+django-cors-headers==3.7.0
+django-pipeline==4.1.0
+future==1.0.0
+gunicorn==26.2.0
+idna==3.20
+importlib-resources==7.1.0
+numpy==2.5.4
+omero-iviewer==0.19.1
+omero-marshal==0.9.1
+omero-py==5.23.0
+omero-web==5.33.2
+packaging==26.3
+pillow==13.0.0
+portalocker==4.4.1
+pytz==2026.5
+pyyaml==6.0.3
+requests==2.34.2
+setuptools==84.2.1
+sqlparse==0.6.0
+tzdata==2026.5
+urllib3==2.8.0
+wheel==0.48.0
+whitenoise==6.12.0
+zeroc-ice==3.6.5

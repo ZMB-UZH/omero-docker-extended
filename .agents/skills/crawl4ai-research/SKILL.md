@@ -23,6 +23,9 @@ the selected public sources before conclusions or code changes depend on them.
 4. For later sources use `python3 tools/crawl4ai_research.py read "<url>"`.
    Start with a focused `--selector` or bounded `--max-chars`. Truncation is
    explicit; read further relevant sections before treating coverage as complete.
+   GitHub Markdown file previews require their article body. If a large preview
+   is unavailable, retain the failed capture and read the same tagged raw file
+   through Crawl4AI; navigation and file metadata are not source content.
 5. The reader retains private, immutable native captures before validation,
    including URL, status, success, errors and full extracted text. Keep their
    digests in the verification ledger, including failed and denied reads.

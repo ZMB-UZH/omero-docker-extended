@@ -1,0 +1,116 @@
+﻿[
+  {
+    "language": [
+      "c",
+      "cpp",
+      "csharp",
+      "coffeescript",
+      "fsharp",
+      "go",
+      "groovy",
+      "jade",
+      "objective-c",
+      "rust",
+      "swift",
+      "javascript",
+      "javascriptreact",
+      "java",
+      "typescript",
+      "typescriptreact",
+      "php",
+      "kotlin",
+      "scala",
+      "dart",
+      "bicep",
+      "gradle"
+    ],
+    "inline": "//",
+    "prefix": "/*",
+    "suffix": "*/"
+  },
+  {
+    "language": [
+      "plaintext"
+    ],
+    "always": true
+  },
+  {
+    "language": [
+      "perl",
+      "perl6",
+      "r",
+      "shellscript",
+      "ruby",
+      "yaml",
+      "powershell",
+      "python",
+      "dockerfile",
+      "toml",
+      "dotenv",
+      "makefile",
+      "pem",
+      "pip-requirements",
+      "pip-config"
+    ],
+    "inline": "#",
+    "prefix": "#",
+    "suffix": "\n"
+  },
+  {
+    "language": [
+      "terraform"
+    ],
+    "inline": "#",
+    "prefix": "/*",
+    "suffix": "*/"
+  },
+  {
+    "language": [
+      "lua",
+      "sql"
+    ],
+    "inline": "--",
+    "prefix": "--",
+    "suffix": "\n"
+  },
+  {
+    "language": [
+      "clojure"
+    ],
+    "inline": ";;",
+    "prefix": ";;",
+    "suffix": ""
+  },
+  {
+    "language": [
+      "vb"
+    ],
+    "inline": "'",
+    "prefix": "'",
+    "suffix": ""
+  },
+  {
+    "language": [
+      "batch"
+    ],
+    "inline": "::",
+    "prefix": "Rem",
+    "suffix": "\n"
+  },
+  {
+    "language": [
+      "razor"
+    ],
+    "inline": "//",
+    "prefix": "<!--",
+    "suffix": "-->"
+  },
+  {
+    "language": [
+      "html",
+      "msbuild"
+    ],
+    "prefix": "<!--",
+    "suffix": "-->"
+  }
+]

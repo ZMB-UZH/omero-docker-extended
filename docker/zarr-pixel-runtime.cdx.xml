@@ -1,0 +1,1068 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">
+  <!--Resolved Java 11 pixel-reader runtime. Every installed replacement or addition is source-bound; unchanged provided artifacts remain visible to scanners.-->
+  <components>
+    <component type="library">
+      <group>com.beust</group>
+      <name>jcommander</name>
+      <version>1.82</version>
+      <hashes>
+        <hash alg="SHA-256">deeac157c8de6822878d85d0c7bc8467a19cc8484d37788f7804f039dde280b1</hash>
+      </hashes>
+      <purl>pkg:maven/com.beust/jcommander@1.82</purl>
+      <properties>
+        <property name="omero:pom-sha256">246344170b513b801ccf812234d4e1324a0f6ed2a81e90aa618913b66b9cc173</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-annotations</name>
+      <version>2.22</version>
+      <hashes>
+        <hash alg="SHA-256">21ddb598807d3a51a876704eb979d9296e1c6a6f47ab1826ff88c6d6a127a2d0</hash>
+      </hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.22</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-core</name>
+      <version>2.22.4</version>
+      <hashes>
+        <hash alg="SHA-256">2d30c375cddea9657a1e1ef97547a2694b663b355facb4de53a097782b312d1a</hash>
+      </hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-core@2.22.4</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.core</group>
+      <name>jackson-databind</name>
+      <version>2.22.4</version>
+      <hashes>
+        <hash alg="SHA-256">d4cbf8947087f305869826801913abdc50735a1fab2074a1993e7bc67ca974a3</hash>
+      </hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.22.4</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.fasterxml.jackson.datatype</group>
+      <name>jackson-datatype-jdk8</name>
+      <version>2.22.4</version>
+      <hashes>
+        <hash alg="SHA-256">2dea0c4f0a5dafaf1bd8b5e694090fe0043c29ba04367dbd38ec0869aca2bce9</hash>
+      </hashes>
+      <purl>pkg:maven/com.fasterxml.jackson.datatype/jackson-datatype-jdk8@2.22.4</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.github.luben</group>
+      <name>zstd-jni</name>
+      <version>1.5.7-24</version>
+      <hashes>
+        <hash alg="SHA-256">79f5e678ce437f09d5ab55df1c6e7fc8cf6a2eb8e73052f34b143464062fcb0b</hash>
+      </hashes>
+      <purl>pkg:maven/com.github.luben/zstd-jni@1.5.7-24</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.glencoesoftware.omero</group>
+      <name>omero-zarr-pixel-buffer</name>
+      <version>0.7.2</version>
+      <hashes>
+        <hash alg="SHA-256">610022287308a20b5145c1b9cc5f4a4fe0fe0b7ce45a77013ed954aff793e312</hash>
+      </hashes>
+      <purl>pkg:maven/com.glencoesoftware.omero/omero-zarr-pixel-buffer@0.7.2</purl>
+      <properties>
+        <property name="omero:installation">image-recipe</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.code.findbugs</group>
+      <name>jsr305</name>
+      <version>3.0.2</version>
+      <hashes>
+        <hash alg="SHA-256">766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.code.findbugs/jsr305@3.0.2</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.errorprone</group>
+      <name>error_prone_annotations</name>
+      <version>2.50.0</version>
+      <hashes>
+        <hash alg="SHA-256">4667724877f1d37a689202da191e23efa7657c62eef93ccdac406eccfe5cdd0a</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.errorprone/error_prone_annotations@2.50.0</purl>
+      <properties>
+        <property name="omero:client-plugin:source-sha256">9e6814cb71816988a4fd1b07a993a8f21bb7058d522c162b1de849e19bea54ae</property>
+        <property name="omero:client-plugin:source-state">present</property>
+        <property name="omero:server-plugin:source-sha256">9e6814cb71816988a4fd1b07a993a8f21bb7058d522c162b1de849e19bea54ae</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.guava</group>
+      <name>failureaccess</name>
+      <version>1.0.3</version>
+      <hashes>
+        <hash alg="SHA-256">cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.guava/failureaccess@1.0.3</purl>
+      <properties>
+        <property name="omero:client-plugin:source-sha256">a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26</property>
+        <property name="omero:client-plugin:source-state">present</property>
+        <property name="omero:server-plugin:source-sha256">a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.guava</group>
+      <name>guava</name>
+      <version>33.7.2-jre</version>
+      <hashes>
+        <hash alg="SHA-256">b530942257fb935f8b2cfaa5f8eb5bd59c555fd8e8d01b8ce98912e077ea606c</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.guava/guava@33.7.2-jre</purl>
+      <properties>
+        <property name="omero:client-plugin:source-sha256">bd7fa227591fb8509677d0d1122cf95158f3b8a9f45653f58281d879f6dc48c5</property>
+        <property name="omero:client-plugin:source-state">present</property>
+        <property name="omero:server-plugin:source-sha256">bd7fa227591fb8509677d0d1122cf95158f3b8a9f45653f58281d879f6dc48c5</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.guava</group>
+      <name>listenablefuture</name>
+      <version>9999.0-empty-to-avoid-conflict-with-guava</version>
+      <hashes>
+        <hash alg="SHA-256">b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.guava/listenablefuture@9999.0-empty-to-avoid-conflict-with-guava</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.j2objc</group>
+      <name>j2objc-annotations</name>
+      <version>3.1</version>
+      <hashes>
+        <hash alg="SHA-256">84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.j2objc/j2objc-annotations@3.1</purl>
+      <properties>
+        <property name="omero:client-plugin:source-sha256">f02a95fa1a5e95edb3ed859fd0fb7df709d121a35290eff8b74dce2ab7f4d6ed</property>
+        <property name="omero:client-plugin:source-state">present</property>
+        <property name="omero:server-plugin:source-sha256">f02a95fa1a5e95edb3ed859fd0fb7df709d121a35290eff8b74dce2ab7f4d6ed</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.protobuf</group>
+      <name>protobuf-java</name>
+      <version>3.25.9</version>
+      <hashes>
+        <hash alg="SHA-256">df18b719cd0c5a11e569013216cc9de47a0a954adeede685c0f98ce4c42d4d1a</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.protobuf/protobuf-java@3.25.9</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.google.re2j</group>
+      <name>re2j</name>
+      <version>1.8</version>
+      <hashes>
+        <hash alg="SHA-256">7b52c72156dd7f98b3237a5b35c1d34fba381b21048c89208913ad80a45dfbd7</hash>
+      </hashes>
+      <purl>pkg:maven/com.google.re2j/re2j@1.8</purl>
+      <properties>
+        <property name="omero:pom-sha256">df62699335cd46fc465f4c03b8c581d3d507792212d27b65adb923b4c27de4e7</property>
+        <property name="omero:server-plugin:source-sha256">d8040fa1c54c1ce208199015b6e599ec2ef37b7780f8f55a8b4b4b4299bade19</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.scalableminds</group>
+      <name>blosc-java</name>
+      <version>0.3-1.21.6</version>
+      <hashes>
+        <hash alg="SHA-256">d8e7163d2c1b630de41eac80d6810095c51a6a20721c26029c754ffb42627fc7</hash>
+      </hashes>
+      <purl>pkg:maven/com.scalableminds/blosc-java@0.3-1.21.6</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.squareup.okhttp3</group>
+      <name>okhttp</name>
+      <version>4.12.1</version>
+      <hashes>
+        <hash alg="SHA-256">86706f20171c58167b4acca46a66a4039d6b7927543b5ed944b7311c3cb52de0</hash>
+      </hashes>
+      <purl>pkg:maven/com.squareup.okhttp3/okhttp@4.12.1</purl>
+      <properties>
+        <property name="omero:pom-sha256">d38ed8f1a69f36dd0338a0565c2c26474ee100c9f83d8d9e01af4df77847c339</property>
+        <property name="omero:server-plugin:source-sha256">f55abda036da75e1af45bd43b9dfa79b2a3d90905be9cb38687c6621597a8165</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.squareup.okio</group>
+      <name>okio</name>
+      <version>3.18.2</version>
+      <hashes>
+        <hash alg="SHA-256">6d9746592170dee6db877969b520a5f79d974083835c911a3e1a58295ee51f67</hash>
+      </hashes>
+      <purl>pkg:maven/com.squareup.okio/okio@3.18.2</purl>
+      <properties>
+        <property name="omero:pom-sha256">d63868feb53befeae594494d329bfaabd58cd9c6f0818b1a1daab89ed204b786</property>
+        <property name="omero:server-plugin:source-sha256">bfe7dfe483c37137966a1690f0c7d0b448ba217902c1fed202aaffdbba3291ae</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>com.squareup.okio</group>
+      <name>okio-jvm</name>
+      <version>3.18.2</version>
+      <hashes>
+        <hash alg="SHA-256">681fed549d1d2c63710f42c9eab433d642c71af778babd67035c50f8c425aaff</hash>
+      </hashes>
+      <purl>pkg:maven/com.squareup.okio/okio-jvm@3.18.2</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>commons-codec</group>
+      <name>commons-codec</name>
+      <version>1.23.0</version>
+      <hashes>
+        <hash alg="SHA-256">47504a3ce71d73a1b0af07675546b8d8c5af87f82ef12b6381f9eb3c17dd5a5b</hash>
+      </hashes>
+      <purl>pkg:maven/commons-codec/commons-codec@1.23.0</purl>
+      <properties>
+        <property name="omero:installation">core-profile</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>commons-io</group>
+      <name>commons-io</name>
+      <version>2.22.0</version>
+      <hashes>
+        <hash alg="SHA-256">2b9a7b1f726fb86216dbd2c8321eabe0221dbd5b1be81c18e1cb53811b104758</hash>
+      </hashes>
+      <purl>pkg:maven/commons-io/commons-io@2.22.0</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>commons-logging</group>
+      <name>commons-logging</name>
+      <version>1.4.0</version>
+      <hashes>
+        <hash alg="SHA-256">d175dbd751dd782a63bde28c7a039520e971f25e84b79c19b8435edc3603e0dc</hash>
+      </hashes>
+      <purl>pkg:maven/commons-logging/commons-logging@1.4.0</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>dev.zarr</group>
+      <name>zarr-java</name>
+      <version>0.3.1</version>
+      <hashes>
+        <hash alg="SHA-256">606fffca9c7c93cce7747de0212a50ee8abd8ae26a894502457f509d1e624e2b</hash>
+      </hashes>
+      <purl>pkg:maven/dev.zarr/zarr-java@0.3.1</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>edu.ucar</group>
+      <name>cdm-core</name>
+      <version>5.11.0</version>
+      <hashes>
+        <hash alg="SHA-256">447cc47fb2a7f16e2bbc507dc83a7213dc1a44fa6875cfe2fb47bc2ca73ff93b</hash>
+      </hashes>
+      <purl>pkg:maven/edu.ucar/cdm-core@5.11.0</purl>
+      <properties>
+        <property name="omero:repository">unidata</property>
+        <property name="omero:server-plugin:source-sha256">4bb5af83727fe54ebe864cfec73bbeee3306debb158c7747d5750df88518c273</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>edu.ucar</group>
+      <name>httpservices</name>
+      <version>5.11.0</version>
+      <hashes>
+        <hash alg="SHA-256">9381c9cc76977fc239900fd2e81dcc2a9564973930b3276fb500e6aa6e936af9</hash>
+      </hashes>
+      <purl>pkg:maven/edu.ucar/httpservices@5.11.0</purl>
+      <properties>
+        <property name="omero:repository">unidata</property>
+        <property name="omero:server-plugin:source-sha256">2a8130e5b261adcfea052f02f84dd737b7d53dc3f497982535c8dbfbe801ea07</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>edu.ucar</group>
+      <name>udunits</name>
+      <version>5.11.0</version>
+      <hashes>
+        <hash alg="SHA-256">b70976d4358f0e110d1c4f239bdda1022a06a82b0c2c19cb9bf0614b9e918144</hash>
+      </hashes>
+      <purl>pkg:maven/edu.ucar/udunits@5.11.0</purl>
+      <properties>
+        <property name="omero:repository">unidata</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>info.picocli</group>
+      <name>picocli</name>
+      <version>4.7.7</version>
+      <hashes>
+        <hash alg="SHA-256">f86e30fffd10d2b13b8caa8d4b237a7ee61f2ffccf5b1941de718b765d235bf8</hash>
+      </hashes>
+      <purl>pkg:maven/info.picocli/picocli@4.7.7</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-buffer</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">48d805b74e56dc5f92b1f288858185abc86db16d293e8da183542df6243427f2</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-buffer@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">ad43f07219dfb757a87b9c2b4765002be478c5401971379954e3d182f285fe6b</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-codec@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec-http</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">627cfdac2cd5dbd8a33af85977fb81fa6b46f0c00389ab4c8677a415f0f85480</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-codec-http@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-codec-http2</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">4cb8bc95386112f3a9da935272781d577d9e70ca4c56cf0eef603a45e9526e02</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-codec-http2@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-common</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">50372d86e27b4b1cf0810d75eb534795966a199049a1e85a0c41bbd2bb97f519</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-common@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-handler</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">ff85f00781b956d618b20f33da076c839a5e43e0084108b07bab0c19737168ec</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-handler@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-resolver</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">562a5388c88325b7d6ed05e8168736871ce0e64ab01e0ce52ea7710760b9b457</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-resolver@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">be7bff8b6274e7fae12bbad3c565777539e9b069517e0b3acc06d9ac2cd6ec05</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-transport@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport-classes-epoll</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">99ea06d67e3e2792cc93521b686223c78da2561bfdf98533ebb29fed1729cce4</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-transport-classes-epoll@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>io.netty</group>
+      <name>netty-transport-native-unix-common</name>
+      <version>4.1.139.Final</version>
+      <hashes>
+        <hash alg="SHA-256">8e660ac8a485fc8d8b47d87d04ea33d19902dc6fc5a113e9353b762188b3f333</hash>
+      </hashes>
+      <purl>pkg:maven/io.netty/netty-transport-native-unix-common@4.1.139.Final</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>joda-time</group>
+      <name>joda-time</name>
+      <version>2.14.3</version>
+      <hashes>
+        <hash alg="SHA-256">43533e9df6431839d0865c897d7d43a9ca75378a52b7f60b3e08b037a5c94986</hash>
+      </hashes>
+      <purl>pkg:maven/joda-time/joda-time@2.14.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-sha256">385282b005818cfaccdbe8bd2429811e7e641782f2b88932a6b8ff51d668f616</property>
+        <property name="omero:server-plugin:source-state">present</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.commons</group>
+      <name>commons-compress</name>
+      <version>1.28.0</version>
+      <hashes>
+        <hash alg="SHA-256">e1522945218456f3649a39bc4afd70ce4bd466221519dba7d378f2141a4642ca</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.commons/commons-compress@1.28.0</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.commons</group>
+      <name>commons-lang3</name>
+      <version>3.21.0</version>
+      <hashes>
+        <hash alg="SHA-256">a2af247ec4db6eb8947e18e23e0433e4871a7c5d0a40e1f92e46ede54ae1defe</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.commons/commons-lang3@3.21.0</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.commons</group>
+      <name>commons-math3</name>
+      <version>3.6.1</version>
+      <hashes>
+        <hash alg="SHA-256">1e56d7b058d28b65abd256b8458e3885b674c1d588fa43cd7d1cbb9c7ef2b308</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.commons/commons-math3@3.6.1</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpclient</name>
+      <version>4.5.14</version>
+      <hashes>
+        <hash alg="SHA-256">c8bc7e1c51a6d4ce72f40d2ebbabf1c4b68bfe76e732104b04381b493478e9d6</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpclient@4.5.14</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpcore</name>
+      <version>4.4.16</version>
+      <hashes>
+        <hash alg="SHA-256">6c9b3dd142a09dc468e23ad39aad6f75a0f2b85125104469f026e52a474e464f</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpcore@4.4.16</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents</group>
+      <name>httpmime</name>
+      <version>4.5.14</version>
+      <hashes>
+        <hash alg="SHA-256">d401243d5c6eae928a37121b6e819158c8c32ea0584793e7285bb489ab2a3d17</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents/httpmime@4.5.14</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.client5</group>
+      <name>httpclient5</name>
+      <version>5.6.5</version>
+      <hashes>
+        <hash alg="SHA-256">a10b555f7c85a720d1011a086d679d854b155816cde91a40198cc98c2b0867e8</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.6.5</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.core5</group>
+      <name>httpcore5</name>
+      <version>5.4.4</version>
+      <hashes>
+        <hash alg="SHA-256">b08e3c3a440fec2029e89980134c7c787dd6796454641ad1eafb81478d7e8b0b</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.core5/httpcore5@5.4.4</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.apache.httpcomponents.core5</group>
+      <name>httpcore5-h2</name>
+      <version>5.4.4</version>
+      <hashes>
+        <hash alg="SHA-256">9a61441889f9b222ce99581977cc549b4dfca7ac9d2841582c1e57a31fa65b48</hash>
+      </hashes>
+      <purl>pkg:maven/org.apache.httpcomponents.core5/httpcore5-h2@5.4.4</purl>
+      <properties>
+        <property name="omero:installation">provided-exact</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jdom</group>
+      <name>jdom2</name>
+      <version>2.0.6.1</version>
+      <hashes>
+        <hash alg="SHA-256">0b20f45e3a0fd8f0d12cdc5316b06776e902b1365db00118876f9175c60f302c</hash>
+      </hashes>
+      <purl>pkg:maven/org.jdom/jdom2@2.0.6.1</purl>
+      <properties>
+        <property name="omero:manifest-version">2.x-2021.11.08.17.25</property>
+        <property name="omero:pom-sha256">55795e1018b8ae647b937967cf810a99b08582c2374e7873c128734c8c914bf3</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jetbrains</group>
+      <name>annotations</name>
+      <version>26.1.0</version>
+      <hashes>
+        <hash alg="SHA-256">ebc7aec252ed0c7d2d04c039d7f00e69f7b86b1f493c741d67b3ef31b986b054</hash>
+      </hashes>
+      <purl>pkg:maven/org.jetbrains/annotations@26.1.0</purl>
+      <properties>
+        <property name="omero:pom-sha256">f8dc50cf3aac4bcec740a90955f2800e41251e9c403630b75b752d3b6ef5bee2</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jetbrains.kotlin</group>
+      <name>kotlin-stdlib</name>
+      <version>2.4.21</version>
+      <hashes>
+        <hash alg="SHA-256">bd8250210584cb659847dce9cda660f8e9906e5def7fbebcea93dc6dcb6a88a3</hash>
+      </hashes>
+      <purl>pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@2.4.21</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jetbrains.kotlin</group>
+      <name>kotlin-stdlib-jdk7</name>
+      <version>2.4.21</version>
+      <hashes>
+        <hash alg="SHA-256">6fce867d4c24c92a8b64c966317d3ac1d4b787a00e1aa6d2b76b1cedd3a0c082</hash>
+      </hashes>
+      <purl>pkg:maven/org.jetbrains.kotlin/kotlin-stdlib-jdk7@2.4.21</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jetbrains.kotlin</group>
+      <name>kotlin-stdlib-jdk8</name>
+      <version>2.4.21</version>
+      <hashes>
+        <hash alg="SHA-256">eb83cbc07ee68fcd5f229b2ed1d66c7a0175c56ac1dca1457cce4b1702004259</hash>
+      </hashes>
+      <purl>pkg:maven/org.jetbrains.kotlin/kotlin-stdlib-jdk8@2.4.21</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.jspecify</group>
+      <name>jspecify</name>
+      <version>1.0.1</version>
+      <hashes>
+        <hash alg="SHA-256">070d75f261fe4c5b8202508366715f7f2d4660f88c8ef7e6d3575e48c9683b66</hash>
+      </hashes>
+      <purl>pkg:maven/org.jspecify/jspecify@1.0.1</purl>
+      <properties>
+        <property name="omero:client-plugin:source-state">absent</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>org.reactivestreams</group>
+      <name>reactive-streams</name>
+      <version>1.0.4</version>
+      <hashes>
+        <hash alg="SHA-256">f75ca597789b3dac58f61857b9ac2e1034a68fa672db35055a8fb4509e325f28</hash>
+      </hashes>
+      <purl>pkg:maven/org.reactivestreams/reactive-streams@1.0.4</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>annotations</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">3dee0006eb10176d718cdd877d926ba86a6673fe0dcbab5788f62ea64e4b24a2</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/annotations@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>apache5-client</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">219c40dbfbde3d0f728c3b905593d626ea282ed08ee714986d59107008261333</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/apache5-client@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>arns</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">c2fd909df91a86016b514ed473a9a0fbe17aa646374c6d8c933970413717d755</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/arns@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>auth</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">7966cc0348dd7305816faeeab79134e10da1c7728a910216e49c5f20706ab629</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/auth@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>aws-core</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">e53a3dcc896002fefccd56e83804b2becdd9bbf3d384a2c4a8cb72ca0a636417</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/aws-core@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>aws-query-protocol</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">0e8b5b6ca54162248dfa430f9fe9f98c36049fb0f8de7e1cf16cbf388cfd9598</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/aws-query-protocol@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>aws-xml-protocol</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">0b4a80dcd2cb504c9f56023eb39b8f9578b0883b30ff158507e1b2db83ccc372</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/aws-xml-protocol@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>checksums</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">6f91f35dbc66f3f7421a75e302a26c2c98e4a75c3e342b29784a4b7fb581c041</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/checksums@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>checksums-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">2239d08f649a1995fd604576bdb630d696d450ccd1089bed658f2d7d9ec399fd</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/checksums-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>crt-core</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">46b9d59aad3c5622179ea0e7d6554e87304129f31ed824f5d1d259eb0723d3dd</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/crt-core@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>endpoints-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">8a5098abdca50041d8f9d5513b2b49f2123ad9e827e8632af60261a2e1005fa9</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/endpoints-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>eventstream</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">17517852d41e527b7f787ce9d7090bd73cc3763aae5bc9b9aa31f45752d4f0e0</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/eventstream@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>http-auth</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">286c880eb0e497e250fbb9890f805ed4b8ef388a211da7b2532ff4f65177af1a</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/http-auth@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>http-auth-aws</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">35bbeb7d5b0e29b1ad860d253c84c560aea940db0762a06fc483a9b3881eba4b</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/http-auth-aws@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>http-auth-aws-eventstream</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">95fe1ecdefe126ea994c15d9249c9874449d5c7f624a6c85d8e0e55a9cf8a8a2</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/http-auth-aws-eventstream@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>http-auth-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">58c7109749bd2ee343ae6f27e7a83393515590d6fa8e015d1c8082a9d1ceebbc</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/http-auth-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>http-client-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">1fc77076839014fc416874936a1a21ef2d5ab07c21e1e14700f6ca508dafffc9</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/http-client-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>identity-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">52c23241d021e6bcd562a3861f3ac1dee870748da3c746c9705cd632c9db37ba</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/identity-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>json-utils</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">b4d0a6e408cf79d265e5dba6ba45e9e0396c4696918645e6c5757bfc30709ffd</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/json-utils@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>metrics-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">741a0892a10f6600ed4d07201dad124eaac0ff9af159ee8d091192d4822aaf01</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/metrics-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>netty-nio-client</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">ef3548dbcd5fbad33ab04f646345990800dfba3dcb79efae28667049ea166972</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/netty-nio-client@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>profiles</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">580759c088f92279cc41c9a9d3000bf05fd89636933f2301fd176a9000c7550d</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/profiles@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>protocol-core</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">cbba9c31acd3a0c2d1424160775a8b6357e80add4d92920b971819cd0f2dfe0d</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/protocol-core@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>regions</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">89c9e70b16d4b482bcee821f6f3dd8b38483c6fb5928b5d549c7b907cbe72ccd</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/regions@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>retries</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">995ca319bad6ed944595a463afd6aed4c50b1ee8f475625e1f792e32fea69a53</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/retries@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>retries-spi</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">b7c1b8a3ddb2605136de7bd090968d8f893718d7906b873567c2ae6800a3151d</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/retries-spi@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>s3</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">f09a188394c900081c53a76845121ed2a28976770ae0b89f54f159a7d5b19237</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/s3@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>sdk-core</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">720788f97ed2be929a9bbcc5cf9bc01683d17edcb76212a3a2ea39a95be362f7</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/sdk-core@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>third-party-jackson-core</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">c1fc6cc0982b94d6b220bbc52b9244f3b8a2008ccab688c57195b695d6858af1</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/third-party-jackson-core@2.57.3</purl>
+      <properties>
+        <property name="omero:pom-sha256">c4c84bf63895958dff97288f41ce8aec265a321bfd5bc5f3d130b5cde5625cfe</property>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>url-connection-client</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">92305291ccb0170a8adfa1ae7346cc8dda7f0681a43fa64824a6aa24e756a21a</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/url-connection-client@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>utils</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">0ced56cf81e52c16ebb110de7cd9b6b4e3976a52d82712dd3da0ee620e0def52</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/utils@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+    <component type="library">
+      <group>software.amazon.awssdk</group>
+      <name>utils-lite</name>
+      <version>2.57.3</version>
+      <hashes>
+        <hash alg="SHA-256">38e69acc0409e2b96f0164dd394e72becb895cc68fff24b2608c3ba07929e9d9</hash>
+      </hashes>
+      <purl>pkg:maven/software.amazon.awssdk/utils-lite@2.57.3</purl>
+      <properties>
+        <property name="omero:server-plugin:source-state">absent</property>
+      </properties>
+    </component>
+  </components>
+</bom>

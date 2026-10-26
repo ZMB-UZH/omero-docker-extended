@@ -77,51 +77,90 @@ class SecurityHardeningContractTests(unittest.TestCase):
 
     def test_application_images_enable_final_hardening_by_default(self):
         """Check direct builds remain hardened. Inputs: Dockerfiles. Output: assertions."""
-        for dockerfile in (self.server_dockerfile, self.web_dockerfile):
+        worker = (REPO_ROOT / "docker/omero-celery-worker.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        for dockerfile in (self.server_dockerfile, self.web_dockerfile, worker):
             self.assertIn("ARG APPLY_SECURITY_HARDENING=1\n", dockerfile)
             self.assertNotIn("ARG APPLY_SECURITY_HARDENING=0\n", dockerfile)
 
-    def test_failed_curated_python_update_stops_server_build(self):
-        """Execute the actual curated pip update with a failing interpreter.
+    def test_curated_python_updates_install_pins_and_fail_closed(self):
+        """Execute both final Python hardening stages without the optional flag.
 
-        Inputs: Dockerfile update commands. Output: requires fatal failure.
+        Inputs: actual image commands and pip failures. Output: enforced pins and checks.
         """
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / "bin").mkdir()
-            executable = root / "bin" / "python"
-            executable.write_text("#!/bin/sh\nexit 67\n", encoding="utf-8")
-            executable.chmod(0o700)
-            boundary = self.server_dockerfile.split(
+        for name, dockerfile in (
+            ("server", self.server_dockerfile),
+            ("web", self.web_dockerfile),
+        ):
+            hardening = dockerfile.split("# Final security hardening pass", 1)[1]
+            boundary = hardening.split(
                 'echo "Applying curated compatibility-safe Python security updates', 1
             )[1]
-            commands = boundary.split('"${VENV_DIR}/bin/python"', 1)[1]
             commands = (
                 '"${VENV_DIR}/bin/python"'
-                + commands.split('echo "Stripping test directories', 1)[0]
+                + boundary.split('"${VENV_DIR}/bin/python"', 1)[1]
             )
-            env = {**os.environ, "VENV_DIR": str(root)}
-            env.update(
-                dict(
-                    re.findall(
-                        r"^ARG ([A-Z0-9_]+_VERSION)=([^\s]+)$",
-                        self.server_dockerfile,
-                        re.M,
+            commands = commands.split('"${VENV_DIR}/bin/python" -m pip check', 1)[0]
+            commands += '"${VENV_DIR}/bin/python" -m pip check'
+            for install_rc, check_rc in ((67, 0), (0, 68), (0, 0)):
+                with (
+                    self.subTest(image=name, install_rc=install_rc, check_rc=check_rc),
+                    tempfile.TemporaryDirectory() as temporary,
+                ):
+                    root = Path(temporary)
+                    (root / "bin").mkdir()
+                    calls = root / "calls"
+                    executable = root / "bin" / "python"
+                    executable.write_text(
+                        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PIP_CALLS"\n'
+                        'if [ "$3" = "install" ]; then exit "$INSTALL_RC"; fi\n'
+                        'if [ "$3" = "check" ]; then exit "$CHECK_RC"; fi\n'
+                        "exit 99\n",
+                        encoding="utf-8",
                     )
-                )
-            )
-            result = subprocess.run(
-                [
-                    shutil.which("bash") or "/bin/bash",
-                    "-c",
-                    "set -euo pipefail; " + commands.replace("\\\n", ""),
-                ],
-                env=env,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 67, result.stdout + result.stderr)
+                    executable.chmod(0o700)
+                    env = {
+                        **os.environ,
+                        "VENV_DIR": str(root),
+                        "PIP_CALLS": str(calls),
+                        "INSTALL_RC": str(install_rc),
+                        "CHECK_RC": str(check_rc),
+                        "APPLY_OMEROWEB_VENV_TOOLING_UPDATES": "0",
+                    }
+                    env.update(
+                        dict(
+                            re.findall(
+                                r"^ARG ([A-Z0-9_]+_VERSION)=([^\s]+)$",
+                                dockerfile,
+                                re.M,
+                            )
+                        )
+                    )
+                    result = subprocess.run(
+                        [
+                            shutil.which("bash") or "/bin/bash",
+                            "-c",
+                            "set -euo pipefail; " + commands.replace("\\\n", ""),
+                        ],
+                        env=env,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        result.returncode,
+                        install_rc or check_rc,
+                        result.stdout + result.stderr,
+                    )
+                    invocations = calls.read_text(encoding="utf-8").splitlines()
+                    installed = " ".join(invocations)
+                    for package, variable in (
+                        ("pillow", "PILLOW_VERSION"),
+                        ("certifi", "CERTIFI_VERSION"),
+                    ):
+                        self.assertIn(f"{package}=={env[variable]}", installed.split())
+                    self.assertEqual("-m pip check" in invocations, install_rc == 0)
 
     def test_server_curated_updates_include_image_and_serialization_libraries(self):
         """Inputs: final server update stage. Output: pinned codecs and pip validation."""
@@ -129,7 +168,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
             1
         ]
         for name, package, version in (
-            ("PILLOW", "pillow", "12.3.0"),
+            ("PILLOW", "pillow", "13.0.0"),
             ("MSGPACK", "msgpack", "1.2.3"),
         ):
             with self.subTest(package=package):
@@ -263,10 +302,10 @@ class SecurityHardeningContractTests(unittest.TestCase):
     def test_server_jdbc_update_is_verified_before_installation(self):
         """Inputs: server driver stage. Output: both classpaths share a verified release."""
         stage = self.server_dockerfile.split("ARG POSTGRESQL_JDBC_VERSION=", 1)[1]
-        self.assertTrue(stage.startswith("42.7.13\n"))
+        self.assertTrue(stage.startswith("42.7.14\n"))
         self.assertIn(
             "ARG POSTGRESQL_JDBC_SHA256="
-            "6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93\n",
+            "73914527305a40cce504b0d3d90b23caf565136912d607ae8ae7c5895512332c\n",
             stage,
         )
         self.assertIn('"${#SERVER_DIRS[@]}" -ne 1', stage)

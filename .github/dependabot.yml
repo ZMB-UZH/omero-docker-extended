@@ -72,6 +72,24 @@ updates:
     commit-message:
       prefix: "deps(tls)"
 
+  - package-ecosystem: "pip"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:15"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    ignore:
+      # The web base supports Django 5.2.x; upgrades must preserve its contract.
+      - dependency-name: "django"
+        update-types:
+          - "version-update:semver-major"
+    commit-message:
+      prefix: "deps(runtime-pip)"
+
   # Dependabot's Docker updater scans Dockerfiles, not Compose manifests.
   # Compose image tags remain explicit and are refreshed through audited bumps.
   - package-ecosystem: "docker"

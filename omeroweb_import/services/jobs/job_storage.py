@@ -46,7 +46,10 @@ def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> i
     raw = os.environ.get(env_key, "")
     if raw:
         raw = INT_SANITIZER.sub("", str(raw))
-    value = int(raw) if raw else default
+    try:
+        value = int(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
     return max(min_value, min(max_value, value))
 
 
@@ -57,7 +60,7 @@ def normalize_job_batch_size(value, default: int) -> int:
     """
     try:
         normalized = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         normalized = default
     return max(1, min(10, normalized))
 

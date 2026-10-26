@@ -130,10 +130,11 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
 
 ## Network exposure
 
-- By default, only `omeroserver` (`OMERO_SERVER_HOST_PORT`, default 4064) and
-  `omeroweb` (`OMERO_WEB_HOST_PORT`, default 4090) are exposed on all host
-  interfaces. Loki (`127.0.0.1:3100`), Prometheus (`127.0.0.1:9090`), and
-  Grafana (`127.0.0.1:3000`) bind to loopback.
+- `omeroserver` (`OMERO_SERVER_HOST_PORT`, default 4064) and `omeroweb`
+  (`OMERO_WEB_HOST_PORT`, default 4090) expose host ports. Portainer's
+  separate HTTPS binding is described below. Loki (`127.0.0.1:3100`),
+  Prometheus (`127.0.0.1:9090`), and Grafana (`127.0.0.1:3000`) bind to
+  loopback.
 - Portainer is enabled by default for container management, exposes HTTPS only
   on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, and does not expose the legacy
   HTTP port. Set `PORTAINER_HOST_BIND=127.0.0.1` when it should be reachable
@@ -157,7 +158,8 @@ The OMP plugin enforces per-user rate limits on major actions (job starts, bulk 
   container-management role. Treat Portainer as Docker-administrator access:
   keep strong authentication, restrict network reachability with host firewall
   rules or a trusted authenticated reverse proxy when possible, and do not
-  store Portainer credentials in the repository.
+  store Portainer credentials in the repository. A read-only socket mount does
+  not make Docker's API read-only or remove its host-administrator implications.
 
 ## CSRF protection
 

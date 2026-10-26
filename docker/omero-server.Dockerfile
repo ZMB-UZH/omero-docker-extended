@@ -27,18 +27,18 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
 # resource APIs; its CLI and database tooling no longer require pkg_resources.
 # ---------------------------------------------------------------------------
-ARG PIP_VERSION=26.2.1
-ARG SETUPTOOLS_VERSION=84.0.0
+ARG PIP_VERSION=26.2.2
+ARG SETUPTOOLS_VERSION=84.2.1
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
 ARG URLLIB3_VERSION=2.8.0
-ARG CERTIFI_VERSION=2026.7.22
+ARG CERTIFI_VERSION=2026.10.23
 ARG IDNA_VERSION=3.20
 ARG REQUESTS_VERSION=2.34.2
 ARG JINJA2_VERSION=3.1.6
 ARG PYOPENSSL_VERSION=26.4.0
-ARG REPORTLAB_VERSION=5.0.1
-ARG MARKDOWN_VERSION=3.11
+ARG REPORTLAB_VERSION=5.1.0
+ARG MARKDOWN_VERSION=3.11.2
 ARG OMERO_CLI_RENDER_VERSION=0.8.1
 ARG OMERO_METADATA_VERSION=0.14.0
 ARG OMERO_CLI_DUPLICATE_VERSION=0.4.0
@@ -106,14 +106,14 @@ RUN set -euo pipefail; \
 # ---------------------------------------------------------------------
 # Required by omero-cli-zarr imported images.  Without this server-side
 # plugin, zarr-imported images have no accessible pixel data.
-ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.6.1
-ARG OMERO_ZARR_PIXEL_BUFFER_SHA256=9cb3d1ed491ef866bc1703415b809097693fda13eb4818dc0eb6959f8fe94f97
+ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.7.2
+ARG OMERO_ZARR_PIXEL_BUFFER_SHA256=610022287308a20b5145c1b9cc5f4a4fe0fe0b7ce45a77013ed954aff793e312
 ARG CAFFEINE_3_2_4_SHA256=9d9d2cfd681fd9272ded3d27c9930db12f89f732345975aa113ebc223bbf1224
 ARG AWS_JAVA_SDK_S3_1_12_797_SHA256=322f60899f4f0ea16e94d2d2a8c2f059cc2e0204e11f1f26654e08cf2df590e7
 ARG AWS_JAVA_SDK_CORE_1_12_797_SHA256=75c70d4a7a5b6f3ee3f1fc86b1c7f91106acba4769744791fa4159c4c35bfebc
 ARG AWS_JAVA_SDK_KMS_1_12_797_SHA256=b74486c30294cd34062aa9acef627320df6ef5d61c2bd090b01e4de1f675f04a
 ARG S3FS_2_2_3_SHA256=a22e94403de3dcf6e08fe233718d9364b578cf91555eb0dd6edc628443f44602
-ARG TIKA_CORE_3_3_2_SHA256=84d0f2b6add29b97359113499a1e1e7c10dfbfa1e410c122d163c83f3fc5359b
+ARG TIKA_CORE_3_3_3_SHA256=e0c5fc32206f1daef85e549a7d93110a708613ed4b00d2c1e895c1d5d83a1326
 RUN set -euo pipefail; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
@@ -140,9 +140,9 @@ RUN set -euo pipefail; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" \
         "https://repo1.maven.org/maven2/org/lasersonlab/s3fs/2.2.3/s3fs-2.2.3.jar"; \
     printf '%s  %s\n' "${S3FS_2_2_3_SHA256}" "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" | sha256sum -c -; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-3.3.2.jar" \
-        "https://repo1.maven.org/maven2/org/apache/tika/tika-core/3.3.2/tika-core-3.3.2.jar"; \
-    printf '%s  %s\n' "${TIKA_CORE_3_3_2_SHA256}" "${SERVER_DIR}/lib/server/tika-core-3.3.2.jar" | sha256sum -c -; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-3.3.3.jar" \
+        "https://repo1.maven.org/maven2/org/apache/tika/tika-core/3.3.3/tika-core-3.3.3.jar"; \
+    printf '%s  %s\n' "${TIKA_CORE_3_3_3_SHA256}" "${SERVER_DIR}/lib/server/tika-core-3.3.3.jar" | sha256sum -c -; \
     chown omero-server:omero-server "${SERVER_DIR}"/lib/server/omero-zarr-pixel-buffer-*.jar \
         "${SERVER_DIR}"/lib/server/caffeine-*.jar \
         "${SERVER_DIR}"/lib/server/aws-java-sdk-*.jar \
@@ -353,6 +353,11 @@ RUN set -euo pipefail; \
         gcc \
         gcc-c++ \
         make \
+        patch \
+        python3.11-devel \
+        bzip2-devel \
+        openssl-devel \
+        libedit-devel \
         fontconfig \
         libX11 \
         libXext \
@@ -693,7 +698,8 @@ HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
 # Runs AFTER all dnf installs and pip installs are complete, so that every
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
-ARG PILLOW_VERSION=12.3.0
+COPY docker/requirements-runtime-server.txt /tmp/requirements-runtime-server.txt
+ARG PILLOW_VERSION=13.0.0
 ARG MSGPACK_VERSION=1.2.3
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
@@ -733,7 +739,8 @@ RUN set -euo pipefail; \
             "jinja2==${JINJA2_VERSION}" \
             "pillow==${PILLOW_VERSION}" \
             "msgpack==${MSGPACK_VERSION}" \
-            "pyopenssl==${PYOPENSSL_VERSION}"; \
+            "pyopenssl==${PYOPENSSL_VERSION}" \
+            --requirement /tmp/requirements-runtime-server.txt; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}"; \
         "${VENV_DIR}/bin/python" -m pip check; \
         echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \
@@ -748,8 +755,8 @@ RUN set -euo pipefail; \
 
 # Keep the PostgreSQL driver on its maintained Java 8+ line. The upstream
 # distribution retains the Java 7 driver; the server image runs Java 11.
-ARG POSTGRESQL_JDBC_VERSION=42.7.13
-ARG POSTGRESQL_JDBC_SHA256=6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93
+ARG POSTGRESQL_JDBC_VERSION=42.7.14
+ARG POSTGRESQL_JDBC_SHA256=73914527305a40cce504b0d3d90b23caf565136912d607ae8ae7c5895512332c
 RUN set -euo pipefail; \
     mapfile -t SERVER_DIRS < <(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*'); \
     if [[ "${#SERVER_DIRS[@]}" -ne 1 ]]; then \
@@ -788,13 +795,31 @@ RUN set -euo pipefail; \
 
 # Verify and update compatible libraries on both server and client classpaths.
 COPY docker/java-dependencies.cdx.xml /usr/local/share/omero-java-dependencies.cdx.xml
+COPY docker/zarr-pixel-runtime.cdx.xml /usr/local/share/omero-zarr-pixel-runtime.cdx.xml
 COPY tools/install_java_dependencies.py /tmp/install-java-dependencies.py
 RUN set -euo pipefail; \
     SERVER_DIR="$(readlink -f /opt/omero/server/OMERO.server)"; \
     python3 -B /tmp/install-java-dependencies.py \
         --profile server --root "${SERVER_DIR}" \
         --lock /usr/local/share/omero-java-dependencies.cdx.xml; \
+    python3 -B /tmp/install-java-dependencies.py \
+        --profile server-plugin --root "${SERVER_DIR}" \
+        --lock /usr/local/share/omero-zarr-pixel-runtime.cdx.xml; \
+    python3 -B /tmp/install-java-dependencies.py \
+        --profile client-plugin --root "${SERVER_DIR}" \
+        --lock /usr/local/share/omero-zarr-pixel-runtime.cdx.xml; \
     rm -f /tmp/install-java-dependencies.py
+
+# Rebuild the supported Python binding against maintained system TLS libraries.
+COPY docker/install-ice-python.sh /tmp/install-ice-python.sh
+RUN set -euo pipefail; \
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name 'venv*' -exec readlink -f {} \; | sort -u); \
+    test "${#VENV_DIRS[@]}" -gt 0; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        /bin/bash /tmp/install-ice-python.sh "${VENV_DIR}/bin/python"; \
+        "${VENV_DIR}/bin/python" -m pip check; \
+    done; \
+    rm -f /tmp/install-ice-python.sh
 
 # Remove inherited build-only OS dependencies without touching application venvs.
 COPY docker/remove-build-dependencies.sh /tmp/remove-build-dependencies.sh

@@ -34,7 +34,7 @@ services:
       - no-new-privileges:true
 
   portainer:
-    image: "portainer/portainer-ce:2.45.1-alpine"
+    image: "portainer/portainer-ce:2.45.3-alpine"
     container_name: portainer
     restart: unless-stopped
     init: true
@@ -67,7 +67,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.7.8"
+    image: "grafana/loki:3.7.9"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     environment:
@@ -96,7 +96,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.20.1"
+    image: "grafana/alloy:v1.21.2"
     restart: unless-stopped
     command:
       - "run"
@@ -138,7 +138,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.15.0"
+    image: "prom/prometheus:v3.15.1"
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -180,7 +180,7 @@ services:
       - no-new-privileges:true
 
   blackbox-exporter:
-    image: "prom/blackbox-exporter:v0.28.0"
+    image: "prom/blackbox-exporter:v0.29.1"
     restart: unless-stopped
     command:
       - "--config.file=/etc/blackbox_exporter/config.yml"
@@ -342,7 +342,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.93.0-alpine"
+    image: "oliver006/redis_exporter:v1.96.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -363,7 +363,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.2.3"
+    image: "grafana/grafana:13.2.4"
     restart: unless-stopped
     init: true
     entrypoint: ["/bin/sh", "/usr/local/bin/watch-trust.sh", "/run.sh"]
@@ -577,7 +577,7 @@ services:
         OME_ZARR_PY_VERSION: "${OME_ZARR_PY_VERSION:?Set OME_ZARR_PY_VERSION in env/omeroserver.env}"
         BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:?Set BIOFORMATS2RAW_VERSION in env/omeroserver.env}"
         BIOFORMATS2RAW_SHA256: "${BIOFORMATS2RAW_SHA256:?Set BIOFORMATS2RAW_SHA256 in env/omeroserver.env}"
-        TIFFFILE_VERSION: "${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}"
+        TIFFFILE_VERSION: "${WEB_TIFFFILE_VERSION:-${TIFFFILE_VERSION:?Set TIFFFILE_VERSION in env/omeroserver.env}}"
     restart: unless-stopped
     # Startup reconciles bind-mounted runtime paths, then drops to omero-web.
     user: root
@@ -755,7 +755,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.40.0"
+    image: "ollama/ollama:0.40.11"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

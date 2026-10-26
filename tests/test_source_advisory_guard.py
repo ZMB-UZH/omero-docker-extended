@@ -1,7 +1,6 @@
-"""Keep the approved source exception narrower than a package-version ignore."""
+"""Keep direct-URL packages inventoried without suppressing advisory results."""
 
 from copy import deepcopy
-from datetime import date
 import hashlib
 import json
 from pathlib import Path
@@ -14,9 +13,6 @@ import pytest
 import yaml
 
 from tools import source_advisory_guard as guard
-
-
-REVIEW_DATE = date(2026, 10, 8)
 
 
 @pytest.fixture
@@ -37,7 +33,7 @@ def change_text(path, old, new):
 
 
 def raw_report(root):
-    """Inputs: fixture root. Output: OSV-shaped unfiltered advisory evidence."""
+    """Inputs: fixture root. Output: native OSV 2.7 all-packages evidence for a clean release."""
     return {
         "results": [
             {
@@ -47,18 +43,10 @@ def raw_report(root):
                 },
                 "packages": [
                     {
-                        "package": dict(guard.PACKAGE),
-                        "vulnerabilities": [{"id": guard.ADVISORY}],
-                        "groups": [
-                            {
-                                "ids": [guard.ADVISORY],
-                                "aliases": [
-                                    guard.ADVISORY,
-                                    "CVE-2026-81726",
-                                    "PYSEC-2026-3740",
-                                ],
-                            }
-                        ],
+                        "package": {
+                            **guard.PACKAGE,
+                            "purl": f"pkg:pypi/nltk@{guard.PACKAGE['version']}",
+                        },
                     }
                 ],
             }
@@ -66,37 +54,33 @@ def raw_report(root):
     }
 
 
-def test_current_review_is_complete_and_time_bounded(source):
-    """Inputs: reviewed files. Output: exact-source acceptance, never release-wide approval."""
-    review = guard.check(source, today=REVIEW_DATE)
-    assert review["advisory"] == guard.ADVISORY
-    guard.validate_report(raw_report(source), source, review)
-    for day in (date(2026, 10, 7), date(2026, 11, 7), date(2027, 1, 1)):
-        with pytest.raises(ValueError, match="review window"):
-            guard.check(source, today=day)
+def test_current_release_is_hash_bound_and_scanned_without_exceptions(source):
+    """Inputs: reviewed fixed release. Output: complete identity and unfiltered clean scan."""
+    review = guard.check(source)
+    assert review["package"] == guard.PACKAGE
+    assert "advisory" not in review
+    guard.validate_report(raw_report(source), source)
 
 
 @pytest.mark.parametrize(
     ("old", "new"),
     [
-        ("schema_version = 1", "schema_version = 2"),
-        (guard.ADVISORY, "GHSA-unreviewed"),
-        ('version = "3.10.3"', 'version = "3.10.4"'),
+        ("schema_version = 2", "schema_version = 1"),
+        ('version = "3.10.4"', 'version = "3.10.3"'),
         (
             guard.crawl4ai_research.NLTK_SOURCE_URL,
             "https://example.org/different.tar.gz",
         ),
         (guard.crawl4ai_research.NLTK_SOURCE_SHA256, "0" * 64),
-        ('source_revision = "', 'source_revision = "invalid-'),
         ("[lock_sha256]", "[unreviewed_locks]"),
-        ("2026-10-08", "2026-09-01"),
+        ("schema_version = 2", 'schema_version = 2\nadvisory = "GHSA-unreviewed"'),
     ],
 )
 def test_review_changes_fail_closed(source, old, new):
     """Inputs: altered source/review identities. Output: each unqualified change blocks."""
     change_text(source / guard.SCOPE / "review.toml", old, new)
     with pytest.raises((ValueError, KeyError)):
-        guard.check(source, today=REVIEW_DATE)
+        guard.check(source)
 
 
 @pytest.mark.parametrize("name", sorted(guard.LOCK_FILES))
@@ -105,15 +89,15 @@ def test_any_dependency_lock_change_invalidates_review(source, name):
     path = source / guard.SCOPE.parent / name
     path.write_bytes(path.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="locks changed"):
-        guard.check(source, today=REVIEW_DATE)
+        guard.check(source)
 
 
 @pytest.mark.parametrize("kind", ["extra", "directory", "symlink", "scope-symlink"])
 def test_directory_scope_cannot_cover_other_dependencies(source, kind):
-    """Inputs: additional or redirected inventory. Output: native directory ignore stays singular."""
+    """Inputs: additional or redirected inventory. Output: require exact package scope."""
     scope = source / guard.SCOPE
     if kind == "extra":
-        (scope / "requirements.txt").write_text("nltk==3.10.3\n")
+        (scope / "requirements.txt").write_text("nltk==3.10.4\n")
     elif kind == "directory":
         (scope / "review.toml").unlink()
         (scope / "review.toml").mkdir()
@@ -127,7 +111,7 @@ def test_directory_scope_cannot_cover_other_dependencies(source, kind):
         scope.rename(moved)
         scope.symlink_to(moved, target_is_directory=True)
     with pytest.raises(ValueError):
-        guard.check(source, today=REVIEW_DATE)
+        guard.check(source)
 
 
 @pytest.mark.parametrize(
@@ -141,9 +125,9 @@ def test_directory_scope_cannot_cover_other_dependencies(source, kind):
             '<component type="library"><name>other</name></component></components>',
         ),
         ("<name>nltk</name>", "<name>other</name>"),
-        ("<version>3.10.3</version>", "<version>3.10.4</version>"),
+        ("<version>3.10.4</version>", "<version>3.10.3</version>"),
         ('type="library"', 'type="application"'),
-        ("pkg:pypi/nltk@3.10.3", "pkg:pypi/nltk@3.10.4"),
+        ("pkg:pypi/nltk@3.10.4", "pkg:pypi/nltk@3.10.3"),
         (guard.crawl4ai_research.NLTK_SOURCE_URL, "https://example.org/other.tar.gz"),
         (guard.crawl4ai_research.NLTK_SOURCE_SHA256, "0" * 64),
         ("</bom>", ""),
@@ -151,10 +135,10 @@ def test_directory_scope_cannot_cover_other_dependencies(source, kind):
     ],
 )
 def test_inventory_identity_and_scope_are_enforced(source, old, new):
-    """Inputs: mismatched or broadened SBOM. Output: exception cannot mask other packages."""
+    """Inputs: mismatched or broadened SBOM. Output: no package can escape its exact inventory."""
     change_text(source / guard.SCOPE / "nltk.cdx.xml", old, new)
     with pytest.raises(ValueError):
-        guard.check(source, today=REVIEW_DATE)
+        guard.check(source)
 
 
 @pytest.mark.parametrize(
@@ -164,12 +148,12 @@ def test_inventory_identity_and_scope_are_enforced(source, old, new):
         "\n[[PackageOverrides]]\nignore = true\n",
     ],
 )
-def test_native_config_cannot_broaden_the_exception(source, extra):
-    """Inputs: a second ignore or whole-package override. Output: reject before native scan."""
+def test_native_config_cannot_add_an_exception(source, extra):
+    """Inputs: an advisory ignore or whole-package override. Output: reject before native scan."""
     path = source / guard.SCOPE / "osv-scanner.toml"
     path.write_text(path.read_text() + extra)
-    with pytest.raises(ValueError, match="broadened"):
-        guard.check(source, today=REVIEW_DATE)
+    with pytest.raises(ValueError, match="exceptions or overrides"):
+        guard.check(source)
 
 
 @pytest.mark.parametrize(
@@ -180,30 +164,23 @@ def test_native_config_cannot_broaden_the_exception(source, extra):
         lambda data: data["results"][0]["source"].update(path="wrong.cdx.json"),
         lambda data: data["results"][0].update(packages=[]),
         lambda data: data["results"][0]["packages"][0]["package"].update(version="0"),
-        lambda data: data["results"][0]["packages"][0].update(vulnerabilities=[]),
-        lambda data: data["results"][0]["packages"][0]["vulnerabilities"].append(
-            {"id": "GHSA-new"}
+        lambda data: data["results"][0]["packages"][0].update(
+            vulnerabilities=[{"id": "GHSA-new"}]
         ),
-        lambda data: data["results"][0]["packages"][0]["vulnerabilities"][0].update(
-            withdrawn="2026-10-08"
+        lambda data: data["results"][0]["packages"][0].update(
+            groups=[{"ids": ["GHSA-filtered"], "ignored": True}]
         ),
-        lambda data: data["results"][0]["packages"][0].update(groups=[]),
-        lambda data: data["results"][0]["packages"][0]["groups"][0].update(
-            ids=["other"]
-        ),
-        lambda data: data["results"][0]["packages"][0]["groups"][0].update(
-            ignored=True
-        ),
-        lambda data: data["results"][0]["packages"][0]["groups"][0].update(aliases=[]),
+        lambda data: data["results"][0]["packages"][0].update(vulnerabilities=None),
+        lambda data: data["results"][0]["packages"][0]["package"].pop("purl"),
     ],
 )
-def test_raw_reports_cannot_be_replaced_by_partial_or_clean_results(source, change):
+def test_raw_reports_reject_partial_inventory_and_any_advisory(source, change):
     """Inputs: missing, filtered or additional findings. Output: fail without rewriting evidence."""
     report = raw_report(source)
     change(report)
     before = deepcopy(report)
     with pytest.raises(ValueError):
-        guard.validate_report(report, source, guard.check(source, today=REVIEW_DATE))
+        guard.validate_report(report, source)
     assert report == before
 
 
@@ -214,10 +191,6 @@ def scanner(source, monkeypatch):
     path.write_bytes(b"fixture executable")
     monkeypatch.setattr(
         guard, "SCANNER_SHA256", hashlib.sha256(path.read_bytes()).hexdigest()
-    )
-    original = guard.check
-    monkeypatch.setattr(
-        guard, "check", lambda root=source: original(root, today=REVIEW_DATE)
     )
     return path
 
@@ -230,7 +203,7 @@ def test_audit_retains_native_bytes_and_forces_unfiltered_configuration(
     output = source / "evidence"
 
     def run(command, **kwargs):
-        """Inputs: scanner invocation. Output: native fixture files and expected advisory exit."""
+        """Inputs: scanner invocation. Output: complete clean native fixture evidence."""
         assert command[0] == str(scanner.resolve())
         assert f"--config={(output / 'unfiltered.toml').resolve()}" in command
         assert (output / "unfiltered.toml").read_bytes() == b""
@@ -240,7 +213,7 @@ def test_audit_retains_native_bytes_and_forces_unfiltered_configuration(
         (output / "raw.json").write_bytes(payload)
         kwargs["stdout"].write(b"native stdout")
         kwargs["stderr"].write(b"native stderr")
-        return subprocess.CompletedProcess(command, 1)
+        return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(guard.subprocess, "run", run)
     guard.audit(scanner, output, source)
@@ -248,17 +221,17 @@ def test_audit_retains_native_bytes_and_forces_unfiltered_configuration(
     assert (output / "stdout.log").read_bytes() == b"native stdout"
     assert (output / "stderr.log").read_bytes() == b"native stderr"
     receipt = json.loads((output / "receipt.json").read_text())
-    assert receipt["returncode"] == 1
+    assert receipt["returncode"] == 0
     assert receipt["raw_sha256"] == hashlib.sha256(payload).hexdigest()
     with pytest.raises(FileExistsError):
         guard.audit(scanner, output, source)
 
 
-@pytest.mark.parametrize("returncode", [0, 2, -9])
-def test_scanner_errors_or_no_longer_needed_exception_do_not_pass(
+@pytest.mark.parametrize("returncode", [1, 2, -9])
+def test_scanner_findings_errors_or_termination_do_not_pass(
     source, scanner, monkeypatch, returncode
 ):
-    """Inputs: clean, failed or killed scanner. Output: record status and require review."""
+    """Inputs: findings, failed or killed scanner. Output: record status and require review."""
     monkeypatch.setattr(
         guard.subprocess,
         "run",
@@ -289,10 +262,10 @@ def test_wrong_scanner_and_mid_scan_policy_changes_are_rejected(
         (output / "raw.json").write_text(json.dumps(raw_report(source)))
         change_text(
             source / guard.SCOPE / "review.toml",
-            "Reviewed upstream",
-            "Changed upstream",
+            "The official fixed release",
+            "Changed upstream release",
         )
-        return subprocess.CompletedProcess(command, 1)
+        return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(guard.subprocess, "run", run)
     with pytest.raises(ValueError, match="during its audit"):
@@ -342,7 +315,7 @@ def test_module_entrypoint_rejects_unknown_commands(monkeypatch):
     assert error.value.code == 2
 
 
-def test_workflow_preserves_raw_evidence_before_directory_exception():
+def test_workflow_preserves_unfiltered_evidence_and_explicit_package_scope():
     """Inputs: actual workflow. Output: native scan depends on the strict, artifact-producing audit."""
     workflow = yaml.safe_load(
         (guard.ROOT / ".github/workflows/security-code-scanning.yml").read_text()

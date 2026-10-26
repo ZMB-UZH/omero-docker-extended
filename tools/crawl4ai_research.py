@@ -23,12 +23,13 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / ".github/requirements/crawl4ai.txt"
 BUILD_LOCK = ROOT / ".github/requirements/crawl4ai-build.txt"
-VERSION = "0.9.4"
+VERSION = "0.9.5"
+NLTK_VERSION = "3.10.4"
 NLTK_SOURCE_URL = (
-    "https://github.com/nltk/nltk/archive/"
-    "b417a98a9497b4a27067043e35e64c388e060686.tar.gz"
+    "https://github.com/nltk/nltk/releases/download/v3.10.4/"
+    "nltk-3.10.4-py3-none-any.whl"
 )
-NLTK_SOURCE_SHA256 = "39612e4c4aebe7626f582d103ac87bd7c5ed256e6341114e61143a8b73c560ee"  # DevSkim: ignore DS173237 -- public upstream archive SHA-256, not a credential
+NLTK_SOURCE_SHA256 = "e46d89e59ef949270e3b19ab097da8dbb09350e05cb5a746ff92f6ccf6e8ce90"  # DevSkim: ignore DS173237 -- public upstream wheel SHA-256, not a credential
 ATTRIBUTION = (
     "This product includes software developed by UncleCode "
     "(https://x.com/unclecode) as part of the Crawl4AI project "
@@ -158,8 +159,6 @@ def setup(home: Path) -> None:
                 "install",
                 "--require-hashes",
                 "--only-binary=:all:",
-                "--no-binary=nltk",
-                "--no-build-isolation",
                 "-r",
                 str(LOCK),
             ],
@@ -172,12 +171,14 @@ def setup(home: Path) -> None:
 
 
 def nltk_provenance() -> dict[str, str]:
-    """Require the reviewed upstream source, not its identically versioned PyPI wheel.
+    """Require the official release wheel, not a different same-version artifact.
 
     Inputs: installed NLTK distribution metadata. Output: verified archive identity;
     missing, malformed or mismatched provenance blocks research.
     """
     distribution = importlib.metadata.distribution("nltk")
+    if distribution.version != NLTK_VERSION:
+        raise RuntimeError("NLTK source version mismatch; run setup")
     direct = json.loads(distribution.read_text("direct_url.json") or "null")
     if not isinstance(direct, dict) or direct.get("url") != NLTK_SOURCE_URL:
         raise RuntimeError("NLTK source provenance mismatch; run setup")
@@ -310,6 +311,23 @@ def result_record(result: object, url: str, max_chars: int) -> dict[str, object]
     }
 
 
+def source_selector(url: str, selector: str | None) -> str | None:
+    """Inputs: source URL and explicit selector. Output: file-body scope for GitHub Markdown.
+
+    GitHub may serve navigation without rendering a large file. Selecting its
+    article makes that response fail as empty instead of accepting the page chrome.
+    """
+    parsed = urlsplit(url)
+    if (
+        selector is None
+        and parsed.hostname == "github.com"
+        and "/blob/" in parsed.path
+        and parsed.path.lower().endswith((".md", ".markdown", ".rst"))
+    ):
+        return "article.markdown-body"
+    return selector
+
+
 async def read_source(
     url: str, max_chars: int, selector: str | None, receipt: Path
 ) -> dict[str, object]:
@@ -324,6 +342,7 @@ async def read_source(
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
     validate_url(url)
+    selector = source_selector(url, selector)
     browser = BrowserConfig(
         headless=True,
         verbose=False,

@@ -1,21 +1,11 @@
-schema_version = 1
-advisory = "GHSA-8mgp-746c-j5xp"
-aliases = ["CVE-2026-81726", "PYSEC-2026-3740"]
-package = {name = "nltk", version = "3.10.3", ecosystem = "PyPI"}
-source_revision = "b417a98a9497b4a27067043e35e64c388e060686" # DevSkim: ignore DS173237 -- public NLTK source commit
-archive_url = "https://github.com/nltk/nltk/archive/b417a98a9497b4a27067043e35e64c388e060686.tar.gz"
-archive_sha256 = "39612e4c4aebe7626f582d103ac87bd7c5ed256e6341114e61143a8b73c560ee" # DevSkim: ignore DS173237 -- public archive SHA-256
-reviewed_on = "2026-10-08"
-review_until = "2026-11-07"
-reason = "Reviewed upstream fixes are present in the exact archive; its unchanged version still matches the release advisory. The isolated installed library passed all 919 relevant upstream tests. Raw scanner results remain mandatory."
-upstream_fixes = [
-  "https://github.com/nltk/nltk/pull/3757",
-  "https://github.com/nltk/nltk/pull/3759",
-  "https://github.com/nltk/nltk/pull/3813",
-]
+schema_version = 2
+package = {name = "nltk", version = "3.10.4", ecosystem = "PyPI"}
+archive_url = "https://github.com/nltk/nltk/releases/download/v3.10.4/nltk-3.10.4-py3-none-any.whl"
+archive_sha256 = "e46d89e59ef949270e3b19ab097da8dbb09350e05cb5a746ff92f6ccf6e8ce90" # DevSkim: ignore DS173237 -- public wheel SHA-256
+reason = "The official fixed release replaces the temporary patched-source exception. Direct-URL dependencies retain an explicit inventory and an unfiltered advisory audit."
 
 [lock_sha256]
-"crawl4ai.in" = "4427adb7bb9a7e98d9b09267fb0a8260d0f0c52c100b0097624db6c95e37cce4" # DevSkim: ignore DS173237 -- dependency-input SHA-256
-"crawl4ai.txt" = "67b3f8190427ac3d2e27f206a8d6202ca1acf2d713a0620bf97e58ebf4801a4a" # DevSkim: ignore DS173237 -- dependency-lock SHA-256
-"crawl4ai-build.in" = "3e8f569dc9a924192449843ecf9b2d65da9ff625cceaeaf0aae8908a401a228d" # DevSkim: ignore DS173237 -- build-input SHA-256
-"crawl4ai-build.txt" = "c6bd7a330cfa2223e01e86bbc7280b316537554215711a6228fc6a5e362d68df" # DevSkim: ignore DS173237 -- build-lock SHA-256
+"crawl4ai.in" = "02250cddf278bcee008c136d93da7a520dd562266fe821c7d7171fce7e50357c" # DevSkim: ignore DS173237 -- dependency-input SHA-256
+"crawl4ai.txt" = "1d92a56b79b5b9f2cda6de5ea22da7e995ef00d7505c8574295d634d19d430ef" # DevSkim: ignore DS173237 -- dependency-lock SHA-256
+"crawl4ai-build.in" = "f8eb60b2c84fddd2d3a588255ec8d0510cacf9fd5d5dc59b1333e8ba349cf5e8" # DevSkim: ignore DS173237 -- build-input SHA-256
+"crawl4ai-build.txt" = "fdafb2406830ecc24b2d9d7ef3650661cbc92b83c14271892f59ea30f3e5725c" # DevSkim: ignore DS173237 -- build-lock SHA-256

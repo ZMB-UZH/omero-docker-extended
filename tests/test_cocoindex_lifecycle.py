@@ -710,7 +710,7 @@ def test_checked_child_failure_preserves_status_and_diagnostic(tmp_path):
 
 def test_missing_required_executable_does_not_fall_back_to_another_tool(monkeypatch):
     """Inputs: no resolved native executable. Output: explicit failure with the required tool name."""
-    monkeypatch.setattr(search.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(search.shutil, "which", lambda _name, **_kwargs: None)
     with pytest.raises(RuntimeError, match="Required command.*fixture-tool"):
         search.resolve_required_executable("fixture-tool")
 

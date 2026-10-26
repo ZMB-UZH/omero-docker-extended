@@ -51,7 +51,7 @@ def test_deployment_contract_workflow_validates_full_compose_build_graph() -> No
     )
     assert checkout["with"]["persist-credentials"] is False
     assert setup_python["uses"] == (
-        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
+        "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
     )
     assert setup_python["with"]["python-version"] == "3.14.8"
     assert prepare["run"] == "python3 -m tools.prepare_ci_compose_environment"
@@ -82,3 +82,4 @@ def test_deployment_contract_workflow_validates_full_compose_build_graph() -> No
     assert "--check" in script
     assert "--set '*.output=type=cacheonly'" in script
     assert "docker compose build" not in script
+    assert "python3 -m unittest -v tests.container_tls_image" in script

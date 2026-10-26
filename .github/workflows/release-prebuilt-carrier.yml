@@ -317,8 +317,8 @@ jobs:
 
       - name: Install Docker Scout CLI
         env:
-          DOCKER_SCOUT_CLI_VERSION: "1.26.0"
-          DOCKER_SCOUT_CLI_SHA256: 47daa9ac442816316c65389f516b847146bb9f45e8d6afdcbb9ce835c4e138bd
+          DOCKER_SCOUT_CLI_VERSION: "1.27.0"
+          DOCKER_SCOUT_CLI_SHA256: 815207e27559fd3d7dddfe778e86f0aeb823eeb24b3cd79d00bc5cd8dfd0724d
         run: |
           set -euo pipefail
           archive="docker-scout_${DOCKER_SCOUT_CLI_VERSION}_linux_amd64.tar.gz"
@@ -768,7 +768,7 @@ jobs:
             "${CARRIER_IMAGE}"
 
       - name: Analyze Docker Hub carrier image with Docker Scout
-        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864 # v1.26.0
+        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84 # v1.27.0
         with:
           command: quickview,cves
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}
@@ -783,7 +783,7 @@ jobs:
           exit-code: false
 
       - name: Export Docker Scout carrier SBOM
-        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864 # v1.26.0
+        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84 # v1.27.0
         with:
           command: sbom
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}

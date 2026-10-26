@@ -62,6 +62,8 @@ relevant files merely because retrieval is unavailable.
   exclusions or language rewrites without a tested configuration contract.
 - Leave embedding-device selection automatic. Supported accelerators may be
   used; explicit unavailable GPUs must fail closed and CPU fallback must work.
+- Git, ripgrep, and Codex must be discoverable through absolute `PATH`
+  directories; relative and empty entries are ignored for executable lookup.
 - The wrapper uses the cached runtime's own isolated Python interpreter, never
   another interpreter's `site-packages`. It reuses existing daemons and stops
   only daemons it started itself. Do not leave wrapper-owned daemons running.

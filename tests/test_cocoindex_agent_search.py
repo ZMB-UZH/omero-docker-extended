@@ -19,6 +19,62 @@ import pytest
 from tools import cocoindex_agent_search
 
 
+def test_executable_lookup_ignores_relative_path_entries(tmp_path, monkeypatch):
+    """Inputs: shadow and trusted commands. Output: only an absolute PATH entry is used."""
+    checkout = tmp_path / "checkout"
+    trusted = tmp_path / "tools"
+    checkout.mkdir()
+    trusted.mkdir()
+    for directory in (checkout, trusted):
+        executable = directory / "git"
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv("PATH", os.pathsep.join((".", "", "relative", str(trusted))))
+
+    assert cocoindex_agent_search.resolve_required_executable("git") == str(
+        trusted / "git"
+    )
+
+
+def test_executable_lookup_fails_without_absolute_path_entries(tmp_path, monkeypatch):
+    """Inputs: relative-only PATH with a shadow command. Output: lookup fails closed."""
+    shadow = tmp_path / "git"
+    shadow.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    shadow.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PATH", os.pathsep.join((".", "", "relative")))
+
+    with pytest.raises(RuntimeError, match="not available"):
+        cocoindex_agent_search.resolve_required_executable("git")
+
+
+@pytest.mark.parametrize("name", ("", ".", "..", "./git", "../git", "git\0tool"))
+def test_executable_lookup_requires_a_program_name(name):
+    """Inputs: invalid command names. Output: explicit rejection before lookup."""
+    with pytest.raises(RuntimeError, match="program name"):
+        cocoindex_agent_search.resolve_required_executable(name)
+
+
+def test_executable_lookup_rejects_absolute_names(tmp_path):
+    """Inputs: absolute command path. Output: rejection before PATH lookup."""
+    with pytest.raises(RuntimeError, match="program name"):
+        cocoindex_agent_search.resolve_required_executable(str(tmp_path / "git"))
+
+
+def test_executable_lookup_uses_system_default_when_path_is_unset(
+    tmp_path, monkeypatch
+):
+    """Inputs: unset PATH. Output: the operating system's default search is used."""
+    monkeypatch.delenv("PATH", raising=False)
+    executable = str(tmp_path / "git")
+    lookup = mock.Mock(return_value=executable)
+    monkeypatch.setattr(cocoindex_agent_search.shutil, "which", lookup)
+
+    assert cocoindex_agent_search.resolve_required_executable("git") == executable
+    lookup.assert_called_once_with("git", path=os.defpath)
+
+
 @pytest.fixture
 def isolated_coco_runtime(tmp_path):
     """Provide an actual isolated interpreter with a small settings API fixture.

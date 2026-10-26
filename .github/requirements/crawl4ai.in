@@ -1,6 +1,6 @@
 # Development-only public documentation reader; no model or PDF extras.
 # Compile with pip-compile --generate-hashes --no-emit-index-url --strip-extras
 #   --output-file .github/requirements/crawl4ai.txt .github/requirements/crawl4ai.in
-crawl4ai==0.9.4
-# Upstream model-path fixes are merged but not in the latest PyPI release.
-nltk @ https://github.com/nltk/nltk/archive/b417a98a9497b4a27067043e35e64c388e060686.tar.gz#sha256=39612e4c4aebe7626f582d103ac87bd7c5ed256e6341114e61143a8b73c560ee
+crawl4ai==0.9.5
+# Admit the unmodified wheel published in the official upstream stable release.
+nltk @ https://github.com/nltk/nltk/releases/download/v3.10.4/nltk-3.10.4-py3-none-any.whl#sha256=e46d89e59ef949270e3b19ab097da8dbb09350e05cb5a746ff92f6ccf6e8ce90

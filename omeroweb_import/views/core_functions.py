@@ -685,7 +685,7 @@ def _normalize_job_batch_size(value, default: int) -> int:
     """
     try:
         normalized = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         normalized = default
     return max(1, min(10, normalized))
 

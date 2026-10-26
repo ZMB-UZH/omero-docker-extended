@@ -767,6 +767,61 @@ class EnvSafetyGuardTests(TestCase):
 
         self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
 
+    def test_optional_web_tiff_pin_preserves_existing_deployment_contract(self):
+        """Inputs: old and new server environments. Output: compatible, validated schemas."""
+        files = {}
+        for example_rel, actual_rel in env_safety_guard.ENV_TEMPLATE_PAIRS:
+            files[example_rel] = "A=example\nB=example\n"
+            files[actual_rel] = "A=live\nB=live\n"
+        example = "env/omeroserver_example.env"
+        actual = "env/omeroserver.env"
+        files[example] = "TIFFFILE_VERSION=2026.3.3\nWEB_TIFFFILE_VERSION=2026.10.15\n"
+        files[actual] = "TIFFFILE_VERSION=2026.3.3\n"
+        repo = self._make_repo([], files)
+        original = (repo / actual).read_bytes()
+        self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
+        self.assertEqual(
+            env_safety_guard.validate_env_file_pair(repo, example, actual, {}), []
+        )
+        self.assertEqual((repo / actual).read_bytes(), original)
+
+        (repo / actual).write_text(
+            "TIFFFILE_VERSION=2026.3.3\nWEB_TIFFFILE_VERSION=2026.10.15\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(env_safety_guard.cmd_template_check(repo), 0)
+        self.assertEqual(
+            env_safety_guard.validate_env_file_pair(repo, example, actual, {}), []
+        )
+        (repo / actual).write_text(
+            "TIFFFILE_VERSION=2026.3.3\nWEB_TIFFFILE_VERSION=@invalid\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            any(
+                "WEB_TIFFFILE_VERSION" in error
+                for error in env_safety_guard.validate_env_file_pair(
+                    repo, example, actual, {}
+                )
+            )
+        )
+
+    def test_web_tiff_pin_remains_required_in_unrelated_templates(self):
+        """Inputs: an unrelated environment template. Output: its active pin stays required."""
+        repo = self._make_repo(
+            [],
+            {
+                "env/example.env": "WEB_TIFFFILE_VERSION=2026.10.15\nA=value\n",
+                "env/actual.env": "A=value\n",
+            },
+        )
+        errors = env_safety_guard.validate_env_file_pair(
+            repo, "env/example.env", "env/actual.env", {}
+        )
+        self.assertTrue(
+            any("missing required keys: WEB_TIFFFILE_VERSION" in x for x in errors)
+        )
+
     def test_runtime_env_check_reports_missing_extra_and_type_errors(self):
         """Verify runtime env check reports missing extra and type errors.
 

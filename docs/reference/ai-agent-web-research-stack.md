@@ -93,32 +93,24 @@ truncation, timeouts, credential isolation and the gate's refusal paths. Reuse
 unchanged receipts; do not recrawl sites merely to inflate a test count.
 
 The base Crawl4AI distribution requires NLTK even though this reader exposes no
-model training/loading APIs. The reader pins upstream NLTK source at
-`b417a98a9497b4a27067043e35e64c388e060686`, which contains the merged model-path
-fixes absent from the released PyPI package. Installation verifies the archive
-hash, uses a separately hash-pinned build backend and permits source builds only
-for this dependency. Each read verifies installed direct-source provenance and
-retains it in the native evidence. The upstream version remains `3.10.3`; it is
-not relabeled to evade version-based advisories. Both locks remain scanner inputs.
-OSV's requirements parser omits direct-source requirements, so the matching
-`crawl4ai-source/nltk.cdx.xml` inventory explicitly includes NLTK's real version,
-archive URL and digest. The raw audit retains version-based findings. Keep the
-inventory, runtime provenance and lock aligned; an empty report without the
-source component is incomplete, not a clean scan.
+model training/loading APIs. The reader uses the official NLTK 3.10.4 release
+wheel, verified by its SHA-256. This fixed release replaces the temporary
+patched-source exception; no advisory ignore or package override remains.
+Each read verifies the installed version and direct-URL provenance and retains
+that identity in its native evidence. Installation uses hash-locked binary
+distributions and checks the complete dependency graph.
 
-The reviewed source exception is restricted to that inventory directory and
-the exact archive hash in `crawl4ai-source/review.toml`. It does not cover the
-PyPI release, any other package, or a future advisory. The source guard checks
-both dependency locks, the inventory and native OSV configuration before the
-scan may use the exception. A separate unfiltered native scan retains the raw
-finding and must match the reviewed advisory. Changed inputs, extra findings,
-missing evidence or the review deadline fail closed. Replace the source pin
-with a qualified upstream release and remove the exception when available;
-never extend its deadline without a new review and explicit authorization.
-Qualify the upstream model-artifact, transition-parser, tagger and maxent-save
-regression suites, then verify real Crawl4AI extraction before changing this pin.
-Do not enable NLP, LLM or PDF extras or claim that isolation alone fixes an
-upstream advisory. Retain and investigate any version-only scanner finding.
+Direct-URL requirements need explicit scanner inventory. The matching
+`crawl4ai-source/nltk.cdx.xml` records the real version, release URL and digest.
+`source_advisory_guard.py` binds that inventory to all runtime/build lock bytes
+and rejects any active OSV configuration in its directory. Its prerequisite
+audit uses the pinned scanner with an empty configuration and `--all-packages`.
+The audit requires the expected package identity and zero findings while
+preserving raw output, diagnostics and return status. A report omitting the
+source component is incomplete, not clean. Changed inputs, additional findings
+or missing evidence block the workflow; never relabel a dependency or filter
+findings to pass. Qualify upstream regressions and real Crawl4AI extraction
+before updating this pin. Do not enable NLP, LLM or PDF extras.
 
 ## Hard Boundaries
 
@@ -132,11 +124,12 @@ upstream advisory. Retain and investigate any version-only scanner finding.
 
 ## Upstream References
 
-- [Crawl4AI 0.9.4 release](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.4)
-- [Tagged changelog](https://github.com/unclecode/crawl4ai/blob/v0.9.4/CHANGELOG.md)
+- [Crawl4AI 0.9.5 release](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.5)
+- [Tagged changelog](https://github.com/unclecode/crawl4ai/blob/v0.9.5/CHANGELOG.md)
+- [NLTK 3.10.4 release](https://github.com/nltk/nltk/releases/tag/v3.10.4)
 - [Installation](https://docs.crawl4ai.com/core/installation/)
 - [Browser and crawler configuration](https://docs.crawl4ai.com/core/browser-crawler-config/)
-- [License and attribution](https://github.com/unclecode/crawl4ai/blob/v0.9.4/LICENSE)
+- [License and attribution](https://github.com/unclecode/crawl4ai/blob/v0.9.5/LICENSE)
 
 This product includes software developed by UncleCode (<https://x.com/unclecode>)
 as part of the Crawl4AI project (<https://github.com/unclecode/crawl4ai>).

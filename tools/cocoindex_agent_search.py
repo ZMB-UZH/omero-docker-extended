@@ -260,7 +260,16 @@ def resolve_required_executable(name: str) -> str:
     Inputs: `name` (str) name. Output: `str`. Raises: RuntimeError when validation or
     external operations fail.
     """
-    resolved = shutil.which(name)
+    if name in {"", ".", ".."} or "\0" in name or os.path.basename(name) != name:
+        raise RuntimeError("Required command must be a program name")
+    directories = [
+        entry
+        for entry in os.environ.get("PATH", os.defpath).split(os.pathsep)
+        if entry and os.path.isabs(entry)
+    ]
+    resolved = (
+        shutil.which(name, path=os.pathsep.join(directories)) if directories else None
+    )
     if not resolved:
         raise RuntimeError(f"Required command is not available in PATH: {name}")
     return resolved

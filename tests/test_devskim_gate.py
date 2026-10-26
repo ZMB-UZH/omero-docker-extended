@@ -71,6 +71,8 @@ def make_repo(path: Path) -> Path:
         ("version", "1.0;command"),
         ("framework", "../net8.0"),
         ("package_sha256", "incorrect"),
+        ("languages_sha256", "incorrect"),
+        ("comments_sha256", "incorrect"),
         ("runtime_image", "image:latest"),
         ("extra", "unexpected"),
     ],
@@ -105,6 +107,158 @@ def test_tooling_requires_explicit_section(tmp_path, text):
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="explicit"):
         gate.read_tooling(path)
+
+
+def test_language_metadata_extends_only_reviewed_file_types(tmp_path):
+    """Inputs: pinned upstream metadata. Output: two additive language mappings."""
+    settings = gate.read_tooling(gate.REPO_ROOT / "tools/devskim_tooling.ini")
+    destination = tmp_path / "metadata"
+    destination.mkdir()
+    gate.prepare_language_metadata(gate.REPO_ROOT, settings, destination)
+    original_dir = gate.REPO_ROOT / "tools" / f"devskim-metadata-v{settings['version']}"
+    original = json.loads((original_dir / "languages.json").read_bytes())
+    candidate = json.loads((destination / "languages.json").read_bytes())
+    for name, extension in (("python", ".pyi"), ("javascript", ".mjs")):
+        target = next(row for row in original if row["name"] == name)
+        target["extensions"].append(extension)
+    assert candidate == original
+    assert (destination / "comments.json").read_bytes() == (
+        original_dir / "comments.json"
+    ).read_bytes()
+
+
+@pytest.mark.parametrize("name", ["languages.json", "comments.json"])
+def test_language_metadata_rejects_tampering_and_symlinks(tmp_path, name):
+    """Inputs: modified or linked upstream metadata. Output: a closed failure."""
+    settings = gate.read_tooling(gate.REPO_ROOT / "tools/devskim_tooling.ini")
+    metadata = tmp_path / "tools" / f"devskim-metadata-v{settings['version']}"
+    shutil.copytree(gate.REPO_ROOT / "tools" / metadata.name, metadata)
+    destination = tmp_path / "output"
+    destination.mkdir()
+    target = metadata / name
+    target.write_bytes(target.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="metadata"):
+        gate.prepare_language_metadata(tmp_path, settings, destination)
+    target.unlink()
+    target.symlink_to(gate.REPO_ROOT / "tools" / metadata.name / name)
+    with pytest.raises(ValueError, match="metadata"):
+        gate.prepare_language_metadata(tmp_path, settings, destination)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_python",
+        "duplicate_mapping",
+        "invalid_comments",
+        "non_object",
+        "invalid_name",
+        "invalid_extensions",
+        "invalid_extension",
+        "invalid_json",
+        "invalid_utf8",
+    ],
+)
+def test_language_metadata_rejects_incompatible_upstream_structure(tmp_path, mutation):
+    """Inputs: verified but incompatible language definitions. Output: a closed failure."""
+    settings = gate.read_tooling(gate.REPO_ROOT / "tools/devskim_tooling.ini")
+    metadata = tmp_path / "tools" / f"devskim-metadata-v{settings['version']}"
+    shutil.copytree(gate.REPO_ROOT / "tools" / metadata.name, metadata)
+    languages = metadata / "languages.json"
+    comments = metadata / "comments.json"
+    data = json.loads(languages.read_bytes())
+    if mutation == "missing_python":
+        data = [row for row in data if row["name"] != "python"]
+    elif mutation == "duplicate_mapping":
+        next(row for row in data if row["name"] == "python")["extensions"].append(
+            ".mjs"
+        )
+    elif mutation == "invalid_comments":
+        comments.write_text("{}")
+        settings["comments_sha256"] = hashlib.sha256(comments.read_bytes()).hexdigest()
+    elif mutation == "non_object":
+        data.append("invalid")
+    elif mutation == "invalid_name":
+        data[0]["name"] = None
+    elif mutation == "invalid_extensions":
+        data[0]["extensions"] = "invalid"
+    elif mutation == "invalid_extension":
+        data[0]["extensions"].append(None)
+    if mutation == "invalid_utf8":
+        languages.write_bytes(b"\xff")
+    else:
+        languages.write_text("[" if mutation == "invalid_json" else json.dumps(data))
+    settings["languages_sha256"] = hashlib.sha256(languages.read_bytes()).hexdigest()
+    destination = tmp_path / "output"
+    destination.mkdir()
+    with pytest.raises(ValueError, match="metadata"):
+        gate.prepare_language_metadata(tmp_path, settings, destination)
+
+
+@pytest.mark.parametrize(
+    "mode", ["missing", "linked_directory", "outside_parent", "oversized"]
+)
+def test_language_metadata_rejects_missing_and_external_paths(
+    tmp_path, monkeypatch, mode
+):
+    """Inputs: missing or redirected metadata. Output: no scanner metadata is generated."""
+    settings = gate.read_tooling(gate.REPO_ROOT / "tools/devskim_tooling.ini")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tools = repo / "tools"
+    name = f"devskim-metadata-v{settings['version']}"
+    external = gate.REPO_ROOT / "tools" / name
+    if mode == "outside_parent":
+        tools.symlink_to(gate.REPO_ROOT / "tools", target_is_directory=True)
+    else:
+        tools.mkdir()
+        if mode == "linked_directory":
+            (tools / name).symlink_to(external, target_is_directory=True)
+        elif mode == "oversized":
+            shutil.copytree(external, tools / name)
+            monkeypatch.setattr(gate, "MAX_METADATA_BYTES", 1)
+    destination = tmp_path / "output"
+    destination.mkdir()
+    with pytest.raises(ValueError, match="metadata"):
+        gate.prepare_language_metadata(repo, settings, destination)
+    assert not list(destination.iterdir())
+
+
+def test_native_scanner_counts_are_reported_without_debug_contents(tmp_path, capsys):
+    """Inputs: native debug log. Output: counts only, without matched source content."""
+    log = tmp_path / "debug.log"
+    log.write_text(
+        "[DBG] Files analyzed: 624\n[DBG] Files skipped: 159\n"
+        "[DBG] private-fixture-detail\n",
+        encoding="utf-8",
+    )
+    gate.report_native_counts(log)
+    output = capsys.readouterr().out
+    assert "624" in output and "159" in output
+    assert "private-fixture-detail" not in output
+
+
+@pytest.mark.parametrize(
+    "kind", ["missing", "symlink", "oversized", "missing_count", "duplicate_count"]
+)
+def test_native_scanner_counts_fail_closed(tmp_path, monkeypatch, kind):
+    """Inputs: missing or ambiguous native counts. Output: an explicit failure."""
+    log = tmp_path / "debug.log"
+    if kind == "symlink":
+        target = tmp_path / "target"
+        target.write_text("[DBG] Files analyzed: 1\n[DBG] Files skipped: 0\n")
+        log.symlink_to(target)
+    elif kind == "missing_count":
+        log.write_text("[DBG] Files analyzed: 1\n")
+    elif kind == "duplicate_count":
+        log.write_text(
+            "[DBG] Files analyzed: 1\n[DBG] Files analyzed: 2\n[DBG] Files skipped: 0\n"
+        )
+    elif kind == "oversized":
+        monkeypatch.setattr(gate, "MAX_DEBUG_LOG_BYTES", 1)
+        log.write_text("[DBG] Files analyzed: 1\n[DBG] Files skipped: 0\n")
+    with pytest.raises(ValueError, match="DevSkim"):
+        gate.report_native_counts(log)
 
 
 def test_verified_cache_avoids_network_and_rejects_changed_content(
@@ -394,7 +548,9 @@ def test_entrypoint_uses_real_guard_without_modifying_report(
 
 
 @pytest.mark.parametrize("artifact_name", ["artifacts", 'artifacts, with "quotes"'])
-@pytest.mark.parametrize("report_kind", ["regular", "missing", "symlink"])
+@pytest.mark.parametrize(
+    "report_kind", ["regular", "missing", "symlink", "invalid_counts"]
+)
 def test_scan_is_offline_readonly_and_keeps_raw_results(
     tmp_path, monkeypatch, artifact_name, report_kind
 ):
@@ -407,6 +563,11 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     shutil.copyfile(
         gate.REPO_ROOT / "tools" / "devskim_tooling.ini",
         repo / "tools" / "devskim_tooling.ini",
+    )
+    settings = gate.read_tooling(repo / "tools" / "devskim_tooling.ini")
+    metadata_name = f"devskim-metadata-v{settings['version']}"
+    shutil.copytree(
+        gate.REPO_ROOT / "tools" / metadata_name, repo / "tools" / metadata_name
     )
     package = make_package(tmp_path / "fixture.nupkg")
     artifact_dir = tmp_path / artifact_name
@@ -435,7 +596,12 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
             )
         )
         report_path = output / "devskim-results.sarif"
-        if report_kind == "regular":
+        (output / "devskim-debug.log").write_text(
+            "[DBG] Files analyzed: 1\n"
+            + ("" if report_kind == "invalid_counts" else "[DBG] Files skipped: 0\n"),
+            encoding="utf-8",
+        )
+        if report_kind in ("regular", "invalid_counts"):
             report_path.write_bytes(raw_report)
         elif report_kind == "symlink":
             report_path.symlink_to(repo / "tracked.py")
@@ -445,6 +611,10 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     if report_kind == "regular":
         report = gate.scan(repo, artifact_dir)
         assert report.read_bytes() == raw_report
+    elif report_kind == "invalid_counts":
+        with pytest.raises(ValueError, match="native file counts"):
+            gate.scan(repo, artifact_dir)
+        assert (artifact_dir / "devskim-results.sarif").read_bytes() == raw_report
     else:
         with pytest.raises(ValueError, match="regular SARIF report"):
             gate.scan(repo, artifact_dir)
@@ -459,4 +629,9 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     assert command[command.index("--ignore-globs") + 1] == gate.IGNORE_GLOBS
     assert any(value.endswith("target=/source,readonly") for value in command)
     assert any(value.endswith("target=/engine,readonly") for value in command)
+    assert any(value.endswith("target=/metadata,readonly") for value in command)
+    assert command[command.index("--languages") + 1] == "/metadata/languages.json"
+    assert command[command.index("--comments") + 1] == "/metadata/comments.json"
+    assert command[command.index("--log-file-level") + 1] == "Debug"
+    assert command[command.index("--log-file-path") + 1] == "/output/devskim-debug.log"
     assert not list(artifact_dir.glob("scan-*"))

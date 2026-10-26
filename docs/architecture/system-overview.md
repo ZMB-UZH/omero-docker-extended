@@ -36,7 +36,9 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 - Compose starts the service as `root` only for bind-mount reconciliation; the
   supervised OMERO.web and worker processes run as `omero-web`.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
-- Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), and server logs (read-only for admin tools).
+- Mounts: OMERO data and the configured `OMERO_TMP_PATH` (read-write), plus
+  server logs (read-only for admin tools). Temporary files remain subject to
+  application cleanup and the operator's storage configuration.
 
 ### PostgreSQL databases
 
@@ -51,8 +53,9 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.10.2-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
-- 512MB max memory with LRU eviction, backed by tmpfs.
+- Data is stored in the persistent `redis-data` named volume. Persistence,
+  memory limits, and eviction policy are configured through the Redis
+  environment settings; the example enables AOF and `noeviction`.
 - Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Imaris Celery broker/result backend (db 2), Tools enhanced-search broker/result backend (db 3).
 
@@ -60,24 +63,27 @@ Cache backend and Celery message broker:
 
 Internal-only Ollama service for OMP's `Local` AI provider:
 
-- Version 0.33.3, pinned as `ollama/ollama:0.33.3`.
-- Stores model data under `OLLAMA_DATA_PATH` when set, otherwise `/disks/omero_temp/ollama`.
+- The pinned image version is specified in `docker-compose.yml`.
+- Stores model data under the required `OLLAMA_DATA_PATH`. Upgrades must
+  retain the existing model-data mount; see the deployment configuration guide.
 - Exposes port 11434 only on the Docker network.
 - Health check: `ollama list`.
 
 ### Monitoring stack
 
-- **Prometheus** (v3.15.0): scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
-- **Grafana** (13.2.3): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
-- **Loki** (3.7.8): log aggregation backend with TSDB storage and 5000 max entries per query.
-- **Alloy** (v1.20.1): collects OMERO server/web internal log files and pushes them to Loki.
-- **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.
-- **Node exporter** (v1.12.1): host-level metrics.
-- **cAdvisor** (v0.60.6): container resource metrics.
-- **Postgres exporters** (v0.20.1, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.93.0): Redis metrics.
-- **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
-- **CrowdSec** (v1.7.8): host-wide cybersecurity engine analyzing mounted host
+Image pins are defined in `docker-compose.yml` and the corresponding Dockerfiles.
+
+- **Prometheus**: scrapes 10 direct metric targets plus blackbox HTTP probes and TCP probes for 5 internal endpoints.
+- **Grafana**: 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Loki**: log aggregation backend with TSDB storage and 5000 max entries per query.
+- **Alloy**: collects OMERO server/web internal log files and pushes them to Loki.
+- **Blackbox exporter**: HTTP 2xx and TCP connect probes.
+- **Node exporter**: host-level metrics.
+- **cAdvisor**: container resource metrics.
+- **Postgres exporters**: one per PostgreSQL instance.
+- **Redis exporter**: Redis metrics.
+- **Path usage exporter** (custom Python image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs portable host `df -kP` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
+- **CrowdSec**: host-wide cybersecurity engine analyzing mounted host
   syslog and SSH auth logs. The firewall bouncer auto-detects
   the host's firewall backend at startup: on Ubuntu 26.04 LTS and Debian 13
   (Trixie) it uses `mode: nftables` with dedicated `crowdsec`/`crowdsec6`
@@ -90,7 +96,8 @@ Internal-only Ollama service for OMP's `Local` AI provider:
   the host's network stack without Docker `privileged` mode. Integrated into
   the UID/GID auto-detection mechanism for host directory ownership.
   Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`.
-  Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
+  Optional installation-time Console enrollment uses `CROWDSEC_ENROLL_KEY`
+  in `env/omero_secrets.env`; local protection does not require enrollment.
 
 ### Maintenance sidecar (`pg-maintenance`)
 
@@ -121,7 +128,8 @@ Filename parsing and metadata annotation workflow:
 - Parses scientific filenames using configurable regex or AI-assisted suggestions.
 - AI providers: Local/Ollama, Groq, Gemini, Claude, Perplexity, xAI, and Cohere; external provider credentials are stored per-user in the plugin database.
 - Writes OMERO MapAnnotations with HMAC-based hash ownership tracking.
-- Background job execution with tmpfs job files and portalocker concurrency.
+- Background job execution with job files under the configured temporary path
+  and portalocker concurrency.
 - REMBI-aligned default variables, scientific nomenclature-aware hyphen protection.
 - Rate limiting: 6 major actions per 60 seconds per user.
 - Database: stores variable sets, AI credentials, user settings in the OMERO plugin database (`database_plugin`) via psycopg2.

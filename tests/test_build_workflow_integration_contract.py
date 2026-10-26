@@ -1759,7 +1759,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 for job in workflow["jobs"].values()
                 for step in job.get("steps", [])
                 if step.get("uses")
-                == "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
+                == "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
             ]
             with self.subTest(relative_path=relative_path):
                 self.assertEqual(expected, actual)
@@ -1835,12 +1835,20 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
                 + lockfile.relative_to(self.repo_root).as_posix()
             )
         self.assertTrue(expected)
-        expected.add("--lockfile=docker/java-dependencies.cdx.xml")
+        expected.update(
+            "--lockfile=requirements.txt:"
+            + requirements.relative_to(self.repo_root).as_posix()
+            for requirements in (self.repo_root / "docker").glob("requirements*.txt")
+        )
         expected.update(
             "--lockfile=" + inventory.relative_to(self.repo_root).as_posix()
+            for directory in (".github/requirements", "docker")
             for pattern in ("*.cdx.json", "*.cdx.xml")
-            for inventory in (self.repo_root / ".github/requirements").rglob(pattern)
+            for inventory in (self.repo_root / directory).rglob(pattern)
         )
+        self.assertIn("--lockfile=docker/java-dependencies.cdx.xml", expected)
+        self.assertIn("--lockfile=docker/zarr-pixel-runtime.cdx.xml", expected)
+        self.assertIn("--lockfile=docker/ice-python.cdx.xml", expected)
         self.assertEqual(
             expected, {arg for arg in args if arg.startswith("--lockfile")}
         )
@@ -2082,7 +2090,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
 
         self.assertEqual({"contents": "read"}, workflow["permissions"])
         self.assertEqual(
-            "semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b",
+            "semgrep/semgrep:1.182.1@sha256:451b3d875c00dac7ed5db5293e584a07de11449a409c10b3c2d2652f429630b6",
             workflow["jobs"]["semgrep"]["container"]["image"],
         )
         trivy_step = next_or_fail(
@@ -2094,7 +2102,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
             trivy_step["uses"],
         )
-        self.assertEqual("v0.75.0", trivy_step["with"]["version"])
+        self.assertEqual("v0.76.1", trivy_step["with"]["version"])
 
         bandit_step = next_or_fail(
             step
