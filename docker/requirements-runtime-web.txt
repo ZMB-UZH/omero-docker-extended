@@ -24,7 +24,6 @@ portalocker==4.4.1
 pytz==2026.5
 pyyaml==6.0.3
 requests==2.34.2
-setuptools==84.2.1
 sqlparse==0.6.0
 tzdata==2026.5
 urllib3==2.8.0
