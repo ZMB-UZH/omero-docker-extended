@@ -5,7 +5,7 @@ blosc2==4.14.1
 charset-normalizer==3.5.2
 MarkupSafe==3.0.4
 numexpr==2.14.2
-numpy==2.4.6
+numpy==2.5.4
 packaging==26.3
 portalocker==4.4.1
 pydantic==2.14.1
