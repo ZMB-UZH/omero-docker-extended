@@ -768,7 +768,7 @@ jobs:
             "${CARRIER_IMAGE}"
 
       - name: Analyze Docker Hub carrier image with Docker Scout
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84 # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0
         with:
           command: quickview,cves
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}
@@ -783,7 +783,7 @@ jobs:
           exit-code: false
 
       - name: Export Docker Scout carrier SBOM
-        uses: docker/scout-action@a4119c5a8c5076236a54e4ce99531f7e4dd2ef84 # v1.27.0
+        uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0
         with:
           command: sbom
           image: registry://${{ steps.release-metadata.outputs.carrier_image }}
