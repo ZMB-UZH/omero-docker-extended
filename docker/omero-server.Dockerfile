@@ -2,7 +2,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f
+FROM openmicroscopy/omero-server:5.6.18-1@sha256:e9e06e654cac68836fe772286ef6f73e009dc615894ba321653852bf62f7f0ad
 
 # Run image build steps as root
 # -----------------------------
