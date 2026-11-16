@@ -8,7 +8,7 @@ pytest==9.1.1
 coverage==7.17.0
 # The source-inventory regression executes the real type checker.
 mypy==2.4.0
-django==5.2.18
+django==5.2.19
 cryptography==50.0.2
 pyyaml==6.0.3
 portalocker==4.4.1

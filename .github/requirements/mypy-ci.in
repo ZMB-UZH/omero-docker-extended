@@ -5,7 +5,7 @@
 #     --output-file .github/requirements/mypy-ci.txt \
 #     .github/requirements/mypy-ci.in
 mypy==2.4.0
-django==5.2.18
+django==5.2.19
 django-stubs==6.1.2
 django-stubs-ext==6.1.2
 # Requests includes inline type information from 2.34; do not shadow it with stubs.
