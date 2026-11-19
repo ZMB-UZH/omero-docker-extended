@@ -72,9 +72,9 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         self.assertIn("OMERO_JOB_SERVICE_PORT=4064", env_text)
         self.assertIn("OMERO_CLI_ZARR_VERSION=0.9.0", env_text)
         self.assertIn("OME_ZARR_PY_VERSION=0.21.0", env_text)
-        self.assertIn("BIOFORMATS2RAW_VERSION=0.13.0", env_text)
+        self.assertIn("BIOFORMATS2RAW_VERSION=0.14.0", env_text)
         self.assertIn(
-            "BIOFORMATS2RAW_SHA256=7f0f92fe2d125219e4e20d4510d4f7cecfe19e8eadc52d9f462510a3494c5360",
+            "BIOFORMATS2RAW_SHA256=08a8aae58e8e673403d96c54c56ee77c41ef2c706516528f051db00bd1c58c1e",
             env_text,
         )
         self.assertIn(

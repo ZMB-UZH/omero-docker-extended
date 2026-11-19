@@ -51,6 +51,11 @@ The target uses OMERO.web 5.33.4. The published releases covered here use
 [upstream upgrade guide](https://github.com/ome/omero-web/blob/v5.33.4/UPGRADING.md)
 does not apply. Preserve Redis.
 
+To update Bio-Formats2Raw to 0.14.0, copy `BIOFORMATS2RAW_VERSION` and
+`BIOFORMATS2RAW_SHA256` together from [the target example](../../env/omeroserver_example.env)
+into `env/omeroserver.env` before rebuilding the web image. Keep the checksum
+matched to the version if you retain an older converter.
+
 Set `WEB_TIFFFILE_VERSION=2026.11.16` in `env/omeroserver.env` before
 rebuilding to use the updated web export dependency. Keep
 `TIFFFILE_VERSION=2026.3.3` for the Python 3.11 server.
