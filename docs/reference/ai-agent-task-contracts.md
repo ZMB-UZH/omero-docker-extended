@@ -81,8 +81,16 @@ GitHub documents these defaults in its
 
 ## Destructive operations and releases
 
-- Pause before every deletion of a pre-existing or persistent object and ask for fresh, explicit user approval naming exactly one object and one deletion operation. Separate approval is required for each file or directory tree, branch, Git tag, GitHub release, Docker image or tag, container, volume, backup, data object, and local or remote artifact.
-- Approval never carries forward. Blanket or "full" permission, an earlier deletion approval, a replace/recreate request, and approval for the same version or object in an earlier run do not authorize a later deletion. Do not start a command, script, or workflow capable of the deletion until that exact approval has been received.
+- Get explicit, single-use approval naming each pre-existing or persistent
+  object and its deletion or replacement. Group separate decisions. Verify
+  a preflight made no change before reusing approval, and recheck identity,
+  scope, and risk. A new mutation after rollback needs new authority.
+- An explicit instruction to proceed without prompts covers only the verified
+  actions in the approved maintenance plan. Do not reprompt for read-only or
+  already authorized work. Check ownership and references before cleanup;
+  skip unknown, referenced, or unrelated objects. Preserve user data and
+  operator env files. Release gates still apply. Blanket permission does
+  not authorize unlisted actions.
 - Before every release, pause and ask the user to provide or confirm the exact GitHub release tag and the exact Docker repository/tag. Never infer, auto-increment, or reuse a release version from history or an earlier conversation. Release replacement needs the release/tag choices plus separate fresh approvals for each GitHub release, Git tag, and Docker tag deletion.
 - Every release needs a version-matched `CHANGELOG.md` section with human-readable changes, checks, and upgrade impact. Publish the rendered notes and OCI metadata through GitHub and the Docker carrier. Keep notes curated and concise: include notable user/operator impact, compatibility, upgrade actions, and brief verification; omit internal, agent, commit-by-commit, and exhaustive-test detail.
   Before publication, require automated disclosure validation and explicit human public-safety review; public notes must never contain credentials, personal or host-specific information, private infrastructure details, security findings, vulnerability mechanics, or other exploit-enabling detail.

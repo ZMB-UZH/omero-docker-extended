@@ -10,10 +10,9 @@ Mandatory for every AI agent. Read once per revision; load triggered docs.
   explicit user approval or the Codex Security UI Start Scan handoff. Minimum
   required workers only; edits, commits, pushes, releases, and reconciliation
   remain in the parent session.
-- Pause before every deletion of a pre-existing or persistent object. Require
-  fresh approval naming exactly one object and one deletion, including replacements,
-  containers, images, tags, releases, volumes, files, backups, and data.
-  Blanket, earlier, or same-version permission never carries forward.
+- Require explicit approval for exactly one object and one deletion or
+  replacement. Group decisions. Used permission never carries forward.
+  A no-change preflight does not consume approval; see task contracts.
 - Before every release, confirm exact GitHub and Docker tags and public notes.
   Never infer or auto-increment versions. Require a matching `CHANGELOG.md`,
   automated disclosure validation, and human public-safety review. Never publish
