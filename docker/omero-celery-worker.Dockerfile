@@ -1,6 +1,6 @@
 # Standalone OMERO Imaris worker using the server-compatible Python 3.11 runtime.
 
-FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
 
 USER root
 
@@ -20,7 +20,7 @@ ARG APPLY_SECURITY_HARDENING=1
 # Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
 # resource APIs; its CLI and database tooling no longer require pkg_resources.
 # --------------------------------------------------------------------------
-ARG PIP_VERSION=26.2.2
+ARG PIP_VERSION=26.3
 ARG SETUPTOOLS_VERSION=84.2.1
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2

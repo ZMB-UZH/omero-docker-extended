@@ -16,7 +16,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
+from typing import BinaryIO
 import zipfile
 
 
@@ -28,6 +30,12 @@ MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
 MAX_DEBUG_LOG_BYTES = 32 * 1024 * 1024
 MAX_METADATA_BYTES = 1024 * 1024
+NATIVE_REPORT_LIMITS = {
+    "devskim-results.sarif": 64 * 1024 * 1024,
+    "devskim-debug.log": MAX_DEBUG_LOG_BYTES,
+}
+SANDBOX_COMMAND = """dotnet "$@" >&2
+exec tar -cf - -C /run/devskim -- devskim-results.sarif devskim-debug.log"""
 
 
 def executable(name: str) -> str:
@@ -59,7 +67,7 @@ def read_tooling(path: Path) -> dict[str, str]:
         "package_sha256": r"[0-9a-f]{64}",
         "languages_sha256": r"[0-9a-f]{64}",
         "comments_sha256": r"[0-9a-f]{64}",
-        "runtime_image": r"mcr\.microsoft\.com/dotnet/sdk:[0-9.]+-bookworm-slim@sha256:[0-9a-f]{64}",
+        "runtime_image": r"mcr\.microsoft\.com/dotnet/runtime:[0-9.]+-noble@sha256:[0-9a-f]{64}",
         "framework": r"net[0-9]+\.0",
     }
     if set(settings) != set(patterns) or any(
@@ -206,17 +214,26 @@ def snapshot_candidate(repo_root: Path, destination: Path) -> None:
     print(f"DevSkim candidate: {len(files)} Git-selected files.", flush=True)
 
 
-def bind_mount(source: Path, target: str, *, readonly: bool = True) -> str:
+def bind_mount(source: Path, target: str) -> str:
     """Encode bind mounts using Docker's CSV grammar, including unusual path names.
 
-    Inputs: host source, container target and access mode. Output: one mount argument.
+    Inputs: host source and container target. Output: a read-only mount argument.
     """
-    fields = ["type=bind", f"source={source}", f"target={target}"]
-    if readonly:
-        fields.append("readonly")
+    fields = ["type=bind", f"source={source}", f"target={target}", "readonly"]
     stream = io.StringIO()
     csv.writer(stream, lineterminator="").writerow(fields)
     return stream.getvalue()
+
+
+def prepare_sandbox_input(root: Path) -> None:
+    """Allow the sandbox UID to read copied inputs without sharing the private parent.
+
+    Inputs: generated input tree under the private scan directory.
+    Output: traversable directories and readable files for the read-only bind mount.
+    """
+    root.chmod(0o755)
+    for path in root.rglob("*"):
+        path.chmod(0o755 if path.is_dir() else 0o644)
 
 
 def prepare_language_metadata(
@@ -305,6 +322,29 @@ def report_native_counts(path: Path) -> None:
     )
 
 
+def read_native_artifacts(stream: BinaryIO, output: Path) -> None:
+    """Inputs: scanner archive and private directory. Output: exact native files."""
+    expected = set(NATIVE_REPORT_LIMITS)
+    try:
+        with tarfile.open(fileobj=stream, mode="r|") as archive:
+            for member in archive:
+                if (
+                    member.name not in expected
+                    or not member.isfile()
+                    or not 0 < member.size <= NATIVE_REPORT_LIMITS[member.name]
+                ):
+                    raise ValueError("Unexpected DevSkim artifact entry.")
+                payload = archive.extractfile(member)
+                if payload is not None:
+                    with payload, (output / member.name).open("wb") as handle:
+                        shutil.copyfileobj(payload, handle)
+                    expected.remove(member.name)
+    except tarfile.TarError as exc:
+        raise ValueError("Invalid DevSkim artifact archive.") from exc
+    if expected:
+        raise ValueError("Incomplete DevSkim artifact archive.")
+
+
 def scan(repo_root: Path, artifact_dir: Path) -> Path:
     """Run the reviewed scanner without network access or write access to source.
 
@@ -324,63 +364,66 @@ def scan(repo_root: Path, artifact_dir: Path) -> Path:
         extract_engine(package, settings["framework"], engine)
         snapshot_candidate(repo_root, source)
         prepare_language_metadata(repo_root, settings, metadata)
-        subprocess.run(
-            [
-                docker,
-                "run",
-                "--rm",
-                "--network",
-                "none",
-                "--read-only",
-                "--tmpfs",
-                "/run/devskim:rw,nosuid,nodev,mode=1777",
-                "--cap-drop",
-                "ALL",
-                "--security-opt",
-                "no-new-privileges",
-                "--user",
-                f"{os.getuid()}:{os.getgid()}",
-                "--env",
-                "HOME=/run/devskim",
-                "--env",
-                "TMPDIR=/run/devskim",
-                "--env",
-                "DOTNET_CLI_TELEMETRY_OPTOUT=1",
-                "--mount",
-                bind_mount(engine, "/engine"),
-                "--mount",
-                bind_mount(source, "/source"),
-                "--mount",
-                bind_mount(output, "/output", readonly=False),
-                "--mount",
-                bind_mount(metadata, "/metadata"),
-                settings["runtime_image"],
-                "dotnet",
-                "/engine/devskim.dll",
-                "analyze",
-                "--source-code",
-                "/source",
-                "--output-file",
-                "/output/devskim-results.sarif",
-                "--ignore-globs",
-                IGNORE_GLOBS,
-                "--ignore-rule-ids",
-                "DS162092",
-                "--languages",
-                "/metadata/languages.json",
-                "--comments",
-                "/metadata/comments.json",
-                "--log-file-level",
-                "Debug",
-                "--log-file-path",
-                "/output/devskim-debug.log",
-            ],
-            check=True,
-        )
-        candidate_report = output / report.name
-        if candidate_report.is_symlink() or not candidate_report.is_file():
-            raise ValueError("DevSkim must produce a regular SARIF report file.")
-        candidate_report.replace(report)
+        # Only the copied inputs are mounted, never their private parent.
+        for directory in (engine, source, metadata):
+            prepare_sandbox_input(directory)
+        command = [
+            docker,
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--tmpfs",
+            "/run/devskim:rw,nosuid,nodev,mode=1777,size=128m",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "--env",
+            "HOME=/run/devskim",
+            "--env",
+            "TMPDIR=/run/devskim",
+            "--env",
+            "DOTNET_CLI_TELEMETRY_OPTOUT=1",
+            "--mount",
+            bind_mount(engine, "/engine"),
+            "--mount",
+            bind_mount(source, "/source"),
+            "--mount",
+            bind_mount(metadata, "/metadata"),
+            "--entrypoint",
+            "/bin/sh",
+            settings["runtime_image"],
+            "-ec",
+            SANDBOX_COMMAND,
+            "devskim",
+            "/engine/devskim.dll",
+            "analyze",
+            "--source-code",
+            "/source",
+            "--output-file",
+            "/run/devskim/devskim-results.sarif",
+            "--ignore-globs",
+            IGNORE_GLOBS,
+            "--ignore-rule-ids",
+            "DS162092",
+            "--languages",
+            "/metadata/languages.json",
+            "--comments",
+            "/metadata/comments.json",
+            "--log-file-level",
+            "Debug",
+            "--log-file-path",
+            "/run/devskim/devskim-debug.log",
+        ]
+        with tempfile.TemporaryFile(dir=root) as stream:
+            subprocess.run(command, stdout=stream, check=True)
+            stream.seek(0)
+            read_native_artifacts(stream, output)
+        (output / report.name).replace(report)
         report_native_counts(output / "devskim-debug.log")
     return report
 

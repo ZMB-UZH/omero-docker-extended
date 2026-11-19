@@ -1107,23 +1107,19 @@ def test_sem_edx_lookups_use_independent_importer_sessions(
 
 def test_start_import_thread_covers_missing_job_and_thread_start_failures(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ):
     """Verify start import thread covers missing job and thread start failures.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start import thread covers missing job and thread start failures.
     Raises: RuntimeError when validation or the called operation fails.
     """
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: None)
-    core_functions._start_import_thread("v" * 32)
-
-    job = {"job_id": "w" * 32, "status": "ready", "import_thread_started": False}
-    saved = []
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: job)
-    monkeypatch.setattr(
-        core_functions,
-        "_save_job",
-        lambda payload: saved.append(copy.deepcopy(payload)) or True,
-    )
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: tmp_path)
+    job_id = "a" * 32
+    core_functions._start_import_thread(job_id)
+    assert not (tmp_path / f".{job_id}.import.lock").exists()
+    job = {"job_id": job_id, "status": "ready", "import_thread_started": False}
+    assert core_functions._save_job(job)
 
     class _BrokenThread:
         """Test double for broken thread behavior in this module."""
@@ -1145,8 +1141,13 @@ def test_start_import_thread_covers_missing_job_and_thread_start_failures(
             raise RuntimeError("thread start failed")
 
     monkeypatch.setattr(core_functions.threading, "Thread", _BrokenThread)
-    core_functions._start_import_thread("w" * 32)
-    assert saved[-1]["import_thread_started"] is False
+    core_functions._start_import_thread(job_id)
+    saved = core_functions._load_job(job_id)
+    assert saved["import_thread_started"] is False
+    assert "import_worker_phase" not in saved
+    ownership = core_functions._try_import_execution_lock(job_id)
+    assert ownership is not None
+    ownership.close()
 
 
 def test_process_import_job_handles_ngff_converter_mixed_outcomes_and_synthetic_entries(

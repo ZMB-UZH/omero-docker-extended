@@ -543,9 +543,10 @@ def tracked_source_paths(repo_root: Path) -> tuple[str, ...]:
         cwd=repo_root,
         check=True,
         capture_output=True,
-        text=True,
     )
-    return tuple(sorted(set(filter(None, result.stdout.split("\0")))))
+    return tuple(
+        sorted({os.fsdecode(path) for path in result.stdout.split(b"\0") if path})
+    )
 
 
 def discover_bandit_targets(repo_root: Path) -> BanditTargets:

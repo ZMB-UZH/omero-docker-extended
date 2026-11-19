@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import ssl
 import stat
 from typing import Iterator
 
@@ -315,7 +316,11 @@ def reconcile(
     if system_trust:
         if len(system_trust) > MAX_MANAGED_BYTES - 4096:
             raise ValueError("System certificate bundle exceeds limit")
-        x509.load_pem_x509_certificates(system_trust)
+        # Validate the distribution bundle as a TLS trust store. Legacy public
+        # anchors must not be parsed as certificates managed by this issuer.
+        if os.environ.get("SSLKEYLOGFILE"):
+            raise ValueError("TLS key logging is not supported by the issuer")
+        ssl.create_default_context(cadata=system_trust.decode("ascii"))
     if (
         now.tzinfo is None
         or not identities

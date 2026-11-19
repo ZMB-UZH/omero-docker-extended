@@ -5,7 +5,7 @@ archive_sha256 = "e46d89e59ef949270e3b19ab097da8dbb09350e05cb5a746ff92f6ccf6e8ce
 reason = "The official fixed release replaces the temporary patched-source exception. Direct-URL dependencies retain an explicit inventory and an unfiltered advisory audit."
 
 [lock_sha256]
-"crawl4ai.in" = "02250cddf278bcee008c136d93da7a520dd562266fe821c7d7171fce7e50357c" # DevSkim: ignore DS173237 -- dependency-input SHA-256
-"crawl4ai.txt" = "1d92a56b79b5b9f2cda6de5ea22da7e995ef00d7505c8574295d634d19d430ef" # DevSkim: ignore DS173237 -- dependency-lock SHA-256
+"crawl4ai.in" = "55d4e6cad6711c19b5285191a1c0bf4749fd800c5192a5bb897f621b3cd9f7f2" # DevSkim: ignore DS173237 -- dependency-input SHA-256
+"crawl4ai.txt" = "bcb0df27e34681009e5cdcb73f206eabf48702f0fa71b8bb1b3cb6590ed250e1" # DevSkim: ignore DS173237 -- dependency-lock SHA-256
 "crawl4ai-build.in" = "f8eb60b2c84fddd2d3a588255ec8d0510cacf9fd5d5dc59b1333e8ba349cf5e8" # DevSkim: ignore DS173237 -- build-input SHA-256
 "crawl4ai-build.txt" = "fdafb2406830ecc24b2d9d7ef3650661cbc92b83c14271892f59ea30f3e5725c" # DevSkim: ignore DS173237 -- build-lock SHA-256

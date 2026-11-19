@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Correct JSON value types and orphan-image lookup in OMERO.web 5.33.2."""
+"""Correct JSON response types and orphan-image lookup in OMERO.web."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import hashlib
 from pathlib import Path
 
 
-# Exact upstream v5.33.2 file and the reviewed response/lookup corrections.
+# OMERO.web 5.33.2 through 5.33.4 contain the same upstream source bytes.
 # A future base-image update must review or remove this compatibility correction.
 # Public content hashes, not credentials; provenance: docs/operations/code-scanning.md.
 SOURCE_SHA256 = "78ae1a39ccea70c003e21903bab1b255102f450cd168b712d4f74697f087a56a"  # DevSkim: ignore DS173237 -- public upstream file SHA-256

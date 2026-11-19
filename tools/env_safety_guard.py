@@ -108,7 +108,6 @@ DOT_ENV_REQUIRED_KEYS = (
     "REDIS_APPENDONLY",
     "REDIS_MAXMEMORY",
     "REDIS_MAXMEMORY_POLICY",
-    "REDIS_DATA_TMPFS_SIZE",
 )
 DOT_ENV_REQUIRED_ALLOW_EMPTY_KEYS = frozenset({"REDIS_SAVE_POLICY"})
 DOT_ENV_DIRECT_KEYS = frozenset(
@@ -119,7 +118,6 @@ DOT_ENV_DIRECT_KEYS = frozenset(
         "REDIS_APPENDONLY",
         "REDIS_MAXMEMORY",
         "REDIS_MAXMEMORY_POLICY",
-        "REDIS_DATA_TMPFS_SIZE",
     }
 )
 DOT_ENV_MIRRORED_KEYS = tuple(
@@ -696,7 +694,7 @@ def validate_assignment_value(
             errors.append(f"{key} must be an octal mode such as 2775")
         return errors
 
-    if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
+    if key == "REDIS_MAXMEMORY":
         if not is_size_text(value):
             errors.append(f"{key} must be a memory size such as 512mb")
         return errors

@@ -74,6 +74,24 @@ monitoring and other infrastructure run as separate services.
 
 For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
+## Upgrading an existing installation
+
+Identify the installed release and retain the existing data paths. Back up
+both PostgreSQL databases, the managed repository, and deployment configuration
+before changing images. Review the [OMERO.server upgrade guide](https://omero.readthedocs.io/en/stable/sysadmins/server-upgrade.html)
+and the target OMERO.web version's upgrade notes.
+
+Use the [environment upgrade guide](docs/operations/upgrade-environment.md)
+to identify the settings your installed release needs. Add required settings
+without overwriting credentials, data paths, or local customizations.
+If Redis still uses temporary storage, follow the
+[Redis persistence migration](docs/operations/redis-persistence.md) before
+stopping it. This applies to default installs before `1.3.0-main.1`.
+
+Verify the databases, stored images, imports, and monitoring after the
+upgrade before retiring backups. Replacing OMERO.server requires users to
+sign in again; storing browser sessions in Redis does not change that.
+
 </details>
 
 <details open>
@@ -148,7 +166,7 @@ has been validated.
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery workers
 │   ├── path-usage-exporter.Dockerfile #   Custom filesystem usage metrics exporter
-│   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
+│   ├── pg-maintenance.Dockerfile      #   PostgreSQL runtime and maintenance builds
 │   ├── prebuilt-carrier.Dockerfile    #   Scratch data carrier for easy installs
 │   ├── redis-sysctl-init.Dockerfile   #   Redis kernel-tuning helper image
 │   ├── *-entrypoint.sh                #   Service entrypoint helpers
@@ -254,11 +272,11 @@ The table below lists the long-running services available in the full profile se
 | internal-tls | custom | Offline issuance and automatic renewal of internal certificates | None |
 | `omeroserver` | Custom OMERO image | OMERO.server: image storage, metadata API, script execution | `OMERO_SERVER_HOST_PORT` -> `OMERO_CLI_PORT` |
 | `omeroweb` | Custom OMERO image | OMERO.web + all plugins + Celery workers (supervisord) | 4090 |
-| `database` | postgres:16.15 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.15 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
+| `database` | PostgreSQL 16.16 | Primary OMERO PostgreSQL database | 5432 (internal) |
+| `database_plugin` | PostgreSQL 16.16 | OMERO plugin PostgreSQL database (OMP, Import, Tools) | 5433 (internal) |
 | `redis` | redis:8.10.2-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `ollama` | ollama/ollama:0.40.11 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
-| `pg-maintenance` | Custom (postgres:16.15) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
+| `ollama` | ollama/ollama:0.40.16 | Local AI inference endpoint for OMP's `Local` provider | 11434 (internal) |
+| `pg-maintenance` | PostgreSQL 16.16 client | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer/portainer-ce:2.45.3-alpine | docker container management UI | `${PORTAINER_HOST_BIND:-0.0.0.0}:9443` |
 | `prometheus` | prom/prometheus:v3.15.1 | Metrics scraping and storage | 127.0.0.1:9090 |
 | `grafana` | grafana/grafana:13.2.4 | Dashboards and visualization | 127.0.0.1:3000 |
@@ -692,7 +710,7 @@ handshake, raw protocol probes, and tool listing with
 `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search`
 only against an existing active index. If it cold-indexes, agents tell the user
 once that the first search can take several minutes; later searches reuse the
-external cache. The mirror asks CocoIndex Code 0.2.42 to include every
+external cache. The mirror asks the pinned CocoIndex Code release to include every
 Git-visible mirrored file pattern; CocoIndex indexes text-decodable content and
 skips undecodable binary files.
 

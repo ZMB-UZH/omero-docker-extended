@@ -61,6 +61,7 @@ from .core_functions import (
     _staged_upload_chunk_matches,
     _staged_upload_size,
     _should_auto_skip_import,
+    _should_dispatch_import,
     _special_methods_enabled,
     _start_import_thread,
     _update_job,
@@ -1876,7 +1877,7 @@ def job_status(request, job_id, conn=None, _url=None, **kwargs):
             context="Failed to prepare upload job status for import",
         )
 
-    if job.get("status") == "ready" and not job.get("import_thread_started"):
+    if _should_dispatch_import(job):
         _start_import_thread(job_id)
         job = _load_job(job_id) or job
 

@@ -2,5 +2,7 @@
 # Compile with pip-compile --generate-hashes --no-emit-index-url --strip-extras
 #   --output-file .github/requirements/crawl4ai.txt .github/requirements/crawl4ai.in
 crawl4ai==0.9.5
+# Keep the patched selector engine floor even when the transitive lock is rebuilt.
+soupsieve>=4.0.0
 # Admit the unmodified wheel published in the official upstream stable release.
 nltk @ https://github.com/nltk/nltk/releases/download/v3.10.4/nltk-3.10.4-py3-none-any.whl#sha256=e46d89e59ef949270e3b19ab097da8dbb09350e05cb5a746ff92f6ccf6e8ce90

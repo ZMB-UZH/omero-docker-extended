@@ -370,17 +370,19 @@ workspace with sufficient free space, not a quota-limited temporary filesystem.
 ### DevSkim Engine Parity And Public Fingerprints
 
 `tools/devskim_gate.py` is the shared local and GitHub runner. Its reviewed
-`tools/devskim_tooling.ini` pins the DevSkim 1.0.100 NuGet package by full SHA-256
-and the .NET SDK 8.0.425 runtime image by digest. A pinned action alone was not
+`tools/devskim_tooling.ini` pins the DevSkim 1.0.103 NuGet package by full SHA-256
+and the .NET 10.0.15 LTS runtime image by digest. A pinned action alone was not
 reproducible: DevSkim action 1.0.16 installed whichever CLI NuGet supplied at
 build time. Both environments now run identical verified engine bytes over
 Git-selected candidate files, including intended new files but not ignored
-deployment state. The container has no network or write access to source.
+deployment state. The container has no network or writable host mounts.
+It streams its report from private container storage, so UID remapping does
+not change which files it can scan or where it can write.
 The raw SARIF is retained as a workflow artifact even when the guard fails.
 The gate verifies the version-matched upstream language and comment metadata,
 then adds Python-stub (`.pyi`) and JavaScript-module (`.mjs`) mappings without
 removing existing mappings. The upstream metadata and MIT license are retained
-under `tools/devskim-metadata-v1.0.100`; update their pins with the CLI.
+under `tools/devskim-metadata-v1.0.103`; update their pins with the CLI.
 DevSkim's own analyzed and skipped counts are reported separately from the
 Git-selected candidate count. Skipped files may be unsupported or unreadable,
 and ignore globs may exclude additional files; other scanners and tests remain
@@ -404,10 +406,10 @@ The proof retained the original six-result report and recomputed these values:
   `docker/omero-server.Dockerfile` at tags `1.1.2-main.1`, `1.1.1-main.1`,
   `1.1.0-main.1`, and `1.0.1-main.1`, in that order.
 
-The current webgateway adapter targets
-[v5.33.2](https://github.com/ome/omero-web/blob/v5.33.2/omeroweb/webgateway/views.py).
-Its replacement source and output fingerprints were recomputed from the exact
-upstream file; unexpected source still fails closed before patching.
+The webgateway adapter's source fingerprint was verified against the packaged
+file in [OMERO.web 5.33.4](https://github.com/ome/omero-web/releases/tag/v5.33.4).
+The source is unchanged from the previously verified 5.33.2 and 5.33.3
+images. Unexpected source still fails closed before patching.
 
 The isolated research tool's source review uses TOML so public commit and
 archive/lock hashes can carry the same native, line-specific annotations.
@@ -565,6 +567,14 @@ runbook or tool concisely with regression coverage.
 1. **Settings > Security & analysis**: enable Code scanning, Dependabot alerts, Secret scanning.
 2. **Actions permissions**: allow workflow runs and SARIF upload.
 3. OSSF Scorecard runs only on push/schedule (not PRs) and publishes results via OIDC.
+
+The web and server Python manifests live in separate directories under
+`docker/runtime/`. Each directory declares the Python version for its
+Dependabot job, and its requirements are installed in the corresponding image
+and explicitly included in the OSV scan. The version file selects the minor
+line, not the runtime patch: it must name a release recognized by the updater's
+Pyenv catalog. When an upstream image changes minor versions, update that file
+and recheck resolution inside the new image before accepting updates.
 
 ## Alert inventory
 

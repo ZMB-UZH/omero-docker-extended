@@ -53,7 +53,7 @@ def test_deployment_contract_workflow_validates_full_compose_build_graph() -> No
     assert setup_python["uses"] == (
         "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
     )
-    assert setup_python["with"]["python-version"] == "3.14.8"
+    assert setup_python["with"]["python-version"] == "3.14.10"
     assert prepare["run"] == "python3 -m tools.prepare_ci_compose_environment"
 
     script = validate["run"]

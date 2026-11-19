@@ -330,6 +330,19 @@ def test_dockerfile_inventory_cli_is_machine_readable():
     assert inventory and result.stderr == ""
 
 
+def test_source_inventory_preserves_literal_linux_path_bytes(gate_context):
+    """Inputs: a real Git worktree. Output: unusual filenames remain discoverable."""
+    root = gate_context.repo_root
+    subprocess.run(
+        [gates._require_executable("git"), "init", "--quiet"], cwd=root, check=True
+    )
+    filename = os.fsdecode(b"container-\xff\r\n.Dockerfile")
+    (root / filename).write_text("FROM scratch\n", encoding="utf-8")
+
+    assert gates.tracked_source_paths(root) == (filename,)
+    assert gates.discover_dockerfiles(root) == (filename,)
+
+
 def test_non_repository_git_failure_has_no_invented_metadata(gate_context):
     """Inputs: native Git in a non-repository. Output: failed lookup stays unknown."""
     assert (

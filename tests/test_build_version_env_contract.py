@@ -82,7 +82,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             env_text,
         )
         self.assertIn("TIFFFILE_VERSION=2026.3.3", env_text)
-        self.assertIn("WEB_TIFFFILE_VERSION=2026.10.15", env_text)
+        self.assertIn("WEB_TIFFFILE_VERSION=2026.11.16", env_text)
         self.assertIn("BIOFORMATS_VERSION=8.5.0", env_text)
         self.assertIn(
             "BIOFORMATS_SHA256=978093f2a4d0034f9581b19a5acd5a53c56d7b04b703865cd533aa953c92b1c2",
@@ -183,19 +183,19 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         compose_text = self.read_text("docker-compose.yml")
         self.assertIn('image: "portainer/portainer-ce:2.45.3-alpine"', compose_text)
-        self.assertIn('image: "grafana/alloy:v1.21.2"', compose_text)
-        self.assertIn('image: "prom/prometheus:v3.15.1"', compose_text)
+        self.assertIn('image: "grafana/alloy:v1.22.0"', compose_text)
+        self.assertIn('image: "prom/prometheus:v3.16.0"', compose_text)
         self.assertIn('image: "prom/node-exporter:v1.12.1"', compose_text)
         self.assertIn(
             'image: "prometheuscommunity/postgres-exporter:v0.20.1"',
             compose_text,
         )
-        self.assertIn('image: "oliver006/redis_exporter:v1.96.0-alpine"', compose_text)
-        self.assertIn('image: "redis:8.10.2-alpine"', compose_text)
-        self.assertIn('image: "ghcr.io/google/cadvisor:0.60.6"', compose_text)
-        self.assertIn('image: "grafana/loki:3.7.9"', compose_text)
-        self.assertIn('image: "grafana/grafana:13.2.4"', compose_text)
-        self.assertIn('image: "ollama/ollama:0.40.11"', compose_text)
+        self.assertIn('image: "oliver006/redis_exporter:v1.97.0-alpine"', compose_text)
+        self.assertIn('image: "redis:8.10.3-alpine"', compose_text)
+        self.assertIn('image: "ghcr.io/google/cadvisor:0.61.0"', compose_text)
+        self.assertIn('image: "grafana/loki:3.7.10"', compose_text)
+        self.assertIn('image: "grafana/grafana:13.3.1"', compose_text)
+        self.assertIn('image: "ollama/ollama:0.40.16"', compose_text)
         self.assertNotIn("portainer/portainer-ce:2.39.0-alpine", compose_text)
         self.assertNotIn("grafana/alloy:v1.17.1", compose_text)
         self.assertNotIn("prom/prometheus:v3.12.0", compose_text)
@@ -410,11 +410,19 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         for dockerfile_path in sorted((self.repo_root / "docker").glob("*.Dockerfile")):
             dockerfile_text = dockerfile_path.read_text(encoding="utf-8")
-            from_refs = re.findall(r"^\s*FROM\s+([^\s#]+)", dockerfile_text, re.M)
-            self.assertTrue(from_refs, str(dockerfile_path))
-            for image_ref in from_refs:
+            from_directives = re.findall(
+                r"^[ \t]*FROM[ \t]+([^\s#]+)(?:[ \t]+AS[ \t]+([^\s#]+))?",
+                dockerfile_text,
+                re.M | re.I,
+            )
+            self.assertTrue(from_directives, str(dockerfile_path))
+            local_stages: set[str] = set()
+            for image_ref, stage in from_directives:
                 with self.subTest(dockerfile=dockerfile_path.name, image_ref=image_ref):
-                    self.assert_explicit_nonfloating_image_ref(image_ref)
+                    if image_ref.casefold() not in local_stages:
+                        self.assert_explicit_nonfloating_image_ref(image_ref)
+                if stage:
+                    local_stages.add(stage.casefold())
 
     def test_workflow_container_images_are_explicitly_tagged_and_never_floating(
         self,
@@ -440,11 +448,12 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         Inputs: repository fixtures. Output: fails on regressions in alpine 323 base images use current verified digest.
         """
         expected_from = (
-            "FROM alpine:3.24.3@"
-            "sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
+            "FROM alpine:3.24.4@"
+            "sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf"
         )
         for relative_path in (
             "docker/firewall-bouncer.Dockerfile",
+            "docker/internal-tls.Dockerfile",
             "docker/path-usage-exporter.Dockerfile",
             "docker/redis-sysctl-init.Dockerfile",
         ):
@@ -464,7 +473,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         dockerfile_text = self.read_text("docker/omero-celery-worker.Dockerfile")
         self.assertIn(
             "FROM ubuntu:26.04@"
-            "sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944",
+            "sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db",
             dockerfile_text,
         )
         self.assertNotIn(
@@ -472,31 +481,99 @@ class BuildVersionEnvContractTests(unittest.TestCase):
             dockerfile_text,
         )
 
-    def test_postgres_1615_base_image_uses_current_verified_digest(self) -> None:
-        """Verify the PostgreSQL 16.15 maintenance base uses its current digest.
+    def test_postgres_shared_stage_pins_verified_base_and_packages(self) -> None:
+        """Verify the PostgreSQL runtime and maintenance builds share validated inputs.
 
-        Inputs: repository fixtures. Output: fails on stale PostgreSQL digests.
+        Inputs: repository Dockerfile. Output: fails on base or package drift.
         """
 
         dockerfile_text = self.read_text("docker/pg-maintenance.Dockerfile")
         self.assertIn(
             "FROM postgres:16.15@"
-            "sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97",
+            "sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97"
+            " AS postgres-base\n",
             dockerfile_text,
         )
-        self.assertNotIn(
-            "sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b",
-            dockerfile_text,
+        runtime, _, maintenance = dockerfile_text.partition(
+            "\nFROM postgres-base AS maintenance\n"
         )
+        self.assertTrue(maintenance)
+        for pin in (
+            "ENV PG_VERSION=16.16-1.pgdg13+1",
+            '"postgresql-16=${PG_VERSION}"',
+            '"postgresql-client-16=${PG_VERSION}"',
+            "postgresql-common=293.pgdg13+1",
+            "postgresql-client-common=293.pgdg13+1",
+            "apt=3.0.4",
+            "libapt-pkg7.0=3.0.4",
+        ):
+            with self.subTest(pin=pin):
+                self.assertIn(pin, runtime)
 
     def test_postgres_runtime_images_match_maintenance_version(self) -> None:
-        """Verify both database services match the maintenance client version.
+        """Verify both databases build the same stage without tag collisions.
 
-        Inputs: repository fixtures. Output: fails on PostgreSQL version drift.
+        Inputs: parsed Compose model. Output: verifies the three build targets.
         """
 
-        compose_text = self.read_text("docker-compose.yml")
-        self.assertEqual(compose_text.count('image: "postgres:16.15"'), 2)
+        services = yaml.safe_load(self.read_text("docker-compose.yml"))["services"]
+        recipe = {
+            "context": ".",
+            "dockerfile": "docker/pg-maintenance.Dockerfile",
+        }
+        for service, image in (
+            ("database", "omero-postgres:16.16"),
+            ("database_plugin", "omero-postgres-plugin:16.16"),
+        ):
+            with self.subTest(service=service):
+                self.assertEqual(services[service]["image"], image)
+                self.assertEqual(
+                    services[service]["build"], {**recipe, "target": "postgres-base"}
+                )
+        self.assertEqual(
+            services["pg-maintenance"]["build"], {**recipe, "target": "maintenance"}
+        )
+
+    def test_web_lock_and_source_patches_match_the_base_release(self) -> None:
+        """Require the exact package release and patch after all pip installs.
+
+        Inputs: pinned web Dockerfile and runtime requirements. Output: fails
+        if the base release, runtime lock, or patch order diverges.
+        """
+        dockerfile = self.read_text("docker/omero-web.Dockerfile")
+        base = next(
+            line
+            for line in dockerfile.splitlines()
+            if line.startswith("FROM openmicroscopy/omero-web-standalone:")
+        )
+        release = base.split(":", 1)[1].split("@", 1)[0].split("-", 1)[0]
+        for suffix in ("in", "txt"):
+            with self.subTest(suffix=suffix):
+                requirements = self.read_text(
+                    f"docker/runtime/web/requirements.{suffix}"
+                )
+                self.assertEqual(
+                    [
+                        line
+                        for line in requirements.splitlines()
+                        if line.startswith("omero-web==")
+                    ],
+                    [f"omero-web=={release}"],
+                )
+
+        capture = dockerfile.index("> /opt/setup/.omero-web-base-version")
+        verify = dockerfile.index(
+            '[[ "${INSTALLED_WEB_VERSION}" != "${BASE_WEB_VERSION}" ]]'
+        )
+        self.assertLess(capture, dockerfile.index(" -m pip install "))
+        self.assertLess(dockerfile.rindex(" -m pip install "), verify)
+        for adapter in ("api_servers", "logo_context", "webgateway"):
+            with self.subTest(adapter=adapter):
+                self.assertLess(
+                    verify,
+                    dockerfile.index(f'/bin/python" /tmp/patch_omeroweb_{adapter}.py'),
+                )
+        self.assertLess(verify, dockerfile.index("# Patch omero-py TempFileManager"))
 
     def test_omero_base_images_use_current_verified_digests(self) -> None:
         """Verify OMERO base images use current verified digests.
@@ -505,18 +582,23 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         """
         expected_from_by_path = {
             "docker/omero-server.Dockerfile": (
-                "FROM openmicroscopy/omero-server:5.6.18@"
-                "sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f"
+                "FROM openmicroscopy/omero-server:5.6.18-1@"
+                "sha256:e9e06e654cac68836fe772286ef6f73e009dc615894ba321653852bf62f7f0ad"
             ),
             "docker/omero-web.Dockerfile": (
-                "FROM openmicroscopy/omero-web-standalone:5.33.2@"
-                "sha256:0ed9880841da97b06db1268d6f28e4bc52dbc25f6217a32eee622e7403f9503b"
+                "FROM openmicroscopy/omero-web-standalone:5.33.4@"
+                "sha256:734fa8fdb9861ce17ee78289e513e01280a95cf4b123b829a116d285798ab86a"
             ),
         }
         for relative_path, expected_from in expected_from_by_path.items():
             with self.subTest(relative_path=relative_path):
                 dockerfile_text = self.read_text(relative_path)
                 self.assertIn(expected_from, dockerfile_text)
+        self.assertIn(
+            expected_from_by_path["docker/omero-server.Dockerfile"]
+            + " AS omero-client",
+            self.read_text("docker/omero-web.Dockerfile"),
+        )
 
     def test_omero_python_api_pin_matches_updated_server_stack(self) -> None:
         """Verify OMERO Python API pins match the updated OMERO server stack.
@@ -535,10 +617,10 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         )
         self.assertIn(expected_pin, server_dockerfile_text)
         for package_pin in (
-            "django==5.2.18",
+            "django==5.2.19",
             "matplotlib==3.11.2",
             "pytest==9.1.1",
-            "portalocker==4.4.1",
+            "portalocker==4.4.2",
             "psycopg2-binary==2.9.13",
             "celery==5.6.3",
             "redis==8.1.0",
@@ -568,7 +650,7 @@ class BuildVersionEnvContractTests(unittest.TestCase):
         worker_text = self.read_text("docker/omero-celery-worker.Dockerfile")
 
         common_version_args = (
-            "ARG PIP_VERSION=26.2.2",
+            "ARG PIP_VERSION=26.3",
             "ARG SETUPTOOLS_VERSION=84.2.1",
             "ARG WHEEL_VERSION=0.48.0",
             "ARG CRYPTOGRAPHY_VERSION=50.0.2",

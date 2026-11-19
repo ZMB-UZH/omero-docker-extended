@@ -5,6 +5,7 @@ from __future__ import annotations
 import configparser
 import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import zipfile
 
 import pytest
@@ -549,7 +551,16 @@ def test_entrypoint_uses_real_guard_without_modifying_report(
 
 @pytest.mark.parametrize("artifact_name", ["artifacts", 'artifacts, with "quotes"'])
 @pytest.mark.parametrize(
-    "report_kind", ["regular", "missing", "symlink", "invalid_counts"]
+    "report_kind",
+    [
+        "regular",
+        "missing",
+        "symlink",
+        "invalid_counts",
+        "oversize",
+        "malformed",
+        "duplicate",
+    ],
 )
 def test_scan_is_offline_readonly_and_keeps_raw_results(
     tmp_path, monkeypatch, artifact_name, report_kind
@@ -559,6 +570,8 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     Inputs: isolated repository and simulated scanner process. Output: raw report and constrained invocation.
     """
     repo = make_repo(tmp_path / "repo")
+    tracked = repo / "tracked.py"
+    tracked.chmod(0o600)
     (repo / "tools").mkdir()
     shutil.copyfile(
         gate.REPO_ROOT / "tools" / "devskim_tooling.ini",
@@ -569,7 +582,10 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     shutil.copytree(
         gate.REPO_ROOT / "tools" / metadata_name, repo / "tools" / metadata_name
     )
-    package = make_package(tmp_path / "fixture.nupkg")
+    package = make_package(
+        tmp_path / "fixture.nupkg",
+        {f"tools/{settings['framework']}/any/devskim.dll": b"fixture"},
+    )
     artifact_dir = tmp_path / artifact_name
     artifact_dir.mkdir()
     monkeypatch.setattr(gate, "verified_package", lambda *args: package)
@@ -577,6 +593,11 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     real_run = subprocess.run
     commands = []
     raw_report = b'{"version":"2.1.0","runs":[{"results":[{"ruleId":"fixture"}]}]}\n'
+    debug_log = b"[DBG] Files analyzed: 1\n" + (
+        b"" if report_kind == "invalid_counts" else b"[DBG] Files skipped: 0\n"
+    )
+    if report_kind == "oversize":
+        monkeypatch.setitem(gate.NATIVE_REPORT_LIMITS, "devskim-results.sarif", 1)
 
     def run(command, **kwargs):
         """Simulate only Docker while retaining actual Git behavior.
@@ -586,40 +607,55 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
         if command[0] != "/usr/bin/docker":
             return real_run(command, **kwargs)
         commands.append(command)
-        mount = next(value for value in command if value.endswith("target=/output"))
-        fields = next(csv.reader([mount]))
-        output = Path(
-            next(
-                field.removeprefix("source=")
-                for field in fields
-                if field.startswith("source=")
-            )
-        )
-        report_path = output / "devskim-results.sarif"
-        (output / "devskim-debug.log").write_text(
-            "[DBG] Files analyzed: 1\n"
-            + ("" if report_kind == "invalid_counts" else "[DBG] Files skipped: 0\n"),
-            encoding="utf-8",
-        )
-        if report_kind in ("regular", "invalid_counts"):
-            report_path.write_bytes(raw_report)
-        elif report_kind == "symlink":
-            report_path.symlink_to(repo / "tracked.py")
+        for index, option in enumerate(command):
+            if option == "--mount":
+                mount = next(csv.reader([command[index + 1]]))
+                directory = Path(mount[1].removeprefix("source="))
+                assert stat.S_IMODE(directory.parent.stat().st_mode) == 0o700
+                assert stat.S_IMODE(directory.stat().st_mode) == 0o755
+                for item in directory.rglob("*"):
+                    expected_mode = 0o755 if item.is_dir() else 0o644
+                    assert stat.S_IMODE(item.stat().st_mode) == expected_mode
+        stream = kwargs["stdout"]
+        if report_kind == "malformed":
+            stream.write(b"not an artifact archive")
+            return subprocess.CompletedProcess(command, 0)
+        with tarfile.open(fileobj=stream, mode="w|") as archive:
+            entries = [("devskim-debug.log", debug_log)]
+            if report_kind != "missing":
+                entries.append(("devskim-results.sarif", raw_report))
+            if report_kind == "duplicate":
+                entries.append(("devskim-results.sarif", raw_report))
+            for name, payload in entries:
+                item = tarfile.TarInfo(name)
+                if name.endswith(".sarif") and report_kind == "symlink":
+                    item.type = tarfile.SYMTYPE
+                    item.linkname = "tracked.py"
+                    archive.addfile(item)
+                else:
+                    item.size = len(payload)
+                    archive.addfile(item, io.BytesIO(payload))
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(gate.subprocess, "run", run)
-    if report_kind == "regular":
-        report = gate.scan(repo, artifact_dir)
-        assert report.read_bytes() == raw_report
-    elif report_kind == "invalid_counts":
-        with pytest.raises(ValueError, match="native file counts"):
-            gate.scan(repo, artifact_dir)
-        assert (artifact_dir / "devskim-results.sarif").read_bytes() == raw_report
-    else:
-        with pytest.raises(ValueError, match="regular SARIF report"):
-            gate.scan(repo, artifact_dir)
-        assert not list(artifact_dir.rglob("*.sarif"))
-        assert (repo / "tracked.py").read_text() == "VALUE = 1\n"
+    previous_umask = os.umask(0o077)
+    try:
+        if report_kind == "regular":
+            report = gate.scan(repo, artifact_dir)
+            assert report.read_bytes() == raw_report
+            assert not (artifact_dir / "devskim-debug.log").exists()
+        elif report_kind == "invalid_counts":
+            with pytest.raises(ValueError, match="native file counts"):
+                gate.scan(repo, artifact_dir)
+            assert (artifact_dir / "devskim-results.sarif").read_bytes() == raw_report
+        else:
+            with pytest.raises(ValueError, match="DevSkim artifact"):
+                gate.scan(repo, artifact_dir)
+            assert not list(artifact_dir.rglob("*.sarif"))
+    finally:
+        os.umask(previous_umask)
+    assert tracked.read_text() == "VALUE = 1\n"
+    assert stat.S_IMODE(tracked.stat().st_mode) == 0o600
     command = commands[0]
     assert command[command.index("--network") + 1] == "none"
     assert "--read-only" in command
@@ -630,8 +666,14 @@ def test_scan_is_offline_readonly_and_keeps_raw_results(
     assert any(value.endswith("target=/source,readonly") for value in command)
     assert any(value.endswith("target=/engine,readonly") for value in command)
     assert any(value.endswith("target=/metadata,readonly") for value in command)
+    for index, value in enumerate(command):
+        if value == "--mount":
+            assert "readonly" in next(csv.reader([command[index + 1]]))
     assert command[command.index("--languages") + 1] == "/metadata/languages.json"
     assert command[command.index("--comments") + 1] == "/metadata/comments.json"
     assert command[command.index("--log-file-level") + 1] == "Debug"
-    assert command[command.index("--log-file-path") + 1] == "/output/devskim-debug.log"
+    assert (
+        command[command.index("--log-file-path") + 1]
+        == "/run/devskim/devskim-debug.log"
+    )
     assert not list(artifact_dir.glob("scan-*"))

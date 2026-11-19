@@ -85,7 +85,7 @@ class VultureIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.8", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.10", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         self.assertEqual(
             ".github/requirements/vulture-ci.txt",

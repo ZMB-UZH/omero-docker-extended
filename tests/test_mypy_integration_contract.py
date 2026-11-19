@@ -70,19 +70,19 @@ class MypyIntegrationContractTests(TestCase):
         source = self.read_text(".github/requirements/mypy-ci.in")
         compiled = self.read_text(".github/requirements/mypy-ci.txt")
 
-        self.assertIn("mypy==2.4.0", source)
-        self.assertIn("django==5.2.18", source)
+        self.assertIn("mypy==2.4.1", source)
+        self.assertIn("django==5.2.19", source)
         self.assertIn("django-stubs==6.1.2", source)
         self.assertIn("django-stubs-ext==6.1.2", source)
         self.assertIn("pip-compile", compiled)
-        self.assertIn("mypy==2.4.0", compiled)
-        self.assertIn("django==5.2.18", compiled)
+        self.assertIn("mypy==2.4.1", compiled)
+        self.assertIn("django==5.2.19", compiled)
         self.assertIn("django-stubs==6.1.2", compiled)
         self.assertIn("django-stubs-ext==6.1.2", compiled)
         self.assertIn("requests==2.34.2", compiled)
         self.assertNotIn("types-requests==", compiled)
         self.assertIn("types-atheris==3.1.0.20260630", compiled)
-        self.assertIn("types-psycopg2==2.9.21.20261008", compiled)
+        self.assertIn("types-psycopg2==2.9.21.20261030", compiled)
         self.assertIn("--generate-hashes", compiled)
         self.assertIn("--hash=sha256:", compiled)
 
@@ -136,7 +136,7 @@ class MypyIntegrationContractTests(TestCase):
         setup_step = next_or_fail(
             step for step in steps if step.get("name") == "Setup Python"
         )
-        self.assertEqual("3.14.8", setup_step["with"]["python-version"])
+        self.assertEqual("3.14.10", setup_step["with"]["python-version"])
         self.assertEqual("pip", setup_step["with"]["cache"])
         cache_dependency_paths = setup_step["with"][
             "cache-dependency-path"

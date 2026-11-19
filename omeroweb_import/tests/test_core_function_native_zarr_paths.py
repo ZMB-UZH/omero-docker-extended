@@ -2032,7 +2032,9 @@ def test_run_compatibility_check_inner_handles_staged_path_errors_and_future_fai
     assert compatibility_dataset_ids == [77]
 
 
-def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
+def test_start_import_thread_requires_ready_state_and_persistence(
+    monkeypatch, tmp_path
+):
     """Verify start import thread requires ready state and persistence.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on regressions in start import thread requires ready state and persistence.
@@ -2050,35 +2052,45 @@ def test_start_import_thread_requires_ready_state_and_persistence(monkeypatch):
             """
             thread_targets.append((target, args, daemon))
 
-        @staticmethod
-        def start():
+        def start(self):
             """Start `_Thread`'s fake operation.
 
             Inputs: caller provides no extra arguments. Output: records the fake side effect.
             """
             events.append("thread-started")
+            target, args, _daemon = thread_targets[-1]
+            target(*args)
 
     job = {"job_id": "a" * 32, "status": "checking"}
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: job)
-    monkeypatch.setattr(core_functions, "_save_job", lambda payload: True)
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: tmp_path)
     monkeypatch.setattr(core_functions.threading, "Thread", _Thread)
+    monkeypatch.setattr(
+        core_functions,
+        "_process_import_job",
+        lambda job_id: events.append("import-executed"),
+    )
+    original_update = core_functions._update_job
 
+    assert core_functions._save_job(job)
     core_functions._start_import_thread("a" * 32)
     assert thread_targets == []
 
     job["status"] = "ready"
     job["import_thread_started"] = True
+    assert core_functions._save_job(job)
     core_functions._start_import_thread("a" * 32)
     assert thread_targets == []
 
     job["import_thread_started"] = False
-    monkeypatch.setattr(core_functions, "_save_job", lambda payload: False)
+    assert core_functions._save_job(job)
+    monkeypatch.setattr(core_functions, "_update_job", lambda *args: None)
     core_functions._start_import_thread("a" * 32)
     assert thread_targets == []
 
-    monkeypatch.setattr(core_functions, "_save_job", lambda payload: True)
+    monkeypatch.setattr(core_functions, "_update_job", original_update)
     core_functions._start_import_thread("a" * 32)
 
-    assert events == ["thread-started"]
-    assert thread_targets[0][1] == ("a" * 32,)
+    assert events == ["thread-started", "import-executed"]
+    assert thread_targets[0][1][0] == "a" * 32
     assert thread_targets[0][2] is True
+    assert core_functions._load_job("a" * 32)["import_worker_phase"] == "executing"

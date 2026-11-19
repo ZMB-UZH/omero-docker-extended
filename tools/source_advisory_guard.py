@@ -24,8 +24,8 @@ PACKAGE = {
     "version": crawl4ai_research.NLTK_VERSION,
     "ecosystem": "PyPI",
 }
-SCANNER_VERSION = "2.7.0"
-SCANNER_SHA256 = "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"  # DevSkim: ignore DS173237 -- public OSV release binary SHA-256
+SCANNER_VERSION = "2.7.1"
+SCANNER_SHA256 = "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"  # DevSkim: ignore DS173237 -- public OSV release binary SHA-256
 
 
 def digest(path: Path) -> str:

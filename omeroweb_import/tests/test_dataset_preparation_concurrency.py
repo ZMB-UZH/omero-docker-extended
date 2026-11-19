@@ -31,6 +31,146 @@ def stored_job(monkeypatch, tmp_path):
     return job
 
 
+@pytest.fixture
+def ready_job(stored_job):
+    """Persist a completed plan that has not created its destination.
+
+    Inputs: isolated job fixture. Output: ready job snapshot with one target.
+    """
+    job = core._update_job(
+        stored_job["job_id"],
+        lambda current: {
+            **current,
+            "status": "ready",
+            "compatibility_enabled": False,
+            "compatibility_thread_active": False,
+            "planned_import_units": [
+                {
+                    "relative_path": "folder/image.tif",
+                    "dataset_relative_path": "folder/image.tif",
+                    "covered_relative_paths": ["folder/image.tif"],
+                }
+            ],
+        },
+    )
+    assert job is not None
+    return job
+
+
+def test_concurrent_requests_create_one_destination(ready_job):
+    """Hold one destination lookup open while another request arrives.
+
+    Inputs: one ready job and a gateway double. Output: verifies one dataset write.
+    """
+    job_id = ready_job["job_id"]
+    first_lookup = threading.Event()
+    release = threading.Event()
+    lookups = []
+    creations = []
+
+    def lookup(model, *, attributes):
+        """Report an absent dataset while the first request owns preparation.
+
+        Inputs: model and requested attributes. Output: empty dataset iterator.
+        """
+        assert model == "Dataset"
+        assert attributes == {"name": "folder"}
+        lookups.append(attributes["name"])
+        if len(lookups) == 1:
+            first_lookup.set()
+            assert release.wait(10)
+        return iter(())
+
+    def create(dataset):
+        """Give each saved dataset a distinct identifier.
+
+        Inputs: dataset model. Output: saved dataset with its assigned ID.
+        """
+        dataset_id = len(creations) + 21
+        creations.append(dataset_id)
+        return SimpleNamespace(
+            getId=lambda: SimpleNamespace(getValue=lambda: dataset_id)
+        )
+
+    conn = SimpleNamespace(
+        getObjects=lookup,
+        getUpdateService=lambda: SimpleNamespace(saveAndReturnObject=create),
+    )
+    stale_request = core._load_job(job_id)
+    assert stale_request is not None
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first = executor.submit(
+            core._prepare_uploaded_job_for_request_path_import,
+            job_id,
+            ready_job,
+            conn,
+        )
+        try:
+            assert first_lookup.wait(10)
+            second, error = core._prepare_uploaded_job_for_request_path_import(
+                job_id, stale_request, conn
+            )
+            assert error is None
+            assert second["status"] == "ready"
+        finally:
+            release.set()
+        prepared, error = first.result(timeout=10)
+
+    assert error is None
+    assert lookups == ["folder"]
+    assert creations == [21]
+    assert prepared["dataset_map"] == {"folder": 21}
+    repeated, error = core._prepare_uploaded_job_for_request_path_import(
+        job_id, stale_request, conn
+    )
+    assert error is None
+    assert repeated["dataset_map"] == {"folder": 21}
+    assert lookups == ["folder"]
+    assert creations == [21]
+    assert core._load_job(job_id)["dataset_map"] == {"folder": 21}
+
+
+@pytest.mark.parametrize("status", ["done", "missing"])
+def test_destination_preparation_rechecks_persisted_job(ready_job, monkeypatch, status):
+    """Delay a ready request until the job has completed or disappeared.
+
+    Inputs: ready snapshot and intervening transition. Output: verifies no dataset write.
+    """
+    job_id = ready_job["job_id"]
+    original_lock = core._try_import_execution_lock
+
+    def lock_after_transition(current_id):
+        """Apply the intervening change before acquiring ownership.
+
+        Inputs: job ID. Output: production lock acquisition result.
+        """
+        if status == "missing":
+            core._job_path(current_id).unlink()
+        else:
+            assert core._update_job(
+                current_id, lambda current: {**current, "status": status}
+            )
+        return original_lock(current_id)
+
+    monkeypatch.setattr(core, "_try_import_execution_lock", lock_after_transition)
+    creation = []
+    monkeypatch.setattr(
+        core, "_get_or_create_dataset", lambda *args, **kwargs: creation.append(args)
+    )
+
+    result, error = core._prepare_uploaded_job_for_request_path_import(
+        job_id, ready_job, object()
+    )
+    assert not creation
+    if status == "missing":
+        assert error == errors.unable_update_upload_job_state()
+        assert core._load_job(job_id) is None
+    else:
+        assert error is None
+        assert result["status"] == "done"
+        assert core._load_job(job_id)["dataset_map"] == {}
+
+
 @pytest.mark.parametrize("worker_status", ["ready", "importing", "error"])
 def test_destination_write_preserves_concurrent_worker_progress(
     monkeypatch, stored_job, worker_status

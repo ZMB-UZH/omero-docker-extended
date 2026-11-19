@@ -285,7 +285,56 @@ def test_invalid_clock_identity_set_and_oversize_trust_do_not_write(installation
         tls.reconcile(*installation, now=datetime.now())
     with pytest.raises(ValueError, match="bundle exceeds limit"):
         tls.reconcile(*installation, system_trust=b"x" * tls.MAX_MANAGED_BYTES)
+    with pytest.raises(ssl.SSLError):
+        tls.reconcile(*installation, system_trust=b"Not a PEM certificate")
     assert snapshot(state.parent) == {}
+
+
+def test_system_trust_is_combined_without_replacing_the_internal_authority(
+    installation,
+    monkeypatch,
+):
+    """Inputs: a separate public anchor. Output: a loadable bundle with both anchors."""
+    state, trust, _, _ = installation
+    now = datetime.now(UTC)
+    external_key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Test platform CA")])
+    external = tls.issue(
+        external_key,
+        external_key,
+        subject=name,
+        issuer=name,
+        names=(),
+        start=now - timedelta(minutes=1),
+        end=now + timedelta(days=30),
+        authority=True,
+    )
+    tls.reconcile(*installation, now=now)
+    authority = (trust / "ca.pem").read_bytes()
+    key_before = snapshot(state)
+    keylog = state.parent / "ssl-keys.log"
+    external_pem = external.public_bytes(serialization.Encoding.PEM)
+    with monkeypatch.context() as application_env:
+        application_env.setenv("SSLKEYLOGFILE", str(keylog))
+        with pytest.raises(ValueError, match="key logging is not supported"):
+            tls.reconcile(*installation, now=now, system_trust=external_pem)
+    assert not keylog.exists()
+    assert snapshot(state) == key_before
+    tls.reconcile(
+        *installation,
+        now=now,
+        system_trust=external_pem,
+    )
+
+    assert snapshot(state) == key_before
+    assert (trust / "ca.pem").read_bytes() == authority
+    bundle = ssl.create_default_context(cafile=str(trust / "ca-bundle.pem"))
+    assert set(bundle.get_ca_certs(binary_form=True)) == {
+        external.public_bytes(serialization.Encoding.DER),
+        x509.load_pem_x509_certificate(authority).public_bytes(
+            serialization.Encoding.DER
+        ),
+    }
 
 
 def test_lock_hardlink_cannot_modify_unrelated_state(installation):

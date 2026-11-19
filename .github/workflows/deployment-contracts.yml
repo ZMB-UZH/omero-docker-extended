@@ -27,7 +27,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.14.8'
+          python-version: '3.14.10'
 
       - name: Prepare synthetic CI environment files
         run: python3 -m tools.prepare_ci_compose_environment
@@ -53,8 +53,8 @@ jobs:
           }
 
           mapfile -t images < <("${compose[@]}" config --images | sort -u)
-          [ "${#images[@]}" -eq 20 ] || {
-            printf 'Expected 20 Compose images, found %s:\n' "${#images[@]}" >&2
+          [ "${#images[@]}" -eq 21 ] || {
+            printf 'Expected 21 Compose images, found %s:\n' "${#images[@]}" >&2
             printf '  %s\n' "${images[@]}" >&2
             exit 1
           }
@@ -78,10 +78,10 @@ jobs:
 
           plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           targets = plan.get("target", {})
-          if not isinstance(targets, dict) or len(targets) != 7:
+          if not isinstance(targets, dict) or len(targets) != 9:
               target_names = sorted(targets) if isinstance(targets, dict) else []
               raise SystemExit(
-                  f"Expected 7 Compose build targets, found {len(target_names)}: "
+                  f"Expected 9 Compose build targets, found {len(target_names)}: "
                   + ", ".join(target_names)
               )
           root = Path.cwd().resolve()

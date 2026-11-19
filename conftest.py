@@ -267,6 +267,39 @@ sys.modules.setdefault("omeroweb.webclient.decorators", _omeroweb_webclient_deco
 sys.modules.setdefault("celery", _celery_module)
 sys.modules.setdefault("celery.states", _celery_states)
 
+# Store replaceable exports directly on the stubs. Test teardown can then
+# restore the original object instead of deleting a lazily generated attribute.
+_replaceable_exports = {
+    "omero": ("client",),
+    "omero.sys": ("ParametersI",),
+    "omero_figure.views": ("imageMarshal",),
+    "omero_iviewer.views": ("imageMarshal",),
+    "omeroweb.webclient.views": (
+        "BaseContainer",
+        "BaseShare",
+        "getIntOrDefault",
+        "load_metadata_preview",
+        "render_response",
+    ),
+    "omeroweb.webgateway.marshal": ("imageMarshal",),
+}
+for _module_name, _exports in _replaceable_exports.items():
+    _module_stub = sys.modules[_module_name]
+    if isinstance(_module_stub, MagicMock):
+        for _export in _exports:
+            setattr(_module_stub, _export, getattr(_module_stub, _export))
+
+for _module_name in ("omeroweb.webclient.urls", "omeroweb.webgateway.urls"):
+    _module_stub = sys.modules[_module_name]
+    if isinstance(_module_stub, MagicMock):
+        _module_stub.urlpatterns = []
+
+_webclient_gateway = sys.modules["omeroweb.webclient.webclient_gateway"]
+if isinstance(_webclient_gateway, MagicMock):
+    _webclient_gateway.ImageWrapper = MagicMock(
+        name="ImageWrapper", getChannels=MagicMock(name="getChannels")
+    )
+
 # Inject ColorHolder into the omero.gateway mock so integration tests that
 # use omero.gateway.ColorHolder.fromRGBA() get real string output.
 sys.modules["omero.gateway"].ColorHolder = _ColorHolder

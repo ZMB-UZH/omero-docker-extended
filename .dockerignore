@@ -4,6 +4,9 @@
 .gitattributes
 .github
 .env
+installation_paths.env
+.env_backups/
+env.bak/
 __pycache__
 *.pyc
 *.pyo

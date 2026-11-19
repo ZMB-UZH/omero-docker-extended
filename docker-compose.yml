@@ -2,6 +2,11 @@
 # Using the tag :latest for OMERO and databases might be tempting but is extremely risky! Have a backup plan!
 # Always check compatibility in the following link or in the official OMERO documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html.
 
+x-postgres-runtime-build: &postgres-runtime-build
+  context: .
+  dockerfile: docker/pg-maintenance.Dockerfile
+  target: postgres-base
+
 services:
 
   internal-tls:
@@ -67,7 +72,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.7.9"
+    image: "grafana/loki:3.7.10"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     environment:
@@ -96,7 +101,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.21.2"
+    image: "grafana/alloy:v1.22.0"
     restart: unless-stopped
     command:
       - "run"
@@ -138,7 +143,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.15.1"
+    image: "prom/prometheus:v3.16.0"
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -252,7 +257,7 @@ services:
       - no-new-privileges:true
 
   cadvisor:
-    image: "ghcr.io/google/cadvisor:0.60.6"
+    image: "ghcr.io/google/cadvisor:0.61.0"
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
@@ -342,7 +347,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.96.0-alpine"
+    image: "oliver006/redis_exporter:v1.97.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
@@ -363,7 +368,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:13.2.4"
+    image: "grafana/grafana:13.3.1"
     restart: unless-stopped
     init: true
     entrypoint: ["/bin/sh", "/usr/local/bin/watch-trust.sh", "/run.sh"]
@@ -409,7 +414,8 @@ services:
       - no-new-privileges:true
 
   database:
-    image: "postgres:16.15"
+    image: "omero-postgres:16.16"
+    build: *postgres-runtime-build
     restart: unless-stopped
     init: true
     depends_on:
@@ -536,7 +542,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.10.2-alpine"
+    image: "redis:8.10.3-alpine"
     restart: unless-stopped
     command:
       - redis-server
@@ -628,7 +634,8 @@ services:
       - no-new-privileges:true
 
   database_plugin:
-    image: "postgres:16.15"
+    image: "omero-postgres-plugin:16.16"
+    build: *postgres-runtime-build
     restart: unless-stopped
     init: true
     depends_on:
@@ -678,6 +685,7 @@ services:
     build:
       context: .
       dockerfile: docker/pg-maintenance.Dockerfile
+      target: maintenance
     container_name: pg-maintenance
     user: root
     restart: unless-stopped
@@ -755,7 +763,7 @@ services:
 
 
   ollama:
-    image: "ollama/ollama:0.40.11"
+    image: "ollama/ollama:0.40.16"
     restart: unless-stopped
     environment:
       OLLAMA_KEEP_ALIVE: "24h"

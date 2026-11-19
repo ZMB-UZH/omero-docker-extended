@@ -169,7 +169,7 @@ class SecurityHardeningContractTests(unittest.TestCase):
         ]
         for name, package, version in (
             ("PILLOW", "pillow", "13.0.0"),
-            ("MSGPACK", "msgpack", "1.2.3"),
+            ("MSGPACK", "msgpack", "1.2.4"),
         ):
             with self.subTest(package=package):
                 self.assertIn(f"ARG {name}_VERSION={version}\n", hardening)

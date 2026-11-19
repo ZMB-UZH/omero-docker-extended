@@ -375,6 +375,84 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
     assert _payload(valid_response) == {"service": "omeroweb_internal", "labels": []}
 
 
+@pytest.mark.parametrize("layout", ["array", "json-lines", "single-line"])
+def test_compose_cli_fallback_reads_container_status(monkeypatch, layout) -> None:
+    """Inputs: current or legacy CLI output, with no Engine API.
+
+    Output: verifies service metadata, running status and exited status.
+    """
+    rows = [
+        {"Service": "web", "State": "running", "Health": "healthy"},
+        {"Service": "worker", "State": "exited", "Health": ""},
+    ]
+    if layout == "single-line":
+        rows = rows[:1]
+    ps_stdout = (
+        json.dumps(rows)
+        if layout == "array"
+        else "\n".join(json.dumps(row) for row in rows) + "\n"
+    )
+
+    def run(command, **kwargs):
+        """Inputs: fixed command and subprocess options. Output: Compose fixture."""
+        assert kwargs == {"check": True, "timeout": 5.0, "start_new_session": True}
+        if command[2] == "config":
+            assert command == [
+                "docker",
+                "compose",
+                "config",
+                "--no-interpolate",
+                "--no-env-resolution",
+                "--format",
+                "json",
+            ]
+            return SimpleNamespace(
+                stdout=json.dumps({"services": {"web": {"healthcheck": {}}}})
+            )
+        assert command == ["docker", "compose", "ps", "--all", "--format", "json"]
+        return SimpleNamespace(stdout=ps_stdout)
+
+    monkeypatch.setattr(index_view, "_docker_api_json", lambda path: None)
+    monkeypatch.setattr(index_view.process_utils, "run", run)
+
+    healthchecks, runtime = index_view._load_compose_health_data()
+
+    assert healthchecks == {"web": True}
+    assert runtime == {
+        row["Service"]: {"state": row["State"], "health": row["Health"]} for row in rows
+    }
+
+
+def test_compose_cli_fallback_rejects_partial_output(monkeypatch, caplog) -> None:
+    """Inputs: a valid record followed by a malformed record.
+
+    Output: verifies that incomplete status is discarded without logging raw data.
+    """
+    monkeypatch.setattr(
+        index_view.process_utils,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout='{"Service":"web","State":"running"}\ninvalid-record'
+        ),
+    )
+
+    assert index_view._load_compose_runtime_health() == {}
+    assert "Failed to decode JSON" in caplog.text
+    assert "invalid-record" not in caplog.text
+
+
+def test_compose_cli_fallback_handles_timeout(monkeypatch) -> None:
+    """Inputs: a Compose subprocess timeout. Output: verifies no partial status."""
+
+    def run(command, *, check, timeout, start_new_session):
+        """Inputs: Compose arguments and deadline. Output: raises the timeout."""
+        raise index_view.process_utils.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(index_view.process_utils, "run", run)
+
+    assert index_view._load_compose_runtime_health() == {}
+
+
 def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
     monkeypatch,
     tmp_path,
@@ -645,12 +723,14 @@ def test_unix_socket_connection_and_docker_runtime_helpers_cover_remaining_edges
     )
     assert index_view._load_compose_healthcheck_config() == {}
 
-    monkeypatch.setattr(index_view, "_docker_compose_json", lambda command: {})
+    monkeypatch.setattr(
+        index_view, "_docker_compose_json", lambda command, **kwargs: {}
+    )
     assert index_view._load_compose_runtime_health() == {}
     monkeypatch.setattr(
         index_view,
         "_docker_compose_json",
-        lambda command: [
+        lambda command, **kwargs: [
             "bad",
             {"Service": "", "State": "running", "Health": "healthy"},
             {"Service": "db", "State": "running", "Health": "healthy"},

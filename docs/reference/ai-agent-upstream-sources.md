@@ -63,7 +63,7 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 - Upstream native installation command:
   `pipx install 'cocoindex-code[full]'`
 - Verified upstream release tag:
-  `v0.2.42` at `6bb17d001649fc0948a7300c2ce847b6218d174c`
+  `v0.2.43` at `5676897a169fe1d46cf1e4d2eaf323c9d91c8587`
 - Local path: `.agents/skills/cocoindex-code-search/`
 - Integration rule: keep one repository-local CocoIndex workflow and generate
   MCP configuration with `tools/cocoindex_agent_search.py mcp-config` when a
@@ -72,7 +72,7 @@ The vendor snapshot includes only the ECC skills that map cleanly onto this repo
 
 ## Crawl4AI research
 
-- Source: [unclecode/crawl4ai 0.9.4](https://github.com/unclecode/crawl4ai/tree/v0.9.4).
+- Source: [unclecode/crawl4ai 0.9.5](https://github.com/unclecode/crawl4ai/tree/v0.9.5).
 - Independent local implementation: `tools/crawl4ai_research.py`; mandatory
   cross-agent routing: `.agents/skills/crawl4ai-research/`.
 - Packages are hash-pinned in `.github/requirements/crawl4ai.txt` and installed

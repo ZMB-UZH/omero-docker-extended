@@ -92,6 +92,12 @@ documentation on Linux. Test real browser extraction, denied/empty/error results
 truncation, timeouts, credential isolation and the gate's refusal paths. Reuse
 unchanged receipts; do not recrawl sites merely to inflate a test count.
 
+When updating a parser dependency, qualify both the default Markdown extraction
+and a CSS-scoped read against known content. Keep compatibility and security
+minimums in `crawl4ai.in` so re-resolving the lock cannot silently drop them.
+Review the resulting dependency diff and refresh the source audit's lock
+digests before rerunning the unfiltered advisory checks.
+
 The base Crawl4AI distribution requires NLTK even though this reader exposes no
 model training/loading APIs. The reader uses the official NLTK 3.10.4 release
 wheel, verified by its SHA-256. This fixed release replaces the temporary

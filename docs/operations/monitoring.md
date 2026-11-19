@@ -2,20 +2,23 @@
 
 ## Stack components
 
-| Service                    | Version              | Purpose                                                                 | Internal endpoint                          |
-| -------------------------- | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
-| Prometheus                 | v3.15.0              | Metrics scraping and storage                                            | `https://prometheus:9090`                  |
-| Grafana                    | 13.2.3               | Dashboards and visualization                                            | `https://grafana:3000`                     |
-| Loki                       | 3.7.8                | Log aggregation backend                                                 | `https://loki:3100`                        |
-| Alloy                      | v1.20.1              | Log collection pipeline (Docker + files)                                | `http://alloy:12345`                       |
-| Blackbox exporter          | v0.28.0              | HTTP/TCP endpoint probing                                               | `http://blackbox-exporter:9115`            |
-| Node exporter              | v1.12.1              | Host-level metrics                                                      | `http://node-exporter:9100`                |
-| cAdvisor                   | v0.60.6              | Container resource metrics                                              | `http://cadvisor:8080`                     |
-| Postgres exporter          | v0.20.1              | OMERO database metrics                                                  | `http://postgres-exporter:9187`            |
-| Postgres exporter (plugin) | v0.20.1              | Plugin database metrics                                                 | `http://postgres-exporter-plugin:9187`     |
-| Redis exporter             | v1.93.0              | Redis metrics                                                           | `http://redis-exporter:9121`               |
-| Path usage exporter        | custom (Python 3.12) | OMERO volume disk usage via textfile collector                          | writes to node-exporter textfile directory |
-| CrowdSec                   | v1.8.1               | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080`                     |
+Use the image versions in [Compose](../../docker-compose.yml) and the
+[image recipes](../../docker/) for the revision you are deploying.
+
+| Service | Purpose | Internal endpoint |
+| --- | --- | --- |
+| Prometheus | Scrape and store metrics | `https://prometheus:9090` |
+| Grafana | Display dashboards | `https://grafana:3000` |
+| Loki | Store and query logs | `https://loki:3100` |
+| Alloy | Collect OMERO log files | `http://alloy:12345` |
+| Blackbox exporter | Probe HTTP, HTTPS, and TCP endpoints | `http://blackbox-exporter:9115` |
+| Node exporter | Export host metrics | `http://node-exporter:9100` |
+| cAdvisor | Export container resource metrics | `http://cadvisor:8080` |
+| PostgreSQL exporter | Export OMERO database metrics | `http://postgres-exporter:9187` |
+| PostgreSQL exporter (plugin) | Export plugin database metrics | `http://postgres-exporter-plugin:9187` |
+| Redis exporter | Export Redis metrics | `http://redis-exporter:9121` |
+| Path usage exporter | Measure OMERO volume usage | Node exporter textfile directory |
+| CrowdSec | Analyze host and container logs | `http://crowdsec:8080` |
 
 Loki uses its native `-health` readiness check. Alloy checks its HTTP readiness
 endpoint with the Bash and timeout utilities already present in the pinned
@@ -80,8 +83,20 @@ upgrade so existing certificate volumes are reused.
 Use the authenticated Admin Tools links for dashboards and Prometheus targets.
 Direct diagnostic clients must explicitly trust the installation's public CA;
 do not use insecure client flags or install the private authority key on a host.
-Portainer retains its separately managed certificate and isolated reachability
-probe. Its existing self-signed probe policy does not apply to managed TLS.
+
+### Portainer access
+
+Portainer controls Docker through the host socket. Mounting the socket
+read-only does not make Docker API operations read-only. Bind
+`PORTAINER_HOST_BIND` to the intended administration interface and restrict
+port 9443 to trusted administrative networks at the host firewall. A
+non-loopback bind supports remote access without exposing the service on
+unintended interfaces.
+
+Portainer uses its own certificate, separate from the internal monitoring CA.
+Configure browser trust for the address or DNS name administrators actually
+use. Portainer's isolated self-signed reachability probe does not establish
+browser trust and does not change certificate verification for other services.
 
 Monitoring data-directory ownership is auto-detected by
 `installation/installation_script.sh` before each install/update. For images

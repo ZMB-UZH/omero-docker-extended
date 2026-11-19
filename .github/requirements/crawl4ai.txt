@@ -2851,10 +2851,12 @@ snowballstemmer==2.2.0 \
     --hash=sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1 \
     --hash=sha256:c8e1716e83cc398ae16824e5572ae04e0d9fc2c6b985fb0f900f5f0c96ecba1a
     # via crawl4ai
-soupsieve==3.0.4 \
-    --hash=sha256:8412826614f9c632227067d0985aeb9f584bd15efc852955430e097a9fe7afbf \
-    --hash=sha256:924fab84ae21604c19e175e1f39815eb6fa83ba23836e09e9de180925e5bc4c0
-    # via beautifulsoup4
+soupsieve==4.1.2 \
+    --hash=sha256:96b4115212a3abee1f572d62da706cca090b088cb5effa278db5702122e63a2c \
+    --hash=sha256:c6539a2638f26991463527337e39d630e3cbb86d024f52282a510535b8a7e09f
+    # via
+    #   -r .github/requirements/crawl4ai.in
+    #   beautifulsoup4
 tiktoken==0.14.0 \
     --hash=sha256:087538c080e5ff421abd3a0785ed63c5111d06af98e6cd0d374dbe5969147ca3 \
     --hash=sha256:10f31e63e40313f2e518d87f7086cfa44e45f64cc14d8ae14103b41220c30a14 \

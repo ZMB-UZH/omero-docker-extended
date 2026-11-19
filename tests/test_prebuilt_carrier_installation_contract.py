@@ -737,19 +737,11 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             step for step in steps if step["name"] == "Install Docker Scout CLI"
         )
         self.assertEqual(
-            "1.27.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
-        )
-        expected_scout_sha256 = "".join(
-            (
-                "815207e27559fd3d",
-                "7dddfe778e86f0ae",
-                "b823eeb24b3cd79d",
-                "00bc5cd8dfd0724d",
-            )
+            "1.29.0", scout_install_step["env"]["DOCKER_SCOUT_CLI_VERSION"]
         )
         self.assertEqual(
-            expected_scout_sha256,
-            scout_install_step["env"]["DOCKER_SCOUT_CLI_SHA256"],
+            "sha256:9157cdc9372b478a8cd51dd53f5e9c74a7e34056ea291c65520bf76016fa72f4",
+            f"sha256:{scout_install_step['env']['DOCKER_SCOUT_CLI_SHA256']}",
         )
         self.assertIn(
             "github.com/docker/scout-cli/releases/download",
@@ -765,13 +757,8 @@ class PrebuiltCarrierInstallationContractTests(TestCase):
             for line in workflow_text.splitlines()
             if "uses: docker/scout-action@" in line
         ]
-        self.assertGreaterEqual(len(scout_action_lines), 1)
-        expected_action_suffix = (
-            f"# v{scout_install_step['env']['DOCKER_SCOUT_CLI_VERSION']}"
-        )
-        self.assertTrue(
-            all(line.endswith(expected_action_suffix) for line in scout_action_lines)
-        )
+        expected_scout_action = "uses: docker/scout-action@e7e2a72bf1485d10a58f30696b6c513b261ce4fa # v1.29.0"
+        self.assertEqual(scout_action_lines, [expected_scout_action] * 2)
         scout_enable_step = next_or_fail(
             step
             for step in steps

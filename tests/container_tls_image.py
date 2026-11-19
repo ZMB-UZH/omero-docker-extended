@@ -96,6 +96,7 @@ class TlsImageTests(unittest.TestCase):
             f"{label}={token}",
             "--network=none",
             "--read-only",
+            "--env=PYTHONWARNINGS=error",
             "--user=0:0",
             "--cap-drop=ALL",
             "--cap-add=CHOWN",
@@ -108,8 +109,12 @@ class TlsImageTests(unittest.TestCase):
         probe = """
 import hashlib
 from pathlib import Path
+import zlib
 from monitoring.tls.manager import load_identities, main
 
+assert zlib.ZLIB_RUNTIME_VERSION == "1.4"
+payload = b"tls-image-compression-roundtrip" * 256
+assert zlib.decompress(zlib.compress(payload)) == payload
 arguments = ["--root", "/pki", "--identities", "/etc/omero-tls/identities.json"]
 assert main(["check", *arguments]) == 1, "An empty PKI must not report readiness"
 assert main(["once", *arguments]) == 0

@@ -175,7 +175,7 @@ The [Caveman upstream guidance](https://github.com/JuliusBrussee/caveman)
 distinguishes style savings from tool-input compression. This integration uses
 the reviewed prompt overlay only: no proxy, telemetry, credential interception,
 or lossy rewriting of source, user prompts, or evidence. The
-[CocoIndex contract](https://github.com/cocoindex-io/cocoindex-code/tree/v0.2.42)
+[CocoIndex contract](https://github.com/cocoindex-io/cocoindex-code/tree/v0.2.43)
 remains pinned and supports scoped semantic retrieval rather than bulk reads.
 
 The adapter set is designed to improve accuracy first, then reduce wasted context:
@@ -214,7 +214,7 @@ edits with `rg`, file reads, and tests in the real checkout.
 
 When CocoIndex reports a cold semantic index, agents should tell the user once
 in one short sentence that the first search can take several minutes and later
-searches reuse the external cache. The wrapper configures CocoIndex Code 0.2.42
+searches reuse the external cache. The wrapper configures the pinned release
 to include every Git-visible mirrored file pattern instead of upstream's
 extension list. CocoIndex indexes text-decodable content and skips undecodable
 binary files, so agents must not claim semantic search inside arbitrary binary

@@ -2,7 +2,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f
+FROM openmicroscopy/omero-server:5.6.18-1@sha256:e9e06e654cac68836fe772286ef6f73e009dc615894ba321653852bf62f7f0ad
 
 # Run image build steps as root
 # -----------------------------
@@ -27,7 +27,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
 # resource APIs; its CLI and database tooling no longer require pkg_resources.
 # ---------------------------------------------------------------------------
-ARG PIP_VERSION=26.2.2
+ARG PIP_VERSION=26.3
 ARG SETUPTOOLS_VERSION=84.2.1
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
@@ -537,7 +537,9 @@ COPY startup/dropbox_user_dir_sync.py /startup/dropbox_user_dir_sync.py
 COPY startup/job_service_group_sync.py /startup/job_service_group_sync.py
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
+COPY startup/60-database.py /startup/60-database.py
 RUN set -euo pipefail; \
+    rm -f /startup/60-database.sh; \
     for startup_script in \
         /startup/10-server-bootstrap.sh \
         /startup/healthcheck-omeroserver.sh \
@@ -545,7 +547,8 @@ RUN set -euo pipefail; \
         /startup/repo_root_sync_helper.py \
         /startup/dropbox_user_dir_sync.py \
         /startup/50-install-omero-downloader.sh \
-        /startup/51-install-imarisconvert.sh; do \
+        /startup/51-install-imarisconvert.sh \
+        /startup/60-database.py; do \
         chown root:root "${startup_script}"; \
         chmod 0555 "${startup_script}"; \
     done; \
@@ -698,9 +701,9 @@ HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
 # Runs AFTER all dnf installs and pip installs are complete, so that every
 # transitive dependency introduced by earlier layers is covered.
 # ---------------------------------------------------------------------------
-COPY docker/requirements-runtime-server.txt /tmp/requirements-runtime-server.txt
+COPY docker/runtime/server/requirements.txt /tmp/requirements-runtime-server.txt
 ARG PILLOW_VERSION=13.0.0
-ARG MSGPACK_VERSION=1.2.3
+ARG MSGPACK_VERSION=1.2.4
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
         echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \

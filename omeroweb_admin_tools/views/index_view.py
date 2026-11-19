@@ -1927,23 +1927,34 @@ def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
     return sorted(discovered)
 
 
-def _docker_compose_json(command: List[str]) -> Optional[object]:
-    """A docker compose JSON command and return decoded payload.
+def _docker_compose_json(
+    command: List[str], *, json_lines: bool = False
+) -> Optional[object]:
+    """Read bounded Compose command output.
 
-    Inputs: `command`. Output: `Optional[object]`.
+    Inputs: fixed command arguments and whether to accept JSON Lines.
+    Output: decoded data, or None when the command or decoding fails.
     """
     try:
         process = process_utils.run(
             command,
             check=True,
+            timeout=5.0,
+            start_new_session=True,
         )
-    except (FileNotFoundError, process_utils.CalledProcessError):
+    except (
+        FileNotFoundError,
+        process_utils.CalledProcessError,
+        process_utils.TimeoutExpired,
+    ):
         return None
 
     stdout = process.stdout.strip()
     if not stdout:
         return None
     try:
+        if json_lines and not stdout.startswith("["):
+            return [json.loads(line) for line in stdout.split("\n") if line.strip()]
         return json.loads(stdout)
     except json.JSONDecodeError:
         logger.warning(
@@ -2338,7 +2349,17 @@ def _load_compose_healthcheck_config() -> Dict[str, bool]:
 
     Inputs: none. Output: `Dict[str, bool]`.
     """
-    payload = _docker_compose_json(["docker", "compose", "config", "--format", "json"])
+    payload = _docker_compose_json(
+        [
+            "docker",
+            "compose",
+            "config",
+            "--no-interpolate",
+            "--no-env-resolution",
+            "--format",
+            "json",
+        ]
+    )
     if not isinstance(payload, dict):
         return {}
     services = payload.get("services", {}) or {}
@@ -2358,7 +2379,9 @@ def _load_compose_runtime_health() -> Dict[str, Dict[str, str]]:
 
     Inputs: none. Output: `Dict[str, Dict[str, str]]`.
     """
-    payload = _docker_compose_json(["docker", "compose", "ps", "--format", "json"])
+    payload = _docker_compose_json(
+        ["docker", "compose", "ps", "--all", "--format", "json"], json_lines=True
+    )
     if not isinstance(payload, list):
         return {}
 

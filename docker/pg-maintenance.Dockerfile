@@ -1,11 +1,28 @@
-# pg-maintenance — lightweight cron sidecar for safe PostgreSQL maintenance
+# Shared PostgreSQL runtime and maintenance images.
 
-# Pull image (needs to match the tag in docker-compose.yml)
-# ---------------------------------------------------------
-FROM postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+FROM postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97 AS postgres-base
 
-# Use bash with pipefail for safer RUN commands
-# ---------------------------------------------
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV PG_VERSION=16.16-1.pgdg13+1
+LABEL org.opencontainers.image.version="16.16"
+
+# Retain the tested PGDG container helpers without adding a second init
+# system. The upstream entrypoint still handles ownership and privilege drop.
+RUN set -euo pipefail; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        apt=3.0.4 \
+        libapt-pkg7.0=3.0.4 \
+        "postgresql-16=${PG_VERSION}" \
+        "postgresql-client-16=${PG_VERSION}" \
+        postgresql-client-common=293.pgdg13+1 \
+        postgresql-common=293.pgdg13+1; \
+    apt-get check; \
+    test -z "$(dpkg --audit)"; \
+    rm -rf /var/lib/apt/lists/*
+
+FROM postgres-base AS maintenance
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
@@ -30,8 +47,13 @@ RUN set -euo pipefail; \
         "cron=$(require_apt_version cron)"; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
+        database_packages=(postgresql-16 postgresql-client-16 postgresql-client-common postgresql-common); \
+        apt-mark hold "${database_packages[@]}"; \
         DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
+        apt-mark unhold "${database_packages[@]}"; \
     fi; \
+    apt-get check; \
+    test -z "$(dpkg --audit)"; \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the maintenance script and cron schedule

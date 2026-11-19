@@ -94,7 +94,7 @@ The mandatory caveman lite policy never overrides risk handling, safety warnings
   worktrees unless the caller uses the matching explicit dirty flag. If it
   cold-indexes, tell the user once that the first search can take several
   minutes and then uses the external cache. Its mirror asks CocoIndex Code
-  0.2.42 to include every Git-visible mirrored file pattern; CocoIndex indexes
+  to include every Git-visible mirrored file pattern; CocoIndex indexes
   text-decodable content and skips undecodable binary files, so do not add
   repo-specific language rewrites or file-type exclusions without a tested,
   documented configuration contract. Use direct `rg` first only for precise

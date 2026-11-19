@@ -25,6 +25,9 @@ import tifffile
 from monitoring.tls import certificates
 
 
+_SERVER_SHUTDOWN_POLL_SECONDS = 0.05
+
+
 def test_export_redirect_query_does_not_falsely_report_an_expired_login(
     https_api, tmp_path
 ):
@@ -1426,7 +1429,11 @@ def https_api(tmp_path, monkeypatch, request):
         fixture.credential,
         scheme="https",
     )
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker = threading.Thread(
+        target=server.serve_forever,
+        kwargs={"poll_interval": _SERVER_SHUTDOWN_POLL_SECONDS},
+        daemon=True,
+    )
     worker.start()
     try:
         yield module, client, fixture
@@ -2942,7 +2949,11 @@ def test_authenticated_redirect_cannot_escape_configured_origin(https_api, metho
     assert client.connect()
     foreign = ThreadingHTTPServer(("127.0.0.1", 0), fixture.handler)
     foreign.socket = fixture.context.wrap_socket(foreign.socket, server_side=True)
-    worker = threading.Thread(target=foreign.serve_forever, daemon=True)
+    worker = threading.Thread(
+        target=foreign.serve_forever,
+        kwargs={"poll_interval": _SERVER_SHUTDOWN_POLL_SECONDS},
+        daemon=True,
+    )
     worker.start()
     fixture.foreign_url = f"https://127.0.0.1:{foreign.server_port}/foreign-target/"
     fixture.mode = "foreign_redirect"

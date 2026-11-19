@@ -688,7 +688,7 @@ def test_admin_helper_fallbacks_cover_wrapped_values_and_compose_health(monkeypa
     monkeypatch.setattr(
         index_view,
         "_docker_compose_json",
-        lambda command: (
+        lambda command, **kwargs: (
             {"services": {"web": {"healthcheck": {}}, "db": {}, "ignored": "bad"}}
             if command[2] == "config"
             else [

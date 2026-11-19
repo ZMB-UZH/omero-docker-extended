@@ -1196,7 +1196,7 @@ class EnvSafetyGuardTests(TestCase):
                 return "1.5"
             if key in env_safety_guard.JSON_KEYS:
                 return "[]"
-            if key in {"REDIS_MAXMEMORY", "REDIS_DATA_TMPFS_SIZE"}:
+            if key == "REDIS_MAXMEMORY":
                 return "512mb"
             if key == "PORTAINER_HOST_BIND":
                 return ALL_INTERFACES_IPV4
@@ -1219,7 +1219,7 @@ class EnvSafetyGuardTests(TestCase):
         dot_env_lines.extend(
             f"{key}={valid_dot_env_value(key)}"
             for key in env_safety_guard.DOT_ENV_REQUIRED_KEYS
-            if key != "COMPOSE_PROJECT_NAME"
+            if key not in {"COMPOSE_PROJECT_NAME", "REDIS_DATA_TMPFS_SIZE"}
         )
         source_values = {
             key: valid_dot_env_value(key)
@@ -1234,6 +1234,11 @@ class EnvSafetyGuardTests(TestCase):
             encoding="utf-8",
         )
         (repo / ".env").write_text("\n".join(dot_env_lines) + "\n", encoding="utf-8")
+        self.assertEqual([], env_safety_guard.validate_dot_env_values(repo, {}))
+        (repo / ".env").write_text(
+            "\n".join([*dot_env_lines, "REDIS_DATA_TMPFS_SIZE=512m", ""]),
+            encoding="utf-8",
+        )
         self.assertEqual([], env_safety_guard.validate_dot_env_values(repo, {}))
 
     def test_mirror_rejects_missing_generated_key_without_mutating_sources(self):

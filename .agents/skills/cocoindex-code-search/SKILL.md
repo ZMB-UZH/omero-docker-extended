@@ -1,7 +1,7 @@
 ---
 name: cocoindex-code-search
 description: Mandatory semantic routing for broad repository navigation; use exact rg for known symbols and keep all index state external.
-origin: repo-local skill based on verified cocoindex-code 0.2.42 behavior
+origin: repo-local skill based on the verified CocoIndex Code adapter
 ---
 
 # CocoIndex Code Search
@@ -45,7 +45,7 @@ relevant files merely because retrieval is unavailable.
 
 ## State and quality boundaries
 
-- Keep pinned `cocoindex-code[full]==0.2.42`; never run `ccc init` directly
+- Keep pinned `cocoindex-code[full]==0.2.43`; never run `ccc init` directly
   in the live checkout. Use one host install under XDG/`AGENT_COCOINDEX_HOME`.
 - Reuse a verified runtime. Failed, incomplete or symlinked existing runtimes
   must remain untouched; inspect the exact path and authorize cleanup separately.

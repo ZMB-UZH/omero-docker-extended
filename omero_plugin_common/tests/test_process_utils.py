@@ -484,7 +484,8 @@ def test_terminate_handles_process_exit_race() -> None:
     assert process_utils._terminate(RacingProcess()) == (b"out", b"err")  # type: ignore[arg-type]
 
 
-def test_terminate_kills_process_group_for_new_session(monkeypatch) -> None:
+@pytest.mark.parametrize("leader_status", [None, 0])
+def test_terminate_kills_only_owned_process_group(monkeypatch, leader_status) -> None:
     """Verify new-session subprocess cleanup targets the whole process group.
 
     Inputs: pytest provides `monkeypatch`. Output: fails on subprocess group cleanup
@@ -496,16 +497,13 @@ def test_terminate_kills_process_group_for_new_session(monkeypatch) -> None:
         """Test double for a new-session process."""
 
         pid = 4321
-        returncode = None
+        returncode = leader_status
         _process_utils_start_new_session = True
 
         @staticmethod
-        def poll():
-            """Return process completion status.
-
-            Inputs: none. Output: None.
-            """
-            return None
+        def poll() -> None:
+            """Inputs: none. Output: rejects premature reaping of the leader."""
+            pytest.fail("Termination must not poll an owned group leader")
 
         @staticmethod
         def communicate():
@@ -523,7 +521,35 @@ def test_terminate_kills_process_group_for_new_session(monkeypatch) -> None:
 
     process_utils._terminate(GroupProcess())  # type: ignore[arg-type]
 
-    assert killed == [(4321, process_utils.signal.SIGKILL)]
+    expected = [(4321, process_utils.signal.SIGKILL)] if leader_status is None else []
+    assert killed == expected
+
+
+@pytest.mark.parametrize("run", [process_utils.run, process_utils.run_streaming])
+def test_new_session_timeout_kills_child_after_leader_exit(run, tmp_path) -> None:
+    """Inputs: a runner and a descendant holding the output pipes.
+
+    Output: verifies cleanup after its leader exits, preserving partial output.
+    """
+    marker = tmp_path / "child-finished"
+    child = (
+        "import pathlib, sys, time; time.sleep(3); pathlib.Path(sys.argv[1]).touch()"
+    )
+    parent = (
+        "import os, subprocess, sys; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]]); "
+        "print('started', flush=True); os._exit(0)"
+    )
+
+    with pytest.raises(process_utils.TimeoutExpired) as excinfo:
+        run(
+            [sys.executable, "-c", parent, child, str(marker)],
+            timeout=1,
+            start_new_session=True,
+        )
+
+    assert excinfo.value.stdout == "started\n"
+    assert not marker.exists()
 
 
 def test_run_streaming_timeout_preserves_partial_output() -> None:

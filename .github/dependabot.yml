@@ -72,12 +72,27 @@ updates:
     commit-message:
       prefix: "deps(tls)"
 
+  # Resolve each runtime with its own Python minor. Without a version file,
+  # Dependabot can select an interpreter unsupported by OMERO or its packages.
   - package-ecosystem: "pip"
-    directory: "/docker"
+    directory: "/docker/runtime/server"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "05:15"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps(server-pip)"
+
+  - package-ecosystem: "pip"
+    directory: "/docker/runtime/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:17"
       timezone: "UTC"
     cooldown:
       default-days: 7
@@ -88,7 +103,7 @@ updates:
         update-types:
           - "version-update:semver-major"
     commit-message:
-      prefix: "deps(runtime-pip)"
+      prefix: "deps(web-pip)"
 
   # Dependabot's Docker updater scans Dockerfiles, not Compose manifests.
   # Compose image tags remain explicit and are refreshed through audited bumps.

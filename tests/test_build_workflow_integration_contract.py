@@ -1743,11 +1743,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         import yaml  # noqa: F811  — available in CI
 
         expected_versions = {
-            ".github/workflows/docs-knowledge-base.yml": ["3.14.8"],
-            ".github/workflows/mypy.yml": ["3.14.8"],
-            ".github/workflows/tests.yml": ["3.14.8"],
-            ".github/workflows/vulture.yml": ["3.14.8"],
-            ".github/workflows/security-code-scanning.yml": ["3.14.8", "3.14.8"],
+            ".github/workflows/docs-knowledge-base.yml": ["3.14.10"],
+            ".github/workflows/mypy.yml": ["3.14.10"],
+            ".github/workflows/tests.yml": ["3.14.10"],
+            ".github/workflows/vulture.yml": ["3.14.10"],
+            ".github/workflows/security-code-scanning.yml": ["3.14.10", "3.14.10"],
         }
 
         for relative_path, expected in expected_versions.items():
@@ -1838,7 +1838,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         expected.update(
             "--lockfile=requirements.txt:"
             + requirements.relative_to(self.repo_root).as_posix()
-            for requirements in (self.repo_root / "docker").glob("requirements*.txt")
+            for requirements in (self.repo_root / "docker").rglob("requirements*.txt")
         )
         expected.update(
             "--lockfile=" + inventory.relative_to(self.repo_root).as_posix()
@@ -2102,7 +2102,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
             trivy_step["uses"],
         )
-        self.assertEqual("v0.76.1", trivy_step["with"]["version"])
+        self.assertEqual("v0.76.2", trivy_step["with"]["version"])
 
         bandit_step = next_or_fail(
             step

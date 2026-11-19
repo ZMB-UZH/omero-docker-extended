@@ -1,11 +1,11 @@
 # Keep the upstream image pinned; validate virtualenv discovery when upgrading it.
 
 # Stage the matching upstream Java client independently of any writable import cache.
-FROM openmicroscopy/omero-server:5.6.18@sha256:895317a8dba185da6a08fe412d337e62fb6bbb9f6579d33e485439020a43217f AS omero-client
+FROM openmicroscopy/omero-server:5.6.18-1@sha256:e9e06e654cac68836fe772286ef6f73e009dc615894ba321653852bf62f7f0ad AS omero-client
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone:5.33.2@sha256:0ed9880841da97b06db1268d6f28e4bc52dbc25f6217a32eee622e7403f9503b
+FROM openmicroscopy/omero-web-standalone:5.33.4@sha256:734fa8fdb9861ce17ee78289e513e01280a95cf4b123b829a116d285798ab86a
 
 # Run image build steps as root
 # -----------------------------
@@ -38,7 +38,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Keep direct Python dependencies reproducible. OMERO.py 5.23 uses supported
 # resource APIs; its CLI and database tooling no longer require pkg_resources.
 # --------------------------------------------------------------------------
-ARG PIP_VERSION=26.2.2
+ARG PIP_VERSION=26.3
 ARG SETUPTOOLS_VERSION=84.2.1
 ARG WHEEL_VERSION=0.48.0
 ARG CRYPTOGRAPHY_VERSION=50.0.2
@@ -165,6 +165,8 @@ RUN set -euo pipefail; \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
     fi; \
+    "${VENV_DIR}/bin/python" -c 'from importlib.metadata import version; print(version("omero-web"))' \
+        > /opt/setup/.omero-web-base-version; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
         "pip==${PIP_VERSION}" \
         "setuptools==${SETUPTOOLS_VERSION}" \
@@ -265,10 +267,10 @@ RUN set -euo pipefail; \
     mkdir -p "${SITE_PACKAGES}/docs"; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        django==5.2.18 \
+        django==5.2.19 \
         matplotlib==3.11.2 \
         pytest==9.1.1 \
-        portalocker==4.4.1 \
+        portalocker==4.4.2 \
         psycopg2-binary==2.9.13 \
         celery==5.6.3 \
         redis==8.1.0 \
@@ -321,6 +323,83 @@ RUN set -euo pipefail; \
     /usr/local/bin/bioformats2raw --help >/dev/null; \
     rm -f "${archive}" /tmp/bioformats2raw-launcher.sh
 
+# Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
+# WARNING:
+# - Affects OMERO.web Python runtime
+# - Enable only for vulnerability testing
+# - Disable immediately if persistent OMERO.web issues occur
+# ----------------------------------------------------------
+ARG APPLY_OMEROWEB_VENV_TOOLING_UPDATES=0
+RUN set -euo pipefail; \
+    if [[ "${APPLY_OMEROWEB_VENV_TOOLING_UPDATES}" != "1" ]]; then \
+        echo "Skipping optional OMERO.web venv tooling updates (APPLY_OMEROWEB_VENV_TOOLING_UPDATES=${APPLY_OMEROWEB_VENV_TOOLING_UPDATES})."; \
+        exit 0; \
+    fi; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO.web venv" >&2; \
+        exit 1; \
+    fi; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}" \
+        "cryptography==${CRYPTOGRAPHY_VERSION}" \
+        "urllib3==${URLLIB3_VERSION}" \
+        "certifi==${CERTIFI_VERSION}" \
+        "idna==${IDNA_VERSION}" \
+        "requests==${REQUESTS_VERSION}" \
+        "jinja2==${JINJA2_VERSION}" \
+        "pyopenssl==${PYOPENSSL_VERSION}" \
+        "pillow==${PILLOW_VERSION}"
+
+# ---------------------------------------------------------------------------
+# Final security hardening pass (APPLY_SECURITY_HARDENING=1)
+#
+# Run after package setup and before patching Python sources. A later
+# resolver reinstall would otherwise discard those patches.
+# ---------------------------------------------------------------------------
+# Refresh pip in both the base Python 3.12 installation and the web venv.
+COPY docker/runtime/web/requirements.txt /tmp/requirements-runtime-web.txt
+ARG APPLY_SECURITY_HARDENING=1
+RUN set -euo pipefail; \
+    if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
+        echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
+        exit 0; \
+    fi; \
+    echo "=== Final security hardening: OS packages (dnf) ==="; \
+    dnf -y --refresh --setopt=timeout=20 --setopt=retries=2 upgrade; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true; \
+    echo "=== Final security hardening: removing unnecessary packages ==="; \
+    dnf -y remove --noautoremove \
+        vim-minimal \
+        || true; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
+    echo "=== Final security hardening: Python packages (pip) ==="; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO.web venv for hardening verification." >&2; \
+        exit 1; \
+    fi; \
+    echo "Applying curated compatibility-safe Python security updates in ${VENV_DIR}..."; \
+    python3.12 -m pip install --no-cache-dir --upgrade --no-deps "pip==${PIP_VERSION}"; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+        "pip==${PIP_VERSION}" \
+        "setuptools==${SETUPTOOLS_VERSION}" \
+        "wheel==${WHEEL_VERSION}" \
+        "cryptography==${CRYPTOGRAPHY_VERSION}" \
+        "urllib3==${URLLIB3_VERSION}" \
+        "certifi==${CERTIFI_VERSION}" \
+        "idna==${IDNA_VERSION}" \
+        "requests==${REQUESTS_VERSION}" \
+        "jinja2==${JINJA2_VERSION}" \
+        "pyopenssl==${PYOPENSSL_VERSION}" \
+        "pillow==${PILLOW_VERSION}" \
+        --requirement /tmp/requirements-runtime-web.txt; \
+    "${VENV_DIR}/bin/python" -m pip check
+
 # Patch OMERO.web API server discovery and keep optional top-logo context keys
 # defined when unset. The API patch makes `/api/v0/servers/` return the
 # explicit public host or allowlisted request host for this deployment's
@@ -329,6 +408,13 @@ RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    BASE_WEB_VERSION="$(</opt/setup/.omero-web-base-version)"; \
+    INSTALLED_WEB_VERSION="$("${VENV_DIR}/bin/python" -c 'from importlib.metadata import version; print(version("omero-web"))')"; \
+    if [[ "${INSTALLED_WEB_VERSION}" != "${BASE_WEB_VERSION}" ]]; then \
+        echo "ERROR: The runtime lock must match the OMERO.web package in the base image." >&2; \
+        exit 1; \
+    fi; \
+    rm -f /opt/setup/.omero-web-base-version; \
     API_VIEWS_PY="${SITE_PACKAGES}/omeroweb/api/views.py"; \
     "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_api_servers.py "${API_VIEWS_PY}"; \
     chown omero-web:omero-web "${API_VIEWS_PY}"; \
@@ -446,81 +532,6 @@ RUN set -euo pipefail; \
     printf '%s  %s\n' "${JZARR_SHA256}" /opt/omero/web/zarr-jar-upgrade/jzarr.jar | sha256sum -c -; \
     chown -R omero-web:omero-web /opt/omero/web/zarr-jar-upgrade; \
     echo "Staged OMEZarrReader ${OMEZARR_READER_VERSION} + JZarr ${JZARR_VERSION} for runtime upgrade"
-
-# Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
-# WARNING:
-# - Affects OMERO.web Python runtime
-# - Enable only for vulnerability testing
-# - Disable immediately if persistent OMERO.web issues occur
-# ----------------------------------------------------------
-ARG APPLY_OMEROWEB_VENV_TOOLING_UPDATES=0
-RUN set -euo pipefail; \
-    if [[ "${APPLY_OMEROWEB_VENV_TOOLING_UPDATES}" != "1" ]]; then \
-        echo "Skipping optional OMERO.web venv tooling updates (APPLY_OMEROWEB_VENV_TOOLING_UPDATES=${APPLY_OMEROWEB_VENV_TOOLING_UPDATES})."; \
-        exit 0; \
-    fi; \
-    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO.web venv" >&2; \
-        exit 1; \
-    fi; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-        "pip==${PIP_VERSION}" \
-        "setuptools==${SETUPTOOLS_VERSION}" \
-        "wheel==${WHEEL_VERSION}" \
-        "cryptography==${CRYPTOGRAPHY_VERSION}" \
-        "urllib3==${URLLIB3_VERSION}" \
-        "certifi==${CERTIFI_VERSION}" \
-        "idna==${IDNA_VERSION}" \
-        "requests==${REQUESTS_VERSION}" \
-        "jinja2==${JINJA2_VERSION}" \
-        "pyopenssl==${PYOPENSSL_VERSION}" \
-        "pillow==${PILLOW_VERSION}"
-
-# ---------------------------------------------------------------------------
-# Final security hardening pass (APPLY_SECURITY_HARDENING=1)
-#
-# Runs AFTER all dnf installs and pip installs are complete, so that every
-# transitive dependency introduced by earlier layers is covered.
-# ---------------------------------------------------------------------------
-COPY docker/requirements-runtime-web.txt /tmp/requirements-runtime-web.txt
-ARG APPLY_SECURITY_HARDENING=1
-RUN set -euo pipefail; \
-    if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
-        echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
-        exit 0; \
-    fi; \
-    echo "=== Final security hardening: OS packages (dnf) ==="; \
-    dnf -y --refresh --setopt=timeout=20 --setopt=retries=2 upgrade; \
-    dnf clean all || true; \
-    rm -rf /var/cache/dnf /var/tmp/* || true; \
-    echo "=== Final security hardening: removing unnecessary packages ==="; \
-    dnf -y remove --noautoremove \
-        vim-minimal \
-        || true; \
-    dnf clean all || true; \
-    rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
-    echo "=== Final security hardening: Python packages (pip) ==="; \
-    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO.web venv for hardening verification." >&2; \
-        exit 1; \
-    fi; \
-    echo "Applying curated compatibility-safe Python security updates in ${VENV_DIR}..."; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-        "pip==${PIP_VERSION}" \
-        "setuptools==${SETUPTOOLS_VERSION}" \
-        "wheel==${WHEEL_VERSION}" \
-        "cryptography==${CRYPTOGRAPHY_VERSION}" \
-        "urllib3==${URLLIB3_VERSION}" \
-        "certifi==${CERTIFI_VERSION}" \
-        "idna==${IDNA_VERSION}" \
-        "requests==${REQUESTS_VERSION}" \
-        "jinja2==${JINJA2_VERSION}" \
-        "pyopenssl==${PYOPENSSL_VERSION}" \
-        "pillow==${PILLOW_VERSION}" \
-        --requirement /tmp/requirements-runtime-web.txt; \
-    "${VENV_DIR}/bin/python" -m pip check
 
 # Configure supervisord to run OMERO.web and plugin background workers
 # -------------------------------------------------------------------

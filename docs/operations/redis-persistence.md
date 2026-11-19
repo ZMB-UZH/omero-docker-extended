@@ -22,6 +22,12 @@ preserve its in-memory sessions.
 
 ## Existing Installations
 
+Before shutting down services, the installer checks whether the existing Redis
+container uses the destination project's persistent volume. Releases before
+`1.3.0-main.1` used temporary storage by default. Migrate that state before
+running the new installer. A project-name change also requires transferring the
+Redis data; keeping the old volume alone does not attach it to the new project.
+
 Plan a short maintenance window. Discover the actual Compose project, Redis
 container, data directory and image from the running deployment; do not assume
 an installation path or container name. Keep configuration and data backups

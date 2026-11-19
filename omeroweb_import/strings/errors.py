@@ -362,6 +362,17 @@ def import_parent_directory_not_writable(group_name=None, parent_id=None):
     return detail
 
 
+def import_execution_interrupted():
+    """Explain why an interrupted import needs destination verification.
+
+    Inputs: none. Output: operator-facing instructions without job details.
+    """
+    return (
+        "The import worker stopped before recording the result. Some files may "
+        "already be in OMERO. Check the destination before starting a new import."
+    )
+
+
 def unexpected_import_failure(detail):
     """Return the unexpected import failure.
 

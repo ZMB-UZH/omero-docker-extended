@@ -50,7 +50,7 @@ Mandatory lower-token tools; no silent skips.
   `cocoindex-code` MCP tool first; follow
   [cocoindex-code-search](.agents/skills/cocoindex-code-search/SKILL.md).
   Confirm hits in source; exact symbols, strings, counts, and small scopes use `rg`.
-  Never silently trust a stale index or install/refresh one through MCP search.
+  Never trust a stale index or install/refresh through MCP search.
 - Apply [caveman](.agents/skills/caveman/SKILL.md) lite for internal AI, not opt-in: remove repetition,
   never reasoning or evidence. Public text, code, commands, errors and replies
   stay normal prose and lossless. Expand for safety, approvals, ambiguity, incidents and ordered
@@ -78,7 +78,7 @@ Read matching [task contracts](docs/reference/ai-agent-task-contracts.md):
 | Deployment configuration, imports or test data | Configuration; tracked `*_example*` contracts |
 | Live, Docker/Compose or sync | Runtime and sync; `docs/reference/ai-agent-runtime-playbook.md`; env `check` and `compose-guard` before Compose |
 | Docs/instructions | Documentation; `docs/reference/ai-agent-integrations.md` for adapters |
-| Tests, commit or push | Verification; `.agents/skills/verification-loop/SKILL.md` |
+| Tests, updates, commit or push | Verification; `.agents/skills/verification-loop/SKILL.md` |
 | Identity, branches, deletion, publication | GitHub publication; Default-branch development rule; Destructive operations and releases |
 | Index/MCP maintenance | CocoIndex contract and skill above |
 

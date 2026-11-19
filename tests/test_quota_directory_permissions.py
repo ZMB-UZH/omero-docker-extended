@@ -64,7 +64,8 @@ def test_unsafe_metadata_paths_fail_without_touching_targets(
     Inputs: malicious metadata path shapes. Output: unchanged unrelated content.
     """
     victim = tmp_path / "unrelated"
-    victim.mkdir(mode=0o750)
+    victim.mkdir()
+    victim.chmod(0o750)
     (victim / "retain").write_bytes(b"untouched")
     target = tmp_path / leaf
     target.parent.mkdir(exist_ok=True)
@@ -149,7 +150,8 @@ def test_directory_replacement_does_not_redirect_permission_changes(
     quota = admin / "quota"
     quota.mkdir(parents=True)
     victim = tmp_path / "unrelated"
-    victim.mkdir(mode=0o750)
+    victim.mkdir()
+    victim.chmod(0o750)
     (victim / "retain").write_bytes(b"untouched")
     original = os.open
 

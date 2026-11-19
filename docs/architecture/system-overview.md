@@ -42,7 +42,7 @@ Django-based web frontend with all registered plugin apps and co-located Celery 
 
 ### PostgreSQL databases
 
-Two isolated PostgreSQL 16.15 instances:
+Two isolated PostgreSQL 16 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
 - **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, special method configurations, and the Tools enhanced-search index/saved queries for OMERO.web plugins.
@@ -101,7 +101,7 @@ Image pins are defined in `docker-compose.yml` and the corresponding Dockerfiles
 
 ### Maintenance sidecar (`pg-maintenance`)
 
-Custom image based on postgres:16.15 with cron:
+Custom image based on the same PostgreSQL version as the database services, with cron:
 
 - VACUUM ANALYZE: weekly (Sunday 03:00).
 - REINDEX CONCURRENTLY: monthly (first Sunday 04:00).
@@ -110,12 +110,15 @@ Custom image based on postgres:16.15 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.45.1) runs by default for container management. It exposes
-HTTPS only on `${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, disables the legacy HTTP
+Portainer CE runs by default for container management. Its image version is
+pinned in `docker-compose.yml`. It exposes HTTPS only on
+`${PORTAINER_HOST_BIND:-0.0.0.0}:9443`, disables the legacy HTTP
 listener, uses a read-only root filesystem, drops Linux capabilities, and keeps
 the internal tunnel listener bound to container loopback. The Compose service
 uses Docker's init shim and a non-TLS local TCP readiness healthcheck; Prometheus
 blackbox performs the full HTTPS `/api/system/status` availability probe.
+Limit access to trusted administrators as described in
+[Portainer access](../operations/monitoring.md#portainer-access).
 
 ## Plugin architecture
 

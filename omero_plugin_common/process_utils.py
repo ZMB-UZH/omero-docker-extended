@@ -246,17 +246,20 @@ def _terminate(process: subprocess.Popen[bytes]) -> tuple[bytes | None, bytes | 
     Inputs: `process` (subprocess.Popen[bytes]). Output: `tuple[bytes | None, bytes |
     None]`.
     """
-    if process.poll() is None:
-        try:
-            if getattr(process, "_process_utils_start_new_session", False):
+    try:
+        if getattr(process, "_process_utils_start_new_session", False):
+            # Keep the leader's PID reserved until the entire group is signaled.
+            # Polling an exited leader would reap it while descendants may still
+            # hold the pipes that communicate() is waiting on.
+            if process.returncode is None:
                 os.killpg(process.pid, signal.SIGKILL)
-            else:
-                process.kill()
-        except ProcessLookupError:
-            logger.debug(
-                "Process exited before it could be killed during subprocess cleanup.",
-                exc_info=True,
-            )
+        elif process.poll() is None:
+            process.kill()
+    except ProcessLookupError:
+        logger.debug(
+            "Process exited before it could be killed during subprocess cleanup.",
+            exc_info=True,
+        )
     return process.communicate()
 
 

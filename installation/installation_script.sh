@@ -1929,6 +1929,7 @@ stop_old_installation_containers() {
     local old_compose_file="${old_install_path}/docker-compose.yml"
     local old_dot_env="${old_install_path}/.env"
     local created_temp_dot_env=false
+    local down_status=0
 
     echo ""
     echo "Installation path changed: ${old_install_path}/ -> ${OMERO_INSTALLATION_PATH}"
@@ -1969,28 +1970,24 @@ OLD_DOTENV
             docker compose \
                 --project-directory "${old_install_path}" \
                 -f "${old_compose_file}" \
-                down --remove-orphans 2>&1 || true
+                down --remove-orphans 2>&1 || down_status=$?
         else
             docker compose \
                 --project-directory "${old_install_path}" \
                 -f "${old_compose_file}" \
-                down --remove-orphans --rmi all 2>&1 || true
+                down --remove-orphans --rmi all 2>&1 || down_status=$?
         fi
 
         if [ "${created_temp_dot_env}" = true ] && [ -f "${old_dot_env}" ]; then
             rm -f "${old_dot_env}"
         fi
+        if [ "${down_status}" -ne 0 ]; then
+            echo "ERROR: The previous deployment did not stop successfully. Resolve the Compose error before upgrading." >&2
+            return "${down_status}"
+        fi
     else
         echo "No docker-compose.yml at old installation path; skipping compose down."
     fi
-
-    local fixed_name
-    for fixed_name in portainer redis-sysctl-init pg-maintenance; do
-        if docker container inspect "${fixed_name}" >/dev/null 2>&1; then
-            echo "Force-removing leftover container with fixed name: ${fixed_name}"
-            docker rm -fv "${fixed_name}" 2>/dev/null || true
-        fi
-    done
 
     echo "Old installation container cleanup complete."
     echo ""
@@ -3603,12 +3600,18 @@ echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
 echo "OMERO_TMP_PATH=${OMERO_TMP_PATH}"
 echo "OMERO_DATA_DIR=${OMERO_DATA_DIR}"
 
+OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
+if ! python3 "${REPO_ROOT_DIR%/}/tools/redis_upgrade_guard.py" \
+    --project "${OMERO_COMPOSE_PROJECT_NAME}" \
+    --installation "${OMERO_INSTALLATION_PATH}" \
+    --previous "${DEFAULT_OMERO_INSTALLATION_PATH}"; then
+    exit 1
+fi
+
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
     exit 1
 fi
-
-OMERO_COMPOSE_PROJECT_NAME="$(derive_compose_project_name "${OMERO_INSTALLATION_PATH}")"
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
@@ -3654,13 +3657,15 @@ fi
 cd "${OMERO_INSTALLATION_PATH}"
 
 if [ "${DEFAULT_OMERO_INSTALLATION_PATH%/}" != "${OMERO_INSTALLATION_PATH%/}" ]; then
-    stop_old_installation_containers \
+    if ! stop_old_installation_containers \
         "${DEFAULT_OMERO_INSTALLATION_PATH}" \
         "${DEFAULT_OMERO_DATABASE_PATH}" \
         "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" \
         "${DEFAULT_OMERO_DATA_PATH}" \
         "${DEFAULT_OMERO_DATA_DIR}" \
-        "${KEEP_IMAGES}"
+        "${KEEP_IMAGES}"; then
+        exit 1
+    fi
 fi
 
 echo "Recording pre-stop data path snapshots..."
@@ -3670,10 +3675,15 @@ log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker comp
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (before docker compose down)"
 
 echo "Stopping existing containers..."
-if [ "${KEEP_IMAGES}" -eq 1 ]; then
-    compose_with_installation_env "${COMPOSE_FILE}" down --remove-orphans || true
-else
-    compose_with_installation_env "${COMPOSE_FILE}" down --remove-orphans --rmi all || true
+compose_down_args=(down --remove-orphans)
+if [ "${KEEP_IMAGES}" -ne 1 ]; then
+    compose_down_args+=(--rmi all)
+fi
+if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_down_args[@]}"; then
+    echo "ERROR: The current deployment did not stop successfully. Resolve the Compose error before upgrading." >&2
+    exit 1
+fi
+if [ "${KEEP_IMAGES}" -ne 1 ]; then
     echo "Removing ALL images referenced by docker-compose.yml..."
     COMPOSE_IMAGES="$(compose_images_with_installation_env "${COMPOSE_FILE}")"
     if [ -n "${COMPOSE_IMAGES}" ]; then
@@ -3701,13 +3711,6 @@ log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after dock
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
-
-echo "Removing stale OMERO repository lock files from OMERO user data path..."
-if [ -d "${OMERO_USER_DATA_PATH}" ]; then
-    find "${OMERO_USER_DATA_PATH}" -name "*.lock" -delete || true
-else
-    echo "WARNING: OMERO user data path ${OMERO_USER_DATA_PATH} not found; skipping lock cleanup."
-fi
 
 if ! cleanup_local_build_cache_if_disabled; then
     exit 1

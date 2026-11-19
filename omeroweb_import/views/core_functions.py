@@ -192,6 +192,7 @@ __all__ = [
     "_should_start_compatibility_check",
     "_should_start_import_plan_build",
     "_start_compatibility_check_thread",
+    "_should_dispatch_import",
     "_start_import_thread",
     "_update_job",
     "_validated_job_id",
@@ -3054,7 +3055,7 @@ def _plan_request_job_dataset_targets(job_dict: dict):
 def _prepare_request_job_import_datasets(
     job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
 ):
-    """Prepare the request job import datasets.
+    """Create and record destinations while the request owns the job.
 
     Inputs: `job_id` (str), `job_dict` (dict), `conn` (Optional[BlitzGateway]) OMERO
     gateway connection. Output: `tuple`.
@@ -3128,6 +3129,25 @@ def _prepare_request_job_import_datasets(
     return prepared_job, None
 
 
+def _can_prepare_request_destinations(job: dict) -> bool:
+    """Check whether the job has a usable plan and has not entered execution.
+
+    Inputs: job snapshot. Output: whether request-side destination work can proceed.
+    """
+    status = job.get("status")
+    if (
+        status not in ("checking", "awaiting_confirmation", "ready")
+        or job.get("import_worker_phase") in ("executing", "interrupted")
+        or _has_pending_uploads(job)
+    ):
+        return False
+    waiting_for_plan = job.get("compatibility_thread_active") or (
+        job.get("compatibility_enabled", True)
+        and status in ("checking", "awaiting_confirmation")
+    )
+    return not waiting_for_plan or bool(_planned_import_units_for_request(job))
+
+
 def _prepare_uploaded_job_for_request_path_import(
     job_id: str,
     job_dict: dict,
@@ -3138,7 +3158,11 @@ def _prepare_uploaded_job_for_request_path_import(
     Inputs: `job_id` (str), `job_dict` (dict), `conn` (Optional[BlitzGateway]) OMERO
     gateway connection. Output: `tuple`.
     """
-    if conn is None or _has_pending_uploads(job_dict):
+    if (
+        conn is None
+        or job_dict.get("import_worker_phase") in ("executing", "interrupted")
+        or _has_pending_uploads(job_dict)
+    ):
         return job_dict, None
 
     if _should_start_compatibility_check(job_dict):
@@ -3154,26 +3178,26 @@ def _prepare_uploaded_job_for_request_path_import(
         )
         return _load_job(job_id) or job_dict, None
 
-    if job_dict.get("status") not in ("checking", "awaiting_confirmation", "ready"):
+    if not _can_prepare_request_destinations(job_dict):
         return job_dict, None
 
-    planned_units = _planned_import_units_for_request(job_dict)
-    if not planned_units and (
-        job_dict.get("compatibility_thread_active")
-        or (
-            job_dict.get("compatibility_enabled", True)
-            and job_dict.get("status") in ("checking", "awaiting_confirmation")
+    ownership = _try_import_execution_lock(job_id)
+    if ownership is None:
+        return _load_job(job_id) or job_dict, None
+
+    with ownership:
+        current_job = _load_job(job_id)
+        if current_job is None:
+            return job_dict, errors.unable_update_upload_job_state()
+        if not _can_prepare_request_destinations(current_job):
+            return current_job, None
+        prepared_job, prep_error = _prepare_request_job_import_datasets(
+            job_id, current_job, conn
         )
-    ):
-        return job_dict, None
+        if prep_error:
+            return prepared_job or current_job, prep_error
 
-    prepared_job, prep_error = _prepare_request_job_import_datasets(
-        job_id, job_dict, conn
-    )
-    if prep_error:
-        return prepared_job or job_dict, prep_error
-
-    return _load_job(job_id) or prepared_job or job_dict, None
+        return _load_job(job_id) or prepared_job or current_job, None
 
 
 def _ensure_job_dataset_targets(
@@ -10228,41 +10252,157 @@ def _process_import_job(job_id: str):
         _save_job(job)
 
 
-def _start_import_thread(job_id: str):
-    """Start the import thread.
+def _should_dispatch_import(job: dict) -> bool:
+    """Identify jobs that can be started or checked for a lost worker.
 
-    Inputs: `job_id` (str). Output: None.
+    Inputs: persisted job snapshot. Output: whether to attempt the execution lock.
+    """
+    phase = job.get("import_worker_phase")
+    status = job.get("status")
+    if phase == "executing":
+        return status in ("ready", "importing")
+    return status == "ready" and (
+        phase == "claimed" or (phase is None and not job.get("import_thread_started"))
+    )
+
+
+def _try_import_execution_lock(job_id: str) -> ExitStack | None:
+    """Serialize destination preparation and execution across web workers.
+
+    Inputs: job identifier. Output: lock owner to close, or None if unavailable.
+    """
+    with ExitStack() as ownership:
+        try:
+            name = f".{_validated_job_id(job_id)}.import.lock"
+            parent_fd = _open_managed_directory_fd(_get_jobs_root())
+            try:
+                fd = _open_managed_upload_file_fd(
+                    parent_fd, name, os.O_RDWR | os.O_CREAT | os.O_NONBLOCK, name
+                )
+                ownership.callback(os.close, fd)
+            finally:
+                os.close(parent_fd)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise ValueError("Import lock is not a regular file")
+            portalocker.lock(fd, portalocker.LOCK_EX | portalocker.LOCK_NB)
+        except portalocker.exceptions.AlreadyLocked:
+            return None
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            portalocker.exceptions.LockException,
+        ):
+            logger.warning(
+                "Unable to acquire execution lock for import job %s.",
+                sanitize_log_value(job_id),
+            )
+            return None
+        return ownership.pop_all()
+
+
+def _run_claimed_import(job_id: str, attempt: str, ownership: ExitStack) -> None:
+    """Commit the execution boundary before allowing OMERO writes.
+
+    Inputs: job ID, claim token, and open lock owner. Output: none; releases the lock.
+    """
+    with ownership:
+
+        def begin(job):
+            """Record execution only if this worker still owns the ready job.
+
+            Inputs: latest job record. Output: job with its new phase if still owned.
+            """
+            if (
+                job.get("status") == "ready"
+                and job.get("import_worker_phase") == "claimed"
+                and job.get("import_worker_attempt") == attempt
+            ):
+                job["import_worker_phase"] = "executing"
+                job["updated"] = time.time()
+            return job
+
+        job = _update_job(job_id, begin)
+        if (
+            job
+            and job.get("import_worker_phase") == "executing"
+            and job.get("import_worker_attempt") == attempt
+        ):
+            _process_import_job(job_id)
+
+
+def _start_import_thread(job_id: str) -> None:
+    """Claim a job atomically and transfer the file lock to its worker.
+
+    Inputs: job identifier. Output: none; starts work or records lost execution.
     """
     job = _load_job(job_id)
-    if not job:
+    if not job or not _should_dispatch_import(job):
         return
-    if job.get("status") != "ready":
-        return
-    if job.get("import_thread_started"):
+    ownership = _try_import_execution_lock(job_id)
+    if ownership is None:
         return
 
-    job["import_thread_started"] = True
-    if not _save_job(job):
-        job["import_thread_started"] = False
-        logger.error(
-            "Unable to persist import_thread_started for job %s.",
-            sanitize_log_value(job_id),
-        )
-        return
-    try:
-        worker = threading.Thread(
-            target=_process_import_job, args=(job_id,), daemon=True
-        )
-        worker.start()
-    except Exception as exc:
-        job["import_thread_started"] = False
-        _save_job(job)
-        logger.error(
-            "Unable to start import thread for job %s: %s",
-            sanitize_log_value(job_id),
-            sanitize_log_value(exc),
-            exc_info=sanitized_exc_info(exc),
-        )
+    attempt = uuid.uuid4().hex
+
+    def claim(current):
+        """Distinguish a claim safe to retry from ambiguous execution.
+
+        Inputs: latest job record. Output: claimed, interrupted, or unchanged job.
+        """
+        if not _should_dispatch_import(current):
+            return current
+        if current.get("import_worker_phase") == "executing":
+            # The old worker may already have created OMERO objects.
+            current["status"] = "error"
+            current["import_worker_phase"] = "interrupted"
+            current["reconciliation_required"] = True
+            _append_job_error(current, errors.import_execution_interrupted())
+        else:
+            current["import_thread_started"] = True
+            current["import_worker_phase"] = "claimed"
+            current["import_worker_attempt"] = attempt
+        current["updated"] = time.time()
+        return current
+
+    def reset_unstarted_claim(current):
+        """Clear only this attempt's claim after the thread fails to start.
+
+        Inputs: latest job record. Output: job eligible for retry if still claimed.
+        """
+        if (
+            current.get("import_worker_phase") == "claimed"
+            and current.get("import_worker_attempt") == attempt
+        ):
+            current["import_thread_started"] = False
+            current.pop("import_worker_phase")
+            current.pop("import_worker_attempt")
+            current["updated"] = time.time()
+        return current
+
+    with ownership:
+        job = _update_job(job_id, claim)
+        if (
+            not job
+            or job.get("import_worker_phase") != "claimed"
+            or job.get("import_worker_attempt") != attempt
+        ):
+            return
+        worker_ownership = ownership.pop_all()
+        try:
+            threading.Thread(
+                target=_run_claimed_import,
+                args=(job_id, attempt, worker_ownership),
+                daemon=True,
+            ).start()
+        except Exception as exc:
+            with worker_ownership:
+                _update_job(job_id, reset_unstarted_claim)
+            logger.error(
+                "Unable to start import thread for job %s.",
+                sanitize_log_value(job_id),
+                exc_info=sanitized_exc_info(exc),
+            )
 
 
 append_job_error = _append_job_error

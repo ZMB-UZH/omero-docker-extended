@@ -16,6 +16,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# Redis versions shipped with temporary /data storage in published releases.
+LEGACY_IMAGES = ("redis:8.6.3-alpine", "redis:8.8.0-alpine", "redis:8.10.1-alpine")
 
 
 @pytest.fixture
@@ -40,36 +42,38 @@ def redis_factory():
         )
         return result.stdout if binary else result.stdout.strip()
 
-    def create(*, legacy=False, volume=None, start=True):
+    def create(*, legacy_image=None, volume=None, start=True):
         """Inputs: storage mode. Output: a new isolated Redis instance without published ports."""
-        if not legacy and volume is None:
+        if legacy_image is None and volume is None:
             volume = "redis-persistence-test-" + uuid.uuid4().hex
             command("volume", "create", volume)
             volumes.append(volume)
         storage = (
             ["--tmpfs", "/data"]
-            if legacy
+            if legacy_image is not None
             else ["--mount", f"type=volume,source={volume},target=/data"]
         )
         identifier = command(
             "create",
             "--network",
             "none",
+            "--memory",
+            "128m",
             "--security-opt",
             "no-new-privileges",
             "--mount",
             f"type=bind,source={ROOT / 'docker/redis-healthcheck.sh'},target=/healthcheck.sh,readonly",
             *storage,
-            service["image"],
+            legacy_image or service["image"],
             "redis-server",
             "--save",
             "",
             "--appendonly",
-            "no" if legacy else "yes",
+            "no" if legacy_image else "yes",
             "--maxmemory",
             "16mb",
             "--maxmemory-policy",
-            "allkeys-lru" if legacy else "noeviction",
+            "allkeys-lru" if legacy_image else "noeviction",
         )
         containers.append(identifier)
         instance = RedisInstance(command, identifier, volume)
@@ -203,11 +207,12 @@ def test_fresh_instance_survives_restart_replacement_and_memory_pressure(redis_f
     replacement.health()
 
 
+@pytest.mark.parametrize("legacy_image", LEGACY_IMAGES)
 def test_legacy_tmpfs_migration_preserves_values_and_absolute_expiry(
-    redis_factory, tmp_path
+    redis_factory, tmp_path, legacy_image
 ):
     """Inputs: legacy volatile Redis. Output: complete AOF migration without extending session lifetime."""
-    legacy = redis_factory(legacy=True)
+    legacy = redis_factory(legacy_image=legacy_image)
     before = seed(legacy)
     with pytest.raises(subprocess.CalledProcessError):
         legacy.health()

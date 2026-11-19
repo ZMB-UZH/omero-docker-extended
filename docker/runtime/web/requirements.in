@@ -1,0 +1,10 @@
+# Reviewed inputs for the Python 3.12 web image. Keep Django, CORS middleware,
+# Pydantic and botocore within OMERO and Zarr's declared compatibility bounds.
+asgiref==3.13.0
+charset-normalizer==3.5.2
+concurrent-log-handler==0.9.31
+numpy==2.5.5
+omero-iviewer==0.21.0
+omero-web==5.33.4
+pytz==2026.6
+tzdata==2026.6

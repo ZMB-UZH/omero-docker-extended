@@ -1251,8 +1251,9 @@ run_buildx_bake_without_local_cache_fallback() {
 
 # Return whether run serial mode. Inputs: shell arguments and environment. Output: success or failure status.
 should_run_serial_mode() {
-    local target_count
-    target_count="$(count_build_targets)"
+    if [ "$(count_build_targets)" -le 1 ]; then
+        return 1
+    fi
 
     case "${DOCKER_BUILD_BAKE_SERIAL_MODE}" in
         always) return 0 ;;
@@ -1261,7 +1262,7 @@ should_run_serial_mode() {
             # BuildKit local cache exporter is still prone to transient layer
             # lock contention during parallel multi-target exports. Prefer
             # serial target execution up front to avoid long retry loops.
-            if [ "${target_count}" -gt 1 ] && [ "${DOCKER_BUILD_NO_CACHE}" = "0" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
+            if [ "${DOCKER_BUILD_NO_CACHE}" = "0" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
                 return 0
             fi
             return 1

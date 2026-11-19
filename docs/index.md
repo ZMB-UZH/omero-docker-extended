@@ -37,6 +37,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `operations/monitoring.md` -- Prometheus, Grafana, Loki, Alloy, exporters, dashboards, alerts
 - `operations/redis-persistence.md` -- session-preserving Redis storage and upgrade validation
+- `operations/upgrade-environment.md` -- settings to review and validate when upgrading
 - `operations/installation-permissions.md` -- ownership, modes, writable paths, and install/update/bootstrap permission model
 - `operations/repository-sync-safety.md` -- safe cross-repository file sync rules, branch-history guardrails, and recovery steps for recent branch-root drift
 - `operations/postgres-maintenance.md` -- VACUUM ANALYZE, REINDEX CONCURRENTLY, cron schedule

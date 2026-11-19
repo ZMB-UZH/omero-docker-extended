@@ -24,7 +24,7 @@ from typing import Any, TextIO, cast
 
 
 PACKAGE_NAME = "cocoindex-code"
-PACKAGE_VERSION = "0.2.42"
+PACKAGE_VERSION = "0.2.43"
 PACKAGE_REQUIREMENT = f"{PACKAGE_NAME}[full]=={PACKAGE_VERSION}"
 MCP_SERVER_NAME = "cocoindex-code"
 MCP_PYTHON_COMMAND = "python3"

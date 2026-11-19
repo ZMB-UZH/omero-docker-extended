@@ -145,6 +145,13 @@ invalidate affected checks. The full required final-tree matrix still applies.
   regression.
 - Prefer focused unit/contract tests first; when live testing makes sense or the user explicitly requests it for functional OMERO/install/Compose/startup/plugin/env-contract changes, reconcile the live root, preserve unrelated dirty work non-destructively, match the exact checkout, run env guards, rebuild/inject/restart affected containers, and test mechanisms end to end before commit/push.
 - Pin image tags and dependency versions; never use `:latest`. Before changing OMERO.web or OMERO.server, review tagged release notes, tagged `UPGRADING.md` when present, and the official server upgrade guide, then test every applicable migration or compatibility requirement.
+- For dependency updates, capture open PRs, Dependabot and Code Scanning alert
+  IDs, head SHA and observation time before planning and before publication.
+  A scheduled advisory update can change findings without a new commit.
+- Resolve updates against each actual application, infrastructure, CI or
+  developer runtime. Review upstream release and upgrade notes, verify artifact
+  digests, and check regenerated lock diffs for unrelated changes. Record holds
+  without hiding advisories or presenting an unshipped update as fixed.
 - Validate Markdown with `npx --yes markdownlint-cli2@0.23.3` after editing `.md` files; for frontend preview, run `export PATH="$(python3 tools/frontend_preview_tooling.py install-node --print-bin):$PATH"` before bootstrap if Node.js mismatches. Add workflow `setup-node` only when a workflow actually runs host Node.js; Super-Linter uses its pinned container.
 - Before committing or pushing code, tests, workflow, or documentation changes, run `python3 tools/run_local_workflow_gates.py --setup --profile ci`. Use `--profile all` to mirror the Docker-backed Hadolint, DevSkim, and Super-Linter gates locally; use `--profile devskim` for focused DevSkim iteration.
 - `tools/run_local_workflow_gates.py` installs Python-backed workflow tools from the same hash-pinned requirement files used by GitHub Actions and runs the locally reproducible workflow gates.
@@ -167,7 +174,7 @@ Future adapters must inherit these requirements and be covered by policy tests.
 
 - After preflight, the CocoIndex Code gate is mandatory for broad repo navigation: check for a `cocoindex-code` MCP server or tool first, then use `.agents/skills/cocoindex-code-search/` as semantic routing before exact `rg`. Use direct `rg` for precise string, symbol, scanner-count, or already-small searches.
   It uses one XDG/`AGENT_COCOINDEX_HOME` install with per-repo external mirrors/DB/runtime dirs, never live-checkout `.cocoindex_code/`, and does not weaken the single-session rule.
-  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. It indexes text-decodable mirrored files through CocoIndex Code 0.2.42; do not claim binary semantic search, add repo-specific language rewrites or file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
+  If CocoIndex starts a cold semantic index, tell the user once that the first search can take several minutes and later searches reuse the external cache. The pinned adapter indexes text-decodable mirrored files; do not claim binary semantic search, add repo-specific language rewrites or file-type exclusions, or use `--lang` on mixed-language files unless proven safe.
   Keep embedding-device selection automatic unless an intentional `--device` or `AGENT_COCOINDEX_DEVICE` override is needed; unavailable explicit GPUs must fail closed and CPU fallback must work.
   After MCP install or launcher changes, prove `initialize`, `list_tools`, and probes with `python3 tools/cocoindex_agent_search.py mcp-smoke`; use `--include-search` only against an active index. For current edits run `python3 tools/cocoindex_agent_search.py index --allow-dirty-index` or `search --refresh "<query>"`; MCP search itself never refreshes and can return stale active-index text.
 - Native adapter files exist for GitHub Copilot, Cursor, Claude, and Gemini. Treat `AGENTS.md` as the universal baseline; adapters are additive only.

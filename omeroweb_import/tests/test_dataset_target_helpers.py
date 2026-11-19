@@ -914,23 +914,20 @@ def test_request_path_dataset_helpers_cover_fallback_and_save_failures(
 
 
 def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_branches(
-    monkeypatch,
+    monkeypatch, tmp_path
 ) -> None:
-    """Verify the request path job preparation and dataset target guards cover remaining branches safety boundary.
+    """Exercise destination preparation and planning against persisted job state.
 
-    Inputs: pytest provides `monkeypatch`. Output: fails on regressions when request path job preparation and dataset target guards cover remaining branches accepts unsafe input.
-    when validation or the called operation fails.
+    Inputs: isolated job directory and OMERO doubles. Output: verifies state and errors.
     """
-    saved = {}
-    monkeypatch.setattr(core_functions, "_load_job", lambda job_id: {"job_id": job_id})
+    thread_calls = []
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: tmp_path)
     monkeypatch.setattr(
-        core_functions,
-        "_start_compatibility_check_thread",
-        lambda job_id: saved.setdefault("thread_calls", []).append(job_id),
+        core_functions, "_start_compatibility_check_thread", thread_calls.append
     )
 
     class _Conn:
-        """Test double for conn behavior in this module."""
+        """Reject group context changes in the gateway double."""
 
         SERVICE_OPTS = SimpleNamespace(
             setOmeroGroup=lambda value: (_ for _ in ()).throw(
@@ -938,109 +935,70 @@ def test_request_path_job_preparation_and_dataset_target_guards_cover_remaining_
             )
         )
 
-    compatibility_job, compatibility_error = (
-        core_functions._prepare_uploaded_job_for_request_path_import(
-            "a" * 32,
-            {
-                "job_id": "a" * 32,
-                "status": "ready",
-                "compatibility_enabled": True,
-                "files": [{"status": "uploaded", "relative_path": "demo.ome.tif"}],
-            },
-            conn=_Conn(),
+    def prepare(job):
+        """Save a fixture before issuing a destination preparation request.
+
+        Inputs: job record. Output: persisted preparation result and error.
+        """
+        assert core_functions._save_job(job)
+        return core_functions._prepare_uploaded_job_for_request_path_import(
+            job["job_id"], job, conn=_Conn()
         )
+
+    for digit, status, compatibility in (
+        ("a", "ready", True),
+        ("b", "ready", False),
+        ("c", "queued", False),
+    ):
+        job_id = digit * 32
+        prepared_job, error = prepare(
+            {
+                "job_id": job_id,
+                "status": status,
+                "compatibility_enabled": compatibility,
+                "files": (
+                    [{"status": "uploaded", "relative_path": "demo.ome.tif"}]
+                    if status == "ready"
+                    else []
+                ),
+            }
+        )
+        assert prepared_job["job_id"] == job_id
+        assert error is None
+    assert thread_calls == ["a" * 32, "b" * 32]
+
+    ready = {
+        "status": "ready",
+        "compatibility_enabled": False,
+        "planned_import_units": [
+            {
+                "relative_path": "bundle/data.bin",
+                "dataset_relative_path": "bundle/data.bin",
+                "covered_relative_paths": ["bundle/data.bin"],
+            }
+        ],
+        "files": [{"relative_path": "bundle/data.bin", "status": "uploaded"}],
+    }
+    monkeypatch.setattr(
+        core_functions,
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: None,
     )
-    assert compatibility_job["job_id"] == "a" * 32
-    assert compatibility_error is None
+    failed_job, error = prepare({**ready, "job_id": "d" * 32})
+    assert failed_job["job_id"] == "d" * 32
+    assert error == import_errors.unable_prepare_import_destination()
 
     monkeypatch.setattr(
         core_functions,
-        "_planned_import_units_for_request",
-        lambda job_dict: [],
+        "_get_or_create_dataset",
+        lambda conn, name, dataset_map, project_id=None: dataset_map.setdefault(
+            name, 25
+        ),
     )
-    plan_job, plan_error = core_functions._prepare_uploaded_job_for_request_path_import(
-        "b" * 32,
-        {
-            "job_id": "b" * 32,
-            "status": "ready",
-            "compatibility_enabled": False,
-            "compatibility_thread_active": False,
-            "files": [{"status": "uploaded", "relative_path": "demo.ome.tif"}],
-        },
-        conn=_Conn(),
-    )
-    assert plan_job["job_id"] == "b" * 32
-    assert plan_error is None
-
-    paused_job, paused_error = (
-        core_functions._prepare_uploaded_job_for_request_path_import(
-            "c" * 32,
-            {
-                "job_id": "c" * 32,
-                "status": "queued",
-                "files": [{"relative_path": "demo.ome.tif"}],
-            },
-            conn=_Conn(),
-        )
-    )
-    assert paused_job["job_id"] == "c" * 32
-    assert paused_error is None
-
-    monkeypatch.setattr(
-        core_functions,
-        "_prepare_request_job_import_datasets",
-        lambda job_id, job_dict, conn=None: (None, "prep exploded"),
-    )
-    prep_failed_job, prep_failed_error = (
-        core_functions._prepare_uploaded_job_for_request_path_import(
-            "d" * 32,
-            {
-                "job_id": "d" * 32,
-                "status": "ready",
-                "compatibility_enabled": False,
-                "compatibility_thread_active": False,
-                "planned_import_units": [
-                    {
-                        "relative_path": "bundle/data.bin",
-                        "dataset_relative_path": "bundle/data.bin",
-                        "covered_relative_paths": ["bundle/data.bin"],
-                    }
-                ],
-                "files": [{"relative_path": "bundle/data.bin"}],
-            },
-            conn=_Conn(),
-        )
-    )
-    assert prep_failed_job["job_id"] == "d" * 32
-    assert prep_failed_error == "prep exploded"
-
-    monkeypatch.setattr(
-        core_functions,
-        "_prepare_request_job_import_datasets",
-        lambda job_id, job_dict, conn=None: (job_dict, None),
-    )
-    prepared_job, prepared_error = (
-        core_functions._prepare_uploaded_job_for_request_path_import(
-            "e" * 32,
-            {
-                "job_id": "e" * 32,
-                "status": "ready",
-                "compatibility_enabled": False,
-                "compatibility_thread_active": False,
-                "planned_import_units": [
-                    {
-                        "relative_path": "bundle/data.bin",
-                        "dataset_relative_path": "bundle/data.bin",
-                        "covered_relative_paths": ["bundle/data.bin"],
-                    }
-                ],
-                "files": [{"relative_path": "bundle/data.bin"}],
-            },
-            conn=_Conn(),
-        )
-    )
+    prepared_job, error = prepare({**ready, "job_id": "e" * 32})
     assert prepared_job["job_id"] == "e" * 32
-    assert prepared_error is None
+    assert error is None
+    assert prepared_job["dataset_map"] == {"bundle": 25}
 
     no_missing_job = {
         "job_id": "f" * 32,

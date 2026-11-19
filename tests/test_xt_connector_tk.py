@@ -14,6 +14,7 @@ import tempfile
 import time
 import threading
 import tkinter
+from tkinter import messagebox
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -2299,8 +2300,12 @@ def test_autosave_failure_keeps_live_settings_and_warns_without_disconnecting(
 def test_information_and_cancel_dialogs_restore_modal_state_and_preserve_answer(
     connector_ui, monkeypatch, kind, result
 ):
-    """Inputs: native messagebox answer while real main-window modal lock is held. Output: exact tri-state answer and restored interaction afterward."""
-    module, dialog = connector_ui
+    """Inputs: a native messagebox callback and a real Tk main window.
+
+    Output: verifies the exact answer, modal state and backing callback restoration.
+    """
+    _module, dialog = connector_ui
+    original = getattr(messagebox, kind)
 
     def answer(title, message, **kwargs):
         """Inputs: messagebox call. Output: selected answer with verified parent and active modal lock."""
@@ -2311,13 +2316,16 @@ def test_information_and_cancel_dialogs_restore_modal_state_and_preserve_answer(
             assert kwargs["default"] == "yes"
         return result
 
-    monkeypatch.setattr(module.messagebox, kind, answer)
     method = (
         dialog._show_info_dialog
         if kind == "showinfo"
         else dialog._ask_yes_no_cancel_dialog
     )
-    assert method("Title", "Question") == result
+    # Patch the owner, not the lazy proxy that forwards attribute writes/deletes.
+    with monkeypatch.context() as patched:
+        patched.setattr(messagebox, kind, answer)
+        assert method("Title", "Question") is result
+    assert getattr(messagebox, kind) is original
     assert dialog._modal_background_lock_depth == 0
     assert not dialog._modal_background_window_disabled
 

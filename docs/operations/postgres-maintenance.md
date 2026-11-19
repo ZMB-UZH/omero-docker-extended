@@ -7,6 +7,30 @@ The repository includes a dedicated PostgreSQL maintenance workflow under `maint
 - OMERO primary database,
 - plugin database.
 
+## Updating PostgreSQL 16
+
+The database images and maintenance client use PostgreSQL 16.16. Both
+database images use the same build stage and the existing data directories.
+The update does not require changes to the deployment environment files.
+
+PostgreSQL 16 is recommended by
+[OMERO.server 5.6.18](https://omero.readthedocs.io/en/v5.6.18/sysadmins/version-requirements.html#postgresql).
+Before an existing installation moves to 16.16, review the upstream
+[migration notes](https://www.postgresql.org/docs/16/release-16-16.html#RELEASE-16-16-MIGRATION)
+and the notes for any skipped 16.x releases. Stop application writes,
+back up both databases and their roles, and verify recovery on separate
+storage. Keep the original database directories and mounts in place. A
+16.x minor upgrade does not require `pg_upgrade` or a dump and restore.
+
+After startup, check both databases' collation versions, extensions, and
+query results. The 16.16 notes call for reindexing existing B-tree indexes
+on `bpchar` columns declared without a length limit, and existing GiST
+indexes using `gist_trgm_ops`. Review the other `REINDEX` conditions in
+the upstream notes and verify integrity after any required repair.
+Plan this work before resuming application traffic. The installer does not
+automatically reindex user data. Fresh 16.16 databases do not need the legacy
+index review.
+
 ## Included Scripts
 
 - `maintenance/postgres/pg-maintenance.sh`

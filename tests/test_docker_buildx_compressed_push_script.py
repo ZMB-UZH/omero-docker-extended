@@ -373,6 +373,7 @@ exit 0
                     "DOCKER_BUILD_TARGETS": "omeroserver",
                     "DOCKER_BUILD_PUSH_IMAGES": "0",
                     "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_BAKE_SERIAL_MODE": "always",
                     "DOCKER_BUILD_NO_CACHE": "1",
                     "DOCKER_BUILD_PROVENANCE": "0",
                     "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
@@ -395,9 +396,9 @@ exit 0
             log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
             joined_log = "\n".join(log_lines)
 
-            self.assertIn(
-                "buildx bake --file",
-                joined_log,
+            self.assertEqual(
+                sum(line.startswith("buildx bake --file") for line in log_lines),
+                1,
             )
             self.assertIn(
                 "--provenance false",
