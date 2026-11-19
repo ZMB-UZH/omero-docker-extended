@@ -19,6 +19,7 @@ import threading
 import time
 import tempfile
 import uuid
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
@@ -10266,6 +10267,31 @@ def _should_dispatch_import(job: dict) -> bool:
     )
 
 
+@contextmanager
+def _hold_import_execution_lock(job_id: str) -> Iterator[None]:
+    """Hold a nonblocking lock until the request or worker leaves its scope.
+
+    Inputs: job ID. Output: yields once while the execution lock is held.
+    """
+    name = f".{_validated_job_id(job_id)}.import.lock"
+    parent_fd = _open_managed_directory_fd(_get_jobs_root())
+    fd = None
+    try:
+        try:
+            fd = _open_managed_upload_file_fd(
+                parent_fd, name, os.O_RDWR | os.O_CREAT | os.O_NONBLOCK, name
+            )
+        finally:
+            os.close(parent_fd)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("Import lock is not a regular file")
+        portalocker.lock(fd, portalocker.LOCK_EX | portalocker.LOCK_NB)
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
 def _try_import_execution_lock(job_id: str) -> ExitStack | None:
     """Serialize destination preparation and execution across web workers.
 
@@ -10273,18 +10299,7 @@ def _try_import_execution_lock(job_id: str) -> ExitStack | None:
     """
     with ExitStack() as ownership:
         try:
-            name = f".{_validated_job_id(job_id)}.import.lock"
-            parent_fd = _open_managed_directory_fd(_get_jobs_root())
-            try:
-                fd = _open_managed_upload_file_fd(
-                    parent_fd, name, os.O_RDWR | os.O_CREAT | os.O_NONBLOCK, name
-                )
-                ownership.callback(os.close, fd)
-            finally:
-                os.close(parent_fd)
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
-                raise ValueError("Import lock is not a regular file")
-            portalocker.lock(fd, portalocker.LOCK_EX | portalocker.LOCK_NB)
+            ownership.enter_context(_hold_import_execution_lock(job_id))
         except portalocker.exceptions.AlreadyLocked:
             return None
         except (
@@ -10343,44 +10358,44 @@ def _start_import_thread(job_id: str) -> None:
     if ownership is None:
         return
 
-    attempt = uuid.uuid4().hex
-
-    def claim(current):
-        """Distinguish a claim safe to retry from ambiguous execution.
-
-        Inputs: latest job record. Output: claimed, interrupted, or unchanged job.
-        """
-        if not _should_dispatch_import(current):
-            return current
-        if current.get("import_worker_phase") == "executing":
-            # The old worker may already have created OMERO objects.
-            current["status"] = "error"
-            current["import_worker_phase"] = "interrupted"
-            current["reconciliation_required"] = True
-            _append_job_error(current, errors.import_execution_interrupted())
-        else:
-            current["import_thread_started"] = True
-            current["import_worker_phase"] = "claimed"
-            current["import_worker_attempt"] = attempt
-        current["updated"] = time.time()
-        return current
-
-    def reset_unstarted_claim(current):
-        """Clear only this attempt's claim after the thread fails to start.
-
-        Inputs: latest job record. Output: job eligible for retry if still claimed.
-        """
-        if (
-            current.get("import_worker_phase") == "claimed"
-            and current.get("import_worker_attempt") == attempt
-        ):
-            current["import_thread_started"] = False
-            current.pop("import_worker_phase")
-            current.pop("import_worker_attempt")
-            current["updated"] = time.time()
-        return current
-
     with ownership:
+        attempt = uuid.uuid4().hex
+
+        def claim(current):
+            """Distinguish a claim safe to retry from ambiguous execution.
+
+            Inputs: latest job record. Output: claimed, interrupted, or unchanged job.
+            """
+            if not _should_dispatch_import(current):
+                return current
+            if current.get("import_worker_phase") == "executing":
+                # The old worker may already have created OMERO objects.
+                current["status"] = "error"
+                current["import_worker_phase"] = "interrupted"
+                current["reconciliation_required"] = True
+                _append_job_error(current, errors.import_execution_interrupted())
+            else:
+                current["import_thread_started"] = True
+                current["import_worker_phase"] = "claimed"
+                current["import_worker_attempt"] = attempt
+            current["updated"] = time.time()
+            return current
+
+        def reset_unstarted_claim(current):
+            """Clear only this attempt's claim after the thread fails to start.
+
+            Inputs: latest job record. Output: job eligible for retry if still claimed.
+            """
+            if (
+                current.get("import_worker_phase") == "claimed"
+                and current.get("import_worker_attempt") == attempt
+            ):
+                current["import_thread_started"] = False
+                current.pop("import_worker_phase")
+                current.pop("import_worker_attempt")
+                current["updated"] = time.time()
+            return current
+
         job = _update_job(job_id, claim)
         if (
             not job

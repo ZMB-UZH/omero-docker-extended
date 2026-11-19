@@ -93,6 +93,32 @@ def test_simultaneous_requests_execute_one_import(job_store, monkeypatch):
     assert original_load(job_id)["imported_bytes"] == 123
 
 
+def test_attempt_setup_failure_releases_the_execution_lock(job_store, monkeypatch):
+    """A failed dispatch setup must leave a ready job eligible for retry.
+
+    Inputs: isolated job store and randomness fault. Output: verifies that
+    the real execution lock can be reacquired without changing job state.
+    """
+    core, job_id = job_store
+
+    def unavailable():
+        """Model the OS failing to supply randomness for a new attempt.
+
+        Inputs: none. Output: raises an OSError before an attempt is recorded.
+        """
+        raise OSError("attempt identifier unavailable")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(core.uuid, "uuid4", unavailable)
+        with pytest.raises(OSError, match="attempt identifier unavailable"):
+            core._start_import_thread(job_id)
+
+    assert core._load_job(job_id)["status"] == "ready"
+    ownership = core._try_import_execution_lock(job_id)
+    assert ownership is not None
+    ownership.close()
+
+
 def _exit_while_holding_lock(path, acquired, release):
     """Model abrupt worker exit without releasing the execution lock in Python.
 
