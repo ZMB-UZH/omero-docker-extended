@@ -10,6 +10,24 @@ details, or technical information that would enable misuse.
 
 ## [Unreleased]
 
+## [1.4.0-main.1] - 2026-11-19
+
+### Changed
+
+- Updated OMERO.web, Bio-Formats2Raw, database, and monitoring components for security and stability.
+
+### Fixed
+
+- Improved browser imports when requests arrive together and recovery when a worker fails to start.
+
+### Upgrade Notes
+
+- Preserve your settings, data, and Redis volume. Follow the [environment upgrade guide](https://github.com/ZMB-UZH/omero-docker-extended/blob/918c7b0ca6da965bade7d5a6f09d3f41423a7d72/docs/operations/upgrade-environment.md), back up both databases, and complete the [PostgreSQL 16.16 checks](https://github.com/ZMB-UZH/omero-docker-extended/blob/918c7b0ca6da965bade7d5a6f09d3f41423a7d72/docs/operations/postgres-maintenance.md#updating-postgresql-16).
+
+### Verification
+
+- Linux tests, GitHub workflows, and isolated test-VM import and converter checks passed.
+
 ## [1.3.0-main.1] - 2026-10-13
 
 ### Changed
@@ -166,7 +184,8 @@ changing the supported OMERO application line or storage layout.
 - Passed Linux CI with 100% measured Python coverage, live deployment checks,
   and Docker Scout analysis.
 
-[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.3.0-main.1...HEAD
+[Unreleased]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.4.0-main.1...HEAD
+[1.4.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.3.0-main.1...1.4.0-main.1
 [1.3.0-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.2-main.1...1.3.0-main.1
 [1.2.2-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.1-main.1...1.2.2-main.1
 [1.2.1-main.1]: https://github.com/ZMB-UZH/omero-docker-extended/compare/1.2.0-main.1...1.2.1-main.1
