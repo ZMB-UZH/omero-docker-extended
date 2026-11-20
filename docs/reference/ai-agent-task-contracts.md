@@ -190,6 +190,8 @@ Future adapters must inherit these requirements and be covered by policy tests.
 ## Runtime and sync
 
 Read `docs/reference/ai-agent-runtime-playbook.md` before live operations.
+Use its [Runtime storage lifecycle](ai-agent-runtime-playbook.md#runtime-storage-lifecycle)
+for large builds, VM tests, and artifact cleanup.
 Before ANY file-sync or rsync operation, run `python3 tools/env_safety_guard.py check`
 and `python3 tools/env_safety_guard.py backup`. NEVER use `rsync --delete` or any
 tree-replacement command on the working directory. Sync through a disposable clone;

@@ -118,6 +118,28 @@ Examples:
   and `docker/<service>.Dockerfile` fail closed when those values are absent
   instead of silently falling back to in-code defaults.
 
+### Runtime storage lifecycle
+
+- Before large builds, image exports, or VM tests, identify the filesystems
+  for scratch, Docker data, and their host backing storage. Measure available
+  space and estimate peak usage from concurrent images, cache, compressed
+  bundles, and unpacked layers. Size the work in batches that leave headroom
+  for running services; do not apply a fixed quota to every test.
+- Reuse verified artifacts for unchanged inputs. Prefer verified streaming to
+  storing another full image archive solely for transfer. When isolation is
+  necessary, use one task-owned workspace and builder as needed and inventory
+  their paths, image references, and cache records.
+- On success, failure, or supersession, remove task-owned artifacts once they
+  are unused and authorized for cleanup. Keep compact verification evidence
+  and any required recovery artifacts, not duplicate full-size copies.
+  Follow the inventory and protection rules below; never prune shared cache
+  or remove referenced images or persistent data to meet a space target.
+- In a VM, free guest blocks do not establish that host storage was reclaimed.
+  Check guest usage and backing-disk allocation separately when available.
+  If space must be returned, use the platform's supported discard or compaction
+  procedure on the verified target disk with the required authorization and
+  idle state. Do not force-detach a disk or interrupt unrelated workloads.
+
 ### Final deployment cleanup
 
 Derive required images from the guarded, rendered Compose configuration and

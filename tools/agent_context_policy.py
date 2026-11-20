@@ -67,9 +67,10 @@ AGENT_ADAPTER_LINKS: dict[str, str] = {
 CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
     "AGENTS.md": ContextSurfaceContract(
         max_nonempty_lines=90,
-        max_utf8_bytes=6500,
+        max_utf8_bytes=7000,
         required_tokens=(
             "official GitHub connector",
+            "Runtime storage lifecycle",
             "GitHub defaults: no identity overrides",
             "AI co-author trailers",
             "no CLI/PAT fallback",
@@ -115,7 +116,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
         for path, link in AGENT_ADAPTER_LINKS.items()
     },
     TASK_CONTRACT_PATH: ContextSurfaceContract(
-        max_utf8_bytes=24000,
+        max_utf8_bytes=25000,
         required_tokens=(
             "## Pinned Karpathy agent baseline",
             KARPATHY_BASELINE_COMMIT,
@@ -135,6 +136,7 @@ CONTEXT_SURFACE_CONTRACTS: dict[str, ContextSurfaceContract] = {
             "## Verification",
             "## CocoIndex",
             "## Runtime and sync",
+            "Runtime storage lifecycle",
             "## Verification minimum",
             "python3 -m ruff check .",
             "python3 -m ruff format --check .",

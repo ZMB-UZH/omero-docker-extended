@@ -75,7 +75,7 @@ Read matching [task contracts](docs/reference/ai-agent-task-contracts.md):
 | Code/design decisions | Pinned Karpathy agent baseline; nearest implementation and tests |
 | Paths, I/O, logging, HTTP, SQL, subprocesses, Docker, workflows, secrets or auth | Mandatory security read order: `regression_guard.py catalog`, `scan`, matching prevention/history sections |
 | Deployment configuration, imports or test data | Configuration; tracked `*_example*` contracts |
-| Live, Docker/Compose or sync | Runtime and sync; `docs/reference/ai-agent-runtime-playbook.md`; env `check` and `compose-guard` before Compose |
+| Live, Docker/Compose or sync | Runtime and sync; [Runtime storage lifecycle](docs/reference/ai-agent-runtime-playbook.md#runtime-storage-lifecycle); env `check` and `compose-guard` before Compose |
 | Docs/instructions | Documentation; `docs/reference/ai-agent-integrations.md` for adapters |
 | Tests, updates, commit or push | Verification; `.agents/skills/verification-loop/SKILL.md` |
 | Identity, branches, deletion, publication | GitHub publication; Default-branch development rule; Destructive operations and releases |
